@@ -113,6 +113,11 @@ export class SearchEngine {
             results = this.mergeWithCamelHumps(results, filteredItems, query, maxResults);
         }
 
+        // 3. TYPO TOLERANCE PASS: If we still don't have enough results, look for transpositions/typos
+        if (results.length < maxResults / 4 && query.length > 3) {
+            results = this.mergeWithTypoTolerance(results, filteredItems, query, maxResults);
+        }
+
         // 3. Sort initially
         results.sort((a, b) => b.score - a.score);
 
@@ -130,6 +135,19 @@ export class SearchEngine {
         const existingIds = new Set(results.map((r) => r.item.id));
 
         for (const res of camelHumpsResults) {
+            if (!existingIds.has(res.item.id)) {
+                results.push(res);
+                existingIds.add(res.item.id);
+            }
+        }
+        return results;
+    }
+
+    private mergeWithTypoTolerance(results: SearchResult[], items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
+        const typoResults = this.typoToleranceSearch(items, query, maxResults);
+        const existingIds = new Set(results.map((r) => r.item.id));
+
+        for (const res of typoResults) {
             if (!existingIds.has(res.item.id)) {
                 results.push(res);
                 existingIds.add(res.item.id);
@@ -214,6 +232,77 @@ export class SearchEngine {
         }
 
         return results;
+    }
+
+    /**
+     * Search with typo tolerance (Levenshtein Distance)
+     */
+    private typoToleranceSearch(items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
+        const results: SearchResult[] = [];
+        const queryLower = query.toLowerCase();
+
+        // Only check top items for performance if search is broad
+        const searchPool = items.length > 5000 ? items.slice(0, 5000) : items;
+
+        for (const { item } of searchPool) {
+            const nameLower = item.name.toLowerCase();
+
+            // Allow 1 typo for strings > 3, 2 typos for strings > 7
+            const maxDistance = query.length > 7 ? 2 : 1;
+            const distance = this.levenshteinDistance(queryLower, nameLower);
+
+            if (distance <= maxDistance) {
+                // Score falls off rapidly with distance
+                const score = (1.0 - (distance / (query.length + 1))) * 0.7;
+                results.push({
+                    item,
+                    score: this.applyItemTypeBoost(score, item.type),
+                    scope: this.getScopeForItemType(item.type),
+                });
+            }
+
+            if (results.length >= maxResults) break;
+        }
+
+        return results;
+    }
+
+    /**
+     * Efficient Levenshtein distance with early exit and transposition support
+     */
+    private levenshteinDistance(s1: string, s2: string): number {
+        const len1 = s1.length;
+        const len2 = s2.length;
+
+        // Optimization: if length difference is too large, it's impossible
+        if (Math.abs(len1 - len2) > 2) return 99;
+
+        const matrix: number[][] = [];
+
+        for (let i = 0; i <= len1; i++) {
+            matrix[i] = [i];
+        }
+        for (let j = 0; j <= len2; j++) {
+            matrix[0][j] = j;
+        }
+
+        for (let i = 1; i <= len1; i++) {
+            for (let j = 1; j <= len2; j++) {
+                const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j] + 1,      // deletion
+                    matrix[i][j - 1] + 1,      // insertion
+                    matrix[i - 1][j - 1] + cost // substitution
+                );
+
+                // Damerau extension: handle transpositions (swapped adjacent letters)
+                if (i > 1 && j > 1 && s1[i - 1] === s2[j - 2] && s1[i - 2] === s2[j - 1]) {
+                    matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + cost);
+                }
+            }
+        }
+
+        return matrix[len1][len2];
     }
 
     /**
