@@ -204,30 +204,51 @@ export class SearchProvider {
             if (burstTimeout) clearTimeout(burstTimeout);
             if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
 
-            if (!query || query.trim().length === 0) {
+            const trimmedQuery = query.trim();
+            if (!trimmedQuery) {
                 quickPick.items = [];
+                quickPick.busy = false;
                 return;
             }
 
-            // PHASE 1: Immediate Burst Search (Prefix/Exact) - Ultra Fast
+            // Start busy indicator for deep scan
+            quickPick.busy = true;
+
+            // PHASE 0: Absolute Instant (Immediate exact-name hits)
+            const instantResults = this.searchEngine.burstSearch({
+                query: trimmedQuery,
+                scope: this.currentScope,
+                maxResults: 5
+            });
+
+            if (instantResults.length > 0) {
+                quickPick.items = instantResults.map(r => this.resultToQuickPickItem(r));
+                this.updateTitle(quickPick, instantResults.length);
+            }
+
+            // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
             burstTimeout = setTimeout(() => {
                 const burstResults = this.searchEngine.burstSearch({
-                    query: query.trim(),
+                    query: trimmedQuery,
                     scope: this.currentScope,
                     maxResults: 15
                 });
 
-                if (burstResults.length > 0) {
+                if (burstResults.length > instantResults.length) {
                     quickPick.items = burstResults.map(r => this.resultToQuickPickItem(r));
                     this.updateTitle(quickPick, burstResults.length);
                 }
-            }, 10); // Tiny delay to avoid flicker on super fast typing
+            }, 10);
 
-            // PHASE 2: Full Fuzzy Search - Thorough
+            // PHASE 2: Deep Fuzzy Search (Stabilized results)
             fuzzyTimeout = setTimeout(() => {
-                const results = this.performSearch(quickPick, query);
-                this.updateTitle(quickPick, results.length);
-            }, 150); // Standard full-search debounce
+                try {
+                    const results = this.performSearch(quickPick, query);
+                    this.updateTitle(quickPick, results.length);
+                } finally {
+                    quickPick.busy = false; // Deep scan finished
+                }
+            }, 150);
         });
 
         // Handle button clicks for filter toggling

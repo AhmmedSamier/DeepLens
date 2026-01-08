@@ -1,12 +1,19 @@
 import * as Fuzzysort from 'fuzzysort';
 import { SearchableItem, SearchResult, SearchOptions, SearchScope, SearchItemType } from './types';
 
+interface PreparedItem {
+    item: SearchableItem;
+    preparedName: Fuzzysort.Prepared;
+    preparedFullName: Fuzzysort.Prepared | null;
+}
+
 /**
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
 export class SearchEngine {
     private items: SearchableItem[] = [];
-    private scopedItems: Map<SearchScope, SearchableItem[]> = new Map();
+    private preparedItems: PreparedItem[] = [];
+    private scopedItems: Map<SearchScope, PreparedItem[]> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
 
@@ -35,10 +42,15 @@ export class SearchEngine {
     }
 
     /**
-     * Rebuild pre-filtered arrays for each search scope
+     * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
     private rebuildHotArrays(): void {
         this.scopedItems.clear();
+        this.preparedItems = this.items.map(item => ({
+            item,
+            preparedName: Fuzzysort.prepare(item.name),
+            preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null
+        }));
 
         // Initialize arrays
         for (const scope of Object.values(SearchScope)) {
@@ -48,13 +60,13 @@ export class SearchEngine {
         }
 
         // Categorize items
-        for (const item of this.items) {
-            const scope = this.getScopeForItemType(item.type);
-            this.scopedItems.get(scope)?.push(item);
+        for (const prepared of this.preparedItems) {
+            const scope = this.getScopeForItemType(prepared.item.type);
+            this.scopedItems.get(scope)?.push(prepared);
 
             // Also add to everything
             if (scope !== SearchScope.EVERYTHING) {
-                this.scopedItems.get(SearchScope.EVERYTHING)?.push(item);
+                this.scopedItems.get(SearchScope.EVERYTHING)?.push(prepared);
             }
         }
     }
@@ -113,7 +125,7 @@ export class SearchEngine {
         return results.slice(0, maxResults);
     }
 
-    private mergeWithCamelHumps(results: SearchResult[], items: SearchableItem[], query: string, maxResults: number): SearchResult[] {
+    private mergeWithCamelHumps(results: SearchResult[], items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
         const camelHumpsResults = this.camelHumpsSearch(items, query, maxResults);
         const existingIds = new Set(results.map((r) => r.item.id));
 
@@ -141,25 +153,18 @@ export class SearchEngine {
     /**
      * Filter items by search scope - NOW O(1) using Hot-Arrays
      */
-    private filterByScope(scope: SearchScope): SearchableItem[] {
-        return this.scopedItems.get(scope) || this.items;
+    private filterByScope(scope: SearchScope): PreparedItem[] {
+        return this.scopedItems.get(scope) || this.preparedItems;
     }
 
     /**
      * Fuzzy search using fuzzysort library
      */
-    private fuzzySearch(items: SearchableItem[], query: string, maxResults: number): SearchResult[] {
-        // Prepare items for fuzzysort
-        const preparedItems = items.map((item) => ({
-            item,
-            preparedName: Fuzzysort.prepare(item.name),
-            preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
-        }));
-
+    private fuzzySearch(items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
         // Search by name and fullName
         const results: SearchResult[] = [];
 
-        for (const { item, preparedName, preparedFullName } of preparedItems) {
+        for (const { item, preparedName, preparedFullName } of items) {
             let bestScore = -Infinity;
 
             // Match against name
@@ -193,11 +198,11 @@ export class SearchEngine {
     /**
      * CamelHumps search (e.g., "RFC" matches "React.FC" or "RequestForComment")
      */
-    private camelHumpsSearch(items: SearchableItem[], query: string, maxResults: number): SearchResult[] {
+    private camelHumpsSearch(items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
         const results: SearchResult[] = [];
         const queryUpper = query.toUpperCase();
 
-        for (const item of items) {
+        for (const { item } of items) {
             const score = this.camelHumpsMatch(item.name, queryUpper);
             if (score > 0) {
                 results.push({
@@ -299,7 +304,7 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const queryLower = query.toLowerCase();
 
-        for (const item of filteredItems) {
+        for (const { item } of filteredItems) {
             const nameLower = item.name.toLowerCase();
 
             // Priority matches: Exact name or StartsWith
