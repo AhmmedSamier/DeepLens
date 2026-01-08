@@ -111,21 +111,15 @@ export class SearchEngine {
             results = this.mergeWithCamelHumps(results, filteredItems, query, maxResults);
         }
 
-        // 3. TYPO TOLERANCE PASS: Always trigger for longer queries if the top match is not a perfect hit
-        // Increase tolerance threshold to 0.95 to capture near-perfect transpositions
-        const topScore = results.length > 0 ? results[0].score : 0;
-        if (query.length > 3 && topScore < 0.95) {
-            results = this.mergeWithTypoTolerance(results, filteredItems, query, maxResults);
-        }
-
-        // 3. Sort initially
+        // 3. Sort and return
         results.sort((a, b) => b.score - a.score);
 
-        // 4. Boost by activity and re-sort
+        // 4. Boost by activity and re-sort final time
         if (this.getActivityScore) {
             this.applyPersonalizedBoosting(results);
-            results.sort((a, b) => b.score - a.score);
         }
+
+        results.sort((a, b) => b.score - a.score);
 
         return results.slice(0, maxResults);
     }
@@ -143,18 +137,7 @@ export class SearchEngine {
         return results;
     }
 
-    private mergeWithTypoTolerance(results: SearchResult[], items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
-        const typoResults = this.typoToleranceSearch(items, query, maxResults);
-        const existingIds = new Set(results.map((r) => r.item.id));
 
-        for (const res of typoResults) {
-            if (!existingIds.has(res.item.id)) {
-                results.push(res);
-                existingIds.add(res.item.id);
-            }
-        }
-        return results;
-    }
 
     private applyPersonalizedBoosting(results: SearchResult[]): void {
         if (!this.getActivityScore) return;
@@ -195,7 +178,8 @@ export class SearchEngine {
             if (preparedFullName) {
                 const fullNameResult = Fuzzysort.single(query, preparedFullName);
                 if (fullNameResult && fullNameResult.score > bestScore) {
-                    bestScore = fullNameResult.score * 0.9; // Slight penalty for full name match
+                    // Penalty for full name match (scores are negative, so 1.1 makes it more negative/worse)
+                    bestScore = fullNameResult.score * 1.1;
                 }
             }
 
@@ -234,82 +218,7 @@ export class SearchEngine {
         return results;
     }
 
-    /**
-     * Search with typo tolerance (Levenshtein Distance)
-     */
-    private typoToleranceSearch(items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
-        const results: SearchResult[] = [];
-        const queryLower = query.toLowerCase();
 
-        // SMART POOL: Check items that are actually relevant based on length
-        for (const { item } of items) {
-            // Strip extension for comparison to make queries like "ReserBalances" match "ResetBalances.cs"
-            const targetName = item.type === SearchItemType.FILE
-                ? item.name.split('.')[0]
-                : item.name;
-
-            const nameLower = targetName.toLowerCase();
-
-            // Allow 1 typo for strings > 3, 2 typos for strings > 7
-            const maxDistance = query.length > 7 ? 2 : 1;
-
-            // Fast length check first (Optimization)
-            if (Math.abs(query.length - nameLower.length) > maxDistance) continue;
-
-            const distance = this.levenshteinDistance(queryLower, nameLower);
-
-            if (distance <= maxDistance) {
-                // Score falls off rapidly with distance
-                // Increased base multiplier to 0.85 to make typos more competitive
-                const score = (1.0 - (distance / (query.length + 1))) * 0.85;
-                results.push({
-                    item,
-                    score: this.applyItemTypeBoost(score, item.type),
-                    scope: this.getScopeForItemType(item.type),
-                });
-            }
-
-            if (results.length >= maxResults) break;
-        }
-
-        return results;
-    }
-
-    /**
-     * Efficient Levenshtein distance with early exit and transposition support
-     */
-    private levenshteinDistance(s1: string, s2: string): number {
-        const len1 = s1.length;
-        const len2 = s2.length;
-
-        const matrix: number[][] = [];
-
-        for (let i = 0; i <= len1; i++) {
-            matrix[i] = [i];
-        }
-        for (let j = 0; j <= len2; j++) {
-            matrix[0][j] = j;
-        }
-
-        for (let i = 1; i <= len1; i++) {
-            for (let j = 1; j <= len2; j++) {
-                const cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
-                matrix[i][j] = Math.min(
-                    matrix[i - 1][j] + 1,      // deletion
-                    matrix[i][j - 1] + 1,      // insertion
-                    matrix[i - 1][j - 1] + cost // substitution
-                );
-
-                // Damerau extension: handle transpositions (swapped adjacent letters)
-                if (i > 1 && j > 1 && s1[i - 1] === s2[j - 2] && s1[i - 2] === s2[j - 1]) {
-                    // Cost for transposition is 1
-                    matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
-                }
-            }
-        }
-
-        return matrix[len1][len2];
-    }
 
     /**
      * Calculate CamelHumps match score
@@ -337,8 +246,9 @@ export class SearchEngine {
      */
     private normalizeFuzzysortScore(score: number): number {
         // Fuzzysort scores are negative (better matches are closer to 0)
-        // Typical range is -1000 to 0
-        const normalized = Math.max(0, (score + 1000) / 1000);
+        // Range 10,000 allows for deep subsequence matches in long paths
+        const range = 10000;
+        const normalized = Math.max(0, (score + range) / range);
         return Math.min(1, normalized);
     }
 
@@ -348,16 +258,16 @@ export class SearchEngine {
      */
     private applyItemTypeBoost(score: number, type: SearchItemType): number {
         const boosts: Record<SearchItemType, number> = {
-            [SearchItemType.CLASS]: 1.3,
-            [SearchItemType.INTERFACE]: 1.3,
-            [SearchItemType.ENUM]: 1.2,
-            [SearchItemType.FUNCTION]: 1.1,
-            [SearchItemType.METHOD]: 1.1,
-            [SearchItemType.PROPERTY]: 1.0,
-            [SearchItemType.VARIABLE]: 0.9,
+            [SearchItemType.CLASS]: 1.4,
+            [SearchItemType.INTERFACE]: 1.4,
+            [SearchItemType.ENUM]: 1.3,
+            [SearchItemType.FUNCTION]: 1.25,
+            [SearchItemType.METHOD]: 1.25,
+            [SearchItemType.PROPERTY]: 1.1,
+            [SearchItemType.VARIABLE]: 1.0,
             [SearchItemType.FILE]: 0.8,
             [SearchItemType.TEXT]: 0.7,
-            [SearchItemType.COMMAND]: 1.2,
+            [SearchItemType.COMMAND]: 1.3,
         };
 
         return score * (boosts[type] || 1.0);

@@ -248,7 +248,7 @@ export class SearchProvider {
                 } finally {
                     quickPick.busy = false; // Deep scan finished
                 }
-            }, 150);
+            }, 100);
         });
 
         // Handle button clicks for filter toggling
@@ -364,7 +364,6 @@ export class SearchProvider {
             detail,
             iconPath: coloredIcon,
             result,
-            alwaysShow: true, // IMPORTANT: Bypass VS Code's internal filter so our typo-tolerance results show up
         };
     }
 
