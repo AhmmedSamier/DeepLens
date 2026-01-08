@@ -134,7 +134,7 @@ export class WorkspaceIndexer {
     }
 
     /**
-     * Index symbols from all files with concurrency
+     * Index symbols from all files with optimized concurrency (Sliding Window)
      */
     private async indexSymbols(
         progressCallback?: (message: string, increment?: number) => void
@@ -142,31 +142,86 @@ export class WorkspaceIndexer {
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
         const totalFiles = fileItems.length;
 
-        // Use a concurrency limit to avoid overwhelming language servers
-        const concurrency = 30;
-        const chunks: SearchableItem[][] = [];
-        for (let i = 0; i < fileItems.length; i += concurrency) {
-            chunks.push(fileItems.slice(i, i + concurrency));
+        if (totalFiles === 0) return;
+
+        // HIGH-PERFORMANCE PASS 1: Try workspace-wide symbol extraction (often covers 80% of symbols in 1 call)
+        progressCallback?.('Fast-scanning workspace symbols...', 5);
+        try {
+            const workspaceSymbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
+                'vscode.executeWorkspaceSymbolProvider',
+                ''
+            );
+
+            if (workspaceSymbols && workspaceSymbols.length > 0) {
+                this.processWorkspaceSymbols(workspaceSymbols);
+            }
+        } catch (e) {
+            console.log('Workspace symbol pass failed, moving to file-by-file...');
         }
 
+        // HIGH-PERFORMANCE PASS 2: Sliding Window Concurrent Pool
+        const CONCURRENCY = 50;
         let processed = 0;
-        for (const chunk of chunks) {
-            await Promise.all(chunk.map(async (fileItem) => {
+        let activeWorkers = 0;
+        let currentIndex = 0;
+
+        return new Promise((resolve) => {
+            const startNextWorker = async () => {
+                if (currentIndex >= totalFiles) {
+                    if (activeWorkers === 0) resolve();
+                    return;
+                }
+
+                const fileItem = fileItems[currentIndex++];
+                activeWorkers++;
+
                 try {
                     await this.indexFileSymbols(vscode.Uri.file(fileItem.filePath));
                 } catch (error) {
-                    console.error(`Error indexing ${fileItem.filePath}:`, error);
+                    // Fail silently
                 }
-                processed++;
 
-                if (processed % 10 === 0 || processed === totalFiles) {
+                processed++;
+                activeWorkers--;
+
+                if (processed % 20 === 0 || processed === totalFiles) {
                     const fileName = path.basename(fileItem.filePath);
                     progressCallback?.(
                         `Indexing ${fileName} (${processed}/${totalFiles})`,
-                        (10 / totalFiles) * 100
+                        (20 / totalFiles) * 70
                     );
                 }
-            }));
+
+                startNextWorker();
+            };
+
+            for (let i = 0; i < Math.min(CONCURRENCY, totalFiles); i++) {
+                startNextWorker();
+            }
+        });
+    }
+
+    /**
+     * Process symbols from workspace provider
+     */
+    private processWorkspaceSymbols(symbols: vscode.SymbolInformation[]): void {
+        for (const symbol of symbols) {
+            const itemType = this.mapSymbolKindToItemType(symbol.kind);
+            if (!itemType) continue;
+
+            const id = `symbol:${symbol.location.uri.fsPath}:${symbol.name}:${symbol.location.range.start.line}`;
+            if (this.items.some(i => i.id === id)) continue;
+
+            this.items.push({
+                id,
+                name: symbol.name,
+                type: itemType,
+                filePath: symbol.location.uri.fsPath,
+                line: symbol.location.range.start.line,
+                column: symbol.location.range.start.character,
+                containerName: symbol.containerName,
+                fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
+            });
         }
     }
 

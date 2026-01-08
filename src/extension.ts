@@ -137,7 +137,7 @@ async function indexWorkspace(): Promise<void> {
 
                 // Show completion message
                 vscode.window.showInformationMessage(
-                    `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands`
+                    `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands in ${duration}s`
                 );
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to index workspace: ${error}`);
