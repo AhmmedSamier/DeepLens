@@ -106,9 +106,8 @@ export class SearchEngine {
         const filteredItems = this.filterByScope(scope);
         let results = this.fuzzySearch(filteredItems, query);
 
-        // 2. Add CamelHumps results if needed
-        const minItemsForCamelHumps = Math.min(maxResults / 2, 10);
-        if (enableCamelHumps && results.length < minItemsForCamelHumps) {
+        // 2. Add CamelHumps results if enabled
+        if (enableCamelHumps) {
             results = this.mergeWithCamelHumps(results, filteredItems, query);
         }
 
@@ -145,8 +144,13 @@ export class SearchEngine {
         for (const result of results) {
             const activityScore = this.getActivityScore(result.item.id);
             if (activityScore > 0) {
-                // Blend fuzzy score with activity score
-                result.score = result.score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                // ONLY boost if we have a decent base match.
+                // This prevents "frequently used" but "totally unrelated" items from appearing.
+                const baseScore = result.score;
+                if (baseScore > 0.05) {
+                    // Blend fuzzy score with activity score
+                    result.score = baseScore * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                }
             }
         }
     }
@@ -162,40 +166,54 @@ export class SearchEngine {
      * Fuzzy search using fuzzysort library
      */
     private fuzzySearch(items: PreparedItem[], query: string): SearchResult[] {
-        // Search by name and fullName
         const results: SearchResult[] = [];
+        const MIN_SCORE = 0.01; // Minimum score to be considered a match
 
         for (const { item, preparedName, preparedFullName } of items) {
-            let bestScore = -Infinity;
+            const score = this.calculateItemScore(query, preparedName, preparedFullName, MIN_SCORE);
 
-            // Match against name
-            const nameResult = Fuzzysort.single(query, preparedName);
-            if (nameResult) {
-                bestScore = nameResult.score;
-            }
-
-            // Match against full name if available
-            if (preparedFullName) {
-                const fullNameResult = Fuzzysort.single(query, preparedFullName);
-                if (fullNameResult) {
-                    // Penalty for full name match (scores are 0-1, so 0.9 makes it lower/worse)
-                    const fullNameScore = fullNameResult.score * 0.9;
-                    if (fullNameScore > bestScore) {
-                        bestScore = fullNameScore;
-                    }
-                }
-            }
-
-            if (bestScore > -Infinity) {
+            if (score > MIN_SCORE) {
                 results.push({
                     item,
-                    score: this.applyItemTypeBoost(bestScore, item.type),
+                    score: this.applyItemTypeBoost(score, item.type),
                     scope: this.getScopeForItemType(item.type),
                 });
             }
         }
 
         return results;
+    }
+
+    /**
+     * Calculate the best fuzzy score for an item
+     */
+    private calculateItemScore(
+        query: string,
+        preparedName: Fuzzysort.Prepared,
+        preparedFullName: Fuzzysort.Prepared | null,
+        minScore: number,
+    ): number {
+        let bestScore = -Infinity;
+
+        // Match against name
+        const nameResult = Fuzzysort.single(query, preparedName);
+        if (nameResult && nameResult.score > minScore) {
+            bestScore = nameResult.score;
+        }
+
+        // Match against full name if available
+        if (preparedFullName) {
+            const fullNameResult = Fuzzysort.single(query, preparedFullName);
+            if (fullNameResult && fullNameResult.score > minScore) {
+                // Penalty for full name match (scores are 0-1, so 0.9 makes it lower/worse)
+                const fullNameScore = fullNameResult.score * 0.9;
+                if (fullNameScore > bestScore) {
+                    bestScore = fullNameScore;
+                }
+            }
+        }
+
+        return bestScore;
     }
 
     /**

@@ -99,33 +99,10 @@ export class TreeSitterParser {
                 const lang = await lib.Language.load(wasmPath);
                 this.languages.set(langId, lang);
             } else {
-                // Fallback to local parsers folder if available
-                await this.loadLanguage(langId, wasmFile);
+                console.warn(`WASM file not found for ${langId} at ${wasmPath}`);
             }
         } catch (error) {
-            // Fallback for cases where require.resolve fails or package is missing
-            console.debug(`Module resolution failed for ${langId}, falling back to local:`, error);
-            await this.loadLanguage(langId, wasmFile);
-        }
-    }
-
-    private async loadLanguage(langId: string, wasmFile: string): Promise<void> {
-        try {
-            // First try the source path (for development)
-            let wasmPath = path.join(this.extensionPath, 'src', 'parsers', wasmFile);
-
-            // If not found, try the dist path (for production)
-            if (!fs.existsSync(wasmPath)) {
-                wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
-            }
-
-            if (fs.existsSync(wasmPath)) {
-                const lib = Parser as unknown as TreeSitterLib;
-                const lang = await lib.Language.load(wasmPath);
-                this.languages.set(langId, lang);
-            }
-        } catch (error) {
-            console.error(`Failed to load Tree-sitter language ${langId}:`, error);
+            console.debug(`Module resolution failed for ${langId}:`, error);
         }
     }
 
