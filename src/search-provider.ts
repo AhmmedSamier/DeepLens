@@ -196,17 +196,38 @@ export class SearchProvider {
         // Set up filter buttons
         this.updateFilterButtons(quickPick);
 
-        // Handle input changes with debouncing
-        let searchTimeout: NodeJS.Timeout | undefined;
+        // Handle input changes with Streaming Results
+        let burstTimeout: NodeJS.Timeout | undefined;
+        let fuzzyTimeout: NodeJS.Timeout | undefined;
+
         quickPick.onDidChangeValue((query) => {
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
+            if (burstTimeout) clearTimeout(burstTimeout);
+            if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
+
+            if (!query || query.trim().length === 0) {
+                quickPick.items = [];
+                return;
             }
 
-            searchTimeout = setTimeout(() => {
+            // PHASE 1: Immediate Burst Search (Prefix/Exact) - Ultra Fast
+            burstTimeout = setTimeout(() => {
+                const burstResults = this.searchEngine.burstSearch({
+                    query: query.trim(),
+                    scope: this.currentScope,
+                    maxResults: 15
+                });
+
+                if (burstResults.length > 0) {
+                    quickPick.items = burstResults.map(r => this.resultToQuickPickItem(r));
+                    this.updateTitle(quickPick, burstResults.length);
+                }
+            }, 10); // Tiny delay to avoid flicker on super fast typing
+
+            // PHASE 2: Full Fuzzy Search - Thorough
+            fuzzyTimeout = setTimeout(() => {
                 const results = this.performSearch(quickPick, query);
                 this.updateTitle(quickPick, results.length);
-            }, 100); // 100ms debounce
+            }, 150); // Standard full-search debounce
         });
 
         // Handle button clicks for filter toggling
@@ -246,9 +267,8 @@ export class SearchProvider {
 
         // Handle hiding
         quickPick.onDidHide(() => {
-            if (searchTimeout) {
-                clearTimeout(searchTimeout);
-            }
+            if (burstTimeout) clearTimeout(burstTimeout);
+            if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
             quickPick.dispose();
         });
 

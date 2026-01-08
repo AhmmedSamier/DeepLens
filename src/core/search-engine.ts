@@ -287,4 +287,38 @@ export class SearchEngine {
                 return SearchScope.EVERYTHING;
         }
     }
+
+    /**
+     * Perform an ultra-fast burst search (prefix/exact match) for immediate UI feedback
+     */
+    burstSearch(options: SearchOptions): SearchResult[] {
+        const { query, scope, maxResults = 10 } = options;
+        if (!query || query.trim().length === 0) return [];
+
+        const filteredItems = this.filterByScope(scope);
+        const results: SearchResult[] = [];
+        const queryLower = query.toLowerCase();
+
+        for (const item of filteredItems) {
+            const nameLower = item.name.toLowerCase();
+
+            // Priority matches: Exact name or StartsWith
+            if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
+                results.push({
+                    item,
+                    score: this.applyItemTypeBoost(1.0, item.type),
+                    scope: this.getScopeForItemType(item.type),
+                });
+            }
+
+            if (results.length >= maxResults) break;
+        }
+
+        // Apply activity tracking if available
+        if (this.getActivityScore) {
+            this.applyPersonalizedBoosting(results);
+        }
+
+        return results.sort((a, b) => b.score - a.score);
+    }
 }
