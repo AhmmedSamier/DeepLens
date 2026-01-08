@@ -62,42 +62,50 @@ export class SearchEngine {
             return [];
         }
 
-        // Filter items by scope
-        let filteredItems = this.filterByScope(this.items, scope);
-
-        // Perform fuzzy search
+        // 1. Filter and search
+        const filteredItems = this.filterByScope(this.items, scope);
         let results = this.fuzzySearch(filteredItems, query, maxResults);
 
-        // If CamelHumps is enabled and we have few results, try CamelHumps matching
+        // 2. Add CamelHumps results if needed
         if (enableCamelHumps && results.length < maxResults / 2) {
-            const camelHumpsResults = this.camelHumpsSearch(filteredItems, query, maxResults);
-            // Merge results, avoiding duplicates
-            const existingIds = new Set(results.map((r) => r.item.id));
-            for (const result of camelHumpsResults) {
-                if (!existingIds.has(result.item.id)) {
-                    results.push(result);
-                    existingIds.add(result.item.id);
-                }
-            }
+            results = this.mergeWithCamelHumps(results, filteredItems, query, maxResults);
         }
 
-        // Sort by score (descending) and apply max results
+        // 3. Sort initially
         results.sort((a, b) => b.score - a.score);
 
-        // Apply activity boosting if enabled
+        // 4. Boost by activity and re-sort
         if (this.getActivityScore) {
-            for (const result of results) {
-                const activityScore = this.getActivityScore(result.item.id);
-                if (activityScore > 0) {
-                    // Blend fuzzy score with activity score
-                    result.score = (result.score * (1 - this.activityWeight)) + (activityScore * this.activityWeight);
-                }
-            }
-            // Re-sort after applying activity boost
+            this.applyPersonalizedBoosting(results);
             results.sort((a, b) => b.score - a.score);
         }
 
         return results.slice(0, maxResults);
+    }
+
+    private mergeWithCamelHumps(results: SearchResult[], items: SearchableItem[], query: string, maxResults: number): SearchResult[] {
+        const camelHumpsResults = this.camelHumpsSearch(items, query, maxResults);
+        const existingIds = new Set(results.map((r) => r.item.id));
+
+        for (const res of camelHumpsResults) {
+            if (!existingIds.has(res.item.id)) {
+                results.push(res);
+                existingIds.add(res.item.id);
+            }
+        }
+        return results;
+    }
+
+    private applyPersonalizedBoosting(results: SearchResult[]): void {
+        if (!this.getActivityScore) return;
+
+        for (const result of results) {
+            const activityScore = this.getActivityScore(result.item.id);
+            if (activityScore > 0) {
+                // Blend fuzzy score with activity score
+                result.score = (result.score * (1 - this.activityWeight)) + (activityScore * this.activityWeight);
+            }
+        }
     }
 
     /**
@@ -268,6 +276,8 @@ export class SearchEngine {
                 return SearchScope.FILES;
             case SearchItemType.TEXT:
                 return SearchScope.TEXT;
+            case SearchItemType.COMMAND:
+                return SearchScope.COMMANDS;
             default:
                 return SearchScope.EVERYTHING;
         }

@@ -129,18 +129,23 @@ export class TreeSitterParser {
         if (nodeType.includes('interface_declaration')) return SearchItemType.INTERFACE;
         if (nodeType.includes('enum_declaration')) return SearchItemType.ENUM;
 
-        if (langId === 'csharp') {
-            if (nodeType === 'method_declaration') return SearchItemType.METHOD;
-            if (nodeType === 'property_declaration') return SearchItemType.PROPERTY;
-            if (nodeType === 'variable_declaration') return SearchItemType.VARIABLE;
-        } else {
-            // TypeScript/JavaScript
-            if (nodeType === 'method_definition') return SearchItemType.METHOD;
-            if (nodeType === 'function_declaration') return SearchItemType.FUNCTION;
-            if (nodeType === 'property_definition') return SearchItemType.PROPERTY;
-            if (nodeType === 'variable_declarator') return SearchItemType.VARIABLE;
-        }
+        return langId === 'csharp'
+            ? this.getCSharpItemType(nodeType)
+            : this.getTSJSItemType(nodeType);
+    }
 
+    private getCSharpItemType(nodeType: string): SearchItemType | undefined {
+        if (nodeType === 'method_declaration') return SearchItemType.METHOD;
+        if (nodeType === 'property_declaration') return SearchItemType.PROPERTY;
+        if (nodeType === 'variable_declaration') return SearchItemType.VARIABLE;
+        return undefined;
+    }
+
+    private getTSJSItemType(nodeType: string): SearchItemType | undefined {
+        if (nodeType === 'method_definition') return SearchItemType.METHOD;
+        if (nodeType === 'function_declaration') return SearchItemType.FUNCTION;
+        if (nodeType === 'property_definition') return SearchItemType.PROPERTY;
+        if (nodeType === 'variable_declarator') return SearchItemType.VARIABLE;
         return undefined;
     }
 

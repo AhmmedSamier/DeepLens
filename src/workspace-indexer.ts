@@ -252,68 +252,82 @@ export class WorkspaceIndexer {
         const currentHash = this.fileHashes.get(filePath);
 
         // Check cache
-        const cached = this.persistence.get(filePath);
-        if (cached && (currentHash ? cached.hash === currentHash : cached.mtime === mtime)) {
-            this.items.push(...cached.symbols);
+        if (this.tryLoadFromCache(filePath, mtime, currentHash)) {
             return;
         }
 
         try {
-            let symbolsFound: SearchableItem[] = [];
+            // Try to find symbols using either Tree-sitter or VS Code providers
+            const symbolsFound = await this.performSymbolExtraction(fileUri);
 
-            // TURBO PATH: Try Tree-sitter first
-            const treeSitterItems = await this.treeSitter.parseFile(fileUri);
-            if (treeSitterItems.length > 0) {
-                symbolsFound = treeSitterItems;
-            } else {
-                // FALLBACK PATH: Use VS Code's DocumentSymbolProvider
-                const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-                    'vscode.executeDocumentSymbolProvider',
-                    fileUri
-                );
-
-                if (symbols && symbols.length > 0) {
-                    // Temporarily store in current items to process
-                    const startIndex = this.items.length;
-                    this.processSymbols(symbols, filePath);
-                    symbolsFound = this.items.slice(startIndex).filter(i => i.type !== SearchItemType.FILE);
-
-                    // Since we added to this.items in processSymbols, but we want to return results for caching
-                    // We'll leave them in this.items but also save them to cache below
-                } else {
-                    // Try one more time by opening document if empty
-                    const document = await vscode.workspace.openTextDocument(fileUri);
-                    await new Promise(resolve => setTimeout(resolve, 200));
-                    const retrySymbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-                        'vscode.executeDocumentSymbolProvider',
-                        fileUri
-                    );
-
-                    if (retrySymbols && retrySymbols.length > 0) {
-                        const startIndex = this.items.length;
-                        this.processSymbols(retrySymbols, filePath);
-                        symbolsFound = this.items.slice(startIndex).filter(i => i.type !== SearchItemType.FILE);
-                    }
-                }
-            }
-
-            // Update cache and push (if not already pushed by fallback loop)
             if (symbolsFound.length > 0) {
-                this.persistence.set(filePath, {
-                    mtime,
-                    hash: currentHash,
-                    symbols: symbolsFound
-                });
+                // Update cache
+                this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
 
-                // If the symbols were found via tree-sitter, we need to add them to this.items
-                // If they were found via falling back to processSymbols, they are already in this.items
-                const alreadyInItems = this.items.some(i => i.filePath === filePath && i.type !== SearchItemType.FILE);
-                if (!alreadyInItems) {
-                    this.items.push(...symbolsFound);
-                }
+                // Add to main items list if not already present
+                this.ensureSymbolsInItems(symbolsFound, filePath);
             }
         } catch (error) {
             console.log(`Could not extract symbols from ${filePath}: ${error}`);
+        }
+    }
+
+    /**
+     * Attempt to load symbols from persistent cache
+     */
+    private tryLoadFromCache(filePath: string, mtime: number, hash?: string): boolean {
+        const cached = this.persistence.get(filePath);
+        if (cached && (hash ? cached.hash === hash : cached.mtime === mtime)) {
+            this.items.push(...cached.symbols);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Core logic to extract symbols from a file
+     */
+    private async performSymbolExtraction(fileUri: vscode.Uri): Promise<SearchableItem[]> {
+        const filePath = fileUri.fsPath;
+
+        // 1. Try Tree-sitter first (Turbo Path)
+        const treeSitterItems = await this.treeSitter.parseFile(fileUri);
+        if (treeSitterItems.length > 0) {
+            return treeSitterItems;
+        }
+
+        // 2. Fallback to VS Code provider
+        let symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+            'vscode.executeDocumentSymbolProvider',
+            fileUri
+        );
+
+        // 3. Last ditch effort: open document to trigger LSP
+        if (!symbols || symbols.length === 0) {
+            await vscode.workspace.openTextDocument(fileUri);
+            await new Promise(resolve => setTimeout(resolve, 200));
+            symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+                'vscode.executeDocumentSymbolProvider',
+                fileUri
+            );
+        }
+
+        if (symbols && symbols.length > 0) {
+            const startIndex = this.items.length;
+            this.processSymbols(symbols, filePath);
+            return this.items.slice(startIndex).filter(i => i.type !== SearchItemType.FILE);
+        }
+
+        return [];
+    }
+
+    /**
+     * Ensure extracted symbols are added to the main list
+     */
+    private ensureSymbolsInItems(symbols: SearchableItem[], filePath: string): void {
+        const alreadyInItems = this.items.some(i => i.filePath === filePath && i.type !== SearchItemType.FILE);
+        if (!alreadyInItems) {
+            this.items.push(...symbols);
         }
     }
 
