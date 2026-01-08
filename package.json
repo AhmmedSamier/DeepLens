@@ -1,0 +1,130 @@
+{
+    "name": "find-everywhere",
+    "displayName": "Find Everywhere",
+    "description": "Search everywhere in your workspace - types, symbols, files, and text with fuzzy matching and CamelHumps support (like ReSharper)",
+    "version": "0.1.0",
+    "publisher": "finder",
+    "engines": {
+        "vscode": "^1.85.0"
+    },
+    "categories": [
+        "Other"
+    ],
+    "keywords": [
+        "search",
+        "find",
+        "navigation",
+        "fuzzy",
+        "resharper"
+    ],
+    "activationEvents": [
+        "onStartupFinished"
+    ],
+    "main": "./out/extension.js",
+    "contributes": {
+        "commands": [
+            {
+                "command": "findEverywhere.search",
+                "title": "Find Everywhere"
+            },
+            {
+                "command": "findEverywhere.rebuildIndex",
+                "title": "Find Everywhere: Rebuild Index"
+            }
+        ],
+        "keybindings": [
+            {
+                "command": "findEverywhere.search",
+                "key": "shift shift",
+                "mac": "shift shift"
+            }
+        ],
+        "configuration": {
+            "title": "Find Everywhere",
+            "properties": {
+                "findEverywhere.excludePatterns": {
+                    "type": "array",
+                    "default": [
+                        "**/node_modules/**",
+                        "**/dist/**",
+                        "**/out/**",
+                        "**/.git/**",
+                        "**/build/**"
+                    ],
+                    "description": "Glob patterns to exclude from search"
+                },
+                "findEverywhere.maxResults": {
+                    "type": "number",
+                    "default": 50,
+                    "description": "Maximum number of results to display"
+                },
+                "findEverywhere.enableTextSearch": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable text search across files"
+                },
+                "findEverywhere.enableCamelHumps": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable CamelHumps matching (e.g., 'RFC' matches 'React.FC')"
+                },
+                "findEverywhere.respectGitignore": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Respect .gitignore files when indexing (recommended)"
+                },
+                "findEverywhere.activity.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Enable personalized results based on your usage activity"
+                },
+                "findEverywhere.activity.weight": {
+                    "type": "number",
+                    "default": 0.3,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "How much activity affects results (0=none, 0.5=balanced, 1=only activity)"
+                },
+                "findEverywhere.fileExtensions": {
+                    "type": "array",
+                    "default": [
+                        "ts",
+                        "tsx",
+                        "js",
+                        "jsx",
+                        "py",
+                        "java",
+                        "cs",
+                        "cpp",
+                        "c",
+                        "h",
+                        "go",
+                        "rb",
+                        "php"
+                    ],
+                    "description": "File extensions to index for search"
+                }
+            }
+        }
+    },
+    "scripts": {
+        "vscode:prepublish": "npm run compile",
+        "compile": "tsc -p ./",
+        "watch": "tsc -watch -p ./",
+        "pretest": "npm run compile",
+        "lint": "eslint src --ext ts",
+        "test": "node ./out/test/runTest.js"
+    },
+    "devDependencies": {
+        "@types/node": "^18.19.130",
+        "@types/vscode": "^1.85.0",
+        "@typescript-eslint/eslint-plugin": "^6.13.0",
+        "@typescript-eslint/parser": "^6.13.0",
+        "@vscode/test-electron": "^2.3.8",
+        "eslint": "^8.54.0",
+        "typescript": "^5.3.2"
+    },
+    "dependencies": {
+        "fuzzysort": "^2.0.4"
+    }
+}
