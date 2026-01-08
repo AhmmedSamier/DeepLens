@@ -362,8 +362,9 @@ export class SearchProvider {
             label,
             description,
             detail,
-            result,
             iconPath: coloredIcon,
+            result,
+            alwaysShow: true, // IMPORTANT: Bypass VS Code's internal filter so our typo-tolerance results show up
         };
     }
 

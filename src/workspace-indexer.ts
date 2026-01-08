@@ -324,8 +324,8 @@ export class WorkspaceIndexer {
                 // Update cache
                 this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
 
-                // Add to main items list if not already present
-                this.ensureSymbolsInItems(symbolsFound, filePath);
+                // Add to main items list - thread-safe merge
+                this.items.push(...symbolsFound);
             }
         } catch (error) {
             console.log(`Could not extract symbols from ${filePath}: ${error}`);
@@ -373,9 +373,9 @@ export class WorkspaceIndexer {
         }
 
         if (symbols && symbols.length > 0) {
-            const startIndex = this.items.length;
-            this.processSymbols(symbols, filePath);
-            return this.items.slice(startIndex).filter(i => i.type !== SearchItemType.FILE);
+            const localItems: SearchableItem[] = [];
+            this.processSymbols(symbols, filePath, localItems);
+            return localItems;
         }
 
         return [];
@@ -428,6 +428,7 @@ export class WorkspaceIndexer {
     private processSymbols(
         symbols: vscode.DocumentSymbol[],
         filePath: string,
+        collector: SearchableItem[],
         containerName?: string
     ): void {
         for (const symbol of symbols) {
@@ -435,7 +436,7 @@ export class WorkspaceIndexer {
             if (itemType) {
                 const fullName = containerName ? `${containerName}.${symbol.name}` : symbol.name;
 
-                this.items.push({
+                collector.push({
                     id: `symbol:${filePath}:${fullName}:${symbol.range.start.line}`,
                     name: symbol.name,
                     type: itemType,
@@ -451,7 +452,7 @@ export class WorkspaceIndexer {
             // Process nested symbols
             if (symbol.children && symbol.children.length > 0) {
                 const newContainerName = containerName ? `${containerName}.${symbol.name}` : symbol.name;
-                this.processSymbols(symbol.children, filePath, newContainerName);
+                this.processSymbols(symbol.children, filePath, collector, newContainerName);
             }
         }
     }

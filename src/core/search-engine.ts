@@ -112,8 +112,9 @@ export class SearchEngine {
         }
 
         // 3. TYPO TOLERANCE PASS: Always trigger for longer queries if the top match is not a perfect hit
+        // Increase tolerance threshold to 0.95 to capture near-perfect transpositions
         const topScore = results.length > 0 ? results[0].score : 0;
-        if (query.length > 3 && topScore < 0.9) {
+        if (query.length > 3 && topScore < 0.95) {
             results = this.mergeWithTypoTolerance(results, filteredItems, query, maxResults);
         }
 
