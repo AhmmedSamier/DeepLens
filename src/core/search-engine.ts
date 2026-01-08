@@ -6,28 +6,57 @@ import { SearchableItem, SearchResult, SearchOptions, SearchScope, SearchItemTyp
  */
 export class SearchEngine {
     private items: SearchableItem[] = [];
+    private scopedItems: Map<SearchScope, SearchableItem[]> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
 
     /**
-     * Set the searchable items
+     * Set the searchable items and update hot-arrays
      */
     setItems(items: SearchableItem[]): void {
         this.items = items;
+        this.rebuildHotArrays();
     }
 
     /**
-     * Add items to the search index
+     * Add items to the search index and update hot-arrays
      */
     addItems(items: SearchableItem[]): void {
         this.items.push(...items);
+        this.rebuildHotArrays();
     }
 
     /**
-     * Remove items from a specific file
+     * Remove items from a specific file and update hot-arrays
      */
     removeItemsByFile(filePath: string): void {
         this.items = this.items.filter((item) => item.filePath !== filePath);
+        this.rebuildHotArrays();
+    }
+
+    /**
+     * Rebuild pre-filtered arrays for each search scope
+     */
+    private rebuildHotArrays(): void {
+        this.scopedItems.clear();
+
+        // Initialize arrays
+        for (const scope of Object.values(SearchScope)) {
+            if (typeof scope === 'number') {
+                this.scopedItems.set(scope, []);
+            }
+        }
+
+        // Categorize items
+        for (const item of this.items) {
+            const scope = this.getScopeForItemType(item.type);
+            this.scopedItems.get(scope)?.push(item);
+
+            // Also add to everything
+            if (scope !== SearchScope.EVERYTHING) {
+                this.scopedItems.get(SearchScope.EVERYTHING)?.push(item);
+            }
+        }
     }
 
     /**
@@ -43,6 +72,7 @@ export class SearchEngine {
      */
     clear(): void {
         this.items = [];
+        this.scopedItems.clear();
     }
 
     /**
@@ -53,8 +83,8 @@ export class SearchEngine {
     }
 
     /**
-   * Perform search
-   */
+     * Perform search
+     */
     search(options: SearchOptions): SearchResult[] {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
@@ -62,8 +92,8 @@ export class SearchEngine {
             return [];
         }
 
-        // 1. Filter and search
-        const filteredItems = this.filterByScope(this.items, scope);
+        // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
+        const filteredItems = this.filterByScope(scope);
         let results = this.fuzzySearch(filteredItems, query, maxResults);
 
         // 2. Add CamelHumps results if needed
@@ -109,35 +139,10 @@ export class SearchEngine {
     }
 
     /**
-     * Filter items by search scope
+     * Filter items by search scope - NOW O(1) using Hot-Arrays
      */
-    private filterByScope(items: SearchableItem[], scope: SearchScope): SearchableItem[] {
-        switch (scope) {
-            case SearchScope.TYPES:
-                return items.filter(
-                    (item) =>
-                        item.type === SearchItemType.CLASS ||
-                        item.type === SearchItemType.INTERFACE ||
-                        item.type === SearchItemType.ENUM
-                );
-            case SearchScope.SYMBOLS:
-                return items.filter(
-                    (item) =>
-                        item.type === SearchItemType.FUNCTION ||
-                        item.type === SearchItemType.METHOD ||
-                        item.type === SearchItemType.PROPERTY ||
-                        item.type === SearchItemType.VARIABLE
-                );
-            case SearchScope.FILES:
-                return items.filter((item) => item.type === SearchItemType.FILE);
-            case SearchScope.COMMANDS:
-                return items.filter((item) => item.type === SearchItemType.COMMAND);
-            case SearchScope.TEXT:
-                return items.filter((item) => item.type === SearchItemType.TEXT);
-            case SearchScope.EVERYTHING:
-            default:
-                return items;
-        }
+    private filterByScope(scope: SearchScope): SearchableItem[] {
+        return this.scopedItems.get(scope) || this.items;
     }
 
     /**
