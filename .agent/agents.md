@@ -8,7 +8,7 @@
 From the analysis of the `cognitive-lens` extension, we have implemented and learned the following:
 
 ### 1. Concurrency is King
-- **Parallel Processing**: Avoid sequential loops for symbol extraction. Processing files in concurrent chunks (e.g., concurrency limit of 10) significantly reduces indexing time.
+- **Parallel Processing**: Avoid sequential loops for symbol extraction. Processing files in concurrent chunks (e.g., concurrency limit of 30) significantly reduces indexing time.
 - **Batched Updates**: report progress in batches to avoid flooding the UI/LSP channel.
 
 ### 2. Optimize File Access

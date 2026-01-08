@@ -143,7 +143,7 @@ export class WorkspaceIndexer {
         const totalFiles = fileItems.length;
 
         // Use a concurrency limit to avoid overwhelming language servers
-        const concurrency = 10;
+        const concurrency = 30;
         const chunks: SearchableItem[][] = [];
         for (let i = 0; i < fileItems.length; i += concurrency) {
             chunks.push(fileItems.slice(i, i + concurrency));
@@ -159,11 +159,11 @@ export class WorkspaceIndexer {
                 }
                 processed++;
 
-                if (processed % 5 === 0 || processed === totalFiles) {
+                if (processed % 10 === 0 || processed === totalFiles) {
                     const fileName = path.basename(fileItem.filePath);
                     progressCallback?.(
                         `Indexing ${fileName} (${processed}/${totalFiles})`,
-                        (5 / totalFiles) * 100
+                        (10 / totalFiles) * 100
                     );
                 }
             }));
