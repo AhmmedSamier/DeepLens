@@ -113,8 +113,9 @@ export class SearchEngine {
             results = this.mergeWithCamelHumps(results, filteredItems, query, maxResults);
         }
 
-        // 3. TYPO TOLERANCE PASS: If we still don't have enough results, look for transpositions/typos
-        if (results.length < maxResults / 4 && query.length > 3) {
+        // 3. TYPO TOLERANCE PASS: Trigger if results are low OR if the top match is very weak
+        const topScore = results.length > 0 ? results[0].score : 0;
+        if (query.length > 3 && (results.length < maxResults / 4 || topScore < 0.3)) {
             results = this.mergeWithTypoTolerance(results, filteredItems, query, maxResults);
         }
 
@@ -241,19 +242,26 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const queryLower = query.toLowerCase();
 
-        // Only check top items for performance if search is broad
-        const searchPool = items.length > 5000 ? items.slice(0, 5000) : items;
+        // SMART POOL: Check items that are actually relevant based on length
+        for (const { item } of items) {
+            // Strip extension for comparison to make queries like "ReserBalances" match "ResetBalances.cs"
+            const targetName = item.type === SearchItemType.FILE
+                ? item.name.split('.')[0]
+                : item.name;
 
-        for (const { item } of searchPool) {
-            const nameLower = item.name.toLowerCase();
+            const nameLower = targetName.toLowerCase();
 
             // Allow 1 typo for strings > 3, 2 typos for strings > 7
             const maxDistance = query.length > 7 ? 2 : 1;
+
+            // Fast length check first (Optimization)
+            if (Math.abs(query.length - nameLower.length) > maxDistance) continue;
+
             const distance = this.levenshteinDistance(queryLower, nameLower);
 
             if (distance <= maxDistance) {
                 // Score falls off rapidly with distance
-                const score = (1.0 - (distance / (query.length + 1))) * 0.7;
+                const score = (1.0 - (distance / (query.length + 1))) * 0.75;
                 results.push({
                     item,
                     score: this.applyItemTypeBoost(score, item.type),
@@ -273,9 +281,6 @@ export class SearchEngine {
     private levenshteinDistance(s1: string, s2: string): number {
         const len1 = s1.length;
         const len2 = s2.length;
-
-        // Optimization: if length difference is too large, it's impossible
-        if (Math.abs(len1 - len2) > 2) return 99;
 
         const matrix: number[][] = [];
 
