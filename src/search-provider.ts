@@ -282,6 +282,10 @@ export class SearchProvider {
         if (instantResults.length > 0) {
             quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
             this.updateTitle(quickPick, instantResults.length);
+        } else if (quickPick.items.length > 0) {
+            // Clear items immediately if Phase 0 found nothing (prevent stale results)
+            quickPick.items = [];
+            this.updateTitle(quickPick, 0);
         }
 
         // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
@@ -293,7 +297,8 @@ export class SearchProvider {
                     maxResults: 15,
                 });
 
-                if (burstResults.length > instantResults.length) {
+                // Update if we have more results or if current list is empty
+                if (burstResults.length > instantResults.length || (burstResults.length > 0 && quickPick.items.length === 0)) {
                     quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
                     this.updateTitle(quickPick, burstResults.length);
                 }
@@ -400,6 +405,7 @@ export class SearchProvider {
             description,
             detail,
             iconPath: coloredIcon,
+            alwaysShow: true, // Crucial: prevent VS Code from re-filtering our fuzzy results
             result,
         };
     }

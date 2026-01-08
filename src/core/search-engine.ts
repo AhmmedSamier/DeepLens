@@ -107,19 +107,19 @@ export class SearchEngine {
         let results = this.fuzzySearch(filteredItems, query);
 
         // 2. Add CamelHumps results if needed
-        if (enableCamelHumps && results.length < maxResults / 2) {
+        const minItemsForCamelHumps = Math.min(maxResults / 2, 10);
+        if (enableCamelHumps && results.length < minItemsForCamelHumps) {
             results = this.mergeWithCamelHumps(results, filteredItems, query);
         }
 
-        // 3. Sort and return
+        // 3. Sort by score
         results.sort((a, b) => b.score - a.score);
 
         // 4. Boost by activity and re-sort final time
         if (this.getActivityScore) {
             this.applyPersonalizedBoosting(results);
+            results.sort((a, b) => b.score - a.score);
         }
-
-        results.sort((a, b) => b.score - a.score);
 
         return results.slice(0, maxResults);
     }
@@ -170,25 +170,26 @@ export class SearchEngine {
 
             // Match against name
             const nameResult = Fuzzysort.single(query, preparedName);
-            if (nameResult && nameResult.score > bestScore) {
+            if (nameResult) {
                 bestScore = nameResult.score;
             }
 
             // Match against full name if available
             if (preparedFullName) {
                 const fullNameResult = Fuzzysort.single(query, preparedFullName);
-                if (fullNameResult && fullNameResult.score > bestScore) {
-                    // Penalty for full name match (scores are negative, so 1.1 makes it more negative/worse)
-                    bestScore = fullNameResult.score * 1.1;
+                if (fullNameResult) {
+                    // Penalty for full name match (scores are 0-1, so 0.9 makes it lower/worse)
+                    const fullNameScore = fullNameResult.score * 0.9;
+                    if (fullNameScore > bestScore) {
+                        bestScore = fullNameScore;
+                    }
                 }
             }
 
             if (bestScore > -Infinity) {
-                // Normalize score to 0-1 range
-                const normalizedScore = this.normalizeFuzzysortScore(bestScore);
                 results.push({
                     item,
-                    score: this.applyItemTypeBoost(normalizedScore, item.type),
+                    score: this.applyItemTypeBoost(bestScore, item.type),
                     scope: this.getScopeForItemType(item.type),
                 });
             }
@@ -241,13 +242,10 @@ export class SearchEngine {
 
     /**
      * Normalize fuzzysort score to 0-1 range
+     * Note: Fuzzysort 3.1.0+ already returns scores in 0-1 range
      */
     private normalizeFuzzysortScore(score: number): number {
-        // Fuzzysort scores are negative (better matches are closer to 0)
-        // Range 10,000 allows for deep subsequence matches in long paths
-        const range = 10000;
-        const normalized = Math.max(0, (score + range) / range);
-        return Math.min(1, normalized);
+        return Math.max(0, Math.min(1, score));
     }
 
     /**
