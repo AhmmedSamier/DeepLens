@@ -230,9 +230,14 @@ function setupRepositoryListener(repository: any): void {
         }
 
         gitChangeDebounce = setTimeout(async () => {
-            console.log('Git state changed - re-indexing workspace');
-            vscode.window.setStatusBarMessage('$(sync~spin) Re-indexing after git change...', 2000);
-            await indexWorkspace();
+            console.log('Git state changed - performing delta sync');
+            vscode.window.setStatusBarMessage('$(sync~spin) Syncing git changes...', 2000);
+            await workspaceIndexer.syncGitDelta();
+
+            // Re-sync with search engine
+            const workspaceItems = workspaceIndexer.getItems();
+            const commandItems = commandIndexer.getCommands();
+            searchEngine.setItems([...workspaceItems, ...commandItems]);
         }, 1000); // Wait 1 second after git changes settle
     });
 }

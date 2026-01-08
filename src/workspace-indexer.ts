@@ -533,6 +533,77 @@ export class WorkspaceIndexer {
     }
 
     /**
+     * Incrementally sync the index based on git changes (e.g., branch switch)
+     */
+    async syncGitDelta(): Promise<void> {
+        if (this.indexing) return;
+
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) return;
+
+        this.indexing = true;
+        try {
+            for (const folder of workspaceFolders) {
+                await this.syncFolderDelta(folder);
+            }
+
+            // Sync hashes and persistence
+            await this.populateFileHashes();
+            await this.persistence.save();
+        } finally {
+            this.indexing = false;
+        }
+    }
+
+    /**
+     * Sync changes for a specific workspace folder
+     */
+    private async syncFolderDelta(folder: vscode.WorkspaceFolder): Promise<void> {
+        const folderPath = folder.uri.fsPath;
+        try {
+            // Get changes between previous HEAD and current HEAD
+            const output = cp.execSync('git diff --name-only HEAD@{1} HEAD', {
+                cwd: folderPath,
+                encoding: 'utf8'
+            });
+
+            const relativePaths = output.split('\n').filter(p => p.trim() !== '');
+            if (relativePaths.length === 0) return;
+
+            console.log(`Git delta sync: Processing ${relativePaths.length} changes in ${folder.name}`);
+
+            for (const relPath of relativePaths) {
+                await this.syncFileDelta(folderPath, relPath);
+            }
+        } catch (e) {
+            console.log('Git delta sync skipped or failed for folder:', folder.name);
+        }
+    }
+
+    /**
+     * Sync a single file's delta change
+     */
+    private async syncFileDelta(folderPath: string, relPath: string): Promise<void> {
+        const fullPath = path.join(folderPath, relPath);
+        const uri = vscode.Uri.file(fullPath);
+
+        if (fs.existsSync(fullPath)) {
+            const ext = path.extname(fullPath).toLowerCase().slice(1);
+            if (this.config.getFileExtensions().includes(ext)) {
+                // If already in items as FILE, update symbols; else treat as new
+                const alreadyKnown = this.items.some(i => i.filePath === fullPath && i.type === SearchItemType.FILE);
+                if (alreadyKnown) {
+                    await this.handleFileChanged(uri);
+                } else {
+                    await this.handleFileCreated(uri);
+                }
+            }
+        } else {
+            this.handleFileDeleted(uri);
+        }
+    }
+
+    /**
      * Dispose resources
      */
     dispose(): void {
