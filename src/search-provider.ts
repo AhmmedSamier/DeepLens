@@ -229,7 +229,12 @@ export class SearchProvider {
 
         quickPick.onDidChangeValue((query) => {
             cleanupTimeouts();
-            this.handleQueryChange(quickPick, query, (bt) => (burstTimeout = bt), (ft) => (fuzzyTimeout = ft));
+            this.handleQueryChange(
+                quickPick,
+                query,
+                (bt) => (burstTimeout = bt),
+                (ft) => (fuzzyTimeout = ft),
+            );
         });
 
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
@@ -486,6 +491,7 @@ export class SearchProvider {
             });
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
+            console.error(`Navigation error for ${item.filePath}:`, error);
         }
     }
 }

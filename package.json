@@ -112,30 +112,38 @@
         }
     },
     "scripts": {
-        "vscode:prepublish": "npm run compile",
+        "vscode:prepublish": "bun run compile",
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
-        "pretest": "npm run compile",
-        "lint": "eslint src --ext ts --cache",
-        "format": "prettier --write \"src/**/*.ts\" --cache",
-        "test": "node ./out/test/runTest.js"
+        "lint": "eslint src --cache",
+        "format": "prettier --write \"src/**/*.ts\" --cache"
     },
     "devDependencies": {
-        "@types/node": "^18.19.130",
-        "@types/vscode": "^1.85.0",
-        "@typescript-eslint/eslint-plugin": "^6.13.0",
-        "@typescript-eslint/parser": "^6.13.0",
-        "@vscode/test-electron": "^2.3.8",
-        "eslint": "^8.54.0",
-        "eslint-plugin-sonarjs": "0.23.0",
+        "@eslint/eslintrc": "^3.3.3",
+        "@eslint/js": "^9.39.2",
+        "@types/node": "^25.0.3",
+        "@types/vscode": "^1.107.0",
+        "@typescript-eslint/eslint-plugin": "^8.52.0",
+        "@typescript-eslint/parser": "^8.52.0",
+        "eslint": "^9.39.2",
+        "eslint-plugin-sonarjs": "3.0.5",
+        "globals": "^17.0.0",
         "prettier": "^3.7.4",
         "prettier-plugin-organize-imports": "^4.3.0",
-        "tree-sitter-c-sharp": "^0.23.1",
-        "tree-sitter-typescript": "^0.23.2",
-        "typescript": "^5.3.2"
+        "typescript": "^5.9.3"
     },
     "dependencies": {
-        "fuzzysort": "^2.0.4",
+        "fuzzysort": "^3.1.0",
+        "tree-sitter-c": "^0.24.1",
+        "tree-sitter-c-sharp": "^0.23.1",
+        "tree-sitter-cpp": "^0.23.4",
+        "tree-sitter-go": "^0.25.0",
+        "tree-sitter-java": "^0.23.5",
+        "tree-sitter-javascript": "^0.25.0",
+        "tree-sitter-php": "^0.24.2",
+        "tree-sitter-python": "^0.25.0",
+        "tree-sitter-ruby": "^0.23.1",
+        "tree-sitter-typescript": "^0.23.2",
         "web-tree-sitter": "^0.26.3"
     }
 }

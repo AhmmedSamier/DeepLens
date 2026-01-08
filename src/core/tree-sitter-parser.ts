@@ -49,14 +49,64 @@ export class TreeSitterParser {
         await lib.init();
         this.parser = new ParserClass();
 
-        // Load languages
-        await this.loadLanguage('typescript', 'tree-sitter-typescript.wasm');
-        await this.loadLanguage('typescriptreact', 'tree-sitter-tsx.wasm');
-        await this.loadLanguage('javascript', 'tree-sitter-typescript.wasm');
-        await this.loadLanguage('javascriptreact', 'tree-sitter-tsx.wasm');
-        await this.loadLanguage('csharp', 'tree-sitter-c_sharp.wasm');
+        // Load languages from node_modules
+        const languageMap = [
+            { id: 'typescript', pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-typescript.wasm' },
+            { id: 'typescriptreact', pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-tsx.wasm' },
+            { id: 'javascript', pkg: 'tree-sitter-javascript', wasm: 'tree-sitter-javascript.wasm' },
+            { id: 'javascriptreact', pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-tsx.wasm' },
+            { id: 'csharp', pkg: 'tree-sitter-c-sharp', wasm: 'tree-sitter-c_sharp.wasm' },
+            { id: 'python', pkg: 'tree-sitter-python', wasm: 'tree-sitter-python.wasm' },
+            { id: 'java', pkg: 'tree-sitter-java', wasm: 'tree-sitter-java.wasm' },
+            { id: 'go', pkg: 'tree-sitter-go', wasm: 'tree-sitter-go.wasm' },
+            { id: 'cpp', pkg: 'tree-sitter-cpp', wasm: 'tree-sitter-cpp.wasm' },
+            { id: 'c', pkg: 'tree-sitter-c', wasm: 'tree-sitter-c.wasm' },
+            { id: 'ruby', pkg: 'tree-sitter-ruby', wasm: 'tree-sitter-ruby.wasm' },
+            { id: 'php', pkg: 'tree-sitter-php', wasm: 'tree-sitter-php.wasm' },
+        ];
+
+        for (const lang of languageMap) {
+            await this.loadLanguageFromModule(lang.id, lang.pkg, lang.wasm);
+        }
 
         this.isInitialized = true;
+    }
+
+    private async loadLanguageFromModule(langId: string, packageName: string, wasmFile: string): Promise<void> {
+        try {
+            // Locate the WASM file in node_modules
+            const pkgPath = path.dirname(require.resolve(`${packageName}/package.json`));
+            let wasmPath = path.join(pkgPath, wasmFile);
+
+            // Handle cases where WASM might be in a different subfolder or named differently
+            if (!fs.existsSync(wasmPath)) {
+                // Try a few common locations
+                const alternates = [
+                    path.join(pkgPath, 'out', wasmFile),
+                    path.join(pkgPath, 'dist', wasmFile),
+                    path.join(pkgPath, wasmFile.replace('_', '-')), // c_sharp vs c-sharp
+                ];
+                for (const alt of alternates) {
+                    if (fs.existsSync(alt)) {
+                        wasmPath = alt;
+                        break;
+                    }
+                }
+            }
+
+            if (fs.existsSync(wasmPath)) {
+                const lib = Parser as unknown as TreeSitterLib;
+                const lang = await lib.Language.load(wasmPath);
+                this.languages.set(langId, lang);
+            } else {
+                // Fallback to local parsers folder if available
+                await this.loadLanguage(langId, wasmFile);
+            }
+        } catch (error) {
+            // Fallback for cases where require.resolve fails or package is missing
+            console.debug(`Module resolution failed for ${langId}, falling back to local:`, error);
+            await this.loadLanguage(langId, wasmFile);
+        }
     }
 
     private async loadLanguage(langId: string, wasmFile: string): Promise<void> {
@@ -122,6 +172,24 @@ export class TreeSitterParser {
                 return 'javascriptreact';
             case '.cs':
                 return 'csharp';
+            case '.py':
+                return 'python';
+            case '.java':
+                return 'java';
+            case '.go':
+                return 'go';
+            case '.cpp':
+            case '.cc':
+            case '.cxx':
+            case '.hpp':
+                return 'cpp';
+            case '.c':
+            case '.h':
+                return 'c';
+            case '.rb':
+                return 'ruby';
+            case '.php':
+                return 'php';
             default:
                 return '';
         }
@@ -171,45 +239,70 @@ export class TreeSitterParser {
     }
 
     private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
-        // Common types
-        if (nodeType.includes('class_declaration')) {
+        // Classes & Types
+        if (nodeType.match(/class_declaration|class_definition|^class$/)) {
             return SearchItemType.CLASS;
         }
-        if (nodeType.includes('interface_declaration')) {
+        if (nodeType.match(/interface_declaration|interface_definition|^interface$/)) {
             return SearchItemType.INTERFACE;
         }
-        if (nodeType.includes('enum_declaration')) {
+        if (nodeType.match(/enum_declaration|enum_definition|^enum$/)) {
             return SearchItemType.ENUM;
         }
+        if (nodeType.match(/struct_declaration|struct_definition|^struct$/)) {
+            return SearchItemType.CLASS;
+        }
+        if (nodeType.match(/trait_declaration|trait_definition|^trait$/)) {
+            return SearchItemType.INTERFACE;
+        }
 
-        return langId === 'csharp' ? this.getCSharpItemType(nodeType) : this.getTSJSItemType(nodeType);
-    }
-
-    private getCSharpItemType(nodeType: string): SearchItemType | undefined {
-        if (nodeType === 'method_declaration') {
+        // Functions & Methods
+        if (nodeType.match(/method_declaration|method_definition|^method$/)) {
             return SearchItemType.METHOD;
         }
-        if (nodeType === 'property_declaration') {
+        if (nodeType.match(/function_declaration|function_definition|^function$/)) {
+            return SearchItemType.FUNCTION;
+        }
+
+        return this.getLanguageSpecificItemType(nodeType, langId);
+    }
+
+    private getLanguageSpecificItemType(nodeType: string, langId: string): SearchItemType | undefined {
+        switch (langId) {
+            case 'python':
+                if (nodeType === 'function_definition') {
+                    return SearchItemType.FUNCTION;
+                }
+                break;
+            case 'go':
+                return this.getGoItemType(nodeType);
+            case 'ruby':
+                if (nodeType === 'method' || nodeType === 'singleton_method') {
+                    return SearchItemType.METHOD;
+                }
+                break;
+        }
+
+        // Fallback for common properties and variables
+        if (nodeType.match(/property_declaration|property_definition/)) {
             return SearchItemType.PROPERTY;
         }
-        if (nodeType === 'variable_declaration') {
+        if (nodeType.match(/variable_declaration|variable_declarator/)) {
             return SearchItemType.VARIABLE;
         }
+
         return undefined;
     }
 
-    private getTSJSItemType(nodeType: string): SearchItemType | undefined {
-        if (nodeType === 'method_definition') {
+    private getGoItemType(nodeType: string): SearchItemType | undefined {
+        if (nodeType === 'method_declaration') {
             return SearchItemType.METHOD;
         }
         if (nodeType === 'function_declaration') {
             return SearchItemType.FUNCTION;
         }
-        if (nodeType === 'property_definition') {
-            return SearchItemType.PROPERTY;
-        }
-        if (nodeType === 'variable_declarator') {
-            return SearchItemType.VARIABLE;
+        if (nodeType === 'type_declaration') {
+            return SearchItemType.CLASS;
         }
         return undefined;
     }
@@ -217,9 +310,7 @@ export class TreeSitterParser {
     private getNameNode(node: TreeSitterNode): TreeSitterNode | null {
         // Tree-sitter usually has an 'identifier' or 'name' child for declarations
         return (
-            node.childForFieldName('name') ||
-            node.children.find((c: TreeSitterNode) => c.type === 'identifier') ||
-            null
+            node.childForFieldName('name') || node.children.find((c: TreeSitterNode) => c.type === 'identifier') || null
         );
     }
 }
