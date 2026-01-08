@@ -116,7 +116,8 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "pretest": "npm run compile",
-        "lint": "eslint src --ext ts",
+        "lint": "eslint src --ext ts --cache",
+        "format": "prettier --write \"src/**/*.ts\" --cache",
         "test": "node ./out/test/runTest.js"
     },
     "devDependencies": {
@@ -126,6 +127,9 @@
         "@typescript-eslint/parser": "^6.13.0",
         "@vscode/test-electron": "^2.3.8",
         "eslint": "^8.54.0",
+        "eslint-plugin-sonarjs": "0.23.0",
+        "prettier": "^3.7.4",
+        "prettier-plugin-organize-imports": "^4.3.0",
         "tree-sitter-c-sharp": "^0.23.1",
         "tree-sitter-typescript": "^0.23.2",
         "typescript": "^5.3.2"

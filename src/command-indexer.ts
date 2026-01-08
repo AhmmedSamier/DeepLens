@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { SearchableItem, SearchItemType } from './core/types';
 import { Config } from './config';
+import { SearchableItem, SearchItemType } from './core/types';
 
 /**
  * Indexes VS Code commands for search
@@ -55,14 +55,14 @@ export class CommandIndexer {
      */
     private commandIdToTitle(commandId: string): string {
         // Remove common prefixes
-        let title = commandId
+        const title = commandId
             .replace(/^workbench\.action\./, '')
             .replace(/^editor\.action\./, '')
             .replace(/^vscode\./, '');
 
         // Split by dots and capitalize
         const parts = title.split('.');
-        const readable = parts
+        return parts
             .map((part) => {
                 // Split camelCase
                 const words = part.replace(/([A-Z])/g, ' $1').trim();
@@ -70,8 +70,6 @@ export class CommandIndexer {
                 return words.charAt(0).toUpperCase() + words.slice(1);
             })
             .join(' ');
-
-        return readable;
     }
 
     /**

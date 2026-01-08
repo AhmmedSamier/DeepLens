@@ -1,10 +1,9 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
-import { SearchEngine } from './core/search-engine';
-import { SearchOptions, SearchResult, SearchScope, SearchItemType } from './core/types';
-import { Config } from './config';
 import { ActivityTracker } from './activity-tracker';
 import { CommandIndexer } from './command-indexer';
+import { Config } from './config';
+import { SearchEngine } from './core/search-engine';
+import { SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -20,12 +19,13 @@ export class SearchProvider {
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
     private readonly INACTIVE_PREFIX = '○ ';
+    private readonly ICON_CLASS = 'symbol-class';
 
     constructor(
         searchEngine: SearchEngine,
         config: Config,
         activityTracker?: ActivityTracker,
-        commandIndexer?: CommandIndexer
+        commandIndexer?: CommandIndexer,
     ) {
         this.searchEngine = searchEngine;
         this.config = config;
@@ -37,7 +37,7 @@ export class SearchProvider {
         if (activityTracker && config.isActivityTrackingEnabled()) {
             searchEngine.setActivityCallback(
                 (itemId) => activityTracker.getActivityScore(itemId),
-                config.getActivityWeight()
+                config.getActivityWeight(),
             );
         }
     }
@@ -52,7 +52,7 @@ export class SearchProvider {
         });
 
         this.filterButtons.set(SearchScope.TYPES, {
-            iconPath: new vscode.ThemeIcon('symbol-class'),
+            iconPath: new vscode.ThemeIcon(this.ICON_CLASS),
             tooltip: this.INACTIVE_PREFIX + 'Classes',
         });
 
@@ -82,7 +82,7 @@ export class SearchProvider {
             case SearchScope.EVERYTHING:
                 return new vscode.ThemeIcon('search', color);
             case SearchScope.TYPES:
-                return new vscode.ThemeIcon('symbol-class', color);
+                return new vscode.ThemeIcon(this.ICON_CLASS, color);
             case SearchScope.SYMBOLS:
                 return new vscode.ThemeIcon('symbol-field', color);
             case SearchScope.FILES:
@@ -111,7 +111,9 @@ export class SearchProvider {
 
         for (const scope of orderedScopes) {
             const baseButton = this.filterButtons.get(scope);
-            if (!baseButton) continue;
+            if (!baseButton) {
+                continue;
+            }
 
             const isActive = scope === this.currentScope;
             const baseName = (baseButton.tooltip || '')
@@ -196,88 +198,42 @@ export class SearchProvider {
         // Set up filter buttons
         this.updateFilterButtons(quickPick);
 
-        // Handle input changes with Streaming Results
+        // Register all listeners
+        this.setupEventListeners(quickPick);
+
+        quickPick.show();
+
+        // Perform initial search if there's a query
+        if (quickPick.value) {
+            const results = this.performSearch(quickPick, quickPick.value);
+            this.updateTitle(quickPick, results.length);
+        }
+    }
+
+    /**
+     * Setup all quickPick event listeners
+     */
+    private setupEventListeners(quickPick: vscode.QuickPick<SearchResultItem>): void {
         let burstTimeout: NodeJS.Timeout | undefined;
         let fuzzyTimeout: NodeJS.Timeout | undefined;
 
+        // Cleanup timeouts on hide
+        const cleanupTimeouts = () => {
+            if (burstTimeout) {
+                clearTimeout(burstTimeout);
+            }
+            if (fuzzyTimeout) {
+                clearTimeout(fuzzyTimeout);
+            }
+        };
+
         quickPick.onDidChangeValue((query) => {
-            if (burstTimeout) clearTimeout(burstTimeout);
-            if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
-
-            const trimmedQuery = query.trim();
-            if (!trimmedQuery) {
-                quickPick.items = [];
-                quickPick.busy = false;
-                return;
-            }
-
-            // Start busy indicator for deep scan
-            quickPick.busy = true;
-
-            // PHASE 0: Absolute Instant (Immediate exact-name hits)
-            const instantResults = this.searchEngine.burstSearch({
-                query: trimmedQuery,
-                scope: this.currentScope,
-                maxResults: 5
-            });
-
-            if (instantResults.length > 0) {
-                quickPick.items = instantResults.map(r => this.resultToQuickPickItem(r));
-                this.updateTitle(quickPick, instantResults.length);
-            }
-
-            // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
-            burstTimeout = setTimeout(() => {
-                const burstResults = this.searchEngine.burstSearch({
-                    query: trimmedQuery,
-                    scope: this.currentScope,
-                    maxResults: 15
-                });
-
-                if (burstResults.length > instantResults.length) {
-                    quickPick.items = burstResults.map(r => this.resultToQuickPickItem(r));
-                    this.updateTitle(quickPick, burstResults.length);
-                }
-            }, 10);
-
-            // PHASE 2: Deep Fuzzy Search (Stabilized results)
-            fuzzyTimeout = setTimeout(() => {
-                try {
-                    const results = this.performSearch(quickPick, query);
-                    this.updateTitle(quickPick, results.length);
-                } finally {
-                    quickPick.busy = false; // Deep scan finished
-                }
-            }, 100);
+            cleanupTimeouts();
+            this.handleQueryChange(quickPick, query, (bt) => (burstTimeout = bt), (ft) => (fuzzyTimeout = ft));
         });
 
-        // Handle button clicks for filter toggling
-        quickPick.onDidTriggerButton((button) => {
-            const tooltip = button.tooltip || '';
-            const baseName = tooltip
-                .replace(this.ACTIVE_PREFIX, '')
-                .replace(this.INACTIVE_PREFIX, '');
+        quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
-            // Find which scope was clicked
-            for (const [scope, filterButton] of this.filterButtons.entries()) {
-                const buttonBaseName = (filterButton.tooltip || '')
-                    .replace(this.ACTIVE_PREFIX, '')
-                    .replace(this.INACTIVE_PREFIX, '');
-
-                if (buttonBaseName === baseName) {
-                    this.currentScope = scope;
-                    quickPick.placeholder = this.getPlaceholder();
-                    this.updateFilterButtons(quickPick);
-
-                    // Re-run search with new filter
-                    const results = this.performSearch(quickPick, quickPick.value);
-                    this.updateTitle(quickPick, results.length);
-                    break;
-                }
-            }
-        });
-
-        // Handle item selection
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
@@ -286,19 +242,95 @@ export class SearchProvider {
             }
         });
 
-        // Handle hiding
         quickPick.onDidHide(() => {
-            if (burstTimeout) clearTimeout(burstTimeout);
-            if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
+            cleanupTimeouts();
             quickPick.dispose();
         });
+    }
 
-        quickPick.show();
+    /**
+     * Handle search query changes with tiered execution
+     */
+    private handleQueryChange(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        query: string,
+        setBurstTimeout: (t: NodeJS.Timeout) => void,
+        setFuzzyTimeout: (t: NodeJS.Timeout) => void,
+    ): void {
+        const trimmedQuery = query.trim();
+        if (!trimmedQuery) {
+            quickPick.items = [];
+            quickPick.busy = false;
+            return;
+        }
 
-        // Perform initial search if there's a query
-        if (quickPick.value) {
-            const results = this.performSearch(quickPick, quickPick.value);
-            this.updateTitle(quickPick, results.length);
+        // Start busy indicator for deep scan
+        quickPick.busy = true;
+
+        // PHASE 0: Absolute Instant (Immediate exact-name hits)
+        const instantResults = this.searchEngine.burstSearch({
+            query: trimmedQuery,
+            scope: this.currentScope,
+            maxResults: 5,
+        });
+
+        if (instantResults.length > 0) {
+            quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+            this.updateTitle(quickPick, instantResults.length);
+        }
+
+        // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
+        setBurstTimeout(
+            setTimeout(() => {
+                const burstResults = this.searchEngine.burstSearch({
+                    query: trimmedQuery,
+                    scope: this.currentScope,
+                    maxResults: 15,
+                });
+
+                if (burstResults.length > instantResults.length) {
+                    quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
+                    this.updateTitle(quickPick, burstResults.length);
+                }
+            }, 10),
+        );
+
+        // PHASE 2: Deep Fuzzy Search (Stabilized results)
+        setFuzzyTimeout(
+            setTimeout(() => {
+                try {
+                    const results = this.performSearch(quickPick, query);
+                    this.updateTitle(quickPick, results.length);
+                } finally {
+                    quickPick.busy = false;
+                }
+            }, 100),
+        );
+    }
+
+    /**
+     * Handle button clicks for filter toggling
+     */
+    private handleButtonPress(quickPick: vscode.QuickPick<SearchResultItem>, button: vscode.QuickInputButton): void {
+        const tooltip = button.tooltip || '';
+        const baseName = tooltip.replace(this.ACTIVE_PREFIX, '').replace(this.INACTIVE_PREFIX, '');
+
+        // Find which scope was clicked
+        for (const [scope, filterButton] of this.filterButtons.entries()) {
+            const buttonBaseName = (filterButton.tooltip || '')
+                .replace(this.ACTIVE_PREFIX, '')
+                .replace(this.INACTIVE_PREFIX, '');
+
+            if (buttonBaseName === baseName) {
+                this.currentScope = scope;
+                quickPick.placeholder = this.getPlaceholder();
+                this.updateFilterButtons(quickPick);
+
+                // Re-run search with new filter
+                const results = this.performSearch(quickPick, quickPick.value);
+                this.updateTitle(quickPick, results.length);
+                break;
+            }
         }
     }
 
@@ -336,7 +368,7 @@ export class SearchProvider {
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
         // Don't add icon to label - iconPath will render it
-        let label = item.name;
+        const label = item.name;
         let description = '';
         let detail = '';
 
@@ -368,12 +400,12 @@ export class SearchProvider {
     }
 
     /**
-   * Get icon for item type
-   */
+     * Get icon for item type
+     */
     private getIconForItemType(type: SearchItemType): string {
         switch (type) {
             case SearchItemType.CLASS:
-                return 'symbol-class';
+                return this.ICON_CLASS;
             case SearchItemType.INTERFACE:
                 return 'symbol-interface';
             case SearchItemType.ENUM:
@@ -422,8 +454,8 @@ export class SearchProvider {
     }
 
     /**
-   * Navigate to the selected item or execute command
-   */
+     * Navigate to the selected item or execute command
+     */
     private async navigateToItem(result: SearchResult): Promise<void> {
         const { item } = result;
 
@@ -446,9 +478,7 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line !== undefined
-                    ? new vscode.Position(item.line, item.column || 0)
-                    : new vscode.Position(0, 0);
+                item.line !== undefined ? new vscode.Position(item.line, item.column || 0) : new vscode.Position(0, 0);
 
             await vscode.window.showTextDocument(document, {
                 selection: new vscode.Range(position, position),

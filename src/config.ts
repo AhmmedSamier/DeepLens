@@ -45,15 +45,15 @@ export class Config {
     }
 
     /**
-   * Check if CamelHumps matching is enabled
-   */
+     * Check if CamelHumps matching is enabled
+     */
     isCamelHumpsEnabled(): boolean {
         return this.config.get<boolean>('enableCamelHumps', true);
     }
 
     /**
-   * Check if .gitignore should be respected
-   */
+     * Check if .gitignore should be respected
+     */
     shouldRespectGitignore(): boolean {
         return this.config.get<boolean>('respectGitignore', true);
     }

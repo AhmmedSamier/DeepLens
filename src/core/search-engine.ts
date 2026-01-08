@@ -1,5 +1,5 @@
 import * as Fuzzysort from 'fuzzysort';
-import { SearchableItem, SearchResult, SearchOptions, SearchScope, SearchItemType } from './types';
+import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 
 interface PreparedItem {
     item: SearchableItem;
@@ -46,10 +46,10 @@ export class SearchEngine {
      */
     private rebuildHotArrays(): void {
         this.scopedItems.clear();
-        this.preparedItems = this.items.map(item => ({
+        this.preparedItems = this.items.map((item) => ({
             item,
             preparedName: Fuzzysort.prepare(item.name),
-            preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null
+            preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
         }));
 
         // Initialize arrays
@@ -104,11 +104,11 @@ export class SearchEngine {
 
         // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
         const filteredItems = this.filterByScope(scope);
-        let results = this.fuzzySearch(filteredItems, query, maxResults);
+        let results = this.fuzzySearch(filteredItems, query);
 
         // 2. Add CamelHumps results if needed
         if (enableCamelHumps && results.length < maxResults / 2) {
-            results = this.mergeWithCamelHumps(results, filteredItems, query, maxResults);
+            results = this.mergeWithCamelHumps(results, filteredItems, query);
         }
 
         // 3. Sort and return
@@ -124,8 +124,8 @@ export class SearchEngine {
         return results.slice(0, maxResults);
     }
 
-    private mergeWithCamelHumps(results: SearchResult[], items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
-        const camelHumpsResults = this.camelHumpsSearch(items, query, maxResults);
+    private mergeWithCamelHumps(results: SearchResult[], items: PreparedItem[], query: string): SearchResult[] {
+        const camelHumpsResults = this.camelHumpsSearch(items, query);
         const existingIds = new Set(results.map((r) => r.item.id));
 
         for (const res of camelHumpsResults) {
@@ -137,16 +137,16 @@ export class SearchEngine {
         return results;
     }
 
-
-
     private applyPersonalizedBoosting(results: SearchResult[]): void {
-        if (!this.getActivityScore) return;
+        if (!this.getActivityScore) {
+            return;
+        }
 
         for (const result of results) {
             const activityScore = this.getActivityScore(result.item.id);
             if (activityScore > 0) {
                 // Blend fuzzy score with activity score
-                result.score = (result.score * (1 - this.activityWeight)) + (activityScore * this.activityWeight);
+                result.score = result.score * (1 - this.activityWeight) + activityScore * this.activityWeight;
             }
         }
     }
@@ -161,7 +161,7 @@ export class SearchEngine {
     /**
      * Fuzzy search using fuzzysort library
      */
-    private fuzzySearch(items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
+    private fuzzySearch(items: PreparedItem[], query: string): SearchResult[] {
         // Search by name and fullName
         const results: SearchResult[] = [];
 
@@ -200,7 +200,7 @@ export class SearchEngine {
     /**
      * CamelHumps search (e.g., "RFC" matches "React.FC" or "RequestForComment")
      */
-    private camelHumpsSearch(items: PreparedItem[], query: string, maxResults: number): SearchResult[] {
+    private camelHumpsSearch(items: PreparedItem[], query: string): SearchResult[] {
         const results: SearchResult[] = [];
         const queryUpper = query.toUpperCase();
 
@@ -217,8 +217,6 @@ export class SearchEngine {
 
         return results;
     }
-
-
 
     /**
      * Calculate CamelHumps match score
@@ -303,7 +301,9 @@ export class SearchEngine {
      */
     burstSearch(options: SearchOptions): SearchResult[] {
         const { query, scope, maxResults = 10 } = options;
-        if (!query || query.trim().length === 0) return [];
+        if (!query || query.trim().length === 0) {
+            return [];
+        }
 
         const filteredItems = this.filterByScope(scope);
         const results: SearchResult[] = [];
@@ -321,7 +321,9 @@ export class SearchEngine {
                 });
             }
 
-            if (results.length >= maxResults) break;
+            if (results.length >= maxResults) {
+                break;
+            }
         }
 
         // Apply activity tracking if available

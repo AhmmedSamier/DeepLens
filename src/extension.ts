@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
-import { SearchEngine } from './core/search-engine';
-import { WorkspaceIndexer } from './workspace-indexer';
-import { SearchProvider } from './search-provider';
-import { Config } from './config';
 import { ActivityTracker } from './activity-tracker';
 import { CommandIndexer } from './command-indexer';
-import { TreeSitterParser } from './core/tree-sitter-parser';
+import { Config } from './config';
 import { IndexPersistence } from './core/index-persistence';
+import { SearchEngine } from './core/search-engine';
+import { TreeSitterParser } from './core/tree-sitter-parser';
+import { SearchProvider } from './search-provider';
+import { WorkspaceIndexer } from './workspace-indexer';
 
 let searchEngine: SearchEngine;
 let workspaceIndexer: WorkspaceIndexer;
@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext) {
     searchProvider = new SearchProvider(searchEngine, config, activityTracker, commandIndexer);
 
     // Initialize Tree-sitter (async)
-    treeSitterParser.init().catch(e => console.error('Tree-sitter init failed:', e));
+    treeSitterParser.init().catch((e) => console.error('Tree-sitter init failed:', e));
 
     // Register search command
     const searchCommand = vscode.commands.registerCommand('findEverywhere.search', async () => {
@@ -73,7 +73,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 if (editor) {
                     activityTracker.recordAccess(`file:${editor.document.uri.fsPath}`);
                 }
-            })
+            }),
         );
     }
 
@@ -90,7 +90,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     indexWorkspace();
                 }
             }
-        })
+        }),
     );
 
     // Register indexer for disposal
@@ -139,26 +139,26 @@ async function indexWorkspace(): Promise<void> {
                 const commandItems = commandIndexer.getCommands();
                 const allItems = [...workspaceItems, ...commandItems];
 
-                const fileCount = workspaceItems.filter(i => i.type === 'file').length;
+                const fileCount = workspaceItems.filter((i) => i.type === 'file').length;
                 const symbolCount = workspaceItems.length - fileCount;
                 const commandCount = commandItems.length;
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
                 progress.report({
                     message: `Complete! ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands in ${duration}s`,
-                    increment: 100
+                    increment: 100,
                 });
 
                 searchEngine.setItems(allItems);
 
                 // Show completion message
                 vscode.window.showInformationMessage(
-                    `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands in ${duration}s`
+                    `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands in ${duration}s`,
                 );
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to index workspace: ${error}`);
             }
-        }
+        },
     );
 }
 
@@ -189,30 +189,38 @@ function setupGitListener(context: vscode.ExtensionContext): void {
         }
 
         // Activate git extension if not already active
-        gitExtension.exports.getAPI(1).then((git: any) => {
-            if (!git) {
-                return;
-            }
+        gitExtension.exports
+            .getAPI(1)
+            .then((git: unknown) => {
+                if (!git || typeof git !== 'object') {
+                    return;
+                }
 
-            // Listen to all repositories
-            const repositories = git.repositories;
+                const gitApi = git as {
+                    repositories: unknown[];
+                    onDidOpenRepository: (cb: (repo: unknown) => void) => vscode.Disposable;
+                };
 
-            if (repositories.length === 0) {
-                // Wait for repositories to be initialized
-                const disposable = git.onDidOpenRepository((repo: any) => {
-                    setupRepositoryListener(repo);
-                    disposable.dispose();
-                });
-                context.subscriptions.push(disposable);
-            } else {
-                // Setup listeners for existing repositories
-                repositories.forEach((repo: any) => {
-                    setupRepositoryListener(repo);
-                });
-            }
-        }).catch((error: any) => {
-            console.error('Failed to get git API:', error);
-        });
+                // Listen to all repositories
+                const repositories = gitApi.repositories;
+
+                if (repositories.length === 0) {
+                    // Wait for repositories to be initialized
+                    const disposable = gitApi.onDidOpenRepository((repo: unknown) => {
+                        setupRepositoryListener(repo);
+                        disposable.dispose();
+                    });
+                    context.subscriptions.push(disposable);
+                } else {
+                    // Setup listeners for existing repositories
+                    repositories.forEach((repo: unknown) => {
+                        setupRepositoryListener(repo);
+                    });
+                }
+            })
+            .catch((error: unknown) => {
+                console.error('Failed to get git API:', error);
+            });
     } catch (error) {
         console.error('Error setting up git listener:', error);
     }
@@ -221,9 +229,19 @@ function setupGitListener(context: vscode.ExtensionContext): void {
 /**
  * Setup listener for individual repository
  */
-function setupRepositoryListener(repository: any): void {
+function setupRepositoryListener(repository: unknown): void {
+    if (!repository || typeof repository !== 'object') {
+        return;
+    }
+
+    const repo = repository as {
+        state: {
+            onDidChange: (cb: () => void) => void;
+        };
+    };
+
     // Listen for HEAD changes (branch switches, commits, etc.)
-    repository.state.onDidChange(() => {
+    repo.state.onDidChange(() => {
         // Debounce re-indexing to avoid excessive calls
         if (gitChangeDebounce) {
             clearTimeout(gitChangeDebounce);

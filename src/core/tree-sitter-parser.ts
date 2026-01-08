@@ -1,12 +1,34 @@
-import * as path from 'path';
 import * as fs from 'fs';
+import * as path from 'path';
 import * as vscode from 'vscode';
 import * as Parser from 'web-tree-sitter';
 import { SearchItemType, SearchableItem } from './types';
 
+interface TreeSitterNode {
+    type: string;
+    text: string;
+    startPosition: { row: number; column: number };
+    childCount: number;
+    child: (i: number) => TreeSitterNode | null;
+    childForFieldName: (name: string) => TreeSitterNode | null;
+    children: TreeSitterNode[];
+}
+
+interface TreeSitterLib {
+    init: () => Promise<void>;
+    Language: {
+        load: (path: string) => Promise<unknown>;
+    };
+}
+
 export class TreeSitterParser {
-    private parser: any;
-    private languages: Map<string, any> = new Map();
+    private parser:
+        | {
+            setLanguage: (lang: unknown) => void;
+            parse: (content: string) => { rootNode: unknown; delete: () => void };
+        }
+        | undefined;
+    private languages: Map<string, unknown> = new Map();
     private isInitialized: boolean = false;
     private extensionPath: string;
 
@@ -18,10 +40,14 @@ export class TreeSitterParser {
      * Initialize the parser and load languages
      */
     async init(): Promise<void> {
-        if (this.isInitialized) return;
+        if (this.isInitialized) {
+            return;
+        }
 
-        await (Parser as any).init();
-        this.parser = new (Parser as any)();
+        const lib = Parser as unknown as TreeSitterLib;
+        const ParserClass = Parser as unknown as new () => NonNullable<TreeSitterParser['parser']>;
+        await lib.init();
+        this.parser = new ParserClass();
 
         // Load languages
         await this.loadLanguage('typescript', 'tree-sitter-typescript.wasm');
@@ -44,7 +70,8 @@ export class TreeSitterParser {
             }
 
             if (fs.existsSync(wasmPath)) {
-                const lang = await (Parser as any).Language.load(wasmPath);
+                const lib = Parser as unknown as TreeSitterLib;
+                const lang = await lib.Language.load(wasmPath);
                 this.languages.set(langId, lang);
             }
         } catch (error) {
@@ -56,11 +83,15 @@ export class TreeSitterParser {
      * Parse a file and extract symbols
      */
     async parseFile(fileUri: vscode.Uri): Promise<SearchableItem[]> {
-        if (!this.isInitialized || !this.parser) return [];
+        if (!this.isInitialized || !this.parser) {
+            return [];
+        }
 
         const langId = this.getLanguageId(fileUri.fsPath);
         const lang = this.languages.get(langId);
-        if (!lang) return [];
+        if (!lang) {
+            return [];
+        }
 
         try {
             this.parser.setLanguage(lang);
@@ -68,7 +99,7 @@ export class TreeSitterParser {
             const tree = this.parser.parse(content);
             const items: SearchableItem[] = [];
 
-            this.extractSymbols(tree.rootNode, fileUri.fsPath, items, langId);
+            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, fileUri.fsPath, items, langId);
 
             tree.delete();
             return items;
@@ -81,16 +112,28 @@ export class TreeSitterParser {
     private getLanguageId(filePath: string): string {
         const ext = path.extname(filePath).toLowerCase();
         switch (ext) {
-            case '.ts': return 'typescript';
-            case '.tsx': return 'typescriptreact';
-            case '.js': return 'javascript';
-            case '.jsx': return 'javascriptreact';
-            case '.cs': return 'csharp';
-            default: return '';
+            case '.ts':
+                return 'typescript';
+            case '.tsx':
+                return 'typescriptreact';
+            case '.js':
+                return 'javascript';
+            case '.jsx':
+                return 'javascriptreact';
+            case '.cs':
+                return 'csharp';
+            default:
+                return '';
         }
     }
 
-    private extractSymbols(node: any, filePath: string, items: SearchableItem[], langId: string, containerName?: string): void {
+    private extractSymbols(
+        node: TreeSitterNode,
+        filePath: string,
+        items: SearchableItem[],
+        langId: string,
+        containerName?: string,
+    ): void {
         const type = this.getSearchItemType(node.type, langId);
         let currentContainer = containerName;
 
@@ -108,51 +151,75 @@ export class TreeSitterParser {
                     line: node.startPosition.row,
                     column: node.startPosition.column,
                     containerName: containerName,
-                    fullName: fullName
+                    fullName: fullName,
                 });
 
                 // If it's a type (class/interface/enum), it becomes the container for children
-                if (type === SearchItemType.CLASS || type === SearchItemType.INTERFACE || type === SearchItemType.ENUM) {
+                if (
+                    type === SearchItemType.CLASS ||
+                    type === SearchItemType.INTERFACE ||
+                    type === SearchItemType.ENUM
+                ) {
                     currentContainer = fullName;
                 }
             }
         }
 
         for (let i = 0; i < node.childCount; i++) {
-            this.extractSymbols(node.child(i)!, filePath, items, langId, currentContainer);
+            this.extractSymbols(node.child(i) as TreeSitterNode, filePath, items, langId, currentContainer);
         }
     }
 
     private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
         // Common types
-        if (nodeType.includes('class_declaration')) return SearchItemType.CLASS;
-        if (nodeType.includes('interface_declaration')) return SearchItemType.INTERFACE;
-        if (nodeType.includes('enum_declaration')) return SearchItemType.ENUM;
+        if (nodeType.includes('class_declaration')) {
+            return SearchItemType.CLASS;
+        }
+        if (nodeType.includes('interface_declaration')) {
+            return SearchItemType.INTERFACE;
+        }
+        if (nodeType.includes('enum_declaration')) {
+            return SearchItemType.ENUM;
+        }
 
-        return langId === 'csharp'
-            ? this.getCSharpItemType(nodeType)
-            : this.getTSJSItemType(nodeType);
+        return langId === 'csharp' ? this.getCSharpItemType(nodeType) : this.getTSJSItemType(nodeType);
     }
 
     private getCSharpItemType(nodeType: string): SearchItemType | undefined {
-        if (nodeType === 'method_declaration') return SearchItemType.METHOD;
-        if (nodeType === 'property_declaration') return SearchItemType.PROPERTY;
-        if (nodeType === 'variable_declaration') return SearchItemType.VARIABLE;
+        if (nodeType === 'method_declaration') {
+            return SearchItemType.METHOD;
+        }
+        if (nodeType === 'property_declaration') {
+            return SearchItemType.PROPERTY;
+        }
+        if (nodeType === 'variable_declaration') {
+            return SearchItemType.VARIABLE;
+        }
         return undefined;
     }
 
     private getTSJSItemType(nodeType: string): SearchItemType | undefined {
-        if (nodeType === 'method_definition') return SearchItemType.METHOD;
-        if (nodeType === 'function_declaration') return SearchItemType.FUNCTION;
-        if (nodeType === 'property_definition') return SearchItemType.PROPERTY;
-        if (nodeType === 'variable_declarator') return SearchItemType.VARIABLE;
+        if (nodeType === 'method_definition') {
+            return SearchItemType.METHOD;
+        }
+        if (nodeType === 'function_declaration') {
+            return SearchItemType.FUNCTION;
+        }
+        if (nodeType === 'property_definition') {
+            return SearchItemType.PROPERTY;
+        }
+        if (nodeType === 'variable_declarator') {
+            return SearchItemType.VARIABLE;
+        }
         return undefined;
     }
 
-    private getNameNode(node: any): any | null {
+    private getNameNode(node: TreeSitterNode): TreeSitterNode | null {
         // Tree-sitter usually has an 'identifier' or 'name' child for declarations
-        return node.childForFieldName('name') ||
-            node.children.find((c: any) => c.type === 'identifier') ||
-            null;
+        return (
+            node.childForFieldName('name') ||
+            node.children.find((c: TreeSitterNode) => c.type === 'identifier') ||
+            null
+        );
     }
 }

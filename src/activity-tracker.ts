@@ -4,10 +4,10 @@ import * as vscode from 'vscode';
  * Record of user activity for a specific item (file or symbol)
  */
 export interface ActivityRecord {
-    itemId: string;           // Unique identifier (file path or symbol ID)
-    lastAccessed: number;     // Timestamp of last access
-    accessCount: number;      // Total number of accesses
-    score: number;            // Calculated activity score (0-1)
+    itemId: string; // Unique identifier (file path or symbol ID)
+    lastAccessed: number; // Timestamp of last access
+    accessCount: number; // Total number of accesses
+    score: number; // Calculated activity score (0-1)
 }
 
 /**

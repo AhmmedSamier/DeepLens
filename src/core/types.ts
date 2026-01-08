@@ -23,11 +23,11 @@ export enum SearchItemType {
  */
 export enum SearchScope {
     EVERYTHING = 'everything',
-    TYPES = 'types',           // Classes, interfaces, enums
-    SYMBOLS = 'symbols',       // Methods, functions, properties
-    FILES = 'files',           // File names only
-    COMMANDS = 'commands',     // VS Code commands
-    TEXT = 'text',             // Text content in files
+    TYPES = 'types', // Classes, interfaces, enums
+    SYMBOLS = 'symbols', // Methods, functions, properties
+    FILES = 'files', // File names only
+    COMMANDS = 'commands', // VS Code commands
+    TEXT = 'text', // Text content in files
 }
 
 /**
