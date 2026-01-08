@@ -64,10 +64,8 @@ export class SearchEngine {
             const scope = this.getScopeForItemType(prepared.item.type);
             this.scopedItems.get(scope)?.push(prepared);
 
-            // Also add to everything
-            if (scope !== SearchScope.EVERYTHING) {
-                this.scopedItems.get(SearchScope.EVERYTHING)?.push(prepared);
-            }
+            // All items belong to EVERYTHING scope
+            this.scopedItems.get(SearchScope.EVERYTHING)?.push(prepared);
         }
     }
 
@@ -261,7 +259,8 @@ export class SearchEngine {
 
             if (distance <= maxDistance) {
                 // Score falls off rapidly with distance
-                const score = (1.0 - (distance / (query.length + 1))) * 0.75;
+                // Increased base multiplier to 0.85 to make typos more competitive
+                const score = (1.0 - (distance / (query.length + 1))) * 0.85;
                 results.push({
                     item,
                     score: this.applyItemTypeBoost(score, item.type),
