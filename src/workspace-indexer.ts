@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as cp from 'child_process';
+import * as fs from 'fs';
 import { SearchableItem, SearchItemType } from './core/types';
 import { Config } from './config';
+import { IndexPersistence } from './core/index-persistence';
 
 /**
  * Workspace indexer that scans files and extracts symbols
@@ -11,9 +14,14 @@ export class WorkspaceIndexer {
     private indexing: boolean = false;
     private config: Config;
     private fileWatcher: vscode.FileSystemWatcher | undefined;
+    private treeSitter: import('./core/tree-sitter-parser').TreeSitterParser;
+    private persistence: IndexPersistence;
+    private fileHashes: Map<string, string> = new Map();
 
-    constructor(config: Config) {
+    constructor(config: Config, treeSitter: import('./core/tree-sitter-parser').TreeSitterParser, persistence: IndexPersistence) {
         this.config = config;
+        this.treeSitter = treeSitter;
+        this.persistence = persistence;
     }
 
     /**
@@ -35,12 +43,21 @@ export class WorkspaceIndexer {
                 return;
             }
 
+            // Load cache
+            await this.persistence.load();
+
+            // Try to get git hashes
+            await this.populateFileHashes();
+
             // Index files
             progressCallback?.('Scanning workspace files...', 0);
             await this.indexFiles();
 
             // Index symbols from files
             await this.indexSymbols(progressCallback);
+
+            // Save cache
+            await this.persistence.save();
 
             // Set up file watchers for incremental updates
             this.setupFileWatchers();
@@ -226,39 +243,108 @@ export class WorkspaceIndexer {
     }
 
     /**
-   * Index symbols from a single file
+   * Index symbols from a single file with caching
    */
     private async indexFileSymbols(fileUri: vscode.Uri): Promise<void> {
+        const filePath = fileUri.fsPath;
+        const stats = await vscode.workspace.fs.stat(fileUri);
+        const mtime = stats.mtime;
+        const currentHash = this.fileHashes.get(filePath);
+
+        // Check cache
+        const cached = this.persistence.get(filePath);
+        if (cached && (currentHash ? cached.hash === currentHash : cached.mtime === mtime)) {
+            this.items.push(...cached.symbols);
+            return;
+        }
+
         try {
-            // Use VS Code's DocumentSymbolProvider
-            const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-                'vscode.executeDocumentSymbolProvider',
-                fileUri
-            );
+            let symbolsFound: SearchableItem[] = [];
 
-            if (!symbols || symbols.length === 0) {
-                // Try opening the document to trigger language server
-                const document = await vscode.workspace.openTextDocument(fileUri);
-
-                // Wait a bit for language server to process
-                await new Promise(resolve => setTimeout(resolve, 200));
-
-                // Try again
-                const retrySymbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+            // TURBO PATH: Try Tree-sitter first
+            const treeSitterItems = await this.treeSitter.parseFile(fileUri);
+            if (treeSitterItems.length > 0) {
+                symbolsFound = treeSitterItems;
+            } else {
+                // FALLBACK PATH: Use VS Code's DocumentSymbolProvider
+                const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
                     'vscode.executeDocumentSymbolProvider',
                     fileUri
                 );
 
-                if (retrySymbols && retrySymbols.length > 0) {
-                    this.processSymbols(retrySymbols, fileUri.fsPath);
+                if (symbols && symbols.length > 0) {
+                    // Temporarily store in current items to process
+                    const startIndex = this.items.length;
+                    this.processSymbols(symbols, filePath);
+                    symbolsFound = this.items.slice(startIndex).filter(i => i.type !== SearchItemType.FILE);
+
+                    // Since we added to this.items in processSymbols, but we want to return results for caching
+                    // We'll leave them in this.items but also save them to cache below
+                } else {
+                    // Try one more time by opening document if empty
+                    const document = await vscode.workspace.openTextDocument(fileUri);
+                    await new Promise(resolve => setTimeout(resolve, 200));
+                    const retrySymbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
+                        'vscode.executeDocumentSymbolProvider',
+                        fileUri
+                    );
+
+                    if (retrySymbols && retrySymbols.length > 0) {
+                        const startIndex = this.items.length;
+                        this.processSymbols(retrySymbols, filePath);
+                        symbolsFound = this.items.slice(startIndex).filter(i => i.type !== SearchItemType.FILE);
+                    }
                 }
-            } else {
-                this.processSymbols(symbols, fileUri.fsPath);
+            }
+
+            // Update cache and push (if not already pushed by fallback loop)
+            if (symbolsFound.length > 0) {
+                this.persistence.set(filePath, {
+                    mtime,
+                    hash: currentHash,
+                    symbols: symbolsFound
+                });
+
+                // If the symbols were found via tree-sitter, we need to add them to this.items
+                // If they were found via falling back to processSymbols, they are already in this.items
+                const alreadyInItems = this.items.some(i => i.filePath === filePath && i.type !== SearchItemType.FILE);
+                if (!alreadyInItems) {
+                    this.items.push(...symbolsFound);
+                }
             }
         } catch (error) {
-            // Silently skip files without symbol support
-            // Common for files where language server isn't available yet
-            console.log(`Could not extract symbols from ${fileUri.fsPath}: ${error}`);
+            console.log(`Could not extract symbols from ${filePath}: ${error}`);
+        }
+    }
+
+    /**
+     * Get git hashes for files (Fast Cache Key)
+     */
+    private async populateFileHashes(): Promise<void> {
+        this.fileHashes.clear();
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders) return;
+
+        for (const folder of workspaceFolders) {
+            try {
+                const output = cp.execSync('git ls-files --stage', {
+                    cwd: folder.uri.fsPath,
+                    maxBuffer: 10 * 1024 * 1024 // 10MB buffer for large repos
+                }).toString();
+
+                const lines = output.split('\n');
+                for (const line of lines) {
+                    const match = line.match(/^\d+\s+([a-f0-9]+)\s+\d+\s+(.+)$/);
+                    if (match) {
+                        const hash = match[1];
+                        const relPath = match[2];
+                        const fullPath = path.join(folder.uri.fsPath, relPath);
+                        this.fileHashes.set(fullPath, hash);
+                    }
+                }
+            } catch (e) {
+                // Git failed or not a repo, skip hashing
+            }
         }
     }
 

@@ -5,6 +5,8 @@ import { SearchProvider } from './search-provider';
 import { Config } from './config';
 import { ActivityTracker } from './activity-tracker';
 import { CommandIndexer } from './command-indexer';
+import { TreeSitterParser } from './core/tree-sitter-parser';
+import { IndexPersistence } from './core/index-persistence';
 
 let searchEngine: SearchEngine;
 let workspaceIndexer: WorkspaceIndexer;
@@ -12,6 +14,8 @@ let searchProvider: SearchProvider;
 let config: Config;
 let activityTracker: ActivityTracker;
 let commandIndexer: CommandIndexer;
+let treeSitterParser: TreeSitterParser;
+let indexPersistence: IndexPersistence;
 
 // Debounce timer for git changes
 let gitChangeDebounce: NodeJS.Timeout | undefined;
@@ -25,10 +29,15 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize
     config = new Config();
     searchEngine = new SearchEngine();
-    workspaceIndexer = new WorkspaceIndexer(config);
+    treeSitterParser = new TreeSitterParser(context.extensionPath);
+    indexPersistence = new IndexPersistence(context.globalStorageUri.fsPath);
+    workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence);
     activityTracker = new ActivityTracker(context);
     commandIndexer = new CommandIndexer(config);
     searchProvider = new SearchProvider(searchEngine, config, activityTracker, commandIndexer);
+
+    // Initialize Tree-sitter (async)
+    treeSitterParser.init().catch(e => console.error('Tree-sitter init failed:', e));
 
     // Register search command
     const searchCommand = vscode.commands.registerCommand('findEverywhere.search', async () => {

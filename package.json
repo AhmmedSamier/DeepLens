@@ -122,9 +122,12 @@
         "@typescript-eslint/parser": "^6.13.0",
         "@vscode/test-electron": "^2.3.8",
         "eslint": "^8.54.0",
+        "tree-sitter-c-sharp": "^0.23.1",
+        "tree-sitter-typescript": "^0.23.2",
         "typescript": "^5.3.2"
     },
     "dependencies": {
-        "fuzzysort": "^2.0.4"
+        "fuzzysort": "^2.0.4",
+        "web-tree-sitter": "^0.26.3"
     }
 }
