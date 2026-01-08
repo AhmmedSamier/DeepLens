@@ -116,7 +116,9 @@
         "compile": "tsc -p ./",
         "watch": "tsc -watch -p ./",
         "lint": "eslint src --cache",
-        "format": "prettier --write \"src/**/*.ts\" --cache"
+        "format": "prettier --write \"src/**/*.ts\" --cache",
+        "package": "vsce package",
+        "vsix": "bun run build && bun run package"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3.3.3",
@@ -125,6 +127,7 @@
         "@types/vscode": "^1.107.0",
         "@typescript-eslint/eslint-plugin": "^8.52.0",
         "@typescript-eslint/parser": "^8.52.0",
+        "@vscode/vsce": "^3.7.1",
         "eslint": "^9.39.2",
         "eslint-plugin-sonarjs": "3.0.5",
         "globals": "^17.0.0",
