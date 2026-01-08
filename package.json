@@ -30,6 +30,10 @@
             {
                 "command": "findEverywhere.rebuildIndex",
                 "title": "Find Everywhere: Rebuild Index"
+            },
+            {
+                "command": "findEverywhere.clearIndexCache",
+                "title": "Find Everywhere: Clear Index Cache"
             }
         ],
         "keybindings": [

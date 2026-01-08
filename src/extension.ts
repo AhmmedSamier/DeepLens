@@ -50,8 +50,15 @@ export async function activate(context: vscode.ExtensionContext) {
         await indexWorkspace();
     });
 
+    // Register clear index cache command
+    const clearCacheCommand = vscode.commands.registerCommand('findEverywhere.clearIndexCache', async () => {
+        await indexPersistence.clear();
+        vscode.window.showInformationMessage('Find Everywhere: Index cache cleared.');
+    });
+
     context.subscriptions.push(searchCommand);
     context.subscriptions.push(rebuildCommand);
+    context.subscriptions.push(clearCacheCommand);
 
     // Start workspace indexing
     await indexWorkspace();

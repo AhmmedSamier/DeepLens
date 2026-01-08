@@ -68,7 +68,15 @@ export class IndexPersistence {
         this.cache.delete(filePath);
     }
 
-    clear(): void {
+    async clear(): Promise<void> {
         this.cache.clear();
+        const file = this.getCacheFile();
+        if (fs.existsSync(file)) {
+            try {
+                fs.unlinkSync(file);
+            } catch (error) {
+                console.error('Failed to delete cache file:', error);
+            }
+        }
     }
 }
