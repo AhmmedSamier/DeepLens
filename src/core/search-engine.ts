@@ -111,9 +111,9 @@ export class SearchEngine {
             results = this.mergeWithCamelHumps(results, filteredItems, query, maxResults);
         }
 
-        // 3. TYPO TOLERANCE PASS: Trigger if results are low OR if the top match is very weak
+        // 3. TYPO TOLERANCE PASS: Always trigger for longer queries if the top match is not a perfect hit
         const topScore = results.length > 0 ? results[0].score : 0;
-        if (query.length > 3 && (results.length < maxResults / 4 || topScore < 0.3)) {
+        if (query.length > 3 && topScore < 0.9) {
             results = this.mergeWithTypoTolerance(results, filteredItems, query, maxResults);
         }
 
@@ -301,7 +301,8 @@ export class SearchEngine {
 
                 // Damerau extension: handle transpositions (swapped adjacent letters)
                 if (i > 1 && j > 1 && s1[i - 1] === s2[j - 2] && s1[i - 2] === s2[j - 1]) {
-                    matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + cost);
+                    // Cost for transposition is 1
+                    matrix[i][j] = Math.min(matrix[i][j], matrix[i - 2][j - 2] + 1);
                 }
             }
         }
