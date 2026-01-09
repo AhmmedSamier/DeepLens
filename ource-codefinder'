@@ -1,0 +1,5 @@
+[33mcc43e36[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m)[m HEAD@{0}: commit: Add Properties filter (wrench icon) and improve path-aware symbol search
+[33m87b6f6a[m HEAD@{1}: commit: Update .vscodeignore
+[33m8a3bb33[m HEAD@{2}: commit: Ignore dist folder
+[33m9f58a0b[m HEAD@{3}: commit: Fix search scope initialization, refine item boosting and fix watch task
+[33md4a092a[m HEAD@{4}: commit: Build: Add vsce for VSIX generation and add package/vsix scripts

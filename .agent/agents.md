@@ -18,6 +18,17 @@ From the analysis of the `cognitive-lens` extension, we have implemented and lea
 ### 3. Smart Retry vs. Fixed Delays
 - **Reactive Timing**: Instead of using fixed `setTimeout` delays between file scans, use smart retry logic. Only wait if a provider returns no results, giving the language server a moment to "warm up" only when necessary.
 
+### 4. Git Lifecycle & Stability
+- **Post-Git Debounce**: Windows file systems can be unstable immediately after a Git branch switch or pull. A 3-second debounce before re-indexing is essential to ensure all files are settled on disk.
+- **Watcher Cooldown**: Large-scale file operations (like Git checkout) trigger a "storm" of file change events. Implementing a short (5s) cooldown phase after a full index prevents redundant "aftershock" work and log spam.
+
+### 5. Progress Reporting & UI
+- **Delta-based Progress**: VS Code `ProgressLocation.Notification` requires relative increments, not absolute percentages. Track reported progress to calculate deltas accurately.
+- **UI Throttling**: Limit UI updates (e.g., every 5%) during high-speed batch operations. Communication overhead with the VS Code core can become a bottleneck if every file completion is reported.
+
+### 6. Search Synchronization
+- **Event-Driven UI**: Ensure the Indexer exposes an `onDidChange` event. The Search Engine must subscribe to this to stay in sync during incremental file changes without requiring full manual reloads.
+
 ## Development Workflow
 1. Use `bun install` for dependency management.
 2. Use `bun run compile` or `bun run dev` for building.

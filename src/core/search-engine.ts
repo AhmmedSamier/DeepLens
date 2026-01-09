@@ -289,6 +289,7 @@ export class SearchEngine {
             [SearchItemType.FILE]: 0.9,
             [SearchItemType.TEXT]: 0.7,
             [SearchItemType.COMMAND]: 1.2,
+            [SearchItemType.ENDPOINT]: 1.4,
         };
 
         return score * (boosts[type] || 1.0);
@@ -315,6 +316,8 @@ export class SearchEngine {
                 return SearchScope.TEXT;
             case SearchItemType.COMMAND:
                 return SearchScope.COMMANDS;
+            case SearchItemType.ENDPOINT:
+                return SearchScope.ENDPOINTS;
             default:
                 return SearchScope.EVERYTHING;
         }

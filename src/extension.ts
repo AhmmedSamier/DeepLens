@@ -5,6 +5,7 @@ import { Config } from './config';
 import { IndexPersistence } from './core/index-persistence';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
+import { SearchItemType, SearchScope } from './core/types';
 import { SearchProvider } from './search-provider';
 import { WorkspaceIndexer } from './workspace-indexer';
 
@@ -29,25 +30,30 @@ export async function activate(context: vscode.ExtensionContext) {
     // Initialize
     config = new Config();
     searchEngine = new SearchEngine();
-    treeSitterParser = new TreeSitterParser(context.extensionPath);
+    const treeSitterLogger = vscode.window.createOutputChannel('Find Everywhere (Tree-sitter)');
+    treeSitterParser = new TreeSitterParser(context.extensionPath, treeSitterLogger);
     indexPersistence = new IndexPersistence(context.globalStorageUri.fsPath);
     workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence);
     activityTracker = new ActivityTracker(context);
     commandIndexer = new CommandIndexer(config);
     searchProvider = new SearchProvider(searchEngine, config, activityTracker, commandIndexer);
-
     // Initialize Tree-sitter (async)
-    treeSitterParser.init().catch((e) => console.error('Tree-sitter init failed:', e));
+    const treeSitterInit = treeSitterParser.init().catch((e) => console.error('Tree-sitter init failed:', e));
 
     // Register search command
     const searchCommand = vscode.commands.registerCommand('findEverywhere.search', async () => {
         await searchProvider.show();
     });
 
+    // Register search endpoints command
+    const searchEndpointsCommand = vscode.commands.registerCommand('findEverywhere.searchEndpoints', async () => {
+        await searchProvider.show(SearchScope.ENDPOINTS);
+    });
+
     // Register rebuild index command
     const rebuildCommand = vscode.commands.registerCommand('findEverywhere.rebuildIndex', async () => {
         vscode.window.showInformationMessage('Rebuilding Find Everywhere index...');
-        await indexWorkspace();
+        await indexWorkspace(true);
     });
 
     // Register clear index cache command
@@ -57,14 +63,11 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(searchCommand);
+    context.subscriptions.push(searchEndpointsCommand);
     context.subscriptions.push(rebuildCommand);
     context.subscriptions.push(clearCacheCommand);
 
-    // Start workspace indexing
-    await indexWorkspace();
 
-    // Listen for git repository state changes (branch switches, etc.)
-    setupGitListener(context);
 
     // Track document opens for activity
     if (config.isActivityTrackingEnabled()) {
@@ -93,7 +96,15 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
     );
 
-    // Register indexer for disposal
+    // Register indexer for disposal and listen for incremental updates
+    context.subscriptions.push(
+        workspaceIndexer.onDidChangeItems((workspaceItems) => {
+            const commandItems = commandIndexer.getCommands();
+            const allItems = [...workspaceItems, ...commandItems];
+            searchEngine.setItems(allItems);
+        }),
+    );
+
     context.subscriptions.push({
         dispose: () => {
             workspaceIndexer.dispose();
@@ -103,14 +114,16 @@ export async function activate(context: vscode.ExtensionContext) {
         },
     });
 
-    // Show status bar item during indexing
-    showIndexingStatus();
+    // Final Setup: Index Workspace and Listen for Git
+    await treeSitterInit;
+    await indexWorkspace();
+    setupGitListener(context);
 }
 
 /**
  * Index workspace
  */
-async function indexWorkspace(): Promise<void> {
+async function indexWorkspace(force: boolean = false): Promise<void> {
     if (!vscode.workspace.workspaceFolders) {
         return;
     }
@@ -124,14 +137,15 @@ async function indexWorkspace(): Promise<void> {
         async (progress) => {
             try {
                 const startTime = Date.now();
+                workspaceIndexer.log(`Starting workspace index (force=${force})...`);
 
                 // Index workspace files and symbols
                 await workspaceIndexer.indexWorkspace((message, increment) => {
                     progress.report({ message, increment });
-                });
+                }, force);
 
                 // Index commands
-                progress.report({ message: 'Indexing commands...', increment: 95 });
+                progress.report({ message: 'Indexing commands...', increment: 5 });
                 await commandIndexer.indexCommands();
 
                 // Combine all items
@@ -139,40 +153,33 @@ async function indexWorkspace(): Promise<void> {
                 const commandItems = commandIndexer.getCommands();
                 const allItems = [...workspaceItems, ...commandItems];
 
-                const fileCount = workspaceItems.filter((i) => i.type === 'file').length;
-                const symbolCount = workspaceItems.length - fileCount;
+                const fileCount = workspaceItems.filter((i) => i.type === SearchItemType.FILE).length;
+                const endpointCount = workspaceItems.filter((i) => i.type === SearchItemType.ENDPOINT).length;
+                const symbolCount = workspaceItems.length - fileCount - endpointCount;
                 const commandCount = commandItems.length;
                 const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
-                progress.report({
-                    message: `Complete! ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands in ${duration}s`,
-                    increment: 100,
-                });
-
                 searchEngine.setItems(allItems);
 
-                // Show completion message
-                vscode.window.showInformationMessage(
-                    `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${commandCount} commands in ${duration}s`,
-                );
+                // Show completion notification
+                const message = `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${endpointCount} endpoints, ${commandCount} commands in ${duration}s`;
+                vscode.window.showInformationMessage(message);
+                workspaceIndexer.log(`Index complete: ${message}`);
+                // Cooldown watchers after full index to avoid git checkout event storms
+                workspaceIndexer.cooldownFileWatchers();
             } catch (error) {
                 vscode.window.showErrorMessage(`Failed to index workspace: ${error}`);
+                workspaceIndexer.log(`Index failed: ${error}`);
             }
         },
     );
 }
 
 /**
- * Show indexing status
+ * Index individual files when they change
  */
-function showIndexingStatus(): void {
-    const interval = setInterval(() => {
-        if (workspaceIndexer.isIndexing()) {
-            vscode.window.setStatusBarMessage('$(sync~spin) Indexing workspace...', 1000);
-        } else {
-            clearInterval(interval);
-        }
-    }, 1000);
+async function handleFileChange(uri: vscode.Uri): Promise<void> {
+    // This is handled by WorkspaceIndexer internal watchers now
 }
 
 /**
@@ -191,32 +198,24 @@ function setupGitListener(context: vscode.ExtensionContext): void {
         // Activate git extension if not already active
         gitExtension.exports
             .getAPI(1)
-            .then((git: unknown) => {
+            .then((git: any) => {
                 if (!git || typeof git !== 'object') {
+                    console.log('Failed to get git API object');
                     return;
                 }
 
+                workspaceIndexer.log('Git API obtained successfully');
+
                 const gitApi = git as {
-                    repositories: unknown[];
-                    onDidOpenRepository: (cb: (repo: unknown) => void) => vscode.Disposable;
+                    repositories: any[];
+                    onDidOpenRepository: (cb: (repo: any) => void) => vscode.Disposable;
                 };
 
-                // Listen to all repositories
-                const repositories = gitApi.repositories;
+                // Setup listeners for all current and future repositories
+                gitApi.repositories.forEach(repo => setupRepositoryListener(repo));
+                context.subscriptions.push(gitApi.onDidOpenRepository(repo => setupRepositoryListener(repo)));
 
-                if (repositories.length === 0) {
-                    // Wait for repositories to be initialized
-                    const disposable = gitApi.onDidOpenRepository((repo: unknown) => {
-                        setupRepositoryListener(repo);
-                        disposable.dispose();
-                    });
-                    context.subscriptions.push(disposable);
-                } else {
-                    // Setup listeners for existing repositories
-                    repositories.forEach((repo: unknown) => {
-                        setupRepositoryListener(repo);
-                    });
-                }
+                workspaceIndexer.log(`Git listener setup complete. Monitoring ${gitApi.repositories.length} repositories.`);
             })
             .catch((error: unknown) => {
                 console.error('Failed to get git API:', error);
@@ -229,34 +228,34 @@ function setupGitListener(context: vscode.ExtensionContext): void {
 /**
  * Setup listener for individual repository
  */
-function setupRepositoryListener(repository: unknown): void {
+function setupRepositoryListener(repository: any): void {
     if (!repository || typeof repository !== 'object') {
         return;
     }
 
-    const repo = repository as {
-        state: {
-            onDidChange: (cb: () => void) => void;
-        };
-    };
+    // Keep track of the last known HEAD to detect branch switches/commits
+    let lastHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
+    workspaceIndexer.log(`Monitoring repository at ${repository.rootUri.fsPath} (Initial HEAD: ${lastHead})`);
 
-    // Listen for HEAD changes (branch switches, commits, etc.)
-    repo.state.onDidChange(() => {
-        // Debounce re-indexing to avoid excessive calls
-        if (gitChangeDebounce) {
-            clearTimeout(gitChangeDebounce);
+    // Listen for state changes (branch switches, commits, pull/push updates)
+    repository.state.onDidChange(() => {
+        const currentHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
+
+        if (currentHead !== lastHead) {
+            workspaceIndexer.log(`Git detected HEAD change in ${repository.rootUri.fsPath}: ${lastHead} -> ${currentHead}`);
+            lastHead = currentHead;
+
+            if (gitChangeDebounce) {
+                clearTimeout(gitChangeDebounce);
+            }
+
+            gitChangeDebounce = setTimeout(async () => {
+                workspaceIndexer.log(`[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`);
+                // Trigger index with progress visible to user
+                await indexWorkspace(false);
+                workspaceIndexer.log('[Git Event] Workspace refresh finished.');
+            }, 3000); // 3 second pause to ensure disk settling after checkout/pull
         }
-
-        gitChangeDebounce = setTimeout(async () => {
-            console.log('Git state changed - performing delta sync');
-            vscode.window.setStatusBarMessage('$(sync~spin) Syncing git changes...', 2000);
-            await workspaceIndexer.syncGitDelta();
-
-            // Re-sync with search engine
-            const workspaceItems = workspaceIndexer.getItems();
-            const commandItems = commandIndexer.getCommands();
-            searchEngine.setItems([...workspaceItems, ...commandItems]);
-        }, 1000); // Wait 1 second after git changes settle
     });
 }
 

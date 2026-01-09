@@ -74,6 +74,10 @@ export class SearchProvider {
             iconPath: new vscode.ThemeIcon('symbol-property'),
             tooltip: this.INACTIVE_PREFIX + 'Properties',
         });
+        this.filterButtons.set(SearchScope.ENDPOINTS, {
+            iconPath: new vscode.ThemeIcon('globe'),
+            tooltip: this.INACTIVE_PREFIX + 'Endpoints',
+        });
     }
 
     /**
@@ -95,6 +99,8 @@ export class SearchProvider {
                 return new vscode.ThemeIcon('terminal', color);
             case SearchScope.PROPERTIES:
                 return new vscode.ThemeIcon('symbol-property', color);
+            case SearchScope.ENDPOINTS:
+                return new vscode.ThemeIcon('globe', color);
             default:
                 return new vscode.ThemeIcon('search', color);
         }
@@ -113,6 +119,7 @@ export class SearchProvider {
             SearchScope.SYMBOLS,
             SearchScope.PROPERTIES,
             SearchScope.FILES,
+            SearchScope.ENDPOINTS,
             SearchScope.COMMANDS,
         ];
 
@@ -153,6 +160,8 @@ export class SearchProvider {
                 return 'Searching in Commands only. Type to search...';
             case SearchScope.PROPERTIES:
                 return 'Searching in Properties only. Type to search...';
+            case SearchScope.ENDPOINTS:
+                return 'Searching in Endpoints only. Type to search...';
             case SearchScope.EVERYTHING:
             default:
                 return 'Type to search everywhere (files, classes, symbols...)';
@@ -181,6 +190,9 @@ export class SearchProvider {
             case SearchScope.PROPERTIES:
                 filterName = 'Properties';
                 break;
+            case SearchScope.ENDPOINTS:
+                filterName = 'Endpoints';
+                break;
             default:
                 filterName = 'All';
         }
@@ -193,12 +205,17 @@ export class SearchProvider {
     }
 
     /**
-     * Show search UI
+     * Show search UI with specific scope
      */
-    async show(): Promise<void> {
-        // Reset filter to "All" when opening (better UX - matches PyCharm/IntelliJ behavior)
-        this.currentScope = SearchScope.EVERYTHING;
+    async show(scope: SearchScope = SearchScope.EVERYTHING): Promise<void> {
+        this.currentScope = scope;
+        await this.showInternal();
+    }
 
+    /**
+     * Internal show logic
+     */
+    private async showInternal(): Promise<void> {
         const quickPick = vscode.window.createQuickPick<SearchResultItem>();
 
         quickPick.title = 'Search Everywhere';
@@ -209,6 +226,7 @@ export class SearchProvider {
 
         // Set up filter buttons
         this.updateFilterButtons(quickPick);
+        this.updateTitle(quickPick, 0);
 
         // Register all listeners
         this.setupEventListeners(quickPick);
@@ -447,6 +465,8 @@ export class SearchProvider {
                 return 'search';
             case SearchItemType.COMMAND:
                 return 'run';
+            case SearchItemType.ENDPOINT:
+                return 'globe';
             default:
                 return 'symbol-misc';
         }
@@ -471,6 +491,8 @@ export class SearchProvider {
                 return new vscode.ThemeColor('symbolIcon.variableForeground');
             case SearchItemType.FILE:
                 return new vscode.ThemeColor('symbolIcon.fileForeground');
+            case SearchItemType.ENDPOINT:
+                return new vscode.ThemeColor('symbolIcon.interfaceForeground'); // Purple-ish
             default:
                 return undefined;
         }

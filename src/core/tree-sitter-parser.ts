@@ -1,6 +1,13 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
+import type * as vscode from 'vscode';
+
+/**
+ * Simple interface for logging to allow decoupling from vscode
+ */
+export interface Logger {
+    appendLine(message: string): void;
+}
 import * as Parser from 'web-tree-sitter';
 import { SearchItemType, SearchableItem } from './types';
 
@@ -12,6 +19,7 @@ interface TreeSitterNode {
     child: (i: number) => TreeSitterNode | null;
     childForFieldName: (name: string) => TreeSitterNode | null;
     children: TreeSitterNode[];
+    parent: TreeSitterNode | null;
 }
 
 interface TreeSitterLib {
@@ -22,18 +30,21 @@ interface TreeSitterLib {
 }
 
 export class TreeSitterParser {
-    private parser:
-        | {
-            setLanguage: (lang: unknown) => void;
-            parse: (content: string) => { rootNode: unknown; delete: () => void };
-        }
-        | undefined;
-    private languages: Map<string, unknown> = new Map();
     private isInitialized: boolean = false;
+    private languages: Map<string, any> = new Map();
+    private ParserClass: any;
+    private lib: any;
     private extensionPath: string;
+    private logger: Logger | undefined;
 
-    constructor(extensionPath: string) {
+    constructor(extensionPath: string, logger?: Logger) {
         this.extensionPath = extensionPath;
+        this.logger = logger;
+    }
+
+    private log(message: string): void {
+        this.logger?.appendLine(`[${new Date().toLocaleTimeString()}] ${message}`);
+        console.log(`[TreeSitter] ${message}`);
     }
 
     /**
@@ -44,16 +55,38 @@ export class TreeSitterParser {
             return;
         }
 
-        const lib = Parser as unknown as TreeSitterLib;
-        const ParserClass = Parser as unknown as new () => NonNullable<TreeSitterParser['parser']>;
+        // Load using require to stay as close to Node.js defaults as possible for this external module
+        try {
+            const libraryModule = require('web-tree-sitter');
+            this.lib = libraryModule;
+            this.ParserClass = this.lib;
 
-        // Load web-tree-sitter.wasm from local dist
-        const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm');
-        await lib.init({
-            locateFile: () => wasmPath
-        });
+            if (this.lib.Parser) {
+                this.ParserClass = this.lib.Parser;
+            }
 
-        this.parser = new ParserClass();
+            this.log('Initializing web-tree-sitter WASM...');
+            const wasmPath = path.normalize(path.resolve(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm'));
+
+            if (!fs.existsSync(wasmPath)) {
+                this.log(`ERROR: WASM file MISSING at: ${wasmPath}`);
+            }
+
+            // Standard initialization for web-tree-sitter in Node context
+            await this.ParserClass.init({
+                locateFile: () => wasmPath
+            });
+
+            this.log('Web-tree-sitter WASM initialized.');
+        } catch (e) {
+            this.log(`ERROR: TreeSitter initialization failed: ${e}`);
+            throw e;
+        }
+
+        if (!this.ParserClass || typeof this.ParserClass !== 'function') {
+            this.log('ERROR: Parser class not found or invalid.');
+            throw new Error('Parser class not found');
+        }
 
         // Load languages from dist/parsers
         const languageMap = [
@@ -83,14 +116,22 @@ export class TreeSitterParser {
             const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
 
             if (fs.existsSync(wasmPath)) {
-                const lib = Parser as unknown as TreeSitterLib;
-                const lang = await lib.Language.load(wasmPath);
+                this.log(`Loading language ${langId} from ${wasmFile}...`);
+                // Ensure this.lib is not null before using it
+                if (!this.lib) {
+                    this.log(`ERROR: TreeSitter library not initialized when trying to load ${langId}`);
+                    return;
+                }
+                // Use plain absolute path string - do NOT use file:// URLs on Windows for this library
+                const absoluteWasmPath = path.normalize(wasmPath);
+                const lang = await this.lib.Language.load(absoluteWasmPath);
                 this.languages.set(langId, lang);
+                this.log(`Successfully loaded ${langId}`);
             } else {
-                console.warn(`WASM file not found for ${langId} at ${wasmPath}`);
+                this.log(`WARNING: WASM file not found for ${langId} at ${wasmPath}`);
             }
         } catch (error) {
-            console.debug(`Failed to load ${langId}:`, error);
+            this.log(`ERROR: Failed to load ${langId}: ${error}`);
         }
     }
 
@@ -98,23 +139,40 @@ export class TreeSitterParser {
      * Parse a file and extract symbols
      */
     async parseFile(fileUri: vscode.Uri): Promise<SearchableItem[]> {
-        if (!this.isInitialized || !this.parser) {
+        if (!this.isInitialized || !this.ParserClass) {
             return [];
         }
 
         const langId = this.getLanguageId(fileUri.fsPath);
         const lang = this.languages.get(langId);
         if (!lang) {
+            if (langId === 'csharp' || langId === 'typescript') {
+                this.log(`WARNING: Requested parse for ${langId} but language not loaded.`);
+            }
             return [];
         }
 
         try {
-            this.parser.setLanguage(lang);
+            if (langId === 'csharp') {
+                console.log(`[TreeSitter] Starting C# parse: ${fileUri.fsPath}`);
+            }
+            const parser = new this.ParserClass();
+            parser.setLanguage(lang);
             const content = fs.readFileSync(fileUri.fsPath, 'utf8');
-            const tree = this.parser.parse(content);
+            const tree = parser.parse(content);
             const items: SearchableItem[] = [];
 
             this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, fileUri.fsPath, items, langId);
+
+            if (langId === 'csharp') {
+                const endpoints = items.filter(i => i.type === SearchItemType.ENDPOINT);
+                console.log(`[TreeSitter] Finished C# parse: ${fileUri.fsPath}. Items: ${items.length}, Endpoints: ${endpoints.length}`);
+                if (endpoints.length > 0) {
+                    endpoints.forEach(e => console.log(`  - Found Endpoint: ${e.name}`));
+                }
+            } else if (langId === 'csharp' && items.length === 0) {
+                console.log(`[TreeSitter] Parsed ${fileUri.fsPath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`);
+            }
 
             tree.delete();
             return items;
@@ -171,6 +229,7 @@ export class TreeSitterParser {
         let currentContainer = containerName;
 
         if (type) {
+
             const nameNode = this.getNameNode(node);
             if (nameNode) {
                 const name = nameNode.text;
@@ -198,9 +257,252 @@ export class TreeSitterParser {
             }
         }
 
+        // C# Endpoint detection
+        if (langId === 'csharp') {
+            this.detectCSharpEndpoint(node, filePath, items, containerName);
+        }
+
         for (let i = 0; i < node.childCount; i++) {
             this.extractSymbols(node.child(i) as TreeSitterNode, filePath, items, langId, currentContainer);
         }
+    }
+
+    /**
+     * Specialized detection for ASP.NET Endpoints
+     */
+    private detectCSharpEndpoint(
+        node: TreeSitterNode,
+        filePath: string,
+        items: SearchableItem[],
+        containerName?: string,
+    ): void {
+        this.detectControllerAction(node, filePath, items, containerName);
+        this.detectMinimalApi(node, filePath, items);
+    }
+
+    private detectControllerAction(
+        node: TreeSitterNode,
+        filePath: string,
+        items: SearchableItem[],
+        containerName?: string,
+    ): void {
+        if (node.type !== 'method_declaration') return;
+
+        const { method, route } = this.scanAttributes(node);
+
+        if (method || route) {
+            this.processEndpointMethod(node, method || 'GET', route || '', filePath, items, containerName);
+        }
+    }
+
+    private scanAttributes(node: TreeSitterNode): { method: string | null; route: string | null } {
+        const results: { method: string | null; route: string | null } = { method: null, route: null };
+        this.findAttributeListsRecursive(node, results);
+        return results;
+    }
+
+    private findAttributeListsRecursive(node: TreeSitterNode, results: { method: string | null; route: string | null }, isRoot: boolean = true): void {
+        const type = node.type.toLowerCase();
+
+        // Stop if we hit something that clearly isn't an attribute prefix (like a body or another member)
+        if (!isRoot && (type.includes('body') || type === 'block' || type === 'parameter_list' || type.includes('declaration'))) {
+            return;
+        }
+
+        if (type.includes('attribute_list')) {
+            this.processAttributeList(node, results);
+        }
+
+        // Recursively search children for attribute lists
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (child) {
+                this.findAttributeListsRecursive(child, results, false);
+            }
+        }
+    }
+
+    private processAttributeList(node: TreeSitterNode, results: { method: string | null; route: string | null }): void {
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (!child || !child.type.includes('attribute')) continue;
+
+            const info = this.getHttpAttributeInfo(child);
+            if (!info) continue;
+
+            if (info.method !== 'ROUTE') {
+                results.method = info.method;
+            }
+            const attrRoute = this.extractAttributeRoute(child);
+            if (attrRoute) {
+                results.route = attrRoute;
+            }
+        }
+    }
+
+    private processEndpointMethod(
+        node: TreeSitterNode,
+        method: string,
+        localRoute: string,
+        filePath: string,
+        items: SearchableItem[],
+        containerName?: string
+    ): void {
+        const nameNode = this.getNameNode(node);
+        if (!nameNode) return;
+
+        const methodName = nameNode.text;
+        let finalRoute = localRoute;
+
+        const controllerRoute = this.getControllerRoutePrefix(node);
+        const containerPrefix = containerName ? `${containerName}.` : '';
+
+        if (controllerRoute) {
+            const controllerTokenValue = containerName ? containerName.replace(/Controller$/, '') : '';
+            const resolvedPrefix = controllerRoute.replace('[controller]', controllerTokenValue);
+
+            finalRoute = this.combineRoutes(resolvedPrefix, finalRoute);
+        }
+
+        items.push({
+            id: `endpoint:${filePath}:${containerPrefix}${methodName}:${node.startPosition.row}`,
+            name: finalRoute ? `[${method}] ${finalRoute}` : `[${method}] ${methodName}`,
+            type: SearchItemType.ENDPOINT,
+            filePath: filePath,
+            line: node.startPosition.row,
+            column: node.startPosition.column,
+            containerName: containerName,
+            fullName: `${containerPrefix}${methodName}`,
+            detail: finalRoute
+                ? `ASP.NET Endpoint: ${method} ${finalRoute}`
+                : `ASP.NET Controller Action: ${methodName}`,
+        });
+    }
+
+    private combineRoutes(prefix: string, suffix: string): string {
+        if (!suffix) return prefix;
+        if (!prefix) return suffix;
+        const cleanPrefix = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+        const cleanSuffix = suffix.startsWith('/') ? suffix.slice(1) : suffix;
+        return `${cleanPrefix}/${cleanSuffix}`;
+    }
+
+    private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
+        // Walk up to find the class declaration
+        let parent = this.getParent(methodNode);
+        while (parent && !parent.type.toLowerCase().includes('class_declaration') && parent.type !== 'compilation_unit') {
+            parent = this.getParent(parent);
+        }
+
+        if (parent && parent.type.toLowerCase().includes('class_declaration')) {
+            const results: { method: string | null; route: string | null } = { method: null, route: null };
+            this.findAttributeListsRecursive(parent, results, true);
+            return results.route;
+        }
+        return null;
+    }
+
+    private getHttpAttributeInfo(attr: TreeSitterNode): { method: string } | null {
+        const text = attr.text;
+        // Case-insensitive check for common Http attributes
+        const lowerText = text.toLowerCase();
+        if (lowerText.includes('httpget')) return { method: 'GET' };
+        if (lowerText.includes('httppost')) return { method: 'POST' };
+        if (lowerText.includes('httpput')) return { method: 'PUT' };
+        if (lowerText.includes('httpdelete')) return { method: 'DELETE' };
+        if (lowerText.includes('httppatch')) return { method: 'PATCH' };
+        if (lowerText.includes('httphead')) return { method: 'HEAD' };
+        if (lowerText.includes('httpoptions')) return { method: 'OPTIONS' };
+        if (lowerText.includes('route')) return { method: 'ROUTE' };
+        return null;
+    }
+
+    private extractAttributeRoute(attr: TreeSitterNode): string {
+        // Look for string literals anywhere in the attribute node (usually in the argument list)
+        return this.findFirstStringLiteral(attr) || '';
+    }
+
+    private findFirstStringLiteral(node: TreeSitterNode): string | null {
+        if (node.type === 'string_literal' || node.type === 'verbatim_string_literal') {
+            return this.cleanCSharpString(node.text);
+        }
+
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (child) {
+                const found = this.findFirstStringLiteral(child);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+
+    private cleanCSharpString(text: string): string {
+        let start = 0;
+        // Skip opening quotes and prefixes like @ or $
+        while (start < text.length && '"@$'.includes(text[start])) {
+            start++;
+        }
+        let end = text.length;
+        // Skip closing quotes
+        while (end > start && '"'.includes(text[end - 1])) {
+            end--;
+        }
+        return text.slice(start, end);
+    }
+
+    private detectMinimalApi(node: TreeSitterNode, filePath: string, items: SearchableItem[]): void {
+        if (node.type !== 'invocation_expression') return;
+
+        const text = node.text;
+        // Minimal API Map methods: app.MapGet, app.MapPost, etc.
+        const mapMatch = text.match(/\.Map(Get|Post|Put|Delete|Patch)\s*\(/);
+        if (!mapMatch) return;
+
+        const httpMethod = mapMatch[1].toUpperCase();
+        const args = this.findChildByType(node, 'argument_list');
+        // args has opening '(', then arguments separated by commas, then ')'
+        // Minimal API pattern: MapGet("/route", handler) - route is usually first arg
+        if (!args || args.childCount < 2) return;
+
+        // In tree-sitter, child(0) is '(', child(1) is the first argument
+        const firstArg = args.child(1);
+        if (!firstArg) return;
+
+        const route = this.cleanCSharpString(firstArg.text);
+        if (!route) return;
+
+        items.push({
+            id: `endpoint:${filePath}:${route}:${node.startPosition.row}`,
+            name: `[${httpMethod}] ${route}`,
+            type: SearchItemType.ENDPOINT,
+            filePath: filePath,
+            line: node.startPosition.row,
+            column: node.startPosition.column,
+            fullName: route,
+            detail: `ASP.NET Minimal API: ${httpMethod} ${route}`,
+        });
+    }
+
+    private findChildByType(node: TreeSitterNode, type: string): TreeSitterNode | null {
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (child && child.type === type) return child;
+        }
+        return null;
+    }
+
+    private filterChildrenByType(node: TreeSitterNode, type: string): TreeSitterNode[] {
+        const results: TreeSitterNode[] = [];
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (child && child.type === type) results.push(child);
+        }
+        return results;
+    }
+
+    private getParent(node: TreeSitterNode): TreeSitterNode | null {
+        return node.parent;
     }
 
     private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
@@ -274,8 +576,13 @@ export class TreeSitterParser {
 
     private getNameNode(node: TreeSitterNode): TreeSitterNode | null {
         // Tree-sitter usually has an 'identifier' or 'name' child for declarations
-        return (
-            node.childForFieldName('name') || node.children.find((c: TreeSitterNode) => c.type === 'identifier') || null
-        );
+        const nameChild = node.childForFieldName('name');
+        if (nameChild) return nameChild;
+
+        for (let i = 0; i < node.childCount; i++) {
+            const child = node.child(i);
+            if (child && child.type === 'identifier') return child;
+        }
+        return null;
     }
 }

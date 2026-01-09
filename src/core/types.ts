@@ -16,6 +16,7 @@ export enum SearchItemType {
     VARIABLE = 'variable',
     TEXT = 'text',
     COMMAND = 'command',
+    ENDPOINT = 'endpoint',
 }
 
 /**
@@ -29,6 +30,7 @@ export enum SearchScope {
     COMMANDS = 'commands', // VS Code commands
     PROPERTIES = 'properties', // Properties and variables
     TEXT = 'text', // Text content in files
+    ENDPOINTS = 'endpoints', // ASP.NET endpoints
 }
 
 /**
