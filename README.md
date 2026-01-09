@@ -1,10 +1,10 @@
 <div align="center">
   <img src="https://raw.githubusercontent.com/AhmmedSamier/DeepLens/master/icon.png" width="80" alt="DeepLens Logo">
   <h1>DeepLens</h1>
-  <p><b>High-performance "Search Everywhere" for Visual Studio Code</b></p>
+  <p><b>High-performance "Search Everywhere" for VS Code and Visual Studio 2026</b></p>
 </div>
 
-DeepLens provides a powerful, unified search experience across your entire workspace. Quickly find types, symbols, files, and even API endpoints with lightning-fast fuzzy matching, CamelHumps support, and activity-based ranking.
+DeepLens provides a powerful, unified search experience across your entire workspace, powered by a high-performance standalone search engine. Quickly find types, symbols, files, and even API endpoints with lightning-fast fuzzy matching, CamelHumps support, and activity-based ranking.
 
 ## 🌟 Key Features
 

@@ -14,3 +14,4 @@ TESTING.md
 esbuild.js
 out/**
 dist/**/*.map
+vs-extension

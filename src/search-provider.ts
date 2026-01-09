@@ -2,14 +2,14 @@ import * as vscode from 'vscode';
 import { ActivityTracker } from './activity-tracker';
 import { CommandIndexer } from './command-indexer';
 import { Config } from './config';
-import { SearchEngine } from './core/search-engine';
+import { ISearchProvider } from './core/search-interface';
 import { SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
  */
 export class SearchProvider {
-    private searchEngine: SearchEngine;
+    private searchEngine: ISearchProvider;
     private config: Config;
     private activityTracker: ActivityTracker | undefined;
     private commandIndexer: CommandIndexer | undefined;
@@ -22,7 +22,7 @@ export class SearchProvider {
     private readonly ICON_CLASS = 'symbol-class';
 
     constructor(
-        searchEngine: SearchEngine,
+        searchEngine: ISearchProvider,
         config: Config,
         activityTracker?: ActivityTracker,
         commandIndexer?: CommandIndexer,
@@ -33,10 +33,10 @@ export class SearchProvider {
         this.commandIndexer = commandIndexer;
         this.createFilterButtons();
 
-        // Set up activity tracking in search engine if enabled
-        if (activityTracker && config.isActivityTrackingEnabled()) {
-            searchEngine.setActivityCallback(
-                (itemId) => activityTracker.getActivityScore(itemId),
+        // Set up activity tracking in search engine if enabled (only for local engines)
+        if (activityTracker && config.isActivityTrackingEnabled() && 'setActivityCallback' in searchEngine) {
+            (searchEngine as unknown as { setActivityCallback: (cb: (id: string) => number, weight: number) => void }).setActivityCallback(
+                (itemId: string) => activityTracker.getActivityScore(itemId),
                 config.getActivityWeight(),
             );
         }
@@ -235,7 +235,7 @@ export class SearchProvider {
 
         // Perform initial search if there's a query
         if (quickPick.value) {
-            const results = this.performSearch(quickPick, quickPick.value);
+            const results = await this.performSearch(quickPick, quickPick.value);
             this.updateTitle(quickPick, results.length);
         }
     }
@@ -286,12 +286,12 @@ export class SearchProvider {
     /**
      * Handle search query changes with tiered execution
      */
-    private handleQueryChange(
+    private async handleQueryChange(
         quickPick: vscode.QuickPick<SearchResultItem>,
         query: string,
         setBurstTimeout: (t: NodeJS.Timeout) => void,
         setFuzzyTimeout: (t: NodeJS.Timeout) => void,
-    ): void {
+    ): Promise<void> {
         const trimmedQuery = query.trim();
         if (!trimmedQuery) {
             quickPick.items = [];
@@ -303,7 +303,7 @@ export class SearchProvider {
         quickPick.busy = true;
 
         // PHASE 0: Absolute Instant (Immediate exact-name hits)
-        const instantResults = this.searchEngine.burstSearch({
+        const instantResults = await this.searchEngine.burstSearch({
             query: trimmedQuery,
             scope: this.currentScope,
             maxResults: 5,
@@ -320,8 +320,8 @@ export class SearchProvider {
 
         // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
         setBurstTimeout(
-            setTimeout(() => {
-                const burstResults = this.searchEngine.burstSearch({
+            setTimeout(async () => {
+                const burstResults = await this.searchEngine.burstSearch({
                     query: trimmedQuery,
                     scope: this.currentScope,
                     maxResults: 15,
@@ -340,9 +340,9 @@ export class SearchProvider {
 
         // PHASE 2: Deep Fuzzy Search (Stabilized results)
         setFuzzyTimeout(
-            setTimeout(() => {
+            setTimeout(async () => {
                 try {
-                    const results = this.performSearch(quickPick, query);
+                    const results = await this.performSearch(quickPick, query);
                     this.updateTitle(quickPick, results.length);
                 } finally {
                     quickPick.busy = false;
@@ -354,7 +354,7 @@ export class SearchProvider {
     /**
      * Handle button clicks for filter toggling
      */
-    private handleButtonPress(quickPick: vscode.QuickPick<SearchResultItem>, button: vscode.QuickInputButton): void {
+    private async handleButtonPress(quickPick: vscode.QuickPick<SearchResultItem>, button: vscode.QuickInputButton): Promise<void> {
         const tooltip = button.tooltip || '';
         const baseName = tooltip.replace(this.ACTIVE_PREFIX, '').replace(this.INACTIVE_PREFIX, '');
 
@@ -370,7 +370,7 @@ export class SearchProvider {
                 this.updateFilterButtons(quickPick);
 
                 // Re-run search with new filter
-                const results = this.performSearch(quickPick, quickPick.value);
+                const results = await this.performSearch(quickPick, quickPick.value);
                 this.updateTitle(quickPick, results.length);
                 break;
             }
@@ -380,7 +380,7 @@ export class SearchProvider {
     /**
      * Perform search and update quick pick items
      */
-    private performSearch(quickPick: vscode.QuickPick<SearchResultItem>, query: string): SearchResult[] {
+    private async performSearch(quickPick: vscode.QuickPick<SearchResultItem>, query: string): Promise<SearchResult[]> {
         if (!query || query.trim().length === 0) {
             quickPick.items = [];
             return [];
@@ -393,7 +393,14 @@ export class SearchProvider {
             enableCamelHumps: this.config.isCamelHumpsEnabled(),
         };
 
-        const results = this.searchEngine.search(options);
+        const results = await this.searchEngine.search(options);
+
+        // Merge command results if command search is enabled/relevant
+        if (this.commandIndexer) {
+            const commandResults = this.commandIndexer.search(query);
+            results.push(...commandResults);
+        }
+
         quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
 
         return results;

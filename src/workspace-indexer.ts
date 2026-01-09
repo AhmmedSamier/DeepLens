@@ -2,40 +2,53 @@ import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as vscode from 'vscode';
 import { Config } from './config';
 import { IndexPersistence } from './core/index-persistence';
 import { SearchableItem, SearchItemType } from './core/types';
+import { IndexerEnvironment } from './core/indexer-interfaces';
 
 /**
  * Workspace indexer that scans files and extracts symbols
  */
-const EXECUTE_DOCUMENT_SYMBOL_PROVIDER = 'vscode.executeDocumentSymbolProvider';
-
 export class WorkspaceIndexer {
     private items: SearchableItem[] = [];
-    private onDidChangeItemsEmitter = new vscode.EventEmitter<SearchableItem[]>();
-    public readonly onDidChangeItems = this.onDidChangeItemsEmitter.event;
+    private onDidChangeItemsListeners: ((items: SearchableItem[]) => void)[] = [];
 
     private indexing: boolean = false;
     private watchersActive: boolean = true;
     private watcherCooldownTimer: NodeJS.Timeout | undefined;
     private config: Config;
-    private fileWatcher: vscode.FileSystemWatcher | undefined;
+    private fileWatcher: { dispose(): void } | undefined;
     private treeSitter: import('./core/tree-sitter-parser').TreeSitterParser;
     private persistence: IndexPersistence;
     private fileHashes: Map<string, string> = new Map();
-    private logger: vscode.OutputChannel;
+    private env: IndexerEnvironment;
 
     constructor(
         config: Config,
         treeSitter: import('./core/tree-sitter-parser').TreeSitterParser,
         persistence: IndexPersistence,
+        env: IndexerEnvironment
     ) {
         this.config = config;
         this.treeSitter = treeSitter;
         this.persistence = persistence;
-        this.logger = vscode.window.createOutputChannel('DeepLens');
+        this.env = env;
+    }
+
+    public onDidChangeItems(listener: (items: SearchableItem[]) => void) {
+        this.onDidChangeItemsListeners.push(listener);
+        return {
+            dispose: () => {
+                this.onDidChangeItemsListeners = this.onDidChangeItemsListeners.filter(l => l !== listener);
+            }
+        };
+    }
+
+    private fireDidChangeItems(items: SearchableItem[]) {
+        for (const listener of this.onDidChangeItemsListeners) {
+            listener(items);
+        }
     }
 
     /**
@@ -57,8 +70,8 @@ export class WorkspaceIndexer {
         }
 
         try {
-            const workspaceFolders = vscode.workspace.workspaceFolders;
-            if (!workspaceFolders) {
+            const workspaceFolders = this.env.getWorkspaceFolders();
+            if (workspaceFolders.length === 0) {
                 return;
             }
 
@@ -108,6 +121,9 @@ export class WorkspaceIndexer {
             // Log summary
             const endpointCount = this.items.filter((i) => i.type === SearchItemType.ENDPOINT).length;
             this.log(`Final Index Summary: ${this.items.length} total items, ${endpointCount} endpoints.`);
+
+            // Notify listeners that items have updated
+            this.fireDidChangeItems(this.items);
         } finally {
             this.indexing = false;
         }
@@ -144,9 +160,9 @@ export class WorkspaceIndexer {
         const excludePatterns = this.config.getExcludePatterns();
         const includePattern = `**/*.{${fileExtensions.join(',')}}`;
 
-        // VS Code's findFiles automatically respects files.exclude and .gitignore
+        // LSP client or VS Code provides the implementation
         const excludePattern = `{${excludePatterns.join(',')}}`;
-        const files = await vscode.workspace.findFiles(includePattern, excludePattern);
+        const files = await this.env.findFiles(includePattern, excludePattern);
 
         await this.processFileList(files);
     }
@@ -154,19 +170,19 @@ export class WorkspaceIndexer {
     /**
      * List files using git (much faster than walking disk)
      */
-    private async listGitFiles(extensions: string[]): Promise<vscode.Uri[]> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) {
+    private async listGitFiles(extensions: string[]): Promise<string[]> {
+        const workspaceFolders = this.env.getWorkspaceFolders();
+        if (workspaceFolders.length === 0) {
             return [];
         }
 
-        const results: vscode.Uri[] = [];
-        for (const folder of workspaceFolders) {
+        const results: string[] = [];
+        for (const folderPath of workspaceFolders) {
             try {
                 // Get both tracked and untracked (but not ignored) files
                 const output = cp
                     .execSync('git ls-files --cached --others --exclude-standard', {
-                        cwd: folder.uri.fsPath,
+                        cwd: folderPath,
                         maxBuffer: 10 * 1024 * 1024,
                     })
                     .toString();
@@ -179,27 +195,27 @@ export class WorkspaceIndexer {
                         continue;
                     }
 
-                    const fullPath = path.join(folder.uri.fsPath, line);
+                    const fullPath = path.join(folderPath, line);
                     const ext = path.extname(fullPath).toLowerCase();
 
                     if (extSet.has(ext)) {
-                        results.push(vscode.Uri.file(fullPath));
+                        results.push(fullPath);
                     }
                 }
             } catch (error) {
                 // Not a git repo or git not installed
-                console.debug(`Git file listing failed for ${folder.uri.fsPath}:`, error);
+                console.debug(`Git file listing failed for ${folderPath}:`, error);
             }
         }
         return results;
     }
 
     /**
-     * Process a list of file URIs into searchable items in parallel
+     * Process a list of file paths into searchable items in parallel
      */
-    private async processFileList(files: vscode.Uri[]): Promise<void> {
+    private async processFileList(files: string[]): Promise<void> {
         const CONCURRENCY = 100; // Higher concurrency for metadata checks
-        const chunks: vscode.Uri[][] = [];
+        const chunks: string[][] = [];
 
         for (let i = 0; i < files.length; i += CONCURRENCY) {
             chunks.push(files.slice(i, i + CONCURRENCY));
@@ -207,23 +223,23 @@ export class WorkspaceIndexer {
 
         for (const chunk of chunks) {
             await Promise.all(
-                chunk.map(async (file) => {
+                chunk.map(async (filePath) => {
                     // Skip C# auto-generated files in parallel
-                    if (file.fsPath.endsWith('.cs')) {
-                        const isAutoGenerated = await this.isAutoGeneratedFile(file);
+                    if (filePath.endsWith('.cs')) {
+                        const isAutoGenerated = await this.isAutoGeneratedFile(filePath);
                         if (isAutoGenerated) {
                             return;
                         }
                     }
 
-                    const fileName = path.basename(file.fsPath);
-                    const relativePath = vscode.workspace.asRelativePath(file.fsPath);
+                    const fileName = path.basename(filePath);
+                    const relativePath = this.env.asRelativePath(filePath);
 
                     this.items.push({
-                        id: `file:${file.fsPath}`,
+                        id: `file:${filePath}`,
                         name: fileName,
                         type: SearchItemType.FILE,
-                        filePath: file.fsPath,
+                        filePath: filePath,
                         relativeFilePath: relativePath,
                         detail: relativePath,
                         fullName: relativePath,
@@ -235,13 +251,16 @@ export class WorkspaceIndexer {
 
     /**
      * Check if a file is auto-generated (C# files with // <auto-generated /> marker)
-     * Optimized to avoid opening a full VS Code document
+     * Optimized to avoid opening a full document
      */
-    private async isAutoGeneratedFile(fileUri: vscode.Uri): Promise<boolean> {
+    private async isAutoGeneratedFile(filePath: string): Promise<boolean> {
         try {
-            // Read only first 1KB to check for marker - much faster than openTextDocument
-            const buffer = await vscode.workspace.fs.readFile(fileUri);
-            const content = Buffer.from(buffer.slice(0, 1024)).toString('utf8');
+            // Read only first 1KB to check for marker - much faster than reading full file
+            const fd = await fs.promises.open(filePath, 'r');
+            const { buffer } = await fd.read(Buffer.alloc(1024), 0, 1024, 0);
+            await fd.close();
+
+            const content = buffer.toString('utf8');
 
             if (!content) {
                 return false;
@@ -257,7 +276,7 @@ export class WorkspaceIndexer {
                 content.includes('<auto-generated') // Some files have it later or in a header block
             );
         } catch (error) {
-            console.debug(`Auto-generated check failed for ${fileUri.fsPath}:`, error);
+            console.debug(`Auto-generated check failed for ${filePath}:`, error);
             return false;
         }
     }
@@ -287,11 +306,10 @@ export class WorkspaceIndexer {
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
         progressCallback?.('Fast-scanning workspace symbols...', 5);
+        if (!this.env.executeWorkspaceSymbolProvider) return;
+
         try {
-            const workspaceSymbols = await vscode.commands.executeCommand<vscode.SymbolInformation[]>(
-                'vscode.executeWorkspaceSymbolProvider',
-                '',
-            );
+            const workspaceSymbols = await this.env.executeWorkspaceSymbolProvider();
 
             if (workspaceSymbols && workspaceSymbols.length > 0) {
                 this.processWorkspaceSymbols(workspaceSymbols);
@@ -367,7 +385,7 @@ export class WorkspaceIndexer {
      */
     private async indexOneFile(fileItem: SearchableItem): Promise<void> {
         try {
-            await this.indexFileSymbols(vscode.Uri.file(fileItem.filePath));
+            await this.indexFileSymbols(fileItem.filePath);
         } catch (error) {
             // Fail silently but log for debug
             console.debug(`Indexing failed for ${fileItem.filePath}:`, error);
@@ -377,14 +395,14 @@ export class WorkspaceIndexer {
     /**
      * Process symbols from workspace provider
      */
-    private processWorkspaceSymbols(symbols: vscode.SymbolInformation[]): void {
+    private processWorkspaceSymbols(symbols: import('./core/indexer-interfaces').LeanSymbolInformation[]): void {
         for (const symbol of symbols) {
             const itemType = this.mapSymbolKindToItemType(symbol.kind);
             if (!itemType) {
                 continue;
             }
 
-            const id = `symbol:${symbol.location.uri.fsPath}:${symbol.name}:${symbol.location.range.start.line}`;
+            const id = `symbol:${symbol.location.uri}:${symbol.name}:${symbol.location.range.start.line}`;
             if (this.items.some((i) => i.id === id)) {
                 continue;
             }
@@ -393,8 +411,8 @@ export class WorkspaceIndexer {
                 id,
                 name: symbol.name,
                 type: itemType,
-                filePath: symbol.location.uri.fsPath,
-                relativeFilePath: vscode.workspace.asRelativePath(symbol.location.uri.fsPath),
+                filePath: symbol.location.uri,
+                relativeFilePath: this.env.asRelativePath(symbol.location.uri),
                 line: symbol.location.range.start.line,
                 column: symbol.location.range.start.character,
                 containerName: symbol.containerName,
@@ -406,8 +424,7 @@ export class WorkspaceIndexer {
     /**
      * Index symbols from a single file with caching
      */
-    private async indexFileSymbols(fileUri: vscode.Uri): Promise<void> {
-        const filePath = fileUri.fsPath;
+    private async indexFileSymbols(filePath: string): Promise<void> {
         let currentHash = this.fileHashes.get(filePath);
 
         // If no hash in memory, and this is an incremental update, calculate it
@@ -424,7 +441,7 @@ export class WorkspaceIndexer {
             return;
         }
 
-        const stats = await vscode.workspace.fs.stat(fileUri);
+        const stats = await fs.promises.stat(filePath);
         const mtime = Number(stats.mtime);
 
         if (cached && !currentHash && Number(cached.mtime) === mtime) {
@@ -433,11 +450,11 @@ export class WorkspaceIndexer {
         }
 
         try {
-            const relPath = vscode.workspace.asRelativePath(fileUri);
+            const relPath = this.env.asRelativePath(filePath);
             if (!this.indexing) {
                 this.log(`Parsing file: ${relPath} ...`);
             }
-            const symbolsFound = await this.performSymbolExtraction(fileUri);
+            const symbolsFound = await this.performSymbolExtraction(filePath);
 
             if (symbolsFound.length > 0) {
                 this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
@@ -472,14 +489,15 @@ export class WorkspaceIndexer {
     /**
      * Core logic to extract symbols from a file
      */
-    private async performSymbolExtraction(fileUri: vscode.Uri): Promise<SearchableItem[]> {
-        const filePath = fileUri.fsPath;
-
-        const relPath = vscode.workspace.asRelativePath(fileUri);
+    /**
+     * Core logic to extract symbols from a file
+     */
+    private async performSymbolExtraction(filePath: string): Promise<SearchableItem[]> {
+        const relPath = this.env.asRelativePath(filePath);
 
         // 1. Try Tree-sitter first (Turbo Path)
         try {
-            const treeSitterItems = await this.treeSitter.parseFile(fileUri);
+            const treeSitterItems = await this.treeSitter.parseFile(filePath);
 
             if (treeSitterItems.length > 0) {
                 return treeSitterItems.map((item) => ({ ...item, relativeFilePath: relPath }));
@@ -490,29 +508,21 @@ export class WorkspaceIndexer {
             }
         }
 
-        // 2. Fallback to VS Code provider
-        if (!this.indexing) {
-            this.log(`Falling back to VS Code symbol provider for ${relPath}...`);
-        }
-        let symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-            EXECUTE_DOCUMENT_SYMBOL_PROVIDER,
-            fileUri,
-        );
-
-        // 3. Last ditch effort: open document to trigger LSP
-        if (!symbols || symbols.length === 0) {
-            await vscode.workspace.openTextDocument(fileUri);
-            await new Promise((resolve) => setTimeout(resolve, 200));
-            symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-                EXECUTE_DOCUMENT_SYMBOL_PROVIDER,
-                fileUri,
-            );
-        }
-
-        if (symbols && symbols.length > 0) {
-            const localItems: SearchableItem[] = [];
-            this.processSymbols(symbols, filePath, vscode.workspace.asRelativePath(fileUri), localItems);
-            return localItems;
+        // 2. Fallback to Environement symbol provider (e.g. VS Code's provider)
+        if (this.env.executeDocumentSymbolProvider) {
+            if (!this.indexing) {
+                this.log(`Falling back to environment symbol provider for ${relPath}...`);
+            }
+            try {
+                const symbols = await this.env.executeDocumentSymbolProvider(filePath);
+                if (symbols && symbols.length > 0) {
+                    const localItems: SearchableItem[] = [];
+                    this.processSymbols(symbols, filePath, relPath, localItems);
+                    return localItems;
+                }
+            } catch (error) {
+                this.log(`Environment symbol provider failed for ${relPath}: ${error}`);
+            }
         }
 
         return [];
@@ -533,16 +543,16 @@ export class WorkspaceIndexer {
      */
     private async populateFileHashes(): Promise<void> {
         this.fileHashes.clear();
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders) {
+        const workspaceFolders = this.env.getWorkspaceFolders();
+        if (workspaceFolders.length === 0) {
             return;
         }
 
-        for (const folder of workspaceFolders) {
+        for (const folderPath of workspaceFolders) {
             try {
                 const output = cp
                     .execSync('git ls-files --stage', {
-                        cwd: folder.uri.fsPath,
+                        cwd: folderPath,
                         maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large repos
                     })
                     .toString();
@@ -554,13 +564,13 @@ export class WorkspaceIndexer {
                     if (match) {
                         const hash = match[2];
                         const relPath = match[4];
-                        const fullPath = path.join(folder.uri.fsPath, relPath);
+                        const fullPath = path.join(folderPath, relPath);
                         this.fileHashes.set(fullPath, hash);
                     }
                 }
             } catch (error) {
                 // Git failed or not a repo, skip hashing
-                console.debug(`Git hash population failed for ${folder.uri.fsPath}:`, error);
+                console.debug(`Git hash population failed for ${folderPath}:`, error);
             }
         }
     }
@@ -569,7 +579,7 @@ export class WorkspaceIndexer {
      * Process symbols recursively
      */
     private processSymbols(
-        symbols: vscode.DocumentSymbol[],
+        symbols: import('./core/indexer-interfaces').LeanDocumentSymbol[],
         filePath: string,
         relativeFilePath: string,
         collector: SearchableItem[],
@@ -603,25 +613,26 @@ export class WorkspaceIndexer {
     }
 
     /**
-     * Map VS Code SymbolKind to our SearchItemType
+     * Map SymbolKind to our SearchItemType
      */
-    private mapSymbolKindToItemType(kind: vscode.SymbolKind): SearchItemType | null {
+    private mapSymbolKindToItemType(kind: number): SearchItemType | null {
+        // Based on VS Code SymbolKind enum values
         switch (kind) {
-            case vscode.SymbolKind.Class:
+            case 4: // Class
                 return SearchItemType.CLASS;
-            case vscode.SymbolKind.Interface:
+            case 10: // Interface
                 return SearchItemType.INTERFACE;
-            case vscode.SymbolKind.Enum:
+            case 9: // Enum
                 return SearchItemType.ENUM;
-            case vscode.SymbolKind.Function:
+            case 11: // Function
                 return SearchItemType.FUNCTION;
-            case vscode.SymbolKind.Method:
+            case 5: // Method
                 return SearchItemType.METHOD;
-            case vscode.SymbolKind.Property:
-            case vscode.SymbolKind.Field:
+            case 6: // Property
+            case 7: // Field
                 return SearchItemType.PROPERTY;
-            case vscode.SymbolKind.Variable:
-            case vscode.SymbolKind.Constant:
+            case 12: // Variable
+            case 13: // Constant
                 return SearchItemType.VARIABLE;
             default:
                 return null; // Skip other symbol kinds
@@ -633,84 +644,83 @@ export class WorkspaceIndexer {
      */
     private setupFileWatchers(): void {
         this.fileWatcher?.dispose();
+        if (!this.env.createFileSystemWatcher) return;
+
         const fileExtensions = this.config.getFileExtensions();
         const pattern = `**/*.{${fileExtensions.join(',')}}`;
 
-        this.fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-
-        // Handle file creation
-        this.fileWatcher.onDidCreate((uri) => {
-            this.handleFileCreated(uri);
-        });
-
-        // Handle file changes
-        this.fileWatcher.onDidChange((uri) => {
-            this.handleFileChanged(uri);
-        });
-
-        // Handle file deletion
-        this.fileWatcher.onDidDelete((uri) => {
-            this.handleFileDeleted(uri);
+        this.fileWatcher = this.env.createFileSystemWatcher(pattern, (filePath, type) => {
+            switch (type) {
+                case 'create':
+                    this.handleFileCreated(filePath);
+                    break;
+                case 'change':
+                    this.handleFileChanged(filePath);
+                    break;
+                case 'delete':
+                    this.handleFileDeleted(filePath);
+                    break;
+            }
         });
     }
 
     /**
      * Handle file created
      */
-    private async handleFileCreated(uri: vscode.Uri): Promise<void> {
+    private async handleFileCreated(filePath: string): Promise<void> {
         if (this.indexing || !this.watchersActive) {
             return; // Skip during full re-index or cooldown
         }
 
-        const fileName = path.basename(uri.fsPath);
-        const relativePath = vscode.workspace.asRelativePath(uri.fsPath);
+        const fileName = path.basename(filePath);
+        const relativePath = this.env.asRelativePath(filePath);
 
         // Add file item
         this.items.push({
-            id: `file:${uri.fsPath}`,
+            id: `file:${filePath}`,
             name: fileName,
             type: SearchItemType.FILE,
-            filePath: uri.fsPath,
+            filePath: filePath,
             detail: relativePath,
             fullName: relativePath,
         });
 
         // Index symbols
-        await this.indexFileSymbols(uri);
+        await this.indexFileSymbols(filePath);
 
         this.log(`Indexed new file: ${relativePath}`);
 
         // Notify that items have changed
-        this.onDidChangeItemsEmitter.fire(this.items);
+        this.fireDidChangeItems(this.items);
     }
 
     /**
      * Handle file changed
      */
-    private async handleFileChanged(uri: vscode.Uri): Promise<void> {
+    private async handleFileChanged(filePath: string): Promise<void> {
         if (this.indexing || !this.watchersActive) {
             return; // Skip individual updates during full re-index or cooldown
         }
 
         // Remove old symbols for this file
-        this.items = this.items.filter((item) => item.filePath !== uri.fsPath || item.type === SearchItemType.FILE);
+        this.items = this.items.filter((item) => item.filePath !== filePath || item.type === SearchItemType.FILE);
 
         // Re-index symbols (it will check cache internally)
-        await this.indexFileSymbols(uri);
+        await this.indexFileSymbols(filePath);
 
         // Notify that items have changed
-        this.onDidChangeItemsEmitter.fire(this.items);
+        this.fireDidChangeItems(this.items);
     }
 
     /**
      * Handle file deleted
      */
-    private handleFileDeleted(uri: vscode.Uri): void {
+    private handleFileDeleted(filePath: string): void {
         // Remove all items for this file
-        this.items = this.items.filter((item) => item.filePath !== uri.fsPath);
+        this.items = this.items.filter((item) => item.filePath !== filePath);
 
         // Notify that items have changed
-        this.onDidChangeItemsEmitter.fire(this.items);
+        this.fireDidChangeItems(this.items);
     }
 
     /**
@@ -732,7 +742,7 @@ export class WorkspaceIndexer {
     }
 
     public log(message: string): void {
-        this.logger.appendLine(`[${new Date().toLocaleTimeString()}] ${message}`);
+        this.env.log(message);
         console.log(`[Indexer] ${message}`);
     }
 
@@ -741,6 +751,5 @@ export class WorkspaceIndexer {
      */
     dispose(): void {
         this.fileWatcher?.dispose();
-        this.onDidChangeItemsEmitter.dispose();
     }
 }

@@ -1,6 +1,5 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import type * as vscode from 'vscode';
 import { SearchItemType, SearchableItem } from './types';
 
 /**
@@ -143,12 +142,12 @@ export class TreeSitterParser {
     /**
      * Parse a file and extract symbols
      */
-    async parseFile(fileUri: vscode.Uri): Promise<SearchableItem[]> {
+    async parseFile(filePath: string): Promise<SearchableItem[]> {
         if (!this.isInitialized || !this.ParserClass) {
             return [];
         }
 
-        const langId = this.getLanguageId(fileUri.fsPath);
+        const langId = this.getLanguageId(filePath);
         const lang = this.languages.get(langId);
         if (!lang) {
             if (langId === 'csharp' || langId === 'typescript') {
@@ -159,26 +158,26 @@ export class TreeSitterParser {
 
         try {
             if (langId === 'csharp') {
-                console.log(`[TreeSitter] Starting C# parse: ${fileUri.fsPath}`);
+                console.log(`[TreeSitter] Starting C# parse: ${filePath}`);
             }
             const parser = new this.ParserClass();
             parser.setLanguage(lang);
-            const content = fs.readFileSync(fileUri.fsPath, 'utf8');
+            const content = fs.readFileSync(filePath, 'utf8');
             const tree = parser.parse(content);
             const items: SearchableItem[] = [];
 
-            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, fileUri.fsPath, items, langId);
+            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
 
             if (langId === 'csharp') {
                 const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
                 console.log(
-                    `[TreeSitter] Finished C# parse: ${fileUri.fsPath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
+                    `[TreeSitter] Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
                 );
                 if (endpoints.length > 0) {
                     endpoints.forEach((e) => console.log(`  - Found Endpoint: ${e.name}`));
                 } else if (items.length === 0) {
                     console.log(
-                        `[TreeSitter] Parsed ${fileUri.fsPath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
+                        `[TreeSitter] Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
                     );
                 }
             }
@@ -186,7 +185,7 @@ export class TreeSitterParser {
             tree.delete();
             return items;
         } catch (error) {
-            console.error(`Error tree-sitter parsing ${fileUri.fsPath}:`, error);
+            console.error(`Error tree-sitter parsing ${filePath}:`, error);
             return [];
         }
     }

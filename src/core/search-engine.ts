@@ -1,6 +1,7 @@
 import * as Fuzzysort from 'fuzzysort';
 import { RouteMatcher } from './route-matcher';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
+import { ISearchProvider } from './search-interface';
 
 interface PreparedItem {
     item: SearchableItem;
@@ -13,7 +14,7 @@ interface PreparedItem {
 /**
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
-export class SearchEngine {
+export class SearchEngine implements ISearchProvider {
     private items: SearchableItem[] = [];
     private preparedItems: PreparedItem[] = [];
     private scopedItems: Map<SearchScope, PreparedItem[]> = new Map();

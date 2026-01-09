@@ -1,4 +1,5 @@
-import * as vscode from 'vscode';
+import * as fs from 'fs';
+import * as path from 'path';
 
 /**
  * Record of user activity for a specific item (file or symbol)
@@ -11,18 +12,59 @@ export interface ActivityRecord {
 }
 
 /**
+ * Interface for activity persistence
+ */
+export interface ActivityStorage {
+    load(): Record<string, ActivityRecord> | undefined;
+    save(data: Record<string, ActivityRecord>): Promise<void>;
+}
+
+/**
  * Tracks user activity to personalize search results
  */
 export class ActivityTracker {
     private activities: Map<string, ActivityRecord> = new Map();
-    private context: vscode.ExtensionContext;
+    private storage: ActivityStorage;
     private saveTimer: NodeJS.Timeout | undefined;
     private readonly STORAGE_KEY = 'deeplens.activity';
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
 
-    constructor(context: vscode.ExtensionContext) {
-        this.context = context;
+    constructor(storageOrContext: string | { workspaceState: { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> } }) {
+        if (typeof storageOrContext === 'string') {
+            const storagePath = storageOrContext;
+            this.storage = {
+                load: () => {
+                    const file = path.join(storagePath, 'activity.json');
+                    if (fs.existsSync(file)) {
+                        try {
+                            return JSON.parse(fs.readFileSync(file, 'utf8'));
+                        } catch (e) {
+                            console.error('Failed to load activity file:', e);
+                        }
+                    }
+                    return undefined;
+                },
+                save: async (data) => {
+                    const file = path.join(storagePath, 'activity.json');
+                    try {
+                        if (!fs.existsSync(storagePath)) {
+                            fs.mkdirSync(storagePath, { recursive: true });
+                        }
+                        fs.writeFileSync(file, JSON.stringify(data));
+                    } catch (e) {
+                        console.error('Failed to save activity file:', e);
+                    }
+                }
+            };
+        } else {
+            const context = storageOrContext;
+            this.storage = {
+                load: () => context.workspaceState.get(this.STORAGE_KEY),
+                save: async (data) => { await context.workspaceState.update(this.STORAGE_KEY, data); }
+            };
+        }
+
         this.loadActivities();
         this.startPeriodicSave();
     }
@@ -115,11 +157,11 @@ export class ActivityTracker {
     }
 
     /**
-     * Load activities from workspace state
+     * Load activities from storage
      */
     private loadActivities(): void {
         try {
-            const stored = this.context.workspaceState.get<Record<string, ActivityRecord>>(this.STORAGE_KEY);
+            const stored = this.storage.load();
 
             if (stored) {
                 this.activities = new Map(Object.entries(stored));
@@ -132,7 +174,7 @@ export class ActivityTracker {
     }
 
     /**
-     * Save activities to workspace state
+     * Save activities to storage
      */
     async saveActivities(): Promise<void> {
         try {
@@ -141,7 +183,7 @@ export class ActivityTracker {
                 data[key] = value;
             }
 
-            await this.context.workspaceState.update(this.STORAGE_KEY, data);
+            await this.storage.save(data);
         } catch (error) {
             console.error('Failed to save activity data:', error);
         }
