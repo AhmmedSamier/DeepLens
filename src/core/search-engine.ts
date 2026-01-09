@@ -1,6 +1,6 @@
 import * as Fuzzysort from 'fuzzysort';
-import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 import { RouteMatcher } from './route-matcher';
+import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 
 interface PreparedItem {
     item: SearchableItem;
@@ -54,7 +54,9 @@ export class SearchEngine {
             preparedName: Fuzzysort.prepare(item.name),
             preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
             preparedPath: item.relativeFilePath ? Fuzzysort.prepare(item.relativeFilePath) : null,
-            preparedCombined: item.relativeFilePath ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`) : null,
+            preparedCombined: item.relativeFilePath
+                ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`)
+                : null,
         }));
 
         // Initialize arrays
@@ -201,7 +203,14 @@ export class SearchEngine {
         const MIN_SCORE = 0.01; // Minimum score to be considered a match
 
         for (const { item, preparedName, preparedFullName, preparedPath, preparedCombined } of items) {
-            const score = this.calculateItemScore(query, preparedName, preparedFullName, preparedPath, preparedCombined, MIN_SCORE);
+            const score = this.calculateItemScore(
+                query,
+                preparedName,
+                preparedFullName,
+                preparedPath,
+                preparedCombined,
+                MIN_SCORE,
+            );
 
             if (score > MIN_SCORE) {
                 results.push({
@@ -362,10 +371,27 @@ export class SearchEngine {
         }
 
         const filteredItems = this.filterByScope(scope);
-        const results: SearchResult[] = [];
-        const queryLower = query.toLowerCase();
+        const results: SearchResult[] = this.findBurstMatches(filteredItems, query.toLowerCase(), maxResults);
 
-        for (const { item } of filteredItems) {
+        // Add URL matching to burst search for instant feedback
+        if (
+            (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
+            RouteMatcher.isPotentialUrl(query.toLowerCase())
+        ) {
+            this.addUrlMatches(results, filteredItems, query.toLowerCase(), maxResults);
+        }
+
+        // Apply activity tracking if available
+        if (this.getActivityScore) {
+            this.applyPersonalizedBoosting(results);
+        }
+
+        return results.sort((a, b) => b.score - a.score);
+    }
+
+    private findBurstMatches(items: PreparedItem[], queryLower: string, maxResults: number): SearchResult[] {
+        const results: SearchResult[] = [];
+        for (const { item } of items) {
             const nameLower = item.name.toLowerCase();
 
             // Priority matches: Exact name or StartsWith
@@ -381,27 +407,32 @@ export class SearchEngine {
                 break;
             }
         }
+        return results;
+    }
 
-        // Add URL matching to burst search for instant feedback
-        if ((scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(queryLower)) {
-            for (const { item } of filteredItems) {
-                if (item.type === SearchItemType.ENDPOINT && results.length < maxResults) {
-                    if (RouteMatcher.isMatch(item.name, queryLower)) {
-                        results.push({
-                            item,
-                            score: 2.0, // Top priority
-                            scope: SearchScope.ENDPOINTS,
-                        });
-                    }
+    private addUrlMatches(
+        results: SearchResult[],
+        items: PreparedItem[],
+        queryLower: string,
+        maxResults: number,
+    ): void {
+        const existingIds = new Set(results.map((r) => r.item.id));
+
+        for (const { item } of items) {
+            if (results.length >= maxResults) {
+                break;
+            }
+
+            if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
+                if (RouteMatcher.isMatch(item.name, queryLower)) {
+                    results.push({
+                        item,
+                        score: 2.0, // Top priority
+                        scope: SearchScope.ENDPOINTS,
+                    });
+                    existingIds.add(item.id);
                 }
             }
         }
-
-        // Apply activity tracking if available
-        if (this.getActivityScore) {
-            this.applyPersonalizedBoosting(results);
-        }
-
-        return results.sort((a, b) => b.score - a.score);
     }
 }

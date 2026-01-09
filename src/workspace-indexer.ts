@@ -38,12 +38,13 @@ export class WorkspaceIndexer {
         this.logger = vscode.window.createOutputChannel('DeepLens');
     }
 
-
-
     /**
      * Start indexing the workspace
      */
-    async indexWorkspace(progressCallback?: (message: string, increment?: number) => void, force: boolean = false): Promise<void> {
+    async indexWorkspace(
+        progressCallback?: (message: string, increment?: number) => void,
+        force: boolean = false,
+    ): Promise<void> {
         if (this.indexing) {
             return;
         }
@@ -105,7 +106,7 @@ export class WorkspaceIndexer {
             this.log('Index Workspace complete.');
 
             // Log summary
-            const endpointCount = this.items.filter(i => i.type === SearchItemType.ENDPOINT).length;
+            const endpointCount = this.items.filter((i) => i.type === SearchItemType.ENDPOINT).length;
             this.log(`Final Index Summary: ${this.items.length} total items, ${endpointCount} endpoints.`);
         } finally {
             this.indexing = false;
@@ -337,7 +338,9 @@ export class WorkspaceIndexer {
                     if (processed === totalFiles) {
                         logged100 = true;
                     }
-                    this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
+                    this.log(
+                        `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
+                    );
                 }
 
                 if (progressCallback) {
@@ -362,9 +365,7 @@ export class WorkspaceIndexer {
     /**
      * Index a single file and handle errors
      */
-    private async indexOneFile(
-        fileItem: SearchableItem,
-    ): Promise<void> {
+    private async indexOneFile(fileItem: SearchableItem): Promise<void> {
         try {
             await this.indexFileSymbols(vscode.Uri.file(fileItem.filePath));
         } catch (error) {
@@ -440,7 +441,7 @@ export class WorkspaceIndexer {
 
             if (symbolsFound.length > 0) {
                 this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
-                this.items.push(...symbolsFound.map(s => ({ ...s, relativeFilePath: relPath })));
+                this.items.push(...symbolsFound.map((s) => ({ ...s, relativeFilePath: relPath })));
             }
         } catch (error) {
             this.log(`Error indexing ${filePath}: ${error}`);
@@ -734,8 +735,6 @@ export class WorkspaceIndexer {
         this.logger.appendLine(`[${new Date().toLocaleTimeString()}] ${message}`);
         console.log(`[Indexer] ${message}`);
     }
-
-
 
     /**
      * Dispose resources

@@ -10,8 +10,11 @@ export class RouteMatcher {
     static isMatch(template: string, concretePath: string): boolean {
         // 1. Clean up inputs
         // Remove HTTP methods like "[GET] " or "[POST] "
-        const cleanTemplate = template.replace(/^\[[A-Z]+\]\s+/, '').trim().replace(/^\/|\/$/g, '');
-        const cleanPath = concretePath.trim().replace(/^\/|\/$/g, '');
+        const cleanTemplate = template
+            .replace(/^\[[A-Z]+\]\s+/, '')
+            .trim()
+            .replace(/(^\/|\/$)/g, '');
+        const cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
 
         if (!cleanTemplate || !cleanPath) {
             return false;
@@ -22,10 +25,10 @@ export class RouteMatcher {
         let pattern = cleanTemplate;
 
         // Replace {*slug} (catch-all) with (.*)
-        pattern = pattern.replace(/\{(\*[a-zA-Z0-9_]+)\}/g, '___CATCHALL___');
+        pattern = pattern.replace(/\{(\*\w+)\}/g, '___CATCHALL___');
 
         // Replace {id}, {id:int}, {id?} etc with ([^\/]+)
-        pattern = pattern.replace(/\{[a-zA-Z0-9_?]+(?::[a-zA-Z0-9]+)?\}/g, '___PARAM___');
+        pattern = pattern.replace(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
 
         // Escape regex specials
         pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -47,7 +50,7 @@ export class RouteMatcher {
             // Template: "api/AdminDashboard/customers/{id}"
             // Path: "AdminDashboard/customers/5"
             return this.segmentsMatch(cleanTemplate, cleanPath);
-        } catch (e) {
+        } catch {
             return false;
         }
     }
@@ -59,32 +62,36 @@ export class RouteMatcher {
         const tSegs = template.split('/');
         const pSegs = path.split('/');
 
-        if (pSegs.length > tSegs.length) return false;
+        if (pSegs.length > tSegs.length) {
+            return false;
+        }
 
         for (let i = 1; i <= pSegs.length; i++) {
             const tSeg = tSegs[tSegs.length - i];
             const pSeg = pSegs[pSegs.length - i];
+            const isLast = i === 1;
 
-            // If template segment is a parameter, it matches any non-empty path segment
-            if (tSeg.startsWith('{') && tSeg.endsWith('}')) {
-                if (!pSeg) return false;
-                continue;
-            }
-
-            // For the VERY LAST segment specifically, allow prefix matching
-            // This enables "usern" to match "username"
-            if (i === 1) {
-                if (!tSeg.toLowerCase().startsWith(pSeg.toLowerCase())) {
-                    return false;
-                }
-            } else {
-                // Middle segments must match exactly (or be parameters)
-                if (tSeg.toLowerCase() !== pSeg.toLowerCase()) {
-                    return false;
-                }
+            if (!this.segmentMatches(tSeg, pSeg, isLast)) {
+                return false;
             }
         }
         return true;
+    }
+
+    private static segmentMatches(tSeg: string, pSeg: string, allowPrefix: boolean): boolean {
+        // If template segment is a parameter, it matches any non-empty path segment
+        if (tSeg.startsWith('{') && tSeg.endsWith('}')) {
+            return !!pSeg;
+        }
+
+        if (allowPrefix) {
+            // For the VERY LAST segment specifically, allow prefix matching
+            // This enables "usern" to match "username"
+            return tSeg.toLowerCase().startsWith(pSeg.toLowerCase());
+        }
+
+        // Middle segments must match exactly
+        return tSeg.toLowerCase() === pSeg.toLowerCase();
     }
 
     /**

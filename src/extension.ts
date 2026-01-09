@@ -5,7 +5,7 @@ import { Config } from './config';
 import { IndexPersistence } from './core/index-persistence';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
-import { SearchItemType, SearchScope } from './core/types';
+import { SearchItemType } from './core/types';
 import { SearchProvider } from './search-provider';
 import { WorkspaceIndexer } from './workspace-indexer';
 
@@ -60,8 +60,6 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(searchCommand);
     context.subscriptions.push(rebuildCommand);
     context.subscriptions.push(clearCacheCommand);
-
-
 
     // Track document opens for activity
     if (config.isActivityTrackingEnabled()) {
@@ -169,11 +167,22 @@ async function indexWorkspace(force: boolean = false): Promise<void> {
     );
 }
 
-/**
- * Index individual files when they change
- */
-async function handleFileChange(uri: vscode.Uri): Promise<void> {
-    // This is handled by WorkspaceIndexer internal watchers now
+
+
+interface GitRepository {
+    rootUri: vscode.Uri;
+    state: {
+        HEAD?: {
+            commit?: string;
+            name?: string;
+        };
+        onDidChange: (cb: () => void) => vscode.Disposable;
+    };
+}
+
+interface GitAPI {
+    repositories: GitRepository[];
+    onDidOpenRepository: (cb: (repo: GitRepository) => void) => vscode.Disposable;
 }
 
 /**
@@ -192,24 +201,22 @@ function setupGitListener(context: vscode.ExtensionContext): void {
         // Activate git extension if not already active
         gitExtension.exports
             .getAPI(1)
-            .then((git: any) => {
-                if (!git || typeof git !== 'object') {
+            .then((git: unknown) => {
+                const gitApi = git as GitAPI;
+                if (!gitApi || typeof gitApi !== 'object') {
                     console.log('Failed to get git API object');
                     return;
                 }
 
                 workspaceIndexer.log('Git API obtained successfully');
 
-                const gitApi = git as {
-                    repositories: any[];
-                    onDidOpenRepository: (cb: (repo: any) => void) => vscode.Disposable;
-                };
-
                 // Setup listeners for all current and future repositories
-                gitApi.repositories.forEach(repo => setupRepositoryListener(repo));
-                context.subscriptions.push(gitApi.onDidOpenRepository(repo => setupRepositoryListener(repo)));
+                gitApi.repositories.forEach((repo) => setupRepositoryListener(repo));
+                context.subscriptions.push(gitApi.onDidOpenRepository((repo) => setupRepositoryListener(repo)));
 
-                workspaceIndexer.log(`Git listener setup complete. Monitoring ${gitApi.repositories.length} repositories.`);
+                workspaceIndexer.log(
+                    `Git listener setup complete. Monitoring ${gitApi.repositories.length} repositories.`,
+                );
             })
             .catch((error: unknown) => {
                 console.error('Failed to get git API:', error);
@@ -222,7 +229,7 @@ function setupGitListener(context: vscode.ExtensionContext): void {
 /**
  * Setup listener for individual repository
  */
-function setupRepositoryListener(repository: any): void {
+function setupRepositoryListener(repository: GitRepository): void {
     if (!repository || typeof repository !== 'object') {
         return;
     }
@@ -236,7 +243,9 @@ function setupRepositoryListener(repository: any): void {
         const currentHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
 
         if (currentHead !== lastHead) {
-            workspaceIndexer.log(`Git detected HEAD change in ${repository.rootUri.fsPath}: ${lastHead} -> ${currentHead}`);
+            workspaceIndexer.log(
+                `Git detected HEAD change in ${repository.rootUri.fsPath}: ${lastHead} -> ${currentHead}`,
+            );
             lastHead = currentHead;
 
             if (gitChangeDebounce) {
@@ -244,7 +253,9 @@ function setupRepositoryListener(repository: any): void {
             }
 
             gitChangeDebounce = setTimeout(async () => {
-                workspaceIndexer.log(`[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`);
+                workspaceIndexer.log(
+                    `[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`,
+                );
                 // Trigger index with progress visible to user
                 await indexWorkspace(false);
                 workspaceIndexer.log('[Git Event] Workspace refresh finished.');

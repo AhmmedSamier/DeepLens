@@ -328,7 +328,10 @@ export class SearchProvider {
                 });
 
                 // Update if we have more results or if current list is empty
-                if (burstResults.length > instantResults.length || (burstResults.length > 0 && quickPick.items.length === 0)) {
+                if (
+                    burstResults.length > instantResults.length ||
+                    (burstResults.length > 0 && quickPick.items.length === 0)
+                ) {
                     quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
                     this.updateTitle(quickPick, burstResults.length);
                 }
