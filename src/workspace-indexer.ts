@@ -35,7 +35,7 @@ export class WorkspaceIndexer {
         this.config = config;
         this.treeSitter = treeSitter;
         this.persistence = persistence;
-        this.logger = vscode.window.createOutputChannel('Find Everywhere');
+        this.logger = vscode.window.createOutputChannel('DeepLens');
     }
 
 

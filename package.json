@@ -1,9 +1,11 @@
 {
-    "name": "find-everywhere",
-    "displayName": "Find Everywhere",
-    "description": "Search everywhere in your workspace - types, symbols, files, and text with fuzzy matching and CamelHumps support (like ReSharper)",
-    "version": "0.1.0",
-    "publisher": "finder",
+    "name": "deeplens",
+    "displayName": "DeepLens",
+    "description": "Search everywhere in your workspace - types, symbols, files, and text with fuzzy matching and CamelHumps support",
+    "repository": "https://github.com/AhmedSamir/DeepLens.git",
+    "version": "0.0.1",
+    "publisher": "AhmedSamir",
+    "icon": "icon.png",
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -14,8 +16,7 @@
         "search",
         "find",
         "navigation",
-        "fuzzy",
-        "resharper"
+        "fuzzy"
     ],
     "activationEvents": [
         "onStartupFinished"
@@ -24,38 +25,29 @@
     "contributes": {
         "commands": [
             {
-                "command": "findEverywhere.search",
-                "title": "Find Everywhere"
+                "command": "deeplens.search",
+                "title": "DeepLens: Search Everywhere"
             },
             {
-                "command": "findEverywhere.rebuildIndex",
-                "title": "Find Everywhere: Rebuild Index"
+                "command": "deeplens.rebuildIndex",
+                "title": "DeepLens: Rebuild Index"
             },
             {
-                "command": "findEverywhere.clearIndexCache",
-                "title": "Find Everywhere: Clear Index Cache"
-            },
-            {
-                "command": "findEverywhere.searchEndpoints",
-                "title": "Find Everywhere: Search for Endpoints"
+                "command": "deeplens.clearIndexCache",
+                "title": "DeepLens: Clear Index Cache"
             }
         ],
         "keybindings": [
             {
-                "command": "findEverywhere.search",
+                "command": "deeplens.search",
                 "key": "shift shift",
                 "mac": "shift shift"
-            },
-            {
-                "command": "findEverywhere.searchEndpoints",
-                "key": "ctrl+shift+alt+e",
-                "mac": "ctrl+shift+alt+e"
             }
         ],
         "configuration": {
-            "title": "Find Everywhere",
+            "title": "DeepLens",
             "properties": {
-                "findEverywhere.excludePatterns": {
+                "deeplens.excludePatterns": {
                     "type": "array",
                     "default": [
                         "**/node_modules/**",
@@ -66,39 +58,39 @@
                     ],
                     "description": "Glob patterns to exclude from search"
                 },
-                "findEverywhere.maxResults": {
+                "deeplens.maxResults": {
                     "type": "number",
                     "default": 50,
                     "description": "Maximum number of results to display"
                 },
-                "findEverywhere.enableTextSearch": {
+                "deeplens.enableTextSearch": {
                     "type": "boolean",
                     "default": true,
                     "description": "Enable text search across files"
                 },
-                "findEverywhere.enableCamelHumps": {
+                "deeplens.enableCamelHumps": {
                     "type": "boolean",
                     "default": true,
                     "description": "Enable CamelHumps matching (e.g., 'RFC' matches 'React.FC')"
                 },
-                "findEverywhere.respectGitignore": {
+                "deeplens.respectGitignore": {
                     "type": "boolean",
                     "default": true,
                     "description": "Respect .gitignore files when indexing (recommended)"
                 },
-                "findEverywhere.activity.enabled": {
+                "deeplens.activity.enabled": {
                     "type": "boolean",
                     "default": true,
                     "description": "Enable personalized results based on your usage activity"
                 },
-                "findEverywhere.activity.weight": {
+                "deeplens.activity.weight": {
                     "type": "number",
                     "default": 0.3,
                     "minimum": 0,
                     "maximum": 1,
                     "description": "How much activity affects results (0=none, 0.5=balanced, 1=only activity)"
                 },
-                "findEverywhere.fileExtensions": {
+                "deeplens.fileExtensions": {
                     "type": "array",
                     "default": [
                         "ts",

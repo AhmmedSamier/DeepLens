@@ -17,7 +17,7 @@ export class ActivityTracker {
     private activities: Map<string, ActivityRecord> = new Map();
     private context: vscode.ExtensionContext;
     private saveTimer: NodeJS.Timeout | undefined;
-    private readonly STORAGE_KEY = 'findEverywhere.activity';
+    private readonly STORAGE_KEY = 'deeplens.activity';
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
 

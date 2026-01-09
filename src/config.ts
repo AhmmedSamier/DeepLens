@@ -7,14 +7,14 @@ export class Config {
     private config: vscode.WorkspaceConfiguration;
 
     constructor() {
-        this.config = vscode.workspace.getConfiguration('findEverywhere');
+        this.config = vscode.workspace.getConfiguration('deeplens');
     }
 
     /**
      * Reload configuration
      */
     reload(): void {
-        this.config = vscode.workspace.getConfiguration('findEverywhere');
+        this.config = vscode.workspace.getConfiguration('deeplens');
     }
 
     /**

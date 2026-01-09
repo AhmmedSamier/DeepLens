@@ -25,12 +25,12 @@ let gitChangeDebounce: NodeJS.Timeout | undefined;
  * Extension activation
  */
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('Find Everywhere extension is now active');
+    console.log('DeepLens extension is now active');
 
     // Initialize
     config = new Config();
     searchEngine = new SearchEngine();
-    const treeSitterLogger = vscode.window.createOutputChannel('Find Everywhere (Tree-sitter)');
+    const treeSitterLogger = vscode.window.createOutputChannel('DeepLens (Tree-sitter)');
     treeSitterParser = new TreeSitterParser(context.extensionPath, treeSitterLogger);
     indexPersistence = new IndexPersistence(context.globalStorageUri.fsPath);
     workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence);
@@ -41,29 +41,23 @@ export async function activate(context: vscode.ExtensionContext) {
     const treeSitterInit = treeSitterParser.init().catch((e) => console.error('Tree-sitter init failed:', e));
 
     // Register search command
-    const searchCommand = vscode.commands.registerCommand('findEverywhere.search', async () => {
+    const searchCommand = vscode.commands.registerCommand('deeplens.search', async () => {
         await searchProvider.show();
     });
 
-    // Register search endpoints command
-    const searchEndpointsCommand = vscode.commands.registerCommand('findEverywhere.searchEndpoints', async () => {
-        await searchProvider.show(SearchScope.ENDPOINTS);
-    });
-
     // Register rebuild index command
-    const rebuildCommand = vscode.commands.registerCommand('findEverywhere.rebuildIndex', async () => {
-        vscode.window.showInformationMessage('Rebuilding Find Everywhere index...');
+    const rebuildCommand = vscode.commands.registerCommand('deeplens.rebuildIndex', async () => {
+        vscode.window.showInformationMessage('Rebuilding DeepLens index...');
         await indexWorkspace(true);
     });
 
     // Register clear index cache command
-    const clearCacheCommand = vscode.commands.registerCommand('findEverywhere.clearIndexCache', async () => {
+    const clearCacheCommand = vscode.commands.registerCommand('deeplens.clearIndexCache', async () => {
         await indexPersistence.clear();
-        vscode.window.showInformationMessage('Find Everywhere: Index cache cleared.');
+        vscode.window.showInformationMessage('DeepLens: Index cache cleared.');
     });
 
     context.subscriptions.push(searchCommand);
-    context.subscriptions.push(searchEndpointsCommand);
     context.subscriptions.push(rebuildCommand);
     context.subscriptions.push(clearCacheCommand);
 
@@ -83,12 +77,12 @@ export async function activate(context: vscode.ExtensionContext) {
     // Listen for configuration changes
     context.subscriptions.push(
         vscode.workspace.onDidChangeConfiguration((event) => {
-            if (event.affectsConfiguration('findEverywhere')) {
+            if (event.affectsConfiguration('deeplens')) {
                 config.reload();
                 // Re-index workspace if exclude patterns or file extensions changed
                 if (
-                    event.affectsConfiguration('findEverywhere.excludePatterns') ||
-                    event.affectsConfiguration('findEverywhere.fileExtensions')
+                    event.affectsConfiguration('deeplens.excludePatterns') ||
+                    event.affectsConfiguration('deeplens.fileExtensions')
                 ) {
                     indexWorkspace();
                 }
@@ -131,7 +125,7 @@ async function indexWorkspace(force: boolean = false): Promise<void> {
     await vscode.window.withProgress(
         {
             location: vscode.ProgressLocation.Notification,
-            title: 'Find Everywhere',
+            title: 'DeepLens',
             cancellable: false,
         },
         async (progress) => {
@@ -162,7 +156,7 @@ async function indexWorkspace(force: boolean = false): Promise<void> {
                 searchEngine.setItems(allItems);
 
                 // Show completion notification
-                const message = `Find Everywhere: Indexed ${fileCount} files, ${symbolCount} symbols, ${endpointCount} endpoints, ${commandCount} commands in ${duration}s`;
+                const message = `DeepLens: Indexed ${fileCount} files, ${symbolCount} symbols, ${endpointCount} endpoints, ${commandCount} commands in ${duration}s`;
                 vscode.window.showInformationMessage(message);
                 workspaceIndexer.log(`Index complete: ${message}`);
                 // Cooldown watchers after full index to avoid git checkout event storms

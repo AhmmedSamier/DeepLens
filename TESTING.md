@@ -1,4 +1,4 @@
-# Testing Find Everywhere Extension
+# Testing DeepLens Extension
 
 ## Quick Test Steps
 
@@ -11,7 +11,7 @@
 
 3. **Test the Keybinding**
    - In the Extension Development Host window, press `Shift` twice quickly
-   - The Find Everywhere dialog should appear
+   - The DeepLens dialog should appear
 
 4. **Test Search Functionality**
    - Type a search query (e.g., "SearchEngine", "indexWorkspace", etc.)
@@ -21,23 +21,23 @@
 
 ### If Shift+Shift doesn't work:
 - **Check**: Are you in the Extension Development Host window (not the original window)?
-- **Try**: Use Command Palette (`Ctrl+Shift+P`) and type "Find Everywhere" to trigger manually
+- **Try**: Use Command Palette (`Ctrl+Shift+P`) and type "DeepLens" to trigger manually
 - **Check**: Look at the Debug Console for any errors
 
 ### If search doesn't find methods:
 - **Check**: Was the workspace indexed? Look for "Indexing workspace..." message
 - **Check**: Open a TypeScript/JavaScript file first so VS Code loads the language server
-- **Try**: Use Command Palette > "Find Everywhere: Rebuild Index" (if we added that command)
+- **Try**: Use Command Palette > "DeepLens: Rebuild Index" (if we added that command)
 
 ### Debug Console
 - In the original VS Code window (not Extension Development Host)
 - Go to Debug Console tab
-- Look for errors or "Find Everywhere extension is now active" message
+- Look for errors or "DeepLens extension is now active" message
 
 ## Manual Test Command
 
 You can also test by opening Command Palette in the Extension Development Host:
 1. Press `Ctrl+Shift+P` / `Cmd+Shift+P`
-2. Type "Find Everywhere"
+2. Type "DeepLens"
 3. Select the command
 4. This should open the search regardless of keybinding

@@ -164,7 +164,7 @@ export class SearchProvider {
                 return 'Searching in Endpoints only. Type to search...';
             case SearchScope.EVERYTHING:
             default:
-                return 'Type to search everywhere (files, classes, symbols...)';
+                return 'Type to search everywhere with DeepLens (files, classes, symbols...)';
         }
     }
 
@@ -198,9 +198,9 @@ export class SearchProvider {
         }
 
         if (resultCount > 0) {
-            quickPick.title = `Search Everywhere - ${filterName} (${resultCount})`;
+            quickPick.title = `DeepLens - ${filterName} (${resultCount})`;
         } else {
-            quickPick.title = 'Search Everywhere';
+            quickPick.title = 'DeepLens';
         }
     }
 
@@ -218,7 +218,7 @@ export class SearchProvider {
     private async showInternal(): Promise<void> {
         const quickPick = vscode.window.createQuickPick<SearchResultItem>();
 
-        quickPick.title = 'Search Everywhere';
+        quickPick.title = 'DeepLens';
         quickPick.placeholder = this.getPlaceholder();
         quickPick.matchOnDescription = false;
         quickPick.matchOnDetail = false;

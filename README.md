@@ -1,79 +1,65 @@
-# Find Everywhere
+<div align="center">
+  <img src="icon.png" width="80" alt="DeepLens Logo">
+  <h1>DeepLens</h1>
+  <p><b>High-performance "Search Everywhere" for Visual Studio Code</b></p>
+</div>
 
-A VS Code extension that brings ReSharper's powerful "Search Everywhere" functionality to Visual Studio Code. Quickly find types, symbols, files, and text across your entire workspace with fuzzy matching and CamelHumps support.
+DeepLens provides a powerful, unified search experience across your entire workspace. Quickly find types, symbols, files, and even API endpoints with lightning-fast fuzzy matching, CamelHumps support, and activity-based ranking.
 
-## Features
+## 🌟 Key Features
 
 ### 🔍 **Search Everywhere**
-- **Types**: Find classes, interfaces, and enums
-- **Symbols**: Find functions, methods, and properties
-- **Files**: Find files by name
-- **Text**: Search text content across files (coming soon)
+The ultimate navigation tool. Access everything in your workspace from a single dialog.
+- **Classes & Types**: Find classes, interfaces, and enums instantly.
+- **Methods & Symbols**: Search for functions, methods, and variables.
+- **Files**: Locate any file by name or relative path.
+- **Commands**: Execute VS Code commands directly from the search bar.
+- **API Endpoints**: Specialized search for ASP.NET and web API endpoints.
 
-### ⚡ **Smart Matching**
-- **Fuzzy Search**: Type partial matches like "usebas" to find "useCallback"
-- **CamelHumps**: Type "RFC" to find "React.FC" or "RequestForComment"
-- **Full Name Matching**: Search by fully qualified names
-- **Debounced Search**: Fast, responsive searching without lag
+### 🌐 **Specialized Endpoint Search**
+DeepLens automatically extracts and indexes API endpoints (like `GET /api/users`) from your code, allowing you to navigate to the controller or handler responsible for a specific route.
 
-### 🎯 **Advanced UI**
-- **Filter Buttons**: Click buttons to filter by All, Classes, Symbols, or Files
-- **Visual Indicators**: Active filters are highlighted with colored icons
-- **Result Counts**: See "Classes (100)" in the title as you type  
-- **Colored Icons**: Different colors for classes, methods, files, etc.
-- **Smart Placeholder**: Changes based on active filter
+### ⚡ **Smart Matching Engine**
+- **Fuzzy Search**: Type partial matches like `usebas` to find `useCallback`.
+- **CamelHumps**: Type `RFC` to find `React.FC` or `RequestForComment`.
+- **Ranking**: Results are ranked based on match quality, item type, and your personal usage patterns.
 
-### ⚙️ **Configurable**
-- Customize exclude patterns
-- Configure file extensions to index
-- Adjust maximum results
-- Enable/disable CamelHumps matching
+### 🎯 **Premium UI/UX**
+- **Integrated Filters**: Toggle between search scopes (All, Types, Symbols, Files, Endpoints) with a single click or keyboard shortcut.
+- **Live Statistics**: See real-time counts of files and symbols as they are indexed.
+- **Activity Ranking**: DeepLens learns which files you work on most and boosts them in search results.
 
-## Usage
+### 🚀 **Performance First**
+- **Tree-sitter Powered**: Uses native Tree-sitter parsers for C#, TypeScript, JavaScript, Python, Go, Java, and more for near-instant indexing.
+- **Git Aware**: Automatically respects your `.gitignore` and detects branch switches to keep the index fresh without draining resources.
+- **Persistence**: Caches indices across sessions for instant startup.
 
-### Basic Search
-1. Press `Shift` twice quickly (just like IntelliJ IDEA / ReSharper!)
-2. Type your search query
-3. Select the result to navigate to it
+## ⌨️ Keyboard Shortcuts & Commands
 
-### Filter Buttons
-Click the filter buttons at the top to narrow your search:
-- **🔍 All** - Search everything
-- **📦 Classes** - Only classes, interfaces, enums  
-- **⚡ Symbols** - Only methods, functions, properties
-- **📄 Files** - Only file names
+### Keyboard Shortcuts
 
-Active filters are highlighted with colored icons and a filled circle (●).
+| Shortcut | Action |
+|----------|--------|
+| `Shift` `Shift` (Double Press) | **Global Search**: Open DeepLens Search Everywhere |
 
-### Examples
+### Available Commands
 
-**Find a class:**
-```
-MyComponent
-```
+Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for:
 
-**Find using CamelHumps:**
-```
-RFC → React.FC
-MRCT → MethodReferenceComparerTests
-```
+| Command | Description |
+|---------|-------------|
+| `DeepLens: Search Everywhere` | Main search interface with all filters |
+| `DeepLens: Rebuild Index` | Manually trigger a full re-index of the workspace |
+| `DeepLens: Clear Index Cache` | Clear the local index cache and rebuild |
 
-**Find a method:**
-```
-useState
-```
+## ⚙️ Configuration
 
-**Find a file:**
-```
-config.ts
-```
-
-## Configuration
+Customize DeepLens to fit your workflow in VS Code Settings:
 
 ```json
 {
   // Patterns to exclude from indexing
-  "findEverywhere.excludePatterns": [
+  "deeplens.excludePatterns": [
     "**/node_modules/**",
     "**/dist/**",
     "**/out/**",
@@ -81,104 +67,39 @@ config.ts
     "**/build/**"
   ],
 
-  // Maximum number of search results
-  "findEverywhere.maxResults": 50,
+  // Maximum number of search results to display
+  "deeplens.maxResults": 50,
 
-  // Enable text search across files
-  "findEverywhere.enableTextSearch": true,
+  // Enable CamelHumps matching (e.g., 'RFC' -> 'React.FC')
+  "deeplens.enableCamelHumps": true,
 
-  // Enable CamelHumps matching
-  "findEverywhere.enableCamelHumps": true,
+  // Respect .gitignore files when indexing (highly recommended)
+  "deeplens.respectGitignore": true,
 
-  // Respect .gitignore files (recommended)
-  "findEverywhere.respectGitignore": true,
+  // File extensions to index for search
+  "deeplens.fileExtensions": [
+    "ts", "tsx", "js", "jsx", "py", "java", "cs", "cpp", "c", "h", "go", "rb", "php"
+  ],
 
-  // File extensions to index
-  "findEverywhere.fileExtensions": [
-    "ts", "tsx", "js", "jsx",
-    "py", "java", "cs",
-    "cpp", "c", "h",
-    "go", "rb", "php"
-  ]
+  // Personalization: How much your usage affects results (0-1)
+  "deeplens.activity.weight": 0.3
 }
 ```
 
-### GitIgnore Support
+## 📂 Supported Languages
 
-✅ **The extension automatically respects `.gitignore` files** by default!
+DeepLens features native high-performance indexing for:
+- ✅ **C#** (.cs)
+- ✅ **TypeScript / JavaScript** (.ts, .tsx, .js, .jsx)
+- ✅ **Python** (.py)
+- ✅ **Go** (.go)
+- ✅ **Java** (.java)
+- ✅ **C / C++** (.c, .cpp, .h)
+- ✅ **Ruby** (.rb)
+- ✅ **PHP** (.php)
 
-- VS Code's `workspace.findFiles` API automatically excludes:
-  1. Files/folders in `.gitignore`
-  2. Files matching `files.exclude` setting
-  3. Patterns in `findEverywhere.excludePatterns`
-  4. **C# auto-generated files** (files starting with `// <auto-generated />`)
+*Other languages are supported via VS Code's built-in symbol providers.*
 
-- You can disable gitignore support by setting `"findEverywhere.respectGitignore": false`
+## 📜 License
 
-### Indexing Progress
-
-When the extension starts, you'll see:
-- A notification showing indexing progress
-- File count and symbol count as they're indexed
-- Total duration when indexing completes
-- Example: "Indexed 1,234 files, 5,678 symbols in 2.3s"
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| `Shift` `Shift` (double press) | Open Find Everywhere |
-
-## How It Works
-
-1. **Indexing**: On activation, the extension scans your workspace and indexes:
-   - All files matching configured extensions
-   - Symbols (classes, functions, methods, etc.) from each file using VS Code's symbol provider
-   
-2. **Real-time Updates**: File changes are monitored and the index is updated incrementally
-
-3. **Fast Search**: Uses the `fuzzysort` library for lightning-fast fuzzy search with custom CamelHumps matching
-
-4. **Smart Ranking**: Results are ranked based on:
-   - Match quality
-   - Item type (types > symbols > files)
-   - Match position
-
-## Comparison with ReSharper
-
-This extension brings ReSharper's beloved "Search Everywhere" (Ctrl+T) feature to VS Code:
-
-| Feature | ReSharper | Find Everywhere |
-|---------|-----------|----------------|
-| Search Types | ✅ | ✅ |
-| Search Symbols | ✅ | ✅ |
-| Search Files | ✅ | ✅ |
-| Fuzzy Matching | ✅ | ✅ |
-| CamelHumps | ✅ | ✅ |
-| Scope Cycling | ✅ | ✅ |
-| Text Search | ✅ | 🚧 Coming Soon |
-| Recent Items | ✅ | 🚧 Planned |
-
-## Performance
-
-- Optimized for large workspaces (tested with 10,000+ files)
-- Incremental indexing for fast updates
-- Efficient in-memory search index
-
-## Known Limitations
-
-- Text search across files not yet implemented
-- Recent items tracking not yet implemented
-- Symbol extraction depends on VS Code's language support
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit issues and pull requests.
-
-## License
-
-MIT
-
-## Credits
-
-Inspired by JetBrains ReSharper's "Search Everywhere" feature.
+MIT License - Copyright (c) 2026 AhmedSamir
