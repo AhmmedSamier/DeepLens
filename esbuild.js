@@ -100,7 +100,7 @@ async function main() {
         sourcesContent: false,
         platform: 'node',
         outfile: 'dist/extension.js',
-        external: ['vscode', 'web-tree-sitter'], // Exclude vscode API and tree-sitter to preserve their internal logic
+        external: ['vscode'], // Exclude vscode API to preserve its internal logic
         logLevel: 'silent',
         plugins: [
             /* add to the end of plugins array */

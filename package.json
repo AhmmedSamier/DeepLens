@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "0.0.3",
+    "version": "0.0.5",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
