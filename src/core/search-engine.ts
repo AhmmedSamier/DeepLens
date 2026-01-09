@@ -1,5 +1,6 @@
 import * as Fuzzysort from 'fuzzysort';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
+import { RouteMatcher } from './route-matcher';
 
 interface PreparedItem {
     item: SearchableItem;
@@ -113,6 +114,11 @@ export class SearchEngine {
             results = this.mergeWithCamelHumps(results, filteredItems, query);
         }
 
+        // 2.5 Add URL matches if query looks like a path
+        if (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) {
+            results = this.mergeWithUrlMatches(results, filteredItems, query);
+        }
+
         // 3. Sort by score
         results.sort((a, b) => b.score - a.score);
 
@@ -123,6 +129,29 @@ export class SearchEngine {
         }
 
         return results.slice(0, maxResults);
+    }
+
+    private mergeWithUrlMatches(results: SearchResult[], items: PreparedItem[], query: string): SearchResult[] {
+        if (!RouteMatcher.isPotentialUrl(query)) {
+            return results;
+        }
+
+        const existingIds = new Set(results.map((r) => r.item.id));
+        const urlMatches: SearchResult[] = [];
+
+        for (const { item } of items) {
+            if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
+                if (RouteMatcher.isMatch(item.name, query)) {
+                    urlMatches.push({
+                        item,
+                        score: 1.5, // Ultra high boost for exact URL match
+                        scope: SearchScope.ENDPOINTS,
+                    });
+                }
+            }
+        }
+
+        return [...results, ...urlMatches];
     }
 
     private mergeWithCamelHumps(results: SearchResult[], items: PreparedItem[], query: string): SearchResult[] {
@@ -350,6 +379,21 @@ export class SearchEngine {
 
             if (results.length >= maxResults) {
                 break;
+            }
+        }
+
+        // Add URL matching to burst search for instant feedback
+        if ((scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(queryLower)) {
+            for (const { item } of filteredItems) {
+                if (item.type === SearchItemType.ENDPOINT && results.length < maxResults) {
+                    if (RouteMatcher.isMatch(item.name, queryLower)) {
+                        results.push({
+                            item,
+                            score: 2.0, // Top priority
+                            scope: SearchScope.ENDPOINTS,
+                        });
+                    }
+                }
             }
         }
 
