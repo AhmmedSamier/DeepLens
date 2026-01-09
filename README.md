@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="icon.png" width="80" alt="DeepLens Logo">
+  <img src="https://raw.githubusercontent.com/AhmedSamir/DeepLens/master/icon.png" width="80" alt="DeepLens Logo">
   <h1>DeepLens</h1>
   <p><b>High-performance "Search Everywhere" for Visual Studio Code</b></p>
 </div>
