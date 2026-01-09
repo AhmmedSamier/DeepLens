@@ -19,6 +19,16 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Extract version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Update package.json version
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          echo "Setting version to $VERSION"
+          bun x npm version $VERSION --no-git-tag-version
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
