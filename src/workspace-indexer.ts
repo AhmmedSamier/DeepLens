@@ -182,6 +182,7 @@ export class WorkspaceIndexer {
                         name: fileName,
                         type: SearchItemType.FILE,
                         filePath: file.fsPath,
+                        relativeFilePath: relativePath,
                         detail: relativePath,
                         fullName: relativePath,
                     });
@@ -334,6 +335,7 @@ export class WorkspaceIndexer {
                 name: symbol.name,
                 type: itemType,
                 filePath: symbol.location.uri.fsPath,
+                relativeFilePath: vscode.workspace.asRelativePath(symbol.location.uri.fsPath),
                 line: symbol.location.range.start.line,
                 column: symbol.location.range.start.character,
                 containerName: symbol.containerName,
@@ -402,7 +404,8 @@ export class WorkspaceIndexer {
         // 1. Try Tree-sitter first (Turbo Path)
         const treeSitterItems = await this.treeSitter.parseFile(fileUri);
         if (treeSitterItems.length > 0) {
-            return treeSitterItems;
+            const relPath = vscode.workspace.asRelativePath(fileUri);
+            return treeSitterItems.map((item) => ({ ...item, relativeFilePath: relPath }));
         }
 
         // 2. Fallback to VS Code provider
@@ -423,7 +426,7 @@ export class WorkspaceIndexer {
 
         if (symbols && symbols.length > 0) {
             const localItems: SearchableItem[] = [];
-            this.processSymbols(symbols, filePath, localItems);
+            this.processSymbols(symbols, filePath, vscode.workspace.asRelativePath(fileUri), localItems);
             return localItems;
         }
 
@@ -483,6 +486,7 @@ export class WorkspaceIndexer {
     private processSymbols(
         symbols: vscode.DocumentSymbol[],
         filePath: string,
+        relativeFilePath: string,
         collector: SearchableItem[],
         containerName?: string,
     ): void {
@@ -496,6 +500,7 @@ export class WorkspaceIndexer {
                     name: symbol.name,
                     type: itemType,
                     filePath,
+                    relativeFilePath,
                     line: symbol.range.start.line,
                     column: symbol.range.start.character,
                     containerName,
@@ -507,7 +512,7 @@ export class WorkspaceIndexer {
             // Process nested symbols
             if (symbol.children && symbol.children.length > 0) {
                 const newContainerName = containerName ? `${containerName}.${symbol.name}` : symbol.name;
-                this.processSymbols(symbol.children, filePath, collector, newContainerName);
+                this.processSymbols(symbol.children, filePath, relativeFilePath, collector, newContainerName);
             }
         }
     }
@@ -582,6 +587,14 @@ export class WorkspaceIndexer {
 
         // Index symbols
         await this.indexFileSymbols(uri);
+
+        // Ensure relative path is set for new items if not already
+        const relPath = vscode.workspace.asRelativePath(uri);
+        this.items.forEach(item => {
+            if (item.filePath === uri.fsPath && !item.relativeFilePath) {
+                item.relativeFilePath = relPath;
+            }
+        });
     }
 
     /**

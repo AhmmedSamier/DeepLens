@@ -24,9 +24,10 @@ export enum SearchItemType {
 export enum SearchScope {
     EVERYTHING = 'everything',
     TYPES = 'types', // Classes, interfaces, enums
-    SYMBOLS = 'symbols', // Methods, functions, properties
+    SYMBOLS = 'symbols', // Methods and functions
     FILES = 'files', // File names only
     COMMANDS = 'commands', // VS Code commands
+    PROPERTIES = 'properties', // Properties and variables
     TEXT = 'text', // Text content in files
 }
 
@@ -42,6 +43,8 @@ export interface SearchableItem {
     type: SearchItemType;
     /** File path */
     filePath: string;
+    /** Relative file path for display and search */
+    relativeFilePath?: string;
     /** Line number in file (optional for files) */
     line?: number;
     /** Column number (optional) */

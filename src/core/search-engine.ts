@@ -5,6 +5,8 @@ interface PreparedItem {
     item: SearchableItem;
     preparedName: Fuzzysort.Prepared;
     preparedFullName: Fuzzysort.Prepared | null;
+    preparedPath: Fuzzysort.Prepared | null;
+    preparedCombined: Fuzzysort.Prepared | null;
 }
 
 /**
@@ -50,6 +52,8 @@ export class SearchEngine {
             item,
             preparedName: Fuzzysort.prepare(item.name),
             preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
+            preparedPath: item.relativeFilePath ? Fuzzysort.prepare(item.relativeFilePath) : null,
+            preparedCombined: item.relativeFilePath ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`) : null,
         }));
 
         // Initialize arrays
@@ -167,8 +171,8 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const MIN_SCORE = 0.01; // Minimum score to be considered a match
 
-        for (const { item, preparedName, preparedFullName } of items) {
-            const score = this.calculateItemScore(query, preparedName, preparedFullName, MIN_SCORE);
+        for (const { item, preparedName, preparedFullName, preparedPath, preparedCombined } of items) {
+            const score = this.calculateItemScore(query, preparedName, preparedFullName, preparedPath, preparedCombined, MIN_SCORE);
 
             if (score > MIN_SCORE) {
                 results.push({
@@ -189,24 +193,29 @@ export class SearchEngine {
         query: string,
         preparedName: Fuzzysort.Prepared,
         preparedFullName: Fuzzysort.Prepared | null,
+        preparedPath: Fuzzysort.Prepared | null,
+        preparedCombined: Fuzzysort.Prepared | null,
         minScore: number,
     ): number {
+        const matches = [
+            { prep: preparedName, weight: 1.0 },
+            { prep: preparedFullName, weight: 0.9 },
+            { prep: preparedPath, weight: 0.8 },
+            { prep: preparedCombined, weight: 0.95 },
+        ];
+
         let bestScore = -Infinity;
 
-        // Match against name
-        const nameResult = Fuzzysort.single(query, preparedName);
-        if (nameResult && nameResult.score > minScore) {
-            bestScore = nameResult.score;
-        }
+        for (const match of matches) {
+            if (!match.prep) {
+                continue;
+            }
 
-        // Match against full name if available
-        if (preparedFullName) {
-            const fullNameResult = Fuzzysort.single(query, preparedFullName);
-            if (fullNameResult && fullNameResult.score > minScore) {
-                // Penalty for full name match (scores are 0-1, so 0.9 makes it lower/worse)
-                const fullNameScore = fullNameResult.score * 0.9;
-                if (fullNameScore > bestScore) {
-                    bestScore = fullNameScore;
+            const result = Fuzzysort.single(query, match.prep);
+            if (result && result.score > minScore) {
+                const score = result.score * match.weight;
+                if (score > bestScore) {
+                    bestScore = score;
                 }
             }
         }
@@ -296,9 +305,10 @@ export class SearchEngine {
                 return SearchScope.TYPES;
             case SearchItemType.FUNCTION:
             case SearchItemType.METHOD:
+                return SearchScope.SYMBOLS;
             case SearchItemType.PROPERTY:
             case SearchItemType.VARIABLE:
-                return SearchScope.SYMBOLS;
+                return SearchScope.PROPERTIES;
             case SearchItemType.FILE:
                 return SearchScope.FILES;
             case SearchItemType.TEXT:

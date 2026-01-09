@@ -70,6 +70,10 @@ export class SearchProvider {
             iconPath: new vscode.ThemeIcon('run'),
             tooltip: this.INACTIVE_PREFIX + 'Commands',
         });
+        this.filterButtons.set(SearchScope.PROPERTIES, {
+            iconPath: new vscode.ThemeIcon('symbol-property'),
+            tooltip: this.INACTIVE_PREFIX + 'Properties',
+        });
     }
 
     /**
@@ -89,6 +93,8 @@ export class SearchProvider {
                 return new vscode.ThemeIcon('files', color);
             case SearchScope.COMMANDS:
                 return new vscode.ThemeIcon('terminal', color);
+            case SearchScope.PROPERTIES:
+                return new vscode.ThemeIcon('symbol-property', color);
             default:
                 return new vscode.ThemeIcon('search', color);
         }
@@ -105,6 +111,7 @@ export class SearchProvider {
             SearchScope.EVERYTHING,
             SearchScope.TYPES,
             SearchScope.SYMBOLS,
+            SearchScope.PROPERTIES,
             SearchScope.FILES,
             SearchScope.COMMANDS,
         ];
@@ -144,6 +151,8 @@ export class SearchProvider {
                 return 'Searching in Files only. Type to search...';
             case SearchScope.COMMANDS:
                 return 'Searching in Commands only. Type to search...';
+            case SearchScope.PROPERTIES:
+                return 'Searching in Properties only. Type to search...';
             case SearchScope.EVERYTHING:
             default:
                 return 'Type to search everywhere (files, classes, symbols...)';
@@ -168,6 +177,9 @@ export class SearchProvider {
                 break;
             case SearchScope.COMMANDS:
                 filterName = 'Commands';
+                break;
+            case SearchScope.PROPERTIES:
+                filterName = 'Properties';
                 break;
             default:
                 filterName = 'All';
