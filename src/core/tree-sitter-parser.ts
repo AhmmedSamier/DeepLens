@@ -15,7 +15,7 @@ interface TreeSitterNode {
 }
 
 interface TreeSitterLib {
-    init: () => Promise<void>;
+    init: (options?: { locateFile?: () => string }) => Promise<void>;
     Language: {
         load: (path: string) => Promise<unknown>;
     };
@@ -46,53 +46,41 @@ export class TreeSitterParser {
 
         const lib = Parser as unknown as TreeSitterLib;
         const ParserClass = Parser as unknown as new () => NonNullable<TreeSitterParser['parser']>;
-        await lib.init();
+
+        // Load web-tree-sitter.wasm from local dist
+        const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm');
+        await lib.init({
+            locateFile: () => wasmPath
+        });
+
         this.parser = new ParserClass();
 
-        // Load languages from node_modules
+        // Load languages from dist/parsers
         const languageMap = [
-            { id: 'typescript', pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-typescript.wasm' },
-            { id: 'typescriptreact', pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-tsx.wasm' },
-            { id: 'javascript', pkg: 'tree-sitter-javascript', wasm: 'tree-sitter-javascript.wasm' },
-            { id: 'javascriptreact', pkg: 'tree-sitter-typescript', wasm: 'tree-sitter-tsx.wasm' },
-            { id: 'csharp', pkg: 'tree-sitter-c-sharp', wasm: 'tree-sitter-c_sharp.wasm' },
-            { id: 'python', pkg: 'tree-sitter-python', wasm: 'tree-sitter-python.wasm' },
-            { id: 'java', pkg: 'tree-sitter-java', wasm: 'tree-sitter-java.wasm' },
-            { id: 'go', pkg: 'tree-sitter-go', wasm: 'tree-sitter-go.wasm' },
-            { id: 'cpp', pkg: 'tree-sitter-cpp', wasm: 'tree-sitter-cpp.wasm' },
-            { id: 'c', pkg: 'tree-sitter-c', wasm: 'tree-sitter-c.wasm' },
-            { id: 'ruby', pkg: 'tree-sitter-ruby', wasm: 'tree-sitter-ruby.wasm' },
-            { id: 'php', pkg: 'tree-sitter-php', wasm: 'tree-sitter-php.wasm' },
+            { id: 'typescript', wasm: 'tree-sitter-typescript.wasm' },
+            { id: 'typescriptreact', wasm: 'tree-sitter-tsx.wasm' },
+            { id: 'javascript', wasm: 'tree-sitter-javascript.wasm' },
+            { id: 'javascriptreact', wasm: 'tree-sitter-tsx.wasm' },
+            { id: 'csharp', wasm: 'tree-sitter-c_sharp.wasm' },
+            { id: 'python', wasm: 'tree-sitter-python.wasm' },
+            { id: 'java', wasm: 'tree-sitter-java.wasm' },
+            { id: 'go', wasm: 'tree-sitter-go.wasm' },
+            { id: 'cpp', wasm: 'tree-sitter-cpp.wasm' },
+            { id: 'c', wasm: 'tree-sitter-c.wasm' },
+            { id: 'ruby', wasm: 'tree-sitter-ruby.wasm' },
+            { id: 'php', wasm: 'tree-sitter-php.wasm' },
         ];
 
         for (const lang of languageMap) {
-            await this.loadLanguageFromModule(lang.id, lang.pkg, lang.wasm);
+            await this.loadLanguage(lang.id, lang.wasm);
         }
 
         this.isInitialized = true;
     }
 
-    private async loadLanguageFromModule(langId: string, packageName: string, wasmFile: string): Promise<void> {
+    private async loadLanguage(langId: string, wasmFile: string): Promise<void> {
         try {
-            // Locate the WASM file in node_modules
-            const pkgPath = path.dirname(require.resolve(`${packageName}/package.json`));
-            let wasmPath = path.join(pkgPath, wasmFile);
-
-            // Handle cases where WASM might be in a different subfolder or named differently
-            if (!fs.existsSync(wasmPath)) {
-                // Try a few common locations
-                const alternates = [
-                    path.join(pkgPath, 'out', wasmFile),
-                    path.join(pkgPath, 'dist', wasmFile),
-                    path.join(pkgPath, wasmFile.replace('_', '-')), // c_sharp vs c-sharp
-                ];
-                for (const alt of alternates) {
-                    if (fs.existsSync(alt)) {
-                        wasmPath = alt;
-                        break;
-                    }
-                }
-            }
+            const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
 
             if (fs.existsSync(wasmPath)) {
                 const lib = Parser as unknown as TreeSitterLib;
@@ -102,7 +90,7 @@ export class TreeSitterParser {
                 console.warn(`WASM file not found for ${langId} at ${wasmPath}`);
             }
         } catch (error) {
-            console.debug(`Module resolution failed for ${langId}:`, error);
+            console.debug(`Failed to load ${langId}:`, error);
         }
     }
 

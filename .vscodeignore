@@ -1,0 +1,17 @@
+.vscode/**
+.git/**
+.agent/**
+src/**
+node_modules/**
+tsconfig.json
+eslint.config.js
+.eslintcache
+bun.lock
+TESTING.md
+CSHARP_SUPPORT.md
+*.vsix
+esbuild.js
+out/**
+
+# Include only distribution
+!dist/**

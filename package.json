@@ -20,7 +20,7 @@
     "activationEvents": [
         "onStartupFinished"
     ],
-    "main": "./out/extension.js",
+    "main": "./dist/extension.js",
     "contributes": {
         "commands": [
             {
@@ -112,24 +112,29 @@
         }
     },
     "scripts": {
-        "vscode:prepublish": "bun run compile",
-        "compile": "tsc -p ./",
-        "watch": "tsc -watch -p ./",
+        "vscode:prepublish": "bun run esbuild-base -- --production",
+        "esbuild-base": "node esbuild.js",
+        "esbuild": "bun run esbuild-base -- --sourcemap",
+        "esbuild-watch": "bun run esbuild-base -- --sourcemap --watch",
+        "compile": "bun run esbuild",
+        "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
         "format": "prettier --write \"src/**/*.ts\" --cache",
-        "package": "vsce package",
-        "vsix": "bun run build && bun run package"
+        "package": "vsce package --allow-missing-repository",
+        "vsix": "bun run compile && bun run package"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3.3.3",
         "@eslint/js": "^9.39.2",
         "@types/node": "^25.0.3",
-        "@types/vscode": "^1.107.0",
+        "@types/vscode": "^1.85.0",
         "@typescript-eslint/eslint-plugin": "^8.52.0",
         "@typescript-eslint/parser": "^8.52.0",
         "@vscode/vsce": "^3.7.1",
+        "esbuild": "^0.27.2",
         "eslint": "^9.39.2",
         "eslint-plugin-sonarjs": "3.0.5",
+        "glob": "^13.0.0",
         "globals": "^17.0.0",
         "prettier": "^3.7.4",
         "prettier-plugin-organize-imports": "^4.3.0",
