@@ -54,9 +54,7 @@ export class SearchEngine {
 
         // Initialize arrays
         for (const scope of Object.values(SearchScope)) {
-            if (typeof scope === 'number') {
-                this.scopedItems.set(scope, []);
-            }
+            this.scopedItems.set(scope, []);
         }
 
         // Categorize items
@@ -272,16 +270,16 @@ export class SearchEngine {
      */
     private applyItemTypeBoost(score: number, type: SearchItemType): number {
         const boosts: Record<SearchItemType, number> = {
-            [SearchItemType.CLASS]: 1.4,
-            [SearchItemType.INTERFACE]: 1.4,
+            [SearchItemType.CLASS]: 1.5,
+            [SearchItemType.INTERFACE]: 1.35,
             [SearchItemType.ENUM]: 1.3,
             [SearchItemType.FUNCTION]: 1.25,
             [SearchItemType.METHOD]: 1.25,
             [SearchItemType.PROPERTY]: 1.1,
             [SearchItemType.VARIABLE]: 1.0,
-            [SearchItemType.FILE]: 0.8,
+            [SearchItemType.FILE]: 0.9,
             [SearchItemType.TEXT]: 0.7,
-            [SearchItemType.COMMAND]: 1.3,
+            [SearchItemType.COMMAND]: 1.2,
         };
 
         return score * (boosts[type] || 1.0);
