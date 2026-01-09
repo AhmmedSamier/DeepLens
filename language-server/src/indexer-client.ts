@@ -1,6 +1,6 @@
 import * as path from 'path';
 import { glob } from 'glob';
-import { IndexerEnvironment } from '../core/indexer-interfaces';
+import { IndexerEnvironment } from './core/indexer-interfaces';
 import { Connection } from 'vscode-languageserver/node';
 
 export class LspIndexerEnvironment implements IndexerEnvironment {

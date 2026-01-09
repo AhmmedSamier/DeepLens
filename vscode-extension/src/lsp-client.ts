@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
 import * as path from 'path';
 import * as fs from 'fs';
-import { SearchOptions, SearchResult } from './core/types';
-import { ISearchProvider } from './core/search-interface';
+import { SearchOptions, SearchResult } from '../../language-server/src/core/types';
+import { ISearchProvider } from '../../language-server/src/core/search-interface';
 
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;

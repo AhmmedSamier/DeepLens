@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { ActivityTracker } from './activity-tracker';
+import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { CommandIndexer } from './command-indexer';
-import { Config } from './config';
-import { ISearchProvider } from './core/search-interface';
-import { SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
+import { Config } from '../../language-server/src/core/config';
+import { ISearchProvider } from '../../language-server/src/core/search-interface';
+import { SearchItemType, SearchOptions, SearchResult, SearchScope } from '../../language-server/src/core/types';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)

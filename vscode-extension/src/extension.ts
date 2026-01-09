@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { ActivityTracker } from './activity-tracker';
+import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { CommandIndexer } from './command-indexer';
-import { Config } from './config';
+import { Config } from '../../language-server/src/core/config';
 import { SearchProvider } from './search-provider';
 import { DeepLensLspClient } from './lsp-client';
 

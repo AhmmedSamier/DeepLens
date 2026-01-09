@@ -11,13 +11,13 @@ import {
 
 import * as path from 'path';
 import * as fs from 'fs';
-import { SearchEngine } from '../core/search-engine';
-import { WorkspaceIndexer } from '../workspace-indexer';
-import { TreeSitterParser } from '../core/tree-sitter-parser';
-import { IndexPersistence } from '../core/index-persistence';
-import { Config } from '../config';
-import { SearchItemType, SearchScope, SearchOptions, SearchResult } from '../core/types';
-import { ActivityTracker } from '../activity-tracker';
+import { SearchEngine } from './core/search-engine';
+import { WorkspaceIndexer } from './core/workspace-indexer';
+import { TreeSitterParser } from './core/tree-sitter-parser';
+import { IndexPersistence } from './core/index-persistence';
+import { Config } from './core/config';
+import { SearchItemType, SearchScope, SearchOptions, SearchResult } from './core/types';
+import { ActivityTracker } from './core/activity-tracker';
 import { LspIndexerEnvironment } from './indexer-client';
 
 // Custom requests

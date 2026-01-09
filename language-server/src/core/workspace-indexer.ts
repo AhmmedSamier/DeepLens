@@ -3,9 +3,9 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Config } from './config';
-import { IndexPersistence } from './core/index-persistence';
-import { SearchableItem, SearchItemType } from './core/types';
-import { IndexerEnvironment } from './core/indexer-interfaces';
+import { IndexPersistence } from './index-persistence';
+import { SearchableItem, SearchItemType } from './types';
+import { IndexerEnvironment } from './indexer-interfaces';
 
 /**
  * Workspace indexer that scans files and extracts symbols
@@ -19,14 +19,14 @@ export class WorkspaceIndexer {
     private watcherCooldownTimer: NodeJS.Timeout | undefined;
     private config: Config;
     private fileWatcher: { dispose(): void } | undefined;
-    private treeSitter: import('./core/tree-sitter-parser').TreeSitterParser;
+    private treeSitter: import('./tree-sitter-parser').TreeSitterParser;
     private persistence: IndexPersistence;
     private fileHashes: Map<string, string> = new Map();
     private env: IndexerEnvironment;
 
     constructor(
         config: Config,
-        treeSitter: import('./core/tree-sitter-parser').TreeSitterParser,
+        treeSitter: import('./tree-sitter-parser').TreeSitterParser,
         persistence: IndexPersistence,
         env: IndexerEnvironment
     ) {
@@ -395,7 +395,7 @@ export class WorkspaceIndexer {
     /**
      * Process symbols from workspace provider
      */
-    private processWorkspaceSymbols(symbols: import('./core/indexer-interfaces').LeanSymbolInformation[]): void {
+    private processWorkspaceSymbols(symbols: import('./indexer-interfaces').LeanSymbolInformation[]): void {
         for (const symbol of symbols) {
             const itemType = this.mapSymbolKindToItemType(symbol.kind);
             if (!itemType) {
@@ -579,7 +579,7 @@ export class WorkspaceIndexer {
      * Process symbols recursively
      */
     private processSymbols(
-        symbols: import('./core/indexer-interfaces').LeanDocumentSymbol[],
+        symbols: import('./indexer-interfaces').LeanDocumentSymbol[],
         filePath: string,
         relativeFilePath: string,
         collector: SearchableItem[],

@@ -121,7 +121,7 @@
         "esbuild": "bun run esbuild-base -- --sourcemap",
         "esbuild-watch": "bun run esbuild-base -- --sourcemap --watch",
         "clean": "bun run scripts/clean.ts",
-        "compile-lsp": "bun build ./src/lsp/server.ts --compile --outfile dist/deeplens-lsp.exe",
+        "compile-lsp": "bun build ../language-server/src/server.ts --compile --outfile dist/deeplens-lsp.exe",
         "compile": "bun run clean && bun run esbuild && bun run compile-lsp",
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",

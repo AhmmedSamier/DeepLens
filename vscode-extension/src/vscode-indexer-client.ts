@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { IndexerEnvironment, LeanDocumentSymbol, LeanSymbolInformation } from './core/indexer-interfaces';
+import { IndexerEnvironment, LeanDocumentSymbol, LeanSymbolInformation } from '../../language-server/src/core/indexer-interfaces';
 
 export class VsCodeIndexerEnvironment implements IndexerEnvironment {
     private logger: vscode.OutputChannel;

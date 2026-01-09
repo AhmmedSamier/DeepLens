@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as Fuzzysort from 'fuzzysort';
-import { Config } from './config';
-import { SearchableItem, SearchItemType, SearchResult, SearchScope } from './core/types';
+import { Config } from '../../language-server/src/core/config';
+import { SearchableItem, SearchItemType, SearchResult, SearchScope } from '../../language-server/src/core/types';
 
 interface PreparedCommand {
     item: SearchableItem;
