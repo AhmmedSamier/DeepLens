@@ -1,0 +1,26 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "npm",
+            "script": "compile",
+            "path": "vscode-extension",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": "$esbuild-problem-matcher",
+            "label": "npm: compile",
+            "detail": "Compile VS Code extension"
+        },
+        {
+            "type": "npm",
+            "script": "watch",
+            "path": "vscode-extension",
+            "group": "build",
+            "problemMatcher": "$esbuild-problem-matcher",
+            "label": "npm: watch",
+            "detail": "Watch VS Code extension"
+        }
+    ]
+}
