@@ -23,10 +23,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Page Include="SearchToolWindowContent.xaml">
-      <Generator>MSBuild:Compile</Generator>
+    <EmbeddedResource Include="SearchToolWindowContent.xaml">
       <SubType>Designer</SubType>
-    </Page>
+    </EmbeddedResource>
   </ItemGroup>
 
   <Target Name="BuildLSP" BeforeTargets="BeforeBuild">

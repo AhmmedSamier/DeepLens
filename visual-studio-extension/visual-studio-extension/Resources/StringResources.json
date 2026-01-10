@@ -1,4 +1,5 @@
 {
   "visual_studio_extension.SearchCommand.DisplayName": "DeepLens Search",
-  "visual_studio_extension.RebuildIndexCommand.DisplayName": "DeepLens: Rebuild Index"
+  "visual_studio_extension.RebuildIndexCommand.DisplayName": "DeepLens: Rebuild Index",
+  "visual_studio_extension.ClearCacheCommand.DisplayName": "DeepLens: Clear Cache"
 }

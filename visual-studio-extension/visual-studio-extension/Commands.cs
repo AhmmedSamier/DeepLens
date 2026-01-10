@@ -28,7 +28,7 @@ namespace visual_studio_extension
 
         public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
         {
-            // Initialize LSP if needed
+            // Initialize or Restart LSP if needed
             if (_extension.LspService != null)
             {
                 string rootPath = "";
@@ -54,12 +54,19 @@ namespace visual_studio_extension
                 if (string.IsNullOrEmpty(rootPath))
                 {
                     // Fallback to a safe temp directory or user profile if no solution is open
-                    // This prevents the "C:\" indexing disaster
                      rootPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".deeplens-fallback");
                      Directory.CreateDirectory(rootPath);
                 }
 
-                await _extension.LspService.InitializeAsync(rootPath, cancellationToken);
+                if (!_extension.LspService.IsInitialized)
+                {
+                     await _extension.LspService.InitializeAsync(rootPath, cancellationToken);
+                }
+                else if (!string.Equals(_extension.LspService.CurrentRootPath, rootPath, StringComparison.OrdinalIgnoreCase))
+                {
+                     // Root path changed, restart LSP
+                     await _extension.LspService.RestartAsync(rootPath, cancellationToken);
+                }
             }
 
             await _extension.Shell.ShowToolWindowAsync<SearchToolWindow>(activate: true, cancellationToken);
@@ -87,6 +94,31 @@ namespace visual_studio_extension
              if (_extension.LspService != null)
             {
                 await _extension.LspService.RebuildIndexAsync(true);
+            }
+        }
+    }
+
+    [VisualStudioContribution]
+    public class ClearCacheCommand : Command
+    {
+        private readonly ExtensionEntrypoint _extension;
+
+        public ClearCacheCommand(ExtensionEntrypoint extension)
+        {
+            _extension = extension;
+        }
+
+        public override CommandConfiguration CommandConfiguration => new("%visual_studio_extension.ClearCacheCommand.DisplayName%")
+        {
+            Placements = [CommandPlacement.KnownPlacements.ExtensionsMenu],
+            Icon = new(ImageMoniker.KnownValues.ClearWindowContent, IconSettings.IconAndText),
+        };
+
+        public override async Task ExecuteCommandAsync(IClientContext context, CancellationToken cancellationToken)
+        {
+             if (_extension.LspService != null)
+            {
+                await _extension.LspService.ClearCacheAsync();
             }
         }
     }

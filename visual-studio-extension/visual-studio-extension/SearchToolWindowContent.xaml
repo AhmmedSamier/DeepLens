@@ -27,7 +27,8 @@
                 <ListView.ItemTemplate>
                     <DataTemplate>
                          <!-- Button wrapper for click interaction -->
-                        <Button Command="{Binding DataContext.OpenResultCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                         <!-- Bind directly to OpenCommand on the Item ViewModel -->
+                        <Button Command="{Binding OpenCommand}"
                                 CommandParameter="{Binding}"
                                 HorizontalContentAlignment="Stretch"
                                 BorderThickness="0" Background="Transparent" Padding="0">

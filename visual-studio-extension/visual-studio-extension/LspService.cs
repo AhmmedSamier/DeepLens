@@ -70,12 +70,23 @@ namespace visual_studio_extension
         private JsonRpc? _rpc;
         private readonly ExtensionEntrypoint _extension;
         private bool _isInitialized = false;
+        private string? _currentRootPath;
 
         public bool IsInitialized => _isInitialized;
+        public string? CurrentRootPath => _currentRootPath;
 
         public LspService(ExtensionEntrypoint extension)
         {
             _extension = extension;
+        }
+
+        public async Task RestartAsync(string rootPath, CancellationToken cancellationToken)
+        {
+            Dispose();
+            _isInitialized = false;
+            _serverProcess = null;
+            _rpc = null;
+            await InitializeAsync(rootPath, cancellationToken);
         }
 
         public async Task InitializeAsync(string rootPath, CancellationToken cancellationToken)
@@ -84,6 +95,7 @@ namespace visual_studio_extension
 
             try
             {
+                _currentRootPath = rootPath;
                 string extensionPath = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location) ?? "";
                 string serverPath = Path.Combine(extensionPath, "Resources", "deeplens-lsp.exe");
 
@@ -223,12 +235,16 @@ namespace visual_studio_extension
 
         public void Dispose()
         {
-            _rpc?.Dispose();
-            if (_serverProcess != null && !_serverProcess.HasExited)
+            try
             {
-                _serverProcess.Kill();
-                _serverProcess.Dispose();
+                _rpc?.Dispose();
+                if (_serverProcess != null && !_serverProcess.HasExited)
+                {
+                    _serverProcess.Kill();
+                    _serverProcess.Dispose();
+                }
             }
+            catch {}
         }
     }
 }

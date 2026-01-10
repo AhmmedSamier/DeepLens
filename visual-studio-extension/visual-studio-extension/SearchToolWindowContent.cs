@@ -1,3 +1,4 @@
+using System;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
@@ -47,12 +48,11 @@ namespace visual_studio_extension
             {
                 if (SetProperty(ref _selectedResult, value))
                 {
-                     // Trigger navigation or command?
-                     // Usually better to have a command invoked by UI interaction
                 }
             }
         }
 
+        // Keep this if we need it for something else, or if the view models link back
         [DataMember]
         public IAsyncCommand? OpenResultCommand
         {
@@ -73,20 +73,35 @@ namespace visual_studio_extension
     [DataContract]
     public class SearchResultViewModel : NotifyPropertyChangedObject
     {
-        private readonly SearchResult _result;
+        private readonly SearchResult? _result;
+        private IAsyncCommand? _openCommand;
 
-        public SearchResultViewModel(SearchResult result)
+        // Default constructor for serialization
+        public SearchResultViewModel()
         {
-            _result = result;
+            _result = null;
         }
 
-        public SearchResult GetResult() => _result;
+        public SearchResultViewModel(SearchResult result, IAsyncCommand? openCommand)
+        {
+            _result = result;
+            _openCommand = openCommand;
+        }
+
+        public SearchResult? GetResult() => _result;
 
         [DataMember]
-        public string Name => _result.item.name;
+        public string Name => _result?.item.name ?? "";
 
         [DataMember]
-        public string Detail => $"{_result.item.filePath}:{_result.item.line}";
+        public string Detail => _result != null ? $"{_result.item.filePath}:{_result.item.line}" : "";
+
+        [DataMember]
+        public IAsyncCommand? OpenCommand
+        {
+            get => _openCommand;
+            set => SetProperty(ref _openCommand, value);
+        }
     }
 
     public class SearchToolWindowContent : RemoteUserControl
@@ -94,6 +109,9 @@ namespace visual_studio_extension
         private readonly ExtensionEntrypoint _extension;
         private SearchScope _currentScope = SearchScope.EVERYTHING;
         private readonly SearchToolWindowContentData _data;
+
+        // Cancellation for debouncing
+        private CancellationTokenSource? _searchCts;
 
         public SearchToolWindowContent(ExtensionEntrypoint extension)
             : base(new SearchToolWindowContentData())
@@ -109,34 +127,51 @@ namespace visual_studio_extension
 
         private async void OnSearchQueryChanged(object? sender, string query)
         {
+             // Cancel previous search
+             _searchCts?.Cancel();
+             _searchCts = new CancellationTokenSource();
+             var token = _searchCts.Token;
+
              if (string.IsNullOrWhiteSpace(query))
              {
                  _data.Results.Clear();
                  return;
              }
 
-             if (_extension.LspService != null)
+             try
              {
-                 // Check if initialized
-                 if (!_extension.LspService.IsInitialized)
+                 // Debounce logic
+                 await Task.Delay(100, token);
+
+                 if (token.IsCancellationRequested) return;
+
+                 if (_extension.LspService != null)
                  {
-                     // Attempt to init or just warn?
-                     // Ideally we would try to init here but we lack the context/path easily.
-                     // We can try to rely on the fallback logic in Command if we could invoke it.
-                     // For now, we will just return empty or maybe a placeholder "Indexing..."
+                     if (!_extension.LspService.IsInitialized)
+                     {
+                         return;
+                     }
 
-                     // We could await _extension.EnsureLspInitializedAsync() if implemented properly,
-                     // but that stub doesn't have the path.
-                     return;
+                     // Perform search
+                     var searchResults = await _extension.LspService.BurstSearchAsync(query, _currentScope);
+
+                     if (token.IsCancellationRequested) return;
+
+                     // Update UI
+                     _data.Results.Clear();
+                     foreach (var res in searchResults)
+                     {
+                         _data.Results.Add(new SearchResultViewModel(res, _data.OpenResultCommand));
+                     }
                  }
-
-                 var searchResults = await _extension.LspService.BurstSearchAsync(query, _currentScope);
-
-                 _data.Results.Clear();
-                 foreach (var res in searchResults)
-                 {
-                     _data.Results.Add(new SearchResultViewModel(res));
-                 }
+             }
+             catch (TaskCanceledException)
+             {
+                 // Ignore
+             }
+             catch (Exception ex)
+             {
+                 System.Diagnostics.Debug.WriteLine($"Search error: {ex}");
              }
         }
 
@@ -145,9 +180,10 @@ namespace visual_studio_extension
              if (parameter is SearchResultViewModel vm)
              {
                  var result = vm.GetResult();
+                 if (result == null) return;
+
                  var filePath = result.item.filePath;
 
-                 // If LSP is running, paths should be absolute.
                  if (!string.IsNullOrEmpty(filePath))
                  {
                       try
