@@ -92,14 +92,17 @@ async function main() {
     copyWasmFiles();
 
     const ctx = await esbuild.context({
-        entryPoints: ['src/extension.ts'],
+        entryPoints: {
+            extension: 'src/extension.ts',
+            server: '../language-server/src/server.ts'
+        },
         bundle: true,
         format: 'cjs',
         minify: production,
         sourcemap: !production,
         sourcesContent: false,
         platform: 'node',
-        outfile: 'dist/extension.js',
+        outdir: 'dist',
         external: ['vscode'], // Exclude vscode API to preserve its internal logic
         logLevel: 'silent',
         plugins: [
