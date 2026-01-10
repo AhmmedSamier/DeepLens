@@ -158,7 +158,7 @@ export class WorkspaceIndexer {
 
         // STANDARD FALLBACK
         const excludePatterns = this.config.getExcludePatterns();
-        const includePattern = `**/*.{${fileExtensions.join(',')}}`;
+        const includePattern = `**/*`;
 
         // LSP client or VS Code provides the implementation
         const excludePattern = `{${excludePatterns.join(',')}}`;
@@ -188,7 +188,6 @@ export class WorkspaceIndexer {
                     .toString();
 
                 const lines = output.split('\n');
-                const extSet = new Set(extensions.map((e) => `.${e.toLowerCase()}`));
 
                 for (const line of lines) {
                     if (!line || line.trim() === '') {
@@ -196,11 +195,7 @@ export class WorkspaceIndexer {
                     }
 
                     const fullPath = path.join(folderPath, line);
-                    const ext = path.extname(fullPath).toLowerCase();
-
-                    if (extSet.has(ext)) {
-                        results.push(fullPath);
-                    }
+                    results.push(fullPath);
                 }
             } catch (error) {
                 // Not a git repo or git not installed
@@ -646,8 +641,8 @@ export class WorkspaceIndexer {
         this.fileWatcher?.dispose();
         if (!this.env.createFileSystemWatcher) return;
 
-        const fileExtensions = this.config.getFileExtensions();
-        const pattern = `**/*.{${fileExtensions.join(',')}}`;
+        // Watch all files
+        const pattern = `**/*`;
 
         this.fileWatcher = this.env.createFileSystemWatcher(pattern, (filePath, type) => {
             switch (type) {
