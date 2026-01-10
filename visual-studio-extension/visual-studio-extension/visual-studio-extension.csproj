@@ -8,7 +8,7 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
     <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
-    <PackageReference Include="StreamJsonRpc" Version="2.17.11" />
+    <PackageReference Include="StreamJsonRpc" Version="2.22.23" />
   </ItemGroup>
 
   <ItemGroup>
