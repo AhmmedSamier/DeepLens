@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions } from 'vscode-languageclient/node';
+import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import * as path from 'path';
-import * as fs from 'fs';
 import { SearchOptions, SearchResult } from '../../language-server/src/core/types';
 import { ISearchProvider } from '../../language-server/src/core/search-interface';
 
@@ -17,8 +16,8 @@ export class DeepLensLspClient implements ISearchProvider {
         const serverPath = this.getServerPath();
 
         const serverOptions: ServerOptions = {
-            run: { command: serverPath, args: ['--stdio'] },
-            debug: { command: serverPath, args: ['--stdio'] }
+            run: { module: serverPath, transport: TransportKind.stdio },
+            debug: { module: serverPath, transport: TransportKind.stdio }
         };
 
         const clientOptions: LanguageClientOptions = {
@@ -96,13 +95,8 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     private getServerPath(): string {
-        // Try local dev path first
-        let serverPath = path.join(this.context.extensionPath, 'dist', 'deeplens-lsp.exe');
-        if (!fs.existsSync(serverPath)) {
-            // Try root path (for packaged extension)
-            serverPath = path.join(this.context.extensionPath, 'deeplens-lsp.exe');
-        }
-        return serverPath;
+        // Use the bundled server JS file
+        return path.join(this.context.extensionPath, 'dist', 'server.js');
     }
 
     async search(options: SearchOptions): Promise<SearchResult[]> {
