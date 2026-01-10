@@ -29,7 +29,7 @@
   </ItemGroup>
 
   <Target Name="BuildLSP" BeforeTargets="BeforeBuild">
-    <Exec Command="bun install" WorkingDirectory="$(MSBuildThisFileDirectory)..\..\language-server" />
+    <Exec Command="bun install --ignore-scripts" WorkingDirectory="$(MSBuildThisFileDirectory)..\..\language-server" />
     <Exec Command="bun run build" WorkingDirectory="$(MSBuildThisFileDirectory)..\..\language-server" />
     <Copy SourceFiles="$(MSBuildThisFileDirectory)..\..\vscode-extension\dist\deeplens-lsp.exe" DestinationFolder="$(MSBuildThisFileDirectory)Resources" />
   </Target>
