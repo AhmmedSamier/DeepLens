@@ -1,0 +1,44 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:local="clr-namespace:visual_studio_extension">
+
+    <DataTemplate DataType="{x:Type local:SearchToolWindowContentData}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- Search Bar -->
+            <TextBox Grid.Row="0" Text="{Binding SearchQuery, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Margin="5" />
+
+            <!-- Filters -->
+            <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="5">
+                <TextBlock Text="Filters: " VerticalAlignment="Center"/>
+                <Button Content="All" Command="{Binding FilterCommand}" CommandParameter="EVERYTHING" Margin="2"/>
+                <Button Content="Classes" Command="{Binding FilterCommand}" CommandParameter="TYPES" Margin="2"/>
+                <Button Content="Files" Command="{Binding FilterCommand}" CommandParameter="FILES" Margin="2"/>
+                <Button Content="Sym" Command="{Binding FilterCommand}" CommandParameter="SYMBOLS" Margin="2"/>
+            </StackPanel>
+
+            <!-- Results List -->
+            <ListView Grid.Row="2" ItemsSource="{Binding Results}" Margin="5">
+                <ListView.ItemTemplate>
+                    <DataTemplate>
+                         <!-- Button wrapper for click interaction -->
+                        <Button Command="{Binding DataContext.OpenResultCommand, RelativeSource={RelativeSource AncestorType=ListView}}"
+                                CommandParameter="{Binding}"
+                                HorizontalContentAlignment="Stretch"
+                                BorderThickness="0" Background="Transparent" Padding="0">
+                            <StackPanel Orientation="Vertical" Margin="2">
+                                <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                                <TextBlock Text="{Binding Detail}" FontSize="10" Foreground="Gray"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </DataTemplate>
+</ResourceDictionary>
