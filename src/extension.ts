@@ -6,6 +6,9 @@ import { IndexPersistence } from './core/index-persistence';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
 import { SearchItemType } from './core/types';
+import { DeepLensCodeLensProvider } from './providers/codelens-provider';
+import { DeepLensImplementationProvider } from './providers/implementation-provider';
+import { DeepLensReferenceProvider } from './providers/reference-provider';
 import { SearchProvider } from './search-provider';
 import { WorkspaceIndexer } from './workspace-indexer';
 
@@ -60,6 +63,25 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(searchCommand);
     context.subscriptions.push(rebuildCommand);
     context.subscriptions.push(clearCacheCommand);
+
+    // Register Providers
+    const selector = [
+        { language: 'csharp', scheme: 'file' },
+        { language: 'typescript', scheme: 'file' },
+        { language: 'typescriptreact', scheme: 'file' },
+    ];
+
+    context.subscriptions.push(
+        vscode.languages.registerImplementationProvider(
+            selector,
+            new DeepLensImplementationProvider(workspaceIndexer),
+        ),
+        vscode.languages.registerReferenceProvider(
+            selector,
+            new DeepLensReferenceProvider(treeSitterParser, config),
+        ),
+        vscode.languages.registerCodeLensProvider(selector, new DeepLensCodeLensProvider(treeSitterParser)),
+    );
 
     // Track document opens for activity
     if (config.isActivityTrackingEnabled()) {

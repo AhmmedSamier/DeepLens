@@ -242,6 +242,7 @@ export class TreeSitterParser {
             if (nameNode) {
                 const name = nameNode.text;
                 const fullName = containerName ? `${containerName}.${name}` : name;
+                const inheritance = this.extractInheritance(node, langId);
 
                 items.push({
                     id: `ts:${filePath}:${fullName}:${node.startPosition.row}`,
@@ -252,6 +253,7 @@ export class TreeSitterParser {
                     column: node.startPosition.column,
                     containerName: containerName,
                     fullName: fullName,
+                    implements: inheritance.length > 0 ? inheritance : undefined,
                 });
 
                 // If it's a type (class/interface/enum), it becomes the container for children
@@ -516,6 +518,79 @@ export class TreeSitterParser {
         for (let i = 0; i < node.childCount; i++) {
             const child = node.child(i);
             if (child && child.type === type) results.push(child);
+        }
+        return results;
+    }
+
+    private extractInheritance(node: TreeSitterNode, langId: string): string[] {
+        if (langId === 'csharp') {
+            return this.extractCSharpInheritance(node);
+        } else if (langId === 'typescript' || langId === 'typescriptreact') {
+            return this.extractTypeScriptInheritance(node);
+        }
+        return [];
+    }
+
+    private extractCSharpInheritance(node: TreeSitterNode): string[] {
+        // In C# grammar, base_list is a field
+        const baseList = node.childForFieldName('base_list');
+        if (!baseList) return [];
+
+        const results: string[] = [];
+        for (let i = 0; i < baseList.childCount; i++) {
+            const child = baseList.child(i);
+            if (!child) continue;
+
+            // base_list children are usually ':' then list of base_type
+            if (child.type === 'simple_base_type' || child.type === 'primary_constructor_base_type') {
+                // simple_base_type usually has one child which is the type
+                results.push(child.text.trim());
+            } else if (
+                child.type !== ':' &&
+                child.type !== ',' &&
+                (child.type === 'identifier' || child.type === 'generic_name' || child.type === 'qualified_name')
+            ) {
+                // Fallback for direct children if structure varies
+                results.push(child.text.trim());
+            }
+        }
+        return results;
+    }
+
+    private extractTypeScriptInheritance(node: TreeSitterNode): string[] {
+        let heritageNode = node.childForFieldName('heritage');
+        if (!heritageNode) {
+            // Fallback search
+            for (let i = 0; i < node.childCount; i++) {
+                const c = node.child(i);
+                if (c && (c.type === 'class_heritage' || c.type === 'heritage_clause')) {
+                    heritageNode = c;
+                    break;
+                }
+            }
+        }
+
+        if (!heritageNode) return [];
+
+        const results: string[] = [];
+        for (let i = 0; i < heritageNode.childCount; i++) {
+            const clause = heritageNode.child(i);
+            if (!clause) continue;
+
+            if (clause.type === 'extends_clause' || clause.type === 'implements_clause') {
+                for (let j = 0; j < clause.childCount; j++) {
+                    const typeNode = clause.child(j);
+                    if (!typeNode) continue;
+
+                    if (
+                        typeNode.type === 'type_identifier' ||
+                        typeNode.type === 'identifier' ||
+                        typeNode.type === 'expression_with_type_arguments'
+                    ) {
+                        results.push(typeNode.text.trim());
+                    }
+                }
+            }
         }
         return results;
     }

@@ -59,6 +59,8 @@ export interface SearchableItem {
     detail?: string;
     /** Command ID (for commands) */
     commandId?: string;
+    /** Base classes or interfaces implemented by this item */
+    implements?: string[];
 }
 
 /**
