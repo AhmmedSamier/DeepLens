@@ -18,8 +18,8 @@ export class DeepLensCodeLensProvider implements vscode.CodeLensProvider {
         document: vscode.TextDocument,
         token: vscode.CancellationToken
     ): Promise<vscode.CodeLens[]> {
-        // Parse the file to get symbols
-        const items = await this.parser.parseFile(document.uri);
+        // Parse the file to get symbols (pass document text for dirty state support)
+        const items = await this.parser.parseFile(document.uri, document.getText());
         const lenses: vscode.CodeLens[] = [];
 
         for (const item of items) {
