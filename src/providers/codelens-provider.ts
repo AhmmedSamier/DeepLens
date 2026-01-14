@@ -59,13 +59,20 @@ export class DeepLensCodeLensProvider implements vscode.CodeLensProvider {
                     codeLens.range.start
                 );
 
-                const count = locations ? locations.length : 0;
+                let filteredLocations = locations || [];
+
+                // Filter out self-references (matches within the definition itself)
+                filteredLocations = filteredLocations.filter((loc) => {
+                    return !loc.range.intersection(codeLens.range);
+                });
+
+                const count = filteredLocations.length;
 
                 codeLens.command = {
                     title: count === 1 ? '1 reference' : `${count} references`,
                     tooltip: 'Show all references',
                     command: count > 0 ? 'editor.action.showReferences' : '',
-                    arguments: count > 0 ? [codeLens.documentUri, codeLens.range.start, locations] : []
+                    arguments: count > 0 ? [codeLens.documentUri, codeLens.range.start, filteredLocations] : [],
                 };
             } catch (e) {
                 console.error('Failed to resolve CodeLens:', e);

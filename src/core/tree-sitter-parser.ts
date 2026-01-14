@@ -245,12 +245,12 @@ export class TreeSitterParser {
                 const inheritance = this.extractInheritance(node, langId);
 
                 items.push({
-                    id: `ts:${filePath}:${fullName}:${node.startPosition.row}`,
+                    id: `ts:${filePath}:${fullName}:${nameNode.startPosition.row}`,
                     name: name,
                     type: type,
                     filePath: filePath,
-                    line: node.startPosition.row,
-                    column: node.startPosition.column,
+                    line: nameNode.startPosition.row,
+                    column: nameNode.startPosition.column,
                     containerName: containerName,
                     fullName: fullName,
                     implements: inheritance.length > 0 ? inheritance : undefined,
