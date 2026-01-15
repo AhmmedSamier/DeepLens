@@ -153,7 +153,8 @@
         "lint": "eslint src --cache",
         "format": "prettier --write \"src/**/*.ts\" --cache",
         "package": "vsce package --allow-missing-repository",
-        "vsix": "bun run compile && bun run package"
+        "vsix": "bun run compile && bun run package",
+        "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3.3.3",

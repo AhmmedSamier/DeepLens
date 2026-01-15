@@ -16,6 +16,7 @@ export class SearchProvider {
     private currentScope: SearchScope = SearchScope.EVERYTHING;
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
     private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
+    private lastQueryId = 0;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -272,8 +273,11 @@ export class SearchProvider {
                 this.currentScope = scope;
                 this.updateFilterButtons(quickPick);
             }
-            const results = await this.performSearch(quickPick, text);
-            this.updateTitle(quickPick, results.length);
+            const queryId = ++this.lastQueryId;
+            const results = await this.performSearch(quickPick, text, queryId);
+            if (queryId === this.lastQueryId) {
+                this.updateTitle(quickPick, results.length);
+            }
         } else {
             // Show recent history if no initial query
             await this.showRecentHistory(quickPick);
@@ -351,10 +355,16 @@ export class SearchProvider {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === 'Copy Path') {
                 vscode.env.clipboard.writeText(result.item.filePath);
+            } else if (e.button.tooltip === 'Copy Relative Path') {
+                const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
+                vscode.env.clipboard.writeText(relativePath);
             } else if (e.button.tooltip === 'Open to the Side') {
                 accepted = true;
                 this.navigateToItem(result, vscode.ViewColumn.Beside);
                 quickPick.hide();
+            } else if (e.button.tooltip === 'Reveal in File Explorer') {
+                const uri = vscode.Uri.file(result.item.filePath);
+                vscode.commands.executeCommand('revealInExplorer', uri);
             }
         });
 
@@ -425,9 +435,13 @@ export class SearchProvider {
         }
 
         const trimmedQuery = text.trim();
+        const queryId = ++this.lastQueryId;
+
         if (!trimmedQuery) {
             await this.showRecentHistory(quickPick);
-            quickPick.busy = false;
+            if (queryId === this.lastQueryId) {
+                quickPick.busy = false;
+            }
             return;
         }
 
@@ -441,6 +455,10 @@ export class SearchProvider {
             maxResults: 5,
         });
 
+        if (queryId !== this.lastQueryId) {
+            return;
+        }
+
         if (instantResults.length > 0) {
             quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
             this.updateTitle(quickPick, instantResults.length);
@@ -453,11 +471,19 @@ export class SearchProvider {
         // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
         setBurstTimeout(
             setTimeout(async () => {
+                if (queryId !== this.lastQueryId) {
+                    return;
+                }
+
                 const burstResults = await this.searchEngine.burstSearch({
                     query: trimmedQuery,
                     scope: this.currentScope,
                     maxResults: 15,
                 });
+
+                if (queryId !== this.lastQueryId) {
+                    return;
+                }
 
                 // Update if we have more results or if current list is empty
                 if (
@@ -473,11 +499,18 @@ export class SearchProvider {
         // PHASE 2: Deep Fuzzy Search (Stabilized results)
         setFuzzyTimeout(
             setTimeout(async () => {
+                if (queryId !== this.lastQueryId) {
+                    return;
+                }
                 try {
-                    const results = await this.performSearch(quickPick, text); // Use text (parsed) instead of raw query
-                    this.updateTitle(quickPick, results.length);
+                    const results = await this.performSearch(quickPick, text, queryId); // Use text (parsed) instead of raw query
+                    if (queryId === this.lastQueryId) {
+                        this.updateTitle(quickPick, results.length);
+                    }
                 } finally {
-                    quickPick.busy = false;
+                    if (queryId === this.lastQueryId) {
+                        quickPick.busy = false;
+                    }
                 }
             }, 100),
         );
@@ -546,8 +579,11 @@ export class SearchProvider {
                 // Re-run search with new filter
                 // We use parseQuery to ensure we handle the (potentially updated) text correctly
                 const { text } = this.parseQuery(quickPick.value);
-                const results = await this.performSearch(quickPick, text);
-                this.updateTitle(quickPick, results.length);
+                const queryId = ++this.lastQueryId;
+                const results = await this.performSearch(quickPick, text, queryId);
+                if (queryId === this.lastQueryId) {
+                    this.updateTitle(quickPick, results.length);
+                }
                 break;
             }
         }
@@ -622,16 +658,24 @@ export class SearchProvider {
     /**
      * Perform search and update quick pick items
      */
-    private async performSearch(quickPick: vscode.QuickPick<SearchResultItem>, query: string): Promise<SearchResult[]> {
+    private async performSearch(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        query: string,
+        queryId: number,
+    ): Promise<SearchResult[]> {
         if (!query || query.trim().length === 0) {
-            quickPick.items = [];
+            if (queryId === this.lastQueryId) {
+                quickPick.items = [];
+            }
             return [];
         }
 
         // Use native text search if scope is TEXT and enabled
         if (this.currentScope === SearchScope.TEXT && this.config.isTextSearchEnabled()) {
             const results = await this.performNativeTextSearch(query.trim(), this.config.getMaxResults());
-            quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+            if (queryId === this.lastQueryId) {
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+            }
             return results;
         }
 
@@ -644,13 +688,19 @@ export class SearchProvider {
 
         const results = await this.searchEngine.search(options);
 
+        if (queryId !== this.lastQueryId) {
+            return [];
+        }
+
         // Merge command results if command search is enabled/relevant
         if (this.commandIndexer) {
             const commandResults = this.commandIndexer.search(query);
             results.push(...commandResults);
         }
 
-        quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+        if (queryId === this.lastQueryId) {
+            quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+        }
 
         return results;
     }
@@ -702,8 +752,16 @@ export class SearchProvider {
                     tooltip: 'Copy Path',
                 },
                 {
+                    iconPath: new vscode.ThemeIcon('file-submodule'),
+                    tooltip: 'Copy Relative Path',
+                },
+                {
                     iconPath: new vscode.ThemeIcon('split-horizontal'),
                     tooltip: 'Open to the Side',
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('folder-opened'),
+                    tooltip: 'Reveal in File Explorer',
                 },
             ],
         };
@@ -764,7 +822,7 @@ export class SearchProvider {
                 return new vscode.ThemeColor('symbolIcon.interfaceForeground'); // Purple-ish
             default:
                 return undefined;
-        }
+            }
     }
 
     /**
