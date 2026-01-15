@@ -25,6 +25,7 @@ export class SearchProvider {
     // Prefix mapping for search scopes
     private readonly PREFIX_MAP = new Map<string, SearchScope>([
         ['/t ', SearchScope.TYPES],
+        ['/text ', SearchScope.TEXT],
         ['/s ', SearchScope.SYMBOLS],
         ['/f ', SearchScope.FILES],
         ['/c ', SearchScope.COMMANDS],
@@ -78,6 +79,11 @@ export class SearchProvider {
             tooltip: this.INACTIVE_PREFIX + 'Files',
         });
 
+        this.filterButtons.set(SearchScope.TEXT, {
+            iconPath: new vscode.ThemeIcon('search'),
+            tooltip: this.INACTIVE_PREFIX + 'Text',
+        });
+
         this.filterButtons.set(SearchScope.COMMANDS, {
             iconPath: new vscode.ThemeIcon('run'),
             tooltip: this.INACTIVE_PREFIX + 'Commands',
@@ -107,6 +113,8 @@ export class SearchProvider {
                 return new vscode.ThemeIcon('symbol-field', color);
             case SearchScope.FILES:
                 return new vscode.ThemeIcon('files', color);
+            case SearchScope.TEXT:
+                return new vscode.ThemeIcon('search', color);
             case SearchScope.COMMANDS:
                 return new vscode.ThemeIcon('terminal', color);
             case SearchScope.PROPERTIES:
@@ -131,6 +139,7 @@ export class SearchProvider {
             SearchScope.SYMBOLS,
             SearchScope.PROPERTIES,
             SearchScope.FILES,
+            SearchScope.TEXT,
             SearchScope.ENDPOINTS,
             SearchScope.COMMANDS,
         ];
@@ -168,6 +177,8 @@ export class SearchProvider {
                 return 'Searching in Symbols only. Type to search...';
             case SearchScope.FILES:
                 return 'Searching in Files only. Type to search...';
+            case SearchScope.TEXT:
+                return 'Searching in Text content. Type to search...';
             case SearchScope.COMMANDS:
                 return 'Searching in Commands only. Type to search...';
             case SearchScope.PROPERTIES:
@@ -195,6 +206,9 @@ export class SearchProvider {
                 break;
             case SearchScope.FILES:
                 filterName = 'Files';
+                break;
+            case SearchScope.TEXT:
+                filterName = 'Text';
                 break;
             case SearchScope.COMMANDS:
                 filterName = 'Commands';

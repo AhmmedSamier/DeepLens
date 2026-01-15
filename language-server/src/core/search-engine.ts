@@ -1,4 +1,6 @@
 import * as Fuzzysort from 'fuzzysort';
+import * as fs from 'fs';
+import { Config } from './config';
 import { RouteMatcher } from './route-matcher';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 import { ISearchProvider } from './search-interface';
@@ -21,6 +23,14 @@ export class SearchEngine implements ISearchProvider {
     private itemsMap: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
+    private config?: Config;
+
+    /**
+     * Set configuration
+     */
+    setConfig(config: Config): void {
+        this.config = config;
+    }
 
     /**
      * Set the searchable items and update hot-arrays
@@ -118,7 +128,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Perform search
      */
-    search(options: SearchOptions): SearchResult[] {
+    async search(options: SearchOptions): Promise<SearchResult[]> {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
@@ -130,6 +140,11 @@ export class SearchEngine implements ISearchProvider {
         // If effectiveQuery is empty after stripping line number, return empty
         if (effectiveQuery.trim().length === 0) {
             return [];
+        }
+
+        // Special handling for text search
+        if (scope === SearchScope.TEXT && this.config?.isTextSearchEnabled()) {
+            return this.performTextSearch(effectiveQuery, maxResults);
         }
 
         // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
@@ -167,6 +182,74 @@ export class SearchEngine implements ISearchProvider {
         }
 
         return results.slice(0, maxResults);
+    }
+
+    /**
+     * Perform grep-like text search on indexed files
+     */
+    private async performTextSearch(query: string, maxResults: number): Promise<SearchResult[]> {
+        const results: SearchResult[] = [];
+        const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
+        const queryLower = query.toLowerCase();
+
+        // Limit concurrency to avoid too many open files
+        const CONCURRENCY = 20;
+
+        const chunks: SearchableItem[][] = [];
+        for (let i = 0; i < fileItems.length; i += CONCURRENCY) {
+            chunks.push(fileItems.slice(i, i + CONCURRENCY));
+        }
+
+        for (const chunk of chunks) {
+            if (results.length >= maxResults) {
+                break;
+            }
+
+            await Promise.all(
+                chunk.map(async (fileItem) => {
+                    if (results.length >= maxResults) return;
+
+                    try {
+                        const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
+                        const lines = content.split('\n');
+
+                        for (let i = 0; i < lines.length; i++) {
+                            const lineContent = lines[i];
+                            const matchIndex = lineContent.toLowerCase().indexOf(queryLower);
+
+                            if (matchIndex >= 0) {
+                                // We found a match!
+                                const trimmedLine = lineContent.trim();
+                                if (trimmedLine.length > 0) {
+                                    results.push({
+                                        item: {
+                                            id: `text:${fileItem.filePath}:${i}:${matchIndex}`,
+                                            name: trimmedLine,
+                                            type: SearchItemType.TEXT,
+                                            filePath: fileItem.filePath,
+                                            relativeFilePath: fileItem.relativeFilePath,
+                                            line: i,
+                                            column: matchIndex,
+                                            containerName: fileItem.name, // Show filename as container
+                                            detail: fileItem.relativeFilePath,
+                                        },
+                                        score: 1.0, // Fixed score for text matches
+                                        scope: SearchScope.TEXT,
+                                        highlights: [[matchIndex, matchIndex + query.length]],
+                                    });
+
+                                    if (results.length >= maxResults) break;
+                                }
+                            }
+                        }
+                    } catch (error) {
+                        // Ignore file read errors
+                    }
+                })
+            );
+        }
+
+        return results;
     }
 
     private mergeWithUrlMatches(results: SearchResult[], items: PreparedItem[], query: string): SearchResult[] {

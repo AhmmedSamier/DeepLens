@@ -12,7 +12,7 @@ describe('SearchEngine', () => {
         fullName: name,
     });
 
-    it('should find items by name', () => {
+    it('should find items by name', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
@@ -20,7 +20,7 @@ describe('SearchEngine', () => {
         ];
         engine.setItems(items);
 
-        const results = engine.search({
+        const results = await engine.search({
             query: 'Employee',
             scope: SearchScope.EVERYTHING
         });
@@ -29,7 +29,7 @@ describe('SearchEngine', () => {
         expect(results[0].item.name).toBe('EmployeeService.cs');
     });
 
-    it('should handle filename:line pattern', () => {
+    it('should handle filename:line pattern', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
@@ -37,7 +37,7 @@ describe('SearchEngine', () => {
         ];
         engine.setItems(items);
 
-        const results = engine.search({
+        const results = await engine.search({
             query: 'EmployeeService:200',
             scope: SearchScope.EVERYTHING
         });
@@ -69,14 +69,14 @@ describe('SearchEngine', () => {
         expect(results[0].item.line).toBe(49); // 0-indexed
     });
 
-    it('should not break on simple search without line number', () => {
+    it('should not break on simple search without line number', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
         ];
         engine.setItems(items);
 
-        const results = engine.search({
+        const results = await engine.search({
             query: 'EmployeeService',
             scope: SearchScope.EVERYTHING
         });
