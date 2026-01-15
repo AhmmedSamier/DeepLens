@@ -237,6 +237,41 @@ export class SearchProvider {
         if (quickPick.value) {
             const results = await this.performSearch(quickPick, quickPick.value);
             this.updateTitle(quickPick, results.length);
+        } else {
+            await this.showRecentItems(quickPick);
+        }
+    }
+
+    /**
+     * Show recent items when query is empty
+     */
+    private async showRecentItems(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
+        if (!this.activityTracker || !this.config.isActivityTrackingEnabled()) {
+            return;
+        }
+
+        quickPick.busy = true;
+        try {
+            const recentIds = this.activityTracker.getRecentItems(20);
+            if (recentIds.length === 0) return;
+
+            // Resolve items using the search engine (LSP client)
+            if (this.searchEngine.resolveItems) {
+                const results = await this.searchEngine.resolveItems(recentIds);
+
+                if (results && results.length > 0) {
+                    quickPick.items = results.map((result: SearchResult) => {
+                        const item = this.resultToQuickPickItem(result);
+                        item.description = `(Recent) ${item.description || ''}`;
+                        return item;
+                    });
+                    this.updateTitle(quickPick, results.length);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to show recent items:', error);
+        } finally {
+            quickPick.busy = false;
         }
     }
 
@@ -294,8 +329,7 @@ export class SearchProvider {
     ): Promise<void> {
         const trimmedQuery = query.trim();
         if (!trimmedQuery) {
-            quickPick.items = [];
-            quickPick.busy = false;
+            await this.showRecentItems(quickPick);
             return;
         }
 
@@ -517,6 +551,11 @@ export class SearchProvider {
         // Record activity
         if (this.activityTracker && this.config.isActivityTrackingEnabled()) {
             this.activityTracker.recordAccess(item.id);
+
+            // Sync with server for ranking
+            if (this.searchEngine.recordActivity) {
+                this.searchEngine.recordActivity(item.id);
+            }
         }
 
         // Handle command execution

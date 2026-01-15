@@ -31,6 +31,7 @@ export enum SearchScope {
     PROPERTIES = 'properties', // Properties and variables
     TEXT = 'text', // Text content in files
     ENDPOINTS = 'endpoints', // ASP.NET endpoints
+    RECENT = 'recent', // Recently accessed items
 }
 
 /**

@@ -124,6 +124,11 @@ export class DeepLensLspClient implements ISearchProvider {
         await this.client.sendRequest('deeplens/clearCache');
     }
 
+    async resolveItems(ids: string[]): Promise<SearchResult[]> {
+        if (!this.client) return [];
+        return await this.client.sendRequest<SearchResult[]>('deeplens/resolveItems', { ids });
+    }
+
     async stop(): Promise<void> {
         if (this.client) {
             await this.client.stop();

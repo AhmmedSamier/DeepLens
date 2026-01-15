@@ -25,6 +25,7 @@ export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[],
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType<void, void, void>('deeplens/clearCache');
+export const ResolveItemsRequest = new RequestType<{ ids: string[] }, SearchResult[], void>('deeplens/resolveItems');
 
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
@@ -223,6 +224,11 @@ connection.onRequest(RebuildIndexRequest, async (params) => {
 connection.onRequest(ClearCacheRequest, async () => {
     await indexPersistence.clear();
     await workspaceIndexer.indexWorkspace(undefined, true);
+});
+
+connection.onRequest(ResolveItemsRequest, (params) => {
+    if (!isInitialized) return [];
+    return searchEngine.resolveItems(params.ids);
 });
 
 // Listen on the connection

@@ -99,6 +99,32 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
+     * Resolve items by their IDs
+     */
+    resolveItems(ids: string[]): SearchResult[] {
+        const idSet = new Set(ids);
+        const results: SearchResult[] = [];
+
+        // This is O(N) but typically fast enough for 100k items.
+        // For larger scales, a Map<id, item> would be better.
+        for (const item of this.items) {
+            if (idSet.has(item.id)) {
+                results.push({
+                    item,
+                    score: 1.0,
+                    scope: SearchScope.RECENT
+                });
+            }
+        }
+
+        // Return in the order of requested IDs
+        const resultMap = new Map(results.map(r => [r.item.id, r]));
+        return ids
+            .map(id => resultMap.get(id))
+            .filter((r): r is SearchResult => r !== undefined);
+    }
+
+    /**
      * Perform search
      */
     search(options: SearchOptions): SearchResult[] {

@@ -102,6 +102,16 @@ export class ActivityTracker {
     }
 
     /**
+     * Get a list of most recently accessed item IDs
+     */
+    getRecentItems(limit: number = 20): string[] {
+        return Array.from(this.activities.values())
+            .sort((a, b) => b.lastAccessed - a.lastAccessed)
+            .slice(0, limit)
+            .map((record) => record.itemId);
+    }
+
+    /**
      * Calculate activity score based on recency and frequency
      */
     private calculateScore(record: ActivityRecord): number {

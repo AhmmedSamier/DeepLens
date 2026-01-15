@@ -7,4 +7,8 @@ import { SearchOptions, SearchResult } from './types';
 export interface ISearchProvider {
     search(options: SearchOptions): Promise<SearchResult[]> | SearchResult[];
     burstSearch(options: SearchOptions): Promise<SearchResult[]> | SearchResult[];
+
+    // Optional methods for activity tracking and history
+    recordActivity?(itemId: string): Promise<void> | void;
+    resolveItems?(ids: string[]): Promise<SearchResult[]> | SearchResult[];
 }
