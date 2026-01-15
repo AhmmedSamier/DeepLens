@@ -109,4 +109,6 @@ export interface IndexStats {
     lastUpdate: number;
     /** Indexing in progress */
     indexing: boolean;
+    /** Size of the cache on disk in bytes */
+    cacheSize: number;
 }

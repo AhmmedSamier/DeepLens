@@ -16,7 +16,7 @@ import { WorkspaceIndexer } from './core/workspace-indexer';
 import { TreeSitterParser } from './core/tree-sitter-parser';
 import { IndexPersistence } from './core/index-persistence';
 import { Config } from './core/config';
-import { SearchItemType, SearchScope, SearchOptions, SearchResult } from './core/types';
+import { SearchItemType, SearchScope, SearchOptions, SearchResult, IndexStats } from './core/types';
 import { ActivityTracker } from './core/activity-tracker';
 import { LspIndexerEnvironment } from './indexer-client';
 
@@ -25,6 +25,7 @@ export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[],
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType<void, void, void>('deeplens/clearCache');
+export const IndexStatsRequest = new RequestType<void, IndexStats, void>('deeplens/indexStats');
 
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
@@ -223,6 +224,31 @@ connection.onRequest(RebuildIndexRequest, async (params) => {
 connection.onRequest(ClearCacheRequest, async () => {
     await indexPersistence.clear();
     await workspaceIndexer.indexWorkspace(undefined, true);
+});
+
+connection.onRequest(IndexStatsRequest, () => {
+    const items = workspaceIndexer.getItems();
+    const fileItems = items.filter(i => i.type === SearchItemType.FILE);
+    const typeItems = items.filter(i =>
+        i.type === SearchItemType.CLASS ||
+        i.type === SearchItemType.INTERFACE ||
+        i.type === SearchItemType.ENUM
+    );
+    const symbolItems = items.filter(i =>
+        i.type === SearchItemType.METHOD ||
+        i.type === SearchItemType.FUNCTION ||
+        i.type === SearchItemType.PROPERTY
+    );
+
+    return {
+        totalItems: items.length,
+        totalFiles: fileItems.length,
+        totalTypes: typeItems.length,
+        totalSymbols: symbolItems.length,
+        lastUpdate: Date.now(),
+        indexing: workspaceIndexer.isIndexing(),
+        cacheSize: indexPersistence.getCacheSize()
+    };
 });
 
 // Listen on the connection

@@ -1,12 +1,13 @@
 import * as vscode from 'vscode';
 import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
 import * as path from 'path';
-import { SearchOptions, SearchResult } from '../../language-server/src/core/types';
+import { SearchOptions, SearchResult, IndexStats } from '../../language-server/src/core/types';
 import { ISearchProvider } from '../../language-server/src/core/search-interface';
 
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;
     private context: vscode.ExtensionContext;
+    public onProgress = new vscode.EventEmitter<{ state: 'start' | 'report' | 'end'; message?: string; percentage?: number }>();
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -47,6 +48,8 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     private handleProgressCreation(params: { token: string | number }) {
+        this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
+
         vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
@@ -76,6 +79,8 @@ export class DeepLensLspClient implements ISearchProvider {
 
                 if (value.percentage === 100 || value.message?.startsWith('Done')) {
                     progress.report({ message: value.message || 'Done', increment: 100 - lastPercentage });
+                    this.onProgress.fire({ state: 'end', message: value.message || 'Done', percentage: 100 });
+
                     setTimeout(() => {
                         resolve();
                         disposable.dispose();
@@ -90,6 +95,7 @@ export class DeepLensLspClient implements ISearchProvider {
                 }
 
                 progress.report({ message: value.message, increment });
+                this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
             },
         );
     }
@@ -124,9 +130,15 @@ export class DeepLensLspClient implements ISearchProvider {
         await this.client.sendRequest('deeplens/clearCache');
     }
 
+    async getIndexStats(): Promise<IndexStats | undefined> {
+        if (!this.client) return undefined;
+        return await this.client.sendRequest<IndexStats>('deeplens/indexStats');
+    }
+
     async stop(): Promise<void> {
         if (this.client) {
             await this.client.stop();
         }
+        this.onProgress.dispose();
     }
 }
