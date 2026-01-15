@@ -22,6 +22,8 @@ import { LspIndexerEnvironment } from './indexer-client';
 
 // Custom requests
 export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/burstSearch');
+export const ResolveItemsRequest = new RequestType<{ itemIds: string[] }, SearchResult[], void>('deeplens/resolveItems');
+export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchResult[], void>('deeplens/getRecentItems');
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType<void, void, void>('deeplens/clearCache');
@@ -201,6 +203,17 @@ connection.onWorkspaceSymbol((params) => {
 connection.onRequest(BurstSearchRequest, (options) => {
     if (!isInitialized) return [];
     return searchEngine.burstSearch(options);
+});
+
+connection.onRequest(ResolveItemsRequest, (params) => {
+    if (!isInitialized) return [];
+    return searchEngine.resolveItems(params.itemIds);
+});
+
+connection.onRequest(GetRecentItemsRequest, (params) => {
+    if (!isInitialized || !activityTracker) return [];
+    const itemIds = activityTracker.getRecentItems(params.count);
+    return searchEngine.resolveItems(itemIds);
 });
 
 // We can also override the main search with a custom request that supports Scopes

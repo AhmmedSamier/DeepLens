@@ -83,7 +83,9 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
                 if (editor) {
-                    activityTracker.recordAccess(`file:${editor.document.uri.fsPath}`);
+                    const itemId = `file:${editor.document.uri.fsPath}`;
+                    activityTracker.recordAccess(itemId);
+                    lspClient.recordActivity(itemId);
                 }
             }),
         );

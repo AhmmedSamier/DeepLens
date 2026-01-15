@@ -199,6 +199,18 @@ export class ActivityTracker {
     }
 
     /**
+     * Get the most recent items sorted by score
+     */
+    getRecentItems(count: number): string[] {
+        // Sort activities by score descending
+        const sorted = Array.from(this.activities.values())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, count);
+
+        return sorted.map(r => r.itemId);
+    }
+
+    /**
      * Get statistics about tracked activities
      */
     getStats(): { totalRecords: number; averageScore: number } {
