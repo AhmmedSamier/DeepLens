@@ -4,6 +4,7 @@ import { CommandIndexer } from './command-indexer';
 import { Config } from '../../language-server/src/core/config';
 import { SearchProvider } from './search-provider';
 import { DeepLensLspClient } from './lsp-client';
+import { ReferenceCodeLensProvider } from './reference-code-lens';
 
 let lspClient: DeepLensLspClient;
 let searchProvider: SearchProvider;
@@ -55,6 +56,28 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(rebuildCommand);
     context.subscriptions.push(clearCacheCommand);
 
+    // Register reference code lens provider for all supported languages
+    const codeLensProvider = new ReferenceCodeLensProvider();
+    const supportedLanguages = [
+        { scheme: 'file', language: 'typescript' },
+        { scheme: 'file', language: 'typescriptreact' },
+        { scheme: 'file', language: 'javascript' },
+        { scheme: 'file', language: 'javascriptreact' },
+        { scheme: 'file', language: 'csharp' },
+        { scheme: 'file', language: 'python' },
+        { scheme: 'file', language: 'java' },
+        { scheme: 'file', language: 'go' },
+        { scheme: 'file', language: 'cpp' },
+        { scheme: 'file', language: 'c' },
+        { scheme: 'file', language: 'ruby' },
+        { scheme: 'file', language: 'php' },
+    ];
+
+    context.subscriptions.push(
+        vscode.languages.registerCodeLensProvider(supportedLanguages, codeLensProvider)
+    );
+    context.subscriptions.push(codeLensProvider);
+
     // Track document opens for activity
     if (config.isActivityTrackingEnabled()) {
         context.subscriptions.push(
@@ -71,6 +94,12 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidChangeConfiguration((event) => {
             if (event.affectsConfiguration('deeplens')) {
                 config.reload(vscode.workspace.getConfiguration('deeplens'));
+
+                // Reload codeLens provider config
+                if (event.affectsConfiguration('deeplens.codeLens')) {
+                    codeLensProvider.reloadConfig();
+                }
+
                 // Re-index workspace if exclude patterns or file extensions changed
                 if (
                     event.affectsConfiguration('deeplens.excludePatterns') ||

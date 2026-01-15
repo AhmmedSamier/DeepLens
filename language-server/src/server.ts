@@ -139,7 +139,13 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
         await connection.sendRequest('window/workDoneProgress/create', { token });
 
         const startTime = Date.now();
-        await workspaceIndexer.indexWorkspace((message, percentage) => {
+        let currentPercentage = 0;
+        await workspaceIndexer.indexWorkspace((message, increment) => {
+            if (increment) {
+                currentPercentage += increment;
+            }
+            // Cap at 99% until explicitly done
+            const percentage = Math.min(99, Math.round(currentPercentage));
             connection.sendNotification('deeplens/progress', { token, message, percentage });
         }, force);
 

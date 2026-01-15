@@ -45,6 +45,16 @@
                 "command": "deeplens.search",
                 "key": "shift shift",
                 "mac": "shift shift"
+            },
+            {
+                "command": "editor.action.revealDeclaration",
+                "key": "f12",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "editor.action.peekImplementation",
+                "key": "ctrl+f12",
+                "when": "editorTextFocus"
             }
         ],
         "configuration": {
@@ -111,6 +121,22 @@
                         "php"
                     ],
                     "description": "File extensions to index for search"
+                },
+                "deeplens.codeLens.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show reference counts above classes and functions (like Rider's Code Vision)"
+                },
+                "deeplens.codeLens.minRefsToShow": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Minimum number of references to display code lens (0 = show all, including 'no references')"
+                },
+                "deeplens.codeLens.showImplementations": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show implementation counts above classes, interfaces and methods (Ctrl+F12)"
                 }
             }
         }

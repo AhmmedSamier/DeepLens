@@ -79,7 +79,7 @@ export class DeepLensLspClient implements ISearchProvider {
                     setTimeout(() => {
                         resolve();
                         disposable.dispose();
-                    }, 7000);
+                    }, 3000);
                     return;
                 }
 
