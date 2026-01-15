@@ -8,6 +8,7 @@ export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;
     private context: vscode.ExtensionContext;
     public onProgress = new vscode.EventEmitter<{ state: 'start' | 'report' | 'end'; message?: string; percentage?: number }>();
+    public onStreamResult = new vscode.EventEmitter<{ requestId?: number; result: SearchResult }>();
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -44,6 +45,11 @@ export class DeepLensLspClient implements ISearchProvider {
         // Handle server progress reporting
         this.client.onRequest('window/workDoneProgress/create', async (params: { token: string | number }) => {
             this.handleProgressCreation(params);
+        });
+
+        // Handle streamed search results
+        this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
+            this.onStreamResult.fire(params);
         });
     }
 
@@ -150,5 +156,6 @@ export class DeepLensLspClient implements ISearchProvider {
             await this.client.stop();
         }
         this.onProgress.dispose();
+        this.onStreamResult.dispose();
     }
 }

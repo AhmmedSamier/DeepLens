@@ -4,6 +4,7 @@ import { CommandIndexer } from './command-indexer';
 import { Config } from '../../language-server/src/core/config';
 import { ISearchProvider } from '../../language-server/src/core/search-interface';
 import { SearchItemType, SearchOptions, SearchResult, SearchScope } from '../../language-server/src/core/types';
+import { DeepLensLspClient } from './lsp-client';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -17,22 +18,40 @@ export class SearchProvider {
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
     private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
     private lastQueryId = 0;
+    private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
+    private streamingResults: Map<number, SearchResult[]> = new Map();
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
     private readonly INACTIVE_PREFIX = '○ ';
     private readonly ICON_CLASS = 'symbol-class';
 
+    private matchDecorationType = vscode.window.createTextEditorDecorationType({
+        backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
+        border: '1px solid',
+        borderColor: new vscode.ThemeColor('editor.findMatchHighlightBorder'),
+        borderRadius: '2px',
+    });
+
     // Prefix mapping for search scopes
     private readonly PREFIX_MAP = new Map<string, SearchScope>([
         ['/t ', SearchScope.TYPES],
+        ['/classes ', SearchScope.TYPES],
+        ['/txt ', SearchScope.TEXT],
         ['/text ', SearchScope.TEXT],
         ['/s ', SearchScope.SYMBOLS],
+        ['/symbols ', SearchScope.SYMBOLS],
         ['/f ', SearchScope.FILES],
+        ['/files ', SearchScope.FILES],
         ['/c ', SearchScope.COMMANDS],
+        ['/commands ', SearchScope.COMMANDS],
         ['/p ', SearchScope.PROPERTIES],
+        ['/properties ', SearchScope.PROPERTIES],
         ['/e ', SearchScope.ENDPOINTS],
+        ['/endpoints ', SearchScope.ENDPOINTS],
         ['/a ', SearchScope.EVERYTHING],
+        ['/all ', SearchScope.EVERYTHING],
+        ['/everything ', SearchScope.EVERYTHING],
     ]);
 
     constructor(
@@ -54,47 +73,71 @@ export class SearchProvider {
                 config.getActivityWeight(),
             );
         }
+
+        // Initialize streaming results listener
+        if (this.searchEngine instanceof DeepLensLspClient) {
+            this.searchEngine.onStreamResult.event((params) => {
+                const { requestId, result } = params;
+                if (requestId !== undefined && requestId === this.lastQueryId && this.currentQuickPick) {
+                    let results = this.streamingResults.get(requestId) || [];
+
+                    // Avoid duplicates (though the server should handle this)
+                    if (!results.some(r => r.item.id === result.item.id)) {
+                        results.push(result);
+                        this.streamingResults.set(requestId, results);
+
+                        // Update UI incrementally if this is still the active search
+                        if (requestId === this.lastQueryId) {
+                            this.currentQuickPick.items = results.map(r => this.resultToQuickPickItem(r));
+                            this.updateTitle(this.currentQuickPick, results.length);
+                        }
+                    }
+                }
+            });
+        }
     }
 
     /**
      * Create filter buttons for each scope
      */
     private createFilterButtons(): void {
+        const dimmedColor = new vscode.ThemeColor('descriptionForeground');
+
         this.filterButtons.set(SearchScope.EVERYTHING, {
-            iconPath: new vscode.ThemeIcon('search'),
+            iconPath: new vscode.ThemeIcon('search', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'All',
         });
 
         this.filterButtons.set(SearchScope.TYPES, {
-            iconPath: new vscode.ThemeIcon(this.ICON_CLASS),
+            iconPath: new vscode.ThemeIcon(this.ICON_CLASS, dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Classes',
         });
 
         this.filterButtons.set(SearchScope.SYMBOLS, {
-            iconPath: new vscode.ThemeIcon('symbol-method'),
+            iconPath: new vscode.ThemeIcon('symbol-method', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Symbols',
         });
 
         this.filterButtons.set(SearchScope.FILES, {
-            iconPath: new vscode.ThemeIcon('file'),
+            iconPath: new vscode.ThemeIcon('file', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Files',
         });
 
         this.filterButtons.set(SearchScope.TEXT, {
-            iconPath: new vscode.ThemeIcon('search'),
+            iconPath: new vscode.ThemeIcon('whole-word', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Text',
         });
 
         this.filterButtons.set(SearchScope.COMMANDS, {
-            iconPath: new vscode.ThemeIcon('run'),
+            iconPath: new vscode.ThemeIcon('run', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Commands',
         });
         this.filterButtons.set(SearchScope.PROPERTIES, {
-            iconPath: new vscode.ThemeIcon('symbol-property'),
+            iconPath: new vscode.ThemeIcon('symbol-property', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Properties',
         });
         this.filterButtons.set(SearchScope.ENDPOINTS, {
-            iconPath: new vscode.ThemeIcon('globe'),
+            iconPath: new vscode.ThemeIcon('globe', dimmedColor),
             tooltip: this.INACTIVE_PREFIX + 'Endpoints',
         });
     }
@@ -103,7 +146,7 @@ export class SearchProvider {
      * Get visually distinct active icon with color
      */
     private getActiveIcon(scope: SearchScope): vscode.ThemeIcon {
-        const color = new vscode.ThemeColor('focusBorder');
+        const color = new vscode.ThemeColor('testing.iconPassed');
 
         switch (scope) {
             case SearchScope.EVERYTHING:
@@ -111,13 +154,13 @@ export class SearchProvider {
             case SearchScope.TYPES:
                 return new vscode.ThemeIcon(this.ICON_CLASS, color);
             case SearchScope.SYMBOLS:
-                return new vscode.ThemeIcon('symbol-field', color);
+                return new vscode.ThemeIcon('symbol-method', color);
             case SearchScope.FILES:
-                return new vscode.ThemeIcon('files', color);
+                return new vscode.ThemeIcon('file', color);
             case SearchScope.TEXT:
-                return new vscode.ThemeIcon('search', color);
+                return new vscode.ThemeIcon('whole-word', color);
             case SearchScope.COMMANDS:
-                return new vscode.ThemeIcon('terminal', color);
+                return new vscode.ThemeIcon('run', color);
             case SearchScope.PROPERTIES:
                 return new vscode.ThemeIcon('symbol-property', color);
             case SearchScope.ENDPOINTS:
@@ -136,11 +179,11 @@ export class SearchProvider {
         // Add buttons in the desired order
         const orderedScopes = [
             SearchScope.EVERYTHING,
+            SearchScope.TEXT,
+            SearchScope.FILES,
             SearchScope.TYPES,
             SearchScope.SYMBOLS,
             SearchScope.PROPERTIES,
-            SearchScope.FILES,
-            SearchScope.TEXT,
             SearchScope.ENDPOINTS,
             SearchScope.COMMANDS,
         ];
@@ -173,22 +216,22 @@ export class SearchProvider {
     private getPlaceholder(): string {
         switch (this.currentScope) {
             case SearchScope.TYPES:
-                return 'Searching in Classes only. Type to search...';
+                return 'Classes: Type to search in classes only...';
             case SearchScope.SYMBOLS:
-                return 'Searching in Symbols only. Type to search...';
+                return 'Symbols: Type to search in symbols only...';
             case SearchScope.FILES:
-                return 'Searching in Files only. Type to search...';
+                return 'Files: Type to search in file names only...';
             case SearchScope.TEXT:
-                return 'Searching in Text content. Type to search...';
+                return 'Text: Type to search for text content...';
             case SearchScope.COMMANDS:
-                return 'Searching in Commands only. Type to search...';
+                return 'Commands: Type to search in commands only...';
             case SearchScope.PROPERTIES:
-                return 'Searching in Properties only. Type to search...';
+                return 'Properties: Type to search in properties only...';
             case SearchScope.ENDPOINTS:
-                return 'Searching in Endpoints only. Type to search...';
+                return 'Endpoints: Type to search in endpoints only...';
             case SearchScope.EVERYTHING:
             default:
-                return 'Type to search everywhere with DeepLens (files, classes, symbols...)';
+                return 'Global: Type to search everywhere (classes, files, symbols...)';
         }
     }
 
@@ -196,7 +239,7 @@ export class SearchProvider {
      * Update title to show filter and result count
      */
     private updateTitle(quickPick: vscode.QuickPick<SearchResultItem>, resultCount: number): void {
-        let filterName = '';
+        let filterName = 'All';
 
         switch (this.currentScope) {
             case SearchScope.TYPES:
@@ -221,14 +264,11 @@ export class SearchProvider {
                 filterName = 'Endpoints';
                 break;
             default:
-                filterName = 'All';
+                filterName = 'Everything';
         }
 
-        if (resultCount > 0) {
-            quickPick.title = `DeepLens - ${filterName} (${resultCount})`;
-        } else {
-            quickPick.title = 'DeepLens';
-        }
+        const countSuffix = resultCount > 0 ? ` (${resultCount})` : '';
+        quickPick.title = `DeepLens - ${filterName}${countSuffix}`;
     }
 
     /**
@@ -246,6 +286,7 @@ export class SearchProvider {
     private async showInternal(): Promise<void> {
         const originalEditor = vscode.window.activeTextEditor;
         const quickPick = vscode.window.createQuickPick<SearchResultItem>();
+        this.currentQuickPick = quickPick;
 
         quickPick.title = 'DeepLens';
         quickPick.placeholder = this.getPlaceholder();
@@ -301,8 +342,9 @@ export class SearchProvider {
             // Map results to QuickPick items
             quickPick.items = results.map((r) => this.resultToQuickPickItem(r));
 
-            // Update title
-            quickPick.title = `DeepLens - Recent History`;
+            // Update title with scope reference even in history
+            this.updateTitle(quickPick, 0);
+            quickPick.title += ' - Recent History';
         } finally {
             quickPick.busy = false;
         }
@@ -371,9 +413,16 @@ export class SearchProvider {
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
-                accepted = true;
+                const isSlashCommand = selected.result.item.id.startsWith('slash-cmd:');
+                if (!isSlashCommand) {
+                    accepted = true;
+                }
+
                 this.navigateToItem(selected.result);
-                quickPick.hide();
+
+                if (!isSlashCommand) {
+                    quickPick.hide();
+                }
             }
         });
 
@@ -387,6 +436,11 @@ export class SearchProvider {
                     selection: originalEditor.selection
                 });
             }
+
+            // Clear decorations
+            vscode.window.visibleTextEditors.forEach(editor => {
+                editor.setDecorations(this.matchDecorationType, []);
+            });
 
             quickPick.dispose();
         });
@@ -434,6 +488,64 @@ export class SearchProvider {
             quickPick.placeholder = this.getPlaceholder();
         }
 
+        // Check if user is typing a slash command
+        // We show the list if the query starts with / and we haven't matched a full scope yet
+        if (query.startsWith('/') && !scope) {
+            const commandSuggestions: SearchResult[] = [];
+            const processedScopes = new Set<SearchScope>();
+
+            for (const [prefix, s] of this.PREFIX_MAP.entries()) {
+                if (processedScopes.has(s)) continue;
+
+                // Determine a friendly label for the command
+                let label = '';
+                switch (s) {
+                    case SearchScope.TYPES: label = '/classes'; break;
+                    case SearchScope.SYMBOLS: label = '/symbols'; break;
+                    case SearchScope.FILES: label = '/files'; break;
+                    case SearchScope.TEXT: label = '/text'; break;
+                    case SearchScope.COMMANDS: label = '/commands'; break;
+                    case SearchScope.PROPERTIES: label = '/properties'; break;
+                    case SearchScope.ENDPOINTS: label = '/endpoints'; break;
+                    case SearchScope.EVERYTHING: label = '/all'; break;
+                }
+
+                if (label.startsWith(query.toLowerCase()) || prefix.trim().startsWith(query.toLowerCase().trim())) {
+                    let description = '';
+                    switch (s) {
+                        case SearchScope.TYPES: description = 'Search Classes'; break;
+                        case SearchScope.SYMBOLS: description = 'Search Symbols'; break;
+                        case SearchScope.FILES: description = 'Search Files'; break;
+                        case SearchScope.TEXT: description = 'Search Text'; break;
+                        case SearchScope.COMMANDS: description = 'Search Commands'; break;
+                        case SearchScope.PROPERTIES: description = 'Search Properties'; break;
+                        case SearchScope.ENDPOINTS: description = 'Search Endpoints'; break;
+                        case SearchScope.EVERYTHING: description = 'Search Everything'; break;
+                    }
+
+                    commandSuggestions.push({
+                        item: {
+                            id: 'slash-cmd:' + prefix,
+                            name: label,
+                            type: SearchItemType.COMMAND,
+                            filePath: '',
+                            detail: description
+                        },
+                        score: 1,
+                        scope: SearchScope.COMMANDS
+                    });
+                    processedScopes.add(s);
+                }
+            }
+
+            if (commandSuggestions.length > 0) {
+                quickPick.items = commandSuggestions.map(r => this.resultToQuickPickItem(r));
+                this.updateTitle(quickPick, commandSuggestions.length);
+                quickPick.busy = false;
+                return;
+            }
+        }
+
         const trimmedQuery = text.trim();
         const queryId = ++this.lastQueryId;
 
@@ -449,23 +561,24 @@ export class SearchProvider {
         quickPick.busy = true;
 
         // PHASE 0: Absolute Instant (Immediate exact-name hits)
-        const instantResults = await this.searchEngine.burstSearch({
-            query: trimmedQuery,
-            scope: this.currentScope,
-            maxResults: 5,
-        });
+        try {
+            const instantResults = await this.searchEngine.burstSearch({
+                query: trimmedQuery,
+                scope: this.currentScope,
+                maxResults: 5,
+            });
 
-        if (queryId !== this.lastQueryId) {
-            return;
-        }
+            if (queryId !== this.lastQueryId) {
+                return;
+            }
 
-        if (instantResults.length > 0) {
-            quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
-            this.updateTitle(quickPick, instantResults.length);
-        } else if (quickPick.items.length > 0) {
-            // Clear items immediately if Phase 0 found nothing (prevent stale results)
-            quickPick.items = [];
-            this.updateTitle(quickPick, 0);
+            if (instantResults.length > 0) {
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+                this.updateTitle(quickPick, instantResults.length);
+            }
+            // Don't clear items here - let history stay until we have real results (avoid flicker)
+        } catch (error) {
+            console.error(`Phase 0 search error: ${error}`);
         }
 
         // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
@@ -475,23 +588,24 @@ export class SearchProvider {
                     return;
                 }
 
-                const burstResults = await this.searchEngine.burstSearch({
-                    query: trimmedQuery,
-                    scope: this.currentScope,
-                    maxResults: 15,
-                });
+                try {
+                    const burstResults = await this.searchEngine.burstSearch({
+                        query: trimmedQuery,
+                        scope: this.currentScope,
+                        maxResults: 15,
+                    });
 
-                if (queryId !== this.lastQueryId) {
-                    return;
-                }
+                    if (queryId !== this.lastQueryId) {
+                        return;
+                    }
 
-                // Update if we have more results or if current list is empty
-                if (
-                    burstResults.length > instantResults.length ||
-                    (burstResults.length > 0 && quickPick.items.length === 0)
-                ) {
-                    quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
-                    this.updateTitle(quickPick, burstResults.length);
+                    // Update if we have more results
+                    if (burstResults.length > 0) {
+                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
+                        this.updateTitle(quickPick, burstResults.length);
+                    }
+                } catch (error) {
+                    console.error(`Phase 1 search error: ${error}`);
                 }
             }, 10),
         );
@@ -579,6 +693,12 @@ export class SearchProvider {
                 // Re-run search with new filter
                 // We use parseQuery to ensure we handle the (potentially updated) text correctly
                 const { text } = this.parseQuery(quickPick.value);
+
+                // If the value changed, onDidChangeValue will take care of the search
+                if (currentQuery !== quickPick.value) {
+                    return;
+                }
+
                 const queryId = ++this.lastQueryId;
                 const results = await this.performSearch(quickPick, text, queryId);
                 if (queryId === this.lastQueryId) {
@@ -587,72 +707,6 @@ export class SearchProvider {
                 break;
             }
         }
-    }
-
-    /**
-     * Perform native text search using VS Code API (ripgrep)
-     */
-    private async performNativeTextSearch(query: string, maxResults: number): Promise<SearchResult[]> {
-        const results: SearchResult[] = [];
-        const uniqueIds = new Set<string>();
-        const tokenSource = new vscode.CancellationTokenSource();
-
-        try {
-            const options: vscode.FindTextInFilesOptions = {
-                previewOptions: {
-                    matchLines: 1,
-                    charsPerLine: 1000,
-                },
-            };
-
-            await vscode.workspace.findTextInFiles(
-                { pattern: query, isCaseSensitive: false },
-                options,
-                (result) => {
-                    if (results.length >= maxResults) {
-                        tokenSource.cancel();
-                        return;
-                    }
-
-                    if ('ranges' in result) {
-                        const match = result as vscode.TextSearchMatch;
-                        const filePath = match.uri.fsPath;
-                        const range = match.ranges[0]; // Take first match range
-                        const line = range.start.line;
-                        const column = range.start.character;
-                        const previewText = match.preview.text.trim();
-
-                        const id = `text:${filePath}:${line}:${column}`;
-                        if (uniqueIds.has(id)) {
-                            return;
-                        }
-                        uniqueIds.add(id);
-
-                        results.push({
-                            item: {
-                                id,
-                                name: previewText,
-                                type: SearchItemType.TEXT,
-                                filePath,
-                                line,
-                                column,
-                                detail: vscode.workspace.asRelativePath(match.uri),
-                            },
-                            score: 1.0,
-                            scope: SearchScope.TEXT,
-                            highlights: [], // Native highlights are complex to map back to trimmed text
-                        });
-                    }
-                },
-                tokenSource.token,
-            );
-        } catch (error) {
-            // Cancellation throws an error usually, which is fine
-        } finally {
-            tokenSource.dispose();
-        }
-
-        return results;
     }
 
     /**
@@ -670,21 +724,18 @@ export class SearchProvider {
             return [];
         }
 
-        // Use native text search if scope is TEXT and enabled
-        if (this.currentScope === SearchScope.TEXT && this.config.isTextSearchEnabled()) {
-            const results = await this.performNativeTextSearch(query.trim(), this.config.getMaxResults());
-            if (queryId === this.lastQueryId) {
-                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
-            }
-            return results;
-        }
+        const trimmedQuery = query.trim();
+
 
         const options: SearchOptions = {
-            query: query.trim(),
+            query: trimmedQuery,
             scope: this.currentScope,
             maxResults: this.config.getMaxResults(),
             enableCamelHumps: this.config.isCamelHumpsEnabled(),
+            requestId: queryId,
         };
+
+        this.streamingResults.set(queryId, []);
 
         const results = await this.searchEngine.search(options);
 
@@ -693,13 +744,33 @@ export class SearchProvider {
         }
 
         // Merge command results if command search is enabled/relevant
-        if (this.commandIndexer) {
-            const commandResults = this.commandIndexer.search(query);
-            results.push(...commandResults);
+        if (this.currentScope === SearchScope.EVERYTHING || this.currentScope === SearchScope.COMMANDS) {
+            if (this.commandIndexer) {
+                const commandResults = this.commandIndexer.search(trimmedQuery);
+                results.push(...commandResults);
+            }
         }
 
+        // Unified EVERYTHING scope merge is now handled by the LSP search engine
+
         if (queryId === this.lastQueryId) {
-            quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+            // Sort by score if we merged multiple types
+            if (this.currentScope === SearchScope.EVERYTHING) {
+                results.sort((a, b) => {
+                    const scoreA = typeof a.score === 'number' ? a.score : 0;
+                    const scoreB = typeof b.score === 'number' ? b.score : 0;
+                    return scoreB - scoreA;
+                });
+            }
+
+            // If we still have NO results at the end of Phase 2, then we clear the stale items (history)
+            if (results.length === 0) {
+                quickPick.items = [];
+                this.updateTitle(quickPick, 0);
+            } else {
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+            }
+            this.streamingResults.delete(queryId); // Done with streaming for this query
         }
 
         return results;
@@ -789,7 +860,7 @@ export class SearchProvider {
             case SearchItemType.FILE:
                 return 'file';
             case SearchItemType.TEXT:
-                return 'search';
+                return 'whole-word';
             case SearchItemType.COMMAND:
                 return 'run';
             case SearchItemType.ENDPOINT:
@@ -822,7 +893,7 @@ export class SearchProvider {
                 return new vscode.ThemeColor('symbolIcon.interfaceForeground'); // Purple-ish
             default:
                 return undefined;
-            }
+        }
     }
 
     /**
@@ -834,6 +905,23 @@ export class SearchProvider {
         preview: boolean = false,
     ): Promise<void> {
         const { item } = result;
+
+        // Handle Slash Command Selection
+        if (item.id.startsWith('slash-cmd:') && this.currentQuickPick) {
+            if (preview) return; // Don't do anything for preview
+
+            const functionalPrefix = item.id.substring('slash-cmd:'.length);
+            this.currentQuickPick.value = functionalPrefix;
+
+            // Manually trigger handleQueryChange to force scope update
+            this.handleQueryChange(
+                this.currentQuickPick,
+                functionalPrefix,
+                () => { }, // No-op timeouts
+                () => { }
+            );
+            return;
+        }
 
         // Don't record activity for previews
         if (!preview && this.config.isActivityTrackingEnabled()) {
@@ -859,12 +947,30 @@ export class SearchProvider {
             const position =
                 item.line !== undefined ? new vscode.Position(item.line, item.column || 0) : new vscode.Position(0, 0);
 
-            await vscode.window.showTextDocument(document, {
-                selection: new vscode.Range(position, position),
+            // Calculate range for selection and highlighting
+            let range: vscode.Range;
+            if (result.highlights && result.highlights.length > 0) {
+                const firstHighlight = result.highlights[0];
+                range = new vscode.Range(
+                    new vscode.Position(item.line || 0, firstHighlight[0]),
+                    new vscode.Position(item.line || 0, firstHighlight[1])
+                );
+            } else {
+                range = new vscode.Range(
+                    position,
+                    position.translate(0, item.name.length)
+                );
+            }
+
+            const editor = await vscode.window.showTextDocument(document, {
+                selection: range,
                 viewColumn: viewColumn,
                 preview: preview, // Use preview mode if requested
                 preserveFocus: preview, // Keep focus on quick pick during preview
             });
+
+            // Apply decoration
+            editor.setDecorations(this.matchDecorationType, [range]);
         } catch (error) {
             if (!preview) {
                 vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);

@@ -24,6 +24,14 @@ export class SearchEngine implements ISearchProvider {
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
     private config?: Config;
+    private logger?: { log: (msg: string) => void; error: (msg: string) => void };
+
+    /**
+     * Set logger
+     */
+    setLogger(logger: { log: (msg: string) => void; error: (msg: string) => void }): void {
+        this.logger = logger;
+    }
 
     /**
      * Set configuration
@@ -128,7 +136,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Perform search
      */
-    async search(options: SearchOptions): Promise<SearchResult[]> {
+    async search(options: SearchOptions, onResult?: (result: SearchResult) => void): Promise<SearchResult[]> {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
@@ -144,7 +152,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Special handling for text search
         if (scope === SearchScope.TEXT && this.config?.isTextSearchEnabled()) {
-            return this.performTextSearch(effectiveQuery, maxResults);
+            return this.performTextSearch(effectiveQuery, maxResults, onResult);
         }
 
         // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
@@ -160,6 +168,7 @@ export class SearchEngine implements ISearchProvider {
         if (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) {
             results = this.mergeWithUrlMatches(results, filteredItems, effectiveQuery);
         }
+
 
         // 3. Sort by score
         results.sort((a, b) => b.score - a.score);
@@ -187,41 +196,52 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Perform grep-like text search on indexed files
      */
-    private async performTextSearch(query: string, maxResults: number): Promise<SearchResult[]> {
+    private async performTextSearch(
+        query: string,
+        maxResults: number,
+        onResult?: (result: SearchResult) => void
+    ): Promise<SearchResult[]> {
+        const startTime = Date.now();
+        this.logger?.log(`--- Starting LSP Text Search: "${query}" ---`);
         const results: SearchResult[] = [];
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
         const queryLower = query.toLowerCase();
 
-        // Limit concurrency to avoid too many open files
-        const CONCURRENCY = 20;
-
+        // Limit concurrency
+        const CONCURRENCY = 30;
         const chunks: SearchableItem[][] = [];
         for (let i = 0; i < fileItems.length; i += CONCURRENCY) {
             chunks.push(fileItems.slice(i, i + CONCURRENCY));
         }
 
+        let processedFiles = 0;
         for (const chunk of chunks) {
-            if (results.length >= maxResults) {
-                break;
-            }
+            if (results.length >= maxResults) break;
 
             await Promise.all(
                 chunk.map(async (fileItem) => {
                     if (results.length >= maxResults) return;
 
                     try {
-                        const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
-                        const lines = content.split('\n');
+                        const stats = await fs.promises.stat(fileItem.filePath);
+                        // Skip files larger than 5MB to prevent memory issues
+                        if (stats.size > 5 * 1024 * 1024) return;
 
+                        const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
+                        processedFiles++;
+
+                        // Optimized: First check if file even contains the query before splitting
+                        if (!content.toLowerCase().includes(queryLower)) return;
+
+                        const lines = content.split(/\r?\n/);
                         for (let i = 0; i < lines.length; i++) {
                             const lineContent = lines[i];
                             const matchIndex = lineContent.toLowerCase().indexOf(queryLower);
 
                             if (matchIndex >= 0) {
-                                // We found a match!
                                 const trimmedLine = lineContent.trim();
                                 if (trimmedLine.length > 0) {
-                                    results.push({
+                                    const result: SearchResult = {
                                         item: {
                                             id: `text:${fileItem.filePath}:${i}:${matchIndex}`,
                                             name: trimmedLine,
@@ -230,25 +250,39 @@ export class SearchEngine implements ISearchProvider {
                                             relativeFilePath: fileItem.relativeFilePath,
                                             line: i,
                                             column: matchIndex,
-                                            containerName: fileItem.name, // Show filename as container
+                                            containerName: fileItem.name,
                                             detail: fileItem.relativeFilePath,
                                         },
-                                        score: 1.0, // Fixed score for text matches
+                                        score: 1.0,
                                         scope: SearchScope.TEXT,
                                         highlights: [[matchIndex, matchIndex + query.length]],
-                                    });
+                                    };
 
-                                    if (results.length >= maxResults) break;
+                                    results.push(result);
+                                    if (onResult) {
+                                        onResult(result);
+                                    }
+
+                                    if (results.length >= maxResults) {
+                                        this.logger?.log(`Text search reached limit of ${maxResults} matches`);
+                                        break;
+                                    }
                                 }
                             }
                         }
                     } catch (error) {
-                        // Ignore file read errors
+                        // Ignore read errors
                     }
                 })
             );
+
+            if (processedFiles % 100 === 0 || results.length > 0) {
+                this.logger?.log(`Searched ${processedFiles}/${fileItems.length} files... found ${results.length} matches`);
+            }
         }
 
+        const duration = Date.now() - startTime;
+        this.logger?.log(`Text search completed in ${duration}ms. Found ${results.length} results.`);
         return results;
     }
 
@@ -501,7 +535,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Perform an ultra-fast burst search (prefix/exact match) for immediate UI feedback
      */
-    burstSearch(options: SearchOptions): SearchResult[] {
+    burstSearch(options: SearchOptions, onResult?: (result: SearchResult) => void): SearchResult[] {
         const { query, scope, maxResults = 10 } = options;
         if (!query || query.trim().length === 0) {
             return [];
@@ -519,6 +553,7 @@ export class SearchEngine implements ISearchProvider {
             filteredItems,
             effectiveQuery.toLowerCase(),
             maxResults,
+            onResult,
         );
 
         // Add URL matching to burst search for instant feedback
@@ -548,18 +583,27 @@ export class SearchEngine implements ISearchProvider {
         return results.sort((a, b) => b.score - a.score);
     }
 
-    private findBurstMatches(items: PreparedItem[], queryLower: string, maxResults: number): SearchResult[] {
+    private findBurstMatches(
+        items: PreparedItem[],
+        queryLower: string,
+        maxResults: number,
+        onResult?: (result: SearchResult) => void
+    ): SearchResult[] {
         const results: SearchResult[] = [];
         for (const { item } of items) {
             const nameLower = item.name.toLowerCase();
 
             // Priority matches: Exact name or StartsWith
             if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
-                results.push({
+                const result: SearchResult = {
                     item,
                     score: this.applyItemTypeBoost(1.0, item.type),
                     scope: this.getScopeForItemType(item.type),
-                });
+                };
+                results.push(result);
+                if (onResult) {
+                    onResult(result);
+                }
             }
 
             if (results.length >= maxResults) {

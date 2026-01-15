@@ -1,13 +1,14 @@
+using Microsoft.VisualStudio.Extensibility;
+using Microsoft.VisualStudio.Extensibility.UI;
+using Microsoft.VisualStudio.ProjectSystem.Query;
+using Microsoft.VisualStudio.RpcContracts.OpenDocument;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using Microsoft.VisualStudio.Extensibility;
-using Microsoft.VisualStudio.Extensibility.UI;
 using System.Runtime.Serialization;
-using System.Threading.Tasks;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Input;
-using Microsoft.VisualStudio.ProjectSystem.Query;
 
 namespace DeepLensVS
 {
@@ -29,7 +30,7 @@ namespace DeepLensVS
         {
             this.extensibility = extensibility;
             Results = new ObservableCollection<SearchResultItemViewModel>();
-            
+
             FilterEverythingCommand = new AsyncCommand(async (_, cancellationToken) => await SetScopeAsync(SearchScope.Everything));
             FilterClassesCommand = new AsyncCommand(async (_, cancellationToken) => await SetScopeAsync(SearchScope.Types));
             FilterSymbolsCommand = new AsyncCommand(async (_, cancellationToken) => await SetScopeAsync(SearchScope.Symbols));
@@ -37,7 +38,7 @@ namespace DeepLensVS
             FilterCommandsCommand = new AsyncCommand(async (_, cancellationToken) => await SetScopeAsync(SearchScope.Commands));
             FilterPropertiesCommand = new AsyncCommand(async (_, cancellationToken) => await SetScopeAsync(SearchScope.Properties));
             FilterEndpointsCommand = new AsyncCommand(async (_, cancellationToken) => await SetScopeAsync(SearchScope.Endpoints));
-            
+
             DetectTheme();
 
             LspManager.Client.OnIndexingProgress = (progress) =>
@@ -46,9 +47,10 @@ namespace DeepLensVS
             };
 
             // Start LSP with solution path
-            _ = Task.Run(async () => {
+            _ = Task.Run(async () =>
+            {
                 string? solutionUri = null;
-                try 
+                try
                 {
                     Logger.Log("Starting solution query...");
                     var query = await extensibility.Workspaces().QuerySolutionAsync(
@@ -74,10 +76,10 @@ namespace DeepLensVS
                 {
                     Logger.LogError("Error querying solution", ex);
                 }
-                
+
                 Logger.Log($"Calling EnsureStartedAsync with uri: {solutionUri ?? "null"}");
                 await LspManager.EnsureStartedAsync(solutionUri);
-                
+
                 // Show initial results once started
                 await OnSearchTextChangedAsync();
             });
@@ -209,7 +211,7 @@ namespace DeepLensVS
             var token = searchCts.Token;
 
             IsBusy = true;
-            
+
             try
             {
                 if (!LspManager.Client.IsRunning)
@@ -230,7 +232,7 @@ namespace DeepLensVS
                 }
 
                 // Tiered Search (snappy!)
-                
+
                 // Tier 1: Instant Burst
                 await PerformSearchAsync("deeplens/burstSearch", token, 5);
                 if (token.IsCancellationRequested) return;
@@ -272,8 +274,8 @@ namespace DeepLensVS
 
                 Logger.Log($"Sending Search Request: {method}, Query: '{options.Query}'");
                 var lspResults = await LspManager.Client.SendRequestAsync<LspSearchResult[]>(method, options);
-                
-                if (token.IsCancellationRequested) 
+
+                if (token.IsCancellationRequested)
                 {
                     Logger.Log("Search cancelled.");
                     return;
@@ -284,7 +286,7 @@ namespace DeepLensVS
 
                 if (lspResults != null)
                 {
-                     Logger.Log($"Received {lspResults.Length} results.");
+                    Logger.Log($"Received {lspResults.Length} results.");
                     foreach (var res in lspResults)
                     {
                         AddResult(res.Item);
@@ -299,7 +301,7 @@ namespace DeepLensVS
             }
             catch (Exception ex)
             {
-                 Logger.LogError($"Search failed: {method}", ex);
+                Logger.LogError($"Search failed: {method}", ex);
             }
         }
 
@@ -370,8 +372,18 @@ namespace DeepLensVS
             Results.Add(vm);
         }
 
-        private async Task NavigateToResultAsync(SearchResultItemViewModel item, CancellationToken cancellationToken)
+        private async Task NavigateToResultAsync(SearchResultItemViewModel? item, CancellationToken cancellationToken)
         {
+            if (item == null) return;
+
+            // Handle Slash Command Selection
+            if (item.Description == "slash-command" && Enum.TryParse<SearchScope>(item.ItemId, out var scope))
+            {
+                SearchText = ""; // Clear the command text
+                await SetScopeAsync(scope);
+                return;
+            }
+
             if (string.IsNullOrEmpty(item.FilePath)) return;
 
             try
@@ -379,7 +391,8 @@ namespace DeepLensVS
                 // Record activity
                 if (LspManager.Client.IsRunning && !string.IsNullOrEmpty(item.ItemId))
                 {
-                    _ = LspManager.Client.SendNotificationAsync("deeplens/recordActivity", new { itemId = item.ItemId });
+                    _ = LspManager.Client.SendNotificationAsync("deeplens/recordActivity",
+                        new { itemId = item.ItemId });
                 }
 
                 if (item.Description == "command")
@@ -388,13 +401,24 @@ namespace DeepLensVS
                 }
 
                 var uri = new System.Uri(item.FilePath);
-                var document = await extensibility.Documents().OpenTextDocumentAsync(uri, cancellationToken);
-                
+
+                // If we have line information, use OpenDocumentOptions with Selection to navigate
                 if (item.Line.HasValue)
                 {
-                    // In VisualStudio.Extensibility, navigating to a specific line/column might need more work
-                    // than just opening the document.
-                    // For now, we open it.
+                    // Line and Column from LSP are typically 0-based
+                    int line = item.Line.Value;
+                    int column = item.Column ?? 0;
+
+                    // Create a range at the target position (cursor will be placed there)
+                    var range = new Microsoft.VisualStudio.RpcContracts.Utilities.Range(line, column, line, column);
+                    var options = new OpenDocumentOptions(selection: range);
+
+                    await extensibility.Documents().OpenTextDocumentAsync(uri, options, cancellationToken);
+                }
+                else
+                {
+                    // No line info, just open the file at the beginning
+                    await extensibility.Documents().OpenTextDocumentAsync(uri, cancellationToken);
                 }
             }
             catch (System.Exception ex)
@@ -402,6 +426,7 @@ namespace DeepLensVS
                 Title = $"Error opening file: {ex.Message}";
             }
         }
+
 
         public void Dispose()
         {

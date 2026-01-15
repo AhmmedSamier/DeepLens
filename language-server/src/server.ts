@@ -7,6 +7,7 @@ import {
     TextDocumentSyncKind,
     InitializeResult,
     RequestType,
+    RequestType0,
 } from 'vscode-languageserver/node';
 
 import * as path from 'path';
@@ -26,8 +27,8 @@ export const ResolveItemsRequest = new RequestType<{ itemIds: string[] }, Search
 export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchResult[], void>('deeplens/getRecentItems');
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
-export const ClearCacheRequest = new RequestType<void, void, void>('deeplens/clearCache');
-export const IndexStatsRequest = new RequestType<void, IndexStats, void>('deeplens/indexStats');
+export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
+export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
 
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
@@ -97,6 +98,10 @@ connection.onInitialize(async (params: InitializeParams) => {
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();
     searchEngine.setConfig(config);
+    searchEngine.setLogger({
+        log: (msg) => connection.console.log(msg),
+        error: (msg) => connection.console.error(msg)
+    });
 
     // Wire up search engine to indexer
     workspaceIndexer.onDidChangeItems((items) => searchEngine.setItems(items));
@@ -204,7 +209,9 @@ connection.onWorkspaceSymbol(async (params) => {
 // Custom handlers
 connection.onRequest(BurstSearchRequest, (options) => {
     if (!isInitialized) return [];
-    return searchEngine.burstSearch(options);
+    return searchEngine.burstSearch(options, (result) => {
+        connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+    });
 });
 
 connection.onRequest(ResolveItemsRequest, (params) => {
@@ -222,7 +229,9 @@ connection.onRequest(GetRecentItemsRequest, (params) => {
 export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
 connection.onRequest(DeepLensSearchRequest, async (options) => {
     if (!isInitialized) return [];
-    return await searchEngine.search(options);
+    return await searchEngine.search(options, (result) => {
+        connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+    });
 });
 
 connection.onRequest(RecordActivityRequest, (params) => {
