@@ -259,6 +259,33 @@ export class SearchProvider {
             }
             const results = await this.performSearch(quickPick, text);
             this.updateTitle(quickPick, results.length);
+        } else {
+            // Show recent history if no initial query
+            await this.showRecentHistory(quickPick);
+        }
+    }
+
+    /**
+     * Show recent history items
+     */
+    private async showRecentHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
+        quickPick.busy = true;
+        try {
+            const results = await this.searchEngine.getRecentItems(20);
+
+            if (!results || results.length === 0) {
+                quickPick.items = [];
+                this.updateTitle(quickPick, 0);
+                return;
+            }
+
+            // Map results to QuickPick items
+            quickPick.items = results.map((r) => this.resultToQuickPickItem(r));
+
+            // Update title
+            quickPick.title = `DeepLens - Recent History`;
+        } finally {
+            quickPick.busy = false;
         }
     }
 
@@ -349,10 +376,8 @@ export class SearchProvider {
 
         const trimmedQuery = text.trim();
         if (!trimmedQuery) {
-            quickPick.items = [];
+            await this.showRecentHistory(quickPick);
             quickPick.busy = false;
-            // Ensure title is updated even if empty
-            this.updateTitle(quickPick, 0);
             return;
         }
 
@@ -616,8 +641,11 @@ export class SearchProvider {
         const { item } = result;
 
         // Record activity
-        if (this.activityTracker && this.config.isActivityTrackingEnabled()) {
-            this.activityTracker.recordAccess(item.id);
+        if (this.config.isActivityTrackingEnabled()) {
+            this.searchEngine.recordActivity(item.id);
+            if (this.activityTracker) {
+                this.activityTracker.recordAccess(item.id);
+            }
         }
 
         // Handle command execution

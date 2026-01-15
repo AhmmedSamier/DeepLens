@@ -115,6 +115,16 @@ export class DeepLensLspClient implements ISearchProvider {
         return await this.client.sendRequest<SearchResult[]>('deeplens/burstSearch', options);
     }
 
+    async resolveItems(itemIds: string[]): Promise<SearchResult[]> {
+        if (!this.client) return [];
+        return await this.client.sendRequest<SearchResult[]>('deeplens/resolveItems', { itemIds });
+    }
+
+    async getRecentItems(count: number): Promise<SearchResult[]> {
+        if (!this.client) return [];
+        return await this.client.sendRequest<SearchResult[]>('deeplens/getRecentItems', { count });
+    }
+
     async recordActivity(itemId: string): Promise<void> {
         if (!this.client) return;
         await this.client.sendRequest('deeplens/recordActivity', { itemId });

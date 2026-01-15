@@ -18,6 +18,7 @@ export class SearchEngine implements ISearchProvider {
     private items: SearchableItem[] = [];
     private preparedItems: PreparedItem[] = [];
     private scopedItems: Map<SearchScope, PreparedItem[]> = new Map();
+    private itemsMap: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
 
@@ -26,6 +27,10 @@ export class SearchEngine implements ISearchProvider {
      */
     setItems(items: SearchableItem[]): void {
         this.items = items;
+        this.itemsMap.clear();
+        for (const item of items) {
+            this.itemsMap.set(item.id, item);
+        }
         this.rebuildHotArrays();
     }
 
@@ -34,6 +39,9 @@ export class SearchEngine implements ISearchProvider {
      */
     addItems(items: SearchableItem[]): void {
         this.items.push(...items);
+        for (const item of items) {
+            this.itemsMap.set(item.id, item);
+        }
         this.rebuildHotArrays();
     }
 
@@ -41,7 +49,15 @@ export class SearchEngine implements ISearchProvider {
      * Remove items from a specific file and update hot-arrays
      */
     removeItemsByFile(filePath: string): void {
-        this.items = this.items.filter((item) => item.filePath !== filePath);
+        const newItems: SearchableItem[] = [];
+        for (const item of this.items) {
+            if (item.filePath !== filePath) {
+                newItems.push(item);
+            } else {
+                this.itemsMap.delete(item.id);
+            }
+        }
+        this.items = newItems;
         this.rebuildHotArrays();
     }
 
@@ -88,6 +104,7 @@ export class SearchEngine implements ISearchProvider {
      */
     clear(): void {
         this.items = [];
+        this.itemsMap.clear();
         this.scopedItems.clear();
     }
 
@@ -381,6 +398,24 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
+     * Resolve item IDs to SearchResults
+     */
+    resolveItems(itemIds: string[]): SearchResult[] {
+        const results: SearchResult[] = [];
+        for (const id of itemIds) {
+            const item = this.itemsMap.get(id);
+            if (item) {
+                results.push({
+                    item,
+                    score: 1.0, // History items get high score
+                    scope: this.getScopeForItemType(item.type),
+                });
+            }
+        }
+        return results;
+    }
+
+    /**
      * Perform an ultra-fast burst search (prefix/exact match) for immediate UI feedback
      */
     burstSearch(options: SearchOptions): SearchResult[] {
@@ -490,5 +525,19 @@ export class SearchEngine implements ISearchProvider {
                 }
             }
         }
+    }
+
+    /**
+     * Get recent items (placeholder for server composition)
+     */
+    getRecentItems(count: number): SearchResult[] {
+        return [];
+    }
+
+    /**
+     * Record activity (placeholder for server composition)
+     */
+    recordActivity(itemId: string): void {
+        // No-op
     }
 }
