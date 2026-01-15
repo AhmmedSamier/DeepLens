@@ -56,6 +56,74 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(rebuildCommand);
     context.subscriptions.push(clearCacheCommand);
 
+    // Status Bar Item
+    const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusItem.text = '$(database) DeepLens';
+    statusItem.tooltip = 'DeepLens Index Status';
+    statusItem.command = 'deeplens.showIndexStats';
+    statusItem.show();
+    context.subscriptions.push(statusItem);
+
+    // Register show index stats command
+    const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
+        const stats = await lspClient.getIndexStats();
+        if (!stats) {
+            vscode.window.showErrorMessage('DeepLens: Could not retrieve index statistics.');
+            return;
+        }
+
+        const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
+
+        const items: vscode.QuickPickItem[] = [
+            {
+                label: `$(database) Index Status`,
+                detail: `${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
+                alwaysShow: true
+            },
+            {
+                label: '$(refresh) Rebuild Index',
+                description: 'Force a full re-index of the workspace',
+                picked: false
+            },
+            {
+                label: '$(trash) Clear Cache',
+                description: 'Clear the persistent index cache',
+                picked: false
+            },
+            {
+                label: '$(settings-gear) Configure Settings',
+                description: 'Open DeepLens extension settings',
+                picked: false
+            }
+        ];
+
+        const selection = await vscode.window.showQuickPick(items, {
+            placeHolder: 'DeepLens Index Statistics & Actions'
+        });
+
+        if (selection) {
+            if (selection.label === '$(refresh) Rebuild Index') {
+                vscode.commands.executeCommand('deeplens.rebuildIndex');
+            } else if (selection.label === '$(trash) Clear Cache') {
+                vscode.commands.executeCommand('deeplens.clearIndexCache');
+            } else if (selection.label === '$(settings-gear) Configure Settings') {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+            }
+        }
+    });
+    context.subscriptions.push(showStatsCommand);
+
+    // Listen to progress to update status bar
+    lspClient.onProgress.event(e => {
+        if (e.state === 'start') {
+            statusItem.text = '$(sync~spin) Indexing...';
+            statusItem.tooltip = 'DeepLens is indexing your workspace...';
+        } else if (e.state === 'end') {
+            statusItem.text = '$(database) DeepLens';
+            statusItem.tooltip = 'DeepLens Index Status';
+        }
+    });
+
     // Register reference code lens provider for all supported languages
     const codeLensProvider = new ReferenceCodeLensProvider();
     const supportedLanguages = [
