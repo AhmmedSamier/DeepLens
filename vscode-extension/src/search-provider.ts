@@ -243,6 +243,7 @@ export class SearchProvider {
      * Internal show logic
      */
     private async showInternal(): Promise<void> {
+        const originalEditor = vscode.window.activeTextEditor;
         const quickPick = vscode.window.createQuickPick<SearchResultItem>();
 
         quickPick.title = 'DeepLens';
@@ -256,7 +257,7 @@ export class SearchProvider {
         this.updateTitle(quickPick, 0);
 
         // Register all listeners
-        this.setupEventListeners(quickPick);
+        this.setupEventListeners(quickPick, originalEditor);
 
         quickPick.show();
 
@@ -306,18 +307,20 @@ export class SearchProvider {
     /**
      * Setup all quickPick event listeners
      */
-    private setupEventListeners(quickPick: vscode.QuickPick<SearchResultItem>): void {
+    private setupEventListeners(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        originalEditor: vscode.TextEditor | undefined,
+    ): void {
         let burstTimeout: NodeJS.Timeout | undefined;
         let fuzzyTimeout: NodeJS.Timeout | undefined;
+        let previewTimeout: NodeJS.Timeout | undefined;
+        let accepted = false;
 
         // Cleanup timeouts on hide
         const cleanupTimeouts = () => {
-            if (burstTimeout) {
-                clearTimeout(burstTimeout);
-            }
-            if (fuzzyTimeout) {
-                clearTimeout(fuzzyTimeout);
-            }
+            if (burstTimeout) clearTimeout(burstTimeout);
+            if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
+            if (previewTimeout) clearTimeout(previewTimeout);
         };
 
         quickPick.onDidChangeValue((query) => {
@@ -330,11 +333,35 @@ export class SearchProvider {
             );
         });
 
+        quickPick.onDidChangeActive((items) => {
+            if (previewTimeout) clearTimeout(previewTimeout);
+
+            const item = items[0];
+            if (item) {
+                previewTimeout = setTimeout(() => {
+                    // Preview item (preserve focus in QuickPick)
+                    this.navigateToItem(item.result, vscode.ViewColumn.Active, true);
+                }, 150);
+            }
+        });
+
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
+
+        quickPick.onDidTriggerItemButton((e) => {
+            const result = (e.item as SearchResultItem).result;
+            if (e.button.tooltip === 'Copy Path') {
+                vscode.env.clipboard.writeText(result.item.filePath);
+            } else if (e.button.tooltip === 'Open to the Side') {
+                accepted = true;
+                this.navigateToItem(result, vscode.ViewColumn.Beside);
+                quickPick.hide();
+            }
+        });
 
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
+                accepted = true;
                 this.navigateToItem(selected.result);
                 quickPick.hide();
             }
@@ -342,6 +369,15 @@ export class SearchProvider {
 
         quickPick.onDidHide(() => {
             cleanupTimeouts();
+
+            // Restore original editor if cancelled
+            if (!accepted && originalEditor) {
+                vscode.window.showTextDocument(originalEditor.document, {
+                    viewColumn: originalEditor.viewColumn,
+                    selection: originalEditor.selection
+                });
+            }
+
             quickPick.dispose();
         });
     }
@@ -518,12 +554,85 @@ export class SearchProvider {
     }
 
     /**
+     * Perform native text search using VS Code API (ripgrep)
+     */
+    private async performNativeTextSearch(query: string, maxResults: number): Promise<SearchResult[]> {
+        const results: SearchResult[] = [];
+        const uniqueIds = new Set<string>();
+        const tokenSource = new vscode.CancellationTokenSource();
+
+        try {
+            const options: vscode.FindTextInFilesOptions = {
+                previewOptions: {
+                    matchLines: 1,
+                    charsPerLine: 1000,
+                },
+            };
+
+            await vscode.workspace.findTextInFiles(
+                { pattern: query, isCaseSensitive: false },
+                options,
+                (result) => {
+                    if (results.length >= maxResults) {
+                        tokenSource.cancel();
+                        return;
+                    }
+
+                    if ('ranges' in result) {
+                        const match = result as vscode.TextSearchMatch;
+                        const filePath = match.uri.fsPath;
+                        const range = match.ranges[0]; // Take first match range
+                        const line = range.start.line;
+                        const column = range.start.character;
+                        const previewText = match.preview.text.trim();
+
+                        const id = `text:${filePath}:${line}:${column}`;
+                        if (uniqueIds.has(id)) {
+                            return;
+                        }
+                        uniqueIds.add(id);
+
+                        results.push({
+                            item: {
+                                id,
+                                name: previewText,
+                                type: SearchItemType.TEXT,
+                                filePath,
+                                line,
+                                column,
+                                detail: vscode.workspace.asRelativePath(match.uri),
+                            },
+                            score: 1.0,
+                            scope: SearchScope.TEXT,
+                            highlights: [], // Native highlights are complex to map back to trimmed text
+                        });
+                    }
+                },
+                tokenSource.token,
+            );
+        } catch (error) {
+            // Cancellation throws an error usually, which is fine
+        } finally {
+            tokenSource.dispose();
+        }
+
+        return results;
+    }
+
+    /**
      * Perform search and update quick pick items
      */
     private async performSearch(quickPick: vscode.QuickPick<SearchResultItem>, query: string): Promise<SearchResult[]> {
         if (!query || query.trim().length === 0) {
             quickPick.items = [];
             return [];
+        }
+
+        // Use native text search if scope is TEXT and enabled
+        if (this.currentScope === SearchScope.TEXT && this.config.isTextSearchEnabled()) {
+            const results = await this.performNativeTextSearch(query.trim(), this.config.getMaxResults());
+            quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+            return results;
         }
 
         const options: SearchOptions = {
@@ -587,6 +696,16 @@ export class SearchProvider {
             iconPath: coloredIcon,
             alwaysShow: true, // Crucial: prevent VS Code from re-filtering our fuzzy results
             result,
+            buttons: [
+                {
+                    iconPath: new vscode.ThemeIcon('copy'),
+                    tooltip: 'Copy Path',
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('split-horizontal'),
+                    tooltip: 'Open to the Side',
+                },
+            ],
         };
     }
 
@@ -651,11 +770,15 @@ export class SearchProvider {
     /**
      * Navigate to the selected item or execute command
      */
-    private async navigateToItem(result: SearchResult): Promise<void> {
+    private async navigateToItem(
+        result: SearchResult,
+        viewColumn: vscode.ViewColumn = vscode.ViewColumn.Active,
+        preview: boolean = false,
+    ): Promise<void> {
         const { item } = result;
 
-        // Record activity
-        if (this.config.isActivityTrackingEnabled()) {
+        // Don't record activity for previews
+        if (!preview && this.config.isActivityTrackingEnabled()) {
             this.searchEngine.recordActivity(item.id);
             if (this.activityTracker) {
                 this.activityTracker.recordAccess(item.id);
@@ -664,7 +787,7 @@ export class SearchProvider {
 
         // Handle command execution
         if (item.type === SearchItemType.COMMAND && item.commandId) {
-            if (this.commandIndexer) {
+            if (!preview && this.commandIndexer) {
                 await this.commandIndexer.executeCommand(item.commandId);
             }
             return;
@@ -680,10 +803,14 @@ export class SearchProvider {
 
             await vscode.window.showTextDocument(document, {
                 selection: new vscode.Range(position, position),
-                viewColumn: vscode.ViewColumn.Active,
+                viewColumn: viewColumn,
+                preview: preview, // Use preview mode if requested
+                preserveFocus: preview, // Keep focus on quick pick during preview
             });
         } catch (error) {
-            vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
+            if (!preview) {
+                vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
+            }
             console.error(`Navigation error for ${item.filePath}:`, error);
         }
     }
