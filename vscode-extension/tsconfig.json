@@ -8,7 +8,9 @@
         ],
         "sourceMap": true,
         "forceConsistentCasingInFileNames": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true
     },
     "include": [
         "src/**/*",
