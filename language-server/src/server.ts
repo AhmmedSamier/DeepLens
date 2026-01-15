@@ -93,6 +93,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();
+    searchEngine.setConfig(config);
 
     // Wire up search engine to indexer
     workspaceIndexer.onDidChangeItems((items) => searchEngine.setItems(items));
@@ -174,10 +175,10 @@ function mapItemTypeToSymbolKind(type: SearchItemType): SymbolKind {
 }
 
 // Implement workspace/symbol
-connection.onWorkspaceSymbol((params) => {
+connection.onWorkspaceSymbol(async (params) => {
     if (!isInitialized) return [];
 
-    const results = searchEngine.search({
+    const results = await searchEngine.search({
         query: params.query,
         scope: SearchScope.EVERYTHING, // Default for standard LSP request
         maxResults: 50
@@ -205,9 +206,9 @@ connection.onRequest(BurstSearchRequest, (options) => {
 
 // We can also override the main search with a custom request that supports Scopes
 export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
-connection.onRequest(DeepLensSearchRequest, (options) => {
+connection.onRequest(DeepLensSearchRequest, async (options) => {
     if (!isInitialized) return [];
-    return searchEngine.search(options);
+    return await searchEngine.search(options);
 });
 
 connection.onRequest(RecordActivityRequest, (params) => {
