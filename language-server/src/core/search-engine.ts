@@ -134,18 +134,25 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
+        const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
+
+        // If effectiveQuery is empty after stripping line number, return empty
+        if (effectiveQuery.trim().length === 0) {
+            return [];
+        }
+
         // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
         const filteredItems = this.filterByScope(scope);
-        let results = this.fuzzySearch(filteredItems, query);
+        let results = this.fuzzySearch(filteredItems, effectiveQuery);
 
         // 2. Add CamelHumps results if enabled
         if (enableCamelHumps) {
-            results = this.mergeWithCamelHumps(results, filteredItems, query);
+            results = this.mergeWithCamelHumps(results, filteredItems, effectiveQuery);
         }
 
         // 2.5 Add URL matches if query looks like a path
         if (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) {
-            results = this.mergeWithUrlMatches(results, filteredItems, query);
+            results = this.mergeWithUrlMatches(results, filteredItems, effectiveQuery);
         }
 
         // 3. Sort by score
@@ -155,6 +162,17 @@ export class SearchEngine implements ISearchProvider {
         if (this.getActivityScore) {
             this.applyPersonalizedBoosting(results);
             results.sort((a, b) => b.score - a.score);
+        }
+
+        // Apply target line if found
+        if (targetLine !== undefined) {
+            results = results.map((r) => ({
+                ...r,
+                item: {
+                    ...r.item,
+                    line: targetLine,
+                },
+            }));
         }
 
         return results.slice(0, maxResults);
@@ -397,20 +415,42 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
+        const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
+
+        // If effectiveQuery is empty after stripping line number, return empty
+        if (effectiveQuery.trim().length === 0) {
+            return [];
+        }
+
         const filteredItems = this.filterByScope(scope);
-        const results: SearchResult[] = this.findBurstMatches(filteredItems, query.toLowerCase(), maxResults);
+        let results: SearchResult[] = this.findBurstMatches(
+            filteredItems,
+            effectiveQuery.toLowerCase(),
+            maxResults,
+        );
 
         // Add URL matching to burst search for instant feedback
         if (
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
-            RouteMatcher.isPotentialUrl(query.toLowerCase())
+            RouteMatcher.isPotentialUrl(effectiveQuery.toLowerCase())
         ) {
-            this.addUrlMatches(results, filteredItems, query.toLowerCase(), maxResults);
+            this.addUrlMatches(results, filteredItems, effectiveQuery.toLowerCase(), maxResults);
         }
 
         // Apply activity tracking if available
         if (this.getActivityScore) {
             this.applyPersonalizedBoosting(results);
+        }
+
+        // Apply target line if found
+        if (targetLine !== undefined) {
+            results = results.map((r) => ({
+                ...r,
+                item: {
+                    ...r.item,
+                    line: targetLine,
+                },
+            }));
         }
 
         return results.sort((a, b) => b.score - a.score);
@@ -435,6 +475,21 @@ export class SearchEngine implements ISearchProvider {
             }
         }
         return results;
+    }
+
+    private parseQueryWithLineNumber(query: string): { effectiveQuery: string; targetLine?: number } {
+        // Match pattern "text:123" where 123 is the line number
+        const lineMatch = query.match(/^(.*?):(\d+)$/);
+        if (lineMatch) {
+            const effectiveQuery = lineMatch[1];
+            // VS Code uses 0-indexed line numbers, so subtract 1
+            const line = parseInt(lineMatch[2], 10);
+            return {
+                effectiveQuery,
+                targetLine: line > 0 ? line - 1 : undefined,
+            };
+        }
+        return { effectiveQuery: query };
     }
 
     private addUrlMatches(

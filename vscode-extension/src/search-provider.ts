@@ -14,12 +14,24 @@ export class SearchProvider {
     private activityTracker: ActivityTracker | undefined;
     private commandIndexer: CommandIndexer | undefined;
     private currentScope: SearchScope = SearchScope.EVERYTHING;
+    private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
     private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
     private readonly INACTIVE_PREFIX = '○ ';
     private readonly ICON_CLASS = 'symbol-class';
+
+    // Prefix mapping for search scopes
+    private readonly PREFIX_MAP = new Map<string, SearchScope>([
+        ['/t ', SearchScope.TYPES],
+        ['/s ', SearchScope.SYMBOLS],
+        ['/f ', SearchScope.FILES],
+        ['/c ', SearchScope.COMMANDS],
+        ['/p ', SearchScope.PROPERTIES],
+        ['/e ', SearchScope.ENDPOINTS],
+        ['/a ', SearchScope.EVERYTHING],
+    ]);
 
     constructor(
         searchEngine: ISearchProvider,
@@ -209,6 +221,7 @@ export class SearchProvider {
      */
     async show(scope: SearchScope = SearchScope.EVERYTHING): Promise<void> {
         this.currentScope = scope;
+        this.userSelectedScope = scope; // Reset user selection when opening
         await this.showInternal();
     }
 
@@ -235,7 +248,16 @@ export class SearchProvider {
 
         // Perform initial search if there's a query
         if (quickPick.value) {
-            const results = await this.performSearch(quickPick, quickPick.value);
+            // Manually trigger query change logic to handle parsing
+            // We can't easily access the timeouts here, so we just run performSearch
+            // But better to rely on onDidChangeValue if we set value?
+            // Since we are reading value, we should parse it.
+            const { scope, text } = this.parseQuery(quickPick.value);
+            if (scope) {
+                this.currentScope = scope;
+                this.updateFilterButtons(quickPick);
+            }
+            const results = await this.performSearch(quickPick, text);
             this.updateTitle(quickPick, results.length);
         } else {
             await this.showRecentItems(quickPick);
@@ -319,6 +341,26 @@ export class SearchProvider {
     }
 
     /**
+     * Parse query to extract scope and search term
+     */
+    private parseQuery(query: string): { scope: SearchScope | undefined; text: string } {
+        // Check for prefixes
+        for (const [prefix, scope] of this.PREFIX_MAP.entries()) {
+            if (query.toLowerCase().startsWith(prefix)) {
+                return {
+                    scope,
+                    text: query.slice(prefix.length),
+                };
+            }
+        }
+
+        return {
+            scope: undefined,
+            text: query,
+        };
+    }
+
+    /**
      * Handle search query changes with tiered execution
      */
     private async handleQueryChange(
@@ -327,8 +369,24 @@ export class SearchProvider {
         setBurstTimeout: (t: NodeJS.Timeout) => void,
         setFuzzyTimeout: (t: NodeJS.Timeout) => void,
     ): Promise<void> {
-        const trimmedQuery = query.trim();
+        // Parse scope from query
+        const { scope, text } = this.parseQuery(query);
+
+        // Update current scope: use parsed scope if available, otherwise user selection
+        const previousScope = this.currentScope;
+        this.currentScope = scope || this.userSelectedScope;
+
+        // Update UI if scope changed
+        if (previousScope !== this.currentScope) {
+            this.updateFilterButtons(quickPick);
+            quickPick.placeholder = this.getPlaceholder();
+        }
+
+        const trimmedQuery = text.trim();
         if (!trimmedQuery) {
+            quickPick.items = [];
+            quickPick.busy = false;
+            this.updateTitle(quickPick, 0);
             await this.showRecentItems(quickPick);
             return;
         }
@@ -376,7 +434,7 @@ export class SearchProvider {
         setFuzzyTimeout(
             setTimeout(async () => {
                 try {
-                    const results = await this.performSearch(quickPick, query);
+                    const results = await this.performSearch(quickPick, text); // Use text (parsed) instead of raw query
                     this.updateTitle(quickPick, results.length);
                 } finally {
                     quickPick.busy = false;
@@ -399,14 +457,50 @@ export class SearchProvider {
                 .replace(this.INACTIVE_PREFIX, '');
 
             if (buttonBaseName === baseName) {
+                // Update user selection
+                this.userSelectedScope = scope;
+
+                // Also update current scope (though it might be overridden by query prefix in next step)
                 this.currentScope = scope;
+
+                this.updateQueryPrefixForScope(quickPick, scope);
+
                 quickPick.placeholder = this.getPlaceholder();
                 this.updateFilterButtons(quickPick);
 
                 // Re-run search with new filter
-                const results = await this.performSearch(quickPick, quickPick.value);
+                // We use parseQuery to ensure we handle the (potentially updated) text correctly
+                const { text } = this.parseQuery(quickPick.value);
+                const results = await this.performSearch(quickPick, text);
                 this.updateTitle(quickPick, results.length);
                 break;
+            }
+        }
+    }
+
+    /**
+     * Updates the query prefix in the QuickPick based on the selected scope.
+     * Replaces any existing known prefix with the new one (or empty string).
+     */
+    private updateQueryPrefixForScope(quickPick: vscode.QuickPick<SearchResultItem>, scope: SearchScope): void {
+        let currentQuery = quickPick.value;
+        let newPrefix = '';
+
+        // Find associated prefix for the new scope
+        for (const [prefix, s] of this.PREFIX_MAP.entries()) {
+            if (s === scope) {
+                newPrefix = prefix;
+                break;
+            }
+        }
+
+        // Check if current query has ANY known prefix
+        for (const [prefix] of this.PREFIX_MAP.entries()) {
+            if (currentQuery.toLowerCase().startsWith(prefix)) {
+                // Replace existing prefix with new one (or empty if none)
+                const replacement = scope === SearchScope.EVERYTHING ? '' : newPrefix;
+                quickPick.value = replacement + currentQuery.slice(prefix.length);
+                return;
             }
         }
     }
