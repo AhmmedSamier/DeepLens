@@ -1,0 +1,16 @@
+.vscode/**
+.git/**
+.agent/**
+.gitignore
+.prettierrc
+.eslintcache
+src/**
+node_modules/**
+tsconfig.json
+eslint.config.js
+bun.lock
+TESTING.md
+*.vsix
+esbuild.js
+out/**
+dist/**/*.map

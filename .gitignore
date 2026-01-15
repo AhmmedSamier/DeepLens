@@ -1,6 +1,9 @@
+<<<<<<< HEAD
 .vs
 bin
 obj
+=======
+>>>>>>> origin/master
 node_modules
 out
 *.vsix

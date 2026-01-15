@@ -5,6 +5,7 @@
             "name": "Run Extension",
             "type": "extensionHost",
             "request": "launch",
+<<<<<<< HEAD
             "runtimeExecutable": "${execPath}",
             "args": [
                 "--extensionDevelopmentPath=${workspaceFolder}/vscode-extension"
@@ -13,6 +14,15 @@
                 "${workspaceFolder}/vscode-extension/dist/**/*.js"
             ],
             "preLaunchTask": "npm: compile"
+=======
+            "args": [
+                "--extensionDevelopmentPath=${workspaceFolder}"
+            ],
+            "outFiles": [
+                "${workspaceFolder}/out/**/*.js"
+            ],
+            "preLaunchTask": "${defaultBuildTask}"
+>>>>>>> origin/master
         }
     ]
 }
