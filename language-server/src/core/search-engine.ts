@@ -69,18 +69,34 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
-     * Add items to the search index and update hot-arrays
+     * Add items to the search index and update hot-arrays incrementally
      */
     addItems(items: SearchableItem[]): void {
         this.items.push(...items);
+
         for (const item of items) {
             this.itemsMap.set(item.id, item);
+
+            const prepared: PreparedItem = {
+                item,
+                preparedName: Fuzzysort.prepare(item.name),
+                preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
+                preparedPath: item.relativeFilePath ? Fuzzysort.prepare(item.relativeFilePath) : null,
+                preparedCombined: item.relativeFilePath
+                    ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`)
+                    : null,
+            };
+
+            this.preparedItems.push(prepared);
+
+            const scope = this.getScopeForItemType(item.type);
+            this.scopedItems.get(scope)?.push(prepared);
+            this.scopedItems.get(SearchScope.EVERYTHING)?.push(prepared);
         }
-        this.rebuildHotArrays();
     }
 
     /**
-     * Remove items from a specific file and update hot-arrays
+     * Remove items from a specific file and update hot-arrays incrementally
      */
     removeItemsByFile(filePath: string): void {
         const newItems: SearchableItem[] = [];
@@ -92,7 +108,14 @@ export class SearchEngine implements ISearchProvider {
             }
         }
         this.items = newItems;
-        this.rebuildHotArrays();
+
+        // Efficiently filter prepared items without full rebuild
+        this.preparedItems = this.preparedItems.filter((p) => p.item.filePath !== filePath);
+
+        for (const [scope, items] of this.scopedItems) {
+            const filtered = items.filter((p) => p.item.filePath !== filePath);
+            this.scopedItems.set(scope, filtered);
+        }
     }
 
     /**
@@ -429,26 +452,39 @@ export class SearchEngine implements ISearchProvider {
         preparedCombined: Fuzzysort.Prepared | null,
         minScore: number,
     ): number {
-        const matches = [
-            { prep: preparedName, weight: 1.0 },
-            { prep: preparedFullName, weight: 0.9 },
-            { prep: preparedPath, weight: 0.8 },
-            { prep: preparedCombined, weight: 0.95 },
-        ];
-
         let bestScore = -Infinity;
 
-        for (const match of matches) {
-            if (!match.prep) {
-                continue;
-            }
+        // Name (Weight 1.0)
+        let result = Fuzzysort.single(query, preparedName);
+        if (result && result.score > minScore) {
+            const score = result.score;
+            if (score > bestScore) bestScore = score;
+        }
 
-            const result = Fuzzysort.single(query, match.prep);
+        // Combined (Weight 0.95)
+        if (preparedCombined) {
+            result = Fuzzysort.single(query, preparedCombined);
             if (result && result.score > minScore) {
-                const score = result.score * match.weight;
-                if (score > bestScore) {
-                    bestScore = score;
-                }
+                const score = result.score * 0.95;
+                if (score > bestScore) bestScore = score;
+            }
+        }
+
+        // Full Name (Weight 0.9)
+        if (preparedFullName) {
+            result = Fuzzysort.single(query, preparedFullName);
+            if (result && result.score > minScore) {
+                const score = result.score * 0.9;
+                if (score > bestScore) bestScore = score;
+            }
+        }
+
+        // Path (Weight 0.8)
+        if (preparedPath) {
+            result = Fuzzysort.single(query, preparedPath);
+            if (result && result.score > minScore) {
+                const score = result.score * 0.8;
+                if (score > bestScore) bestScore = score;
             }
         }
 
