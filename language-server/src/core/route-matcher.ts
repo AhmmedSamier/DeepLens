@@ -2,54 +2,79 @@
  * Utility to match concrete URL paths against ASP.NET route templates.
  */
 export class RouteMatcher {
+    private static cache = new Map<string, { regex: RegExp; cleanTemplate: string }>();
+    private static readonly CACHE_LIMIT = 1000;
+
     /**
      * Matches a concrete URL path against an ASP.NET route template.
      * @param template e.g., "api/AdminDashboard/customers/{customerId}"
      * @param concretePath e.g., "api/AdminDashboard/customers/5"
      */
     static isMatch(template: string, concretePath: string): boolean {
-        // 1. Clean up inputs
-        // Remove HTTP methods like "[GET] " or "[POST] "
-        const cleanTemplate = template
-            .replace(/^\[[A-Z]+\]\s+/, '')
-            .trim()
-            .replace(/(^\/|\/$)/g, '');
         const cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
-
-        if (!cleanTemplate || !cleanPath) {
+        if (!cleanPath) {
             return false;
         }
 
-        // 2. Convert template to a Regular Expression
-        // We handle placeholders first, then escape other characters
-        let pattern = cleanTemplate;
+        // Try to get from cache
+        let cached = this.cache.get(template);
 
-        // Replace {*slug} (catch-all) with (.*)
-        pattern = pattern.replace(/\{(\*\w+)\}/g, '___CATCHALL___');
+        if (!cached) {
+            // 1. Clean up inputs
+            // Remove HTTP methods like "[GET] " or "[POST] "
+            const cleanTemplate = template
+                .replace(/^\[[A-Z]+\]\s+/, '')
+                .trim()
+                .replace(/(^\/|\/$)/g, '');
 
-        // Replace {id}, {id:int}, {id?} etc with ([^\/]+)
-        pattern = pattern.replace(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
+            if (!cleanTemplate) {
+                return false;
+            }
 
-        // Escape regex specials
-        pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // 2. Convert template to a Regular Expression
+            // We handle placeholders first, then escape other characters
+            let pattern = cleanTemplate;
 
-        // Restore our markers with regex groups
-        pattern = pattern.replace(/___PARAM___/g, '([^\\/]+)');
-        pattern = pattern.replace(/___CATCHALL___/g, '(.*)');
+            // Replace {*slug} (catch-all) with (.*)
+            pattern = pattern.replace(/\{(\*\w+)\}/g, '___CATCHALL___');
 
-        // Ensure we handle the escaped slashes correctly (they were escaped in the step above)
-        // No additional step needed for slashes as they are already escaped as \/
+            // Replace {id}, {id:int}, {id?} etc with ([^\/]+)
+            pattern = pattern.replace(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
+
+            // Escape regex specials
+            pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // Restore our markers with regex groups
+            pattern = pattern.replace(/___PARAM___/g, '([^\\/]+)');
+            pattern = pattern.replace(/___CATCHALL___/g, '(.*)');
+
+            // Ensure we handle the escaped slashes correctly (they were escaped in the step above)
+            // No additional step needed for slashes as they are already escaped as \/
+
+            try {
+                const exactRegex = new RegExp(`^${pattern}$`, 'i');
+                cached = { regex: exactRegex, cleanTemplate };
+
+                if (this.cache.size >= this.CACHE_LIMIT) {
+                    // Simple LRU-like: remove the first inserted item (Map preserves insertion order)
+                    const firstKey = this.cache.keys().next().value;
+                    if (firstKey) this.cache.delete(firstKey);
+                }
+                this.cache.set(template, cached);
+            } catch {
+                return false;
+            }
+        }
 
         try {
             // 1. Try exact match first (Fastest)
-            const exactRegex = new RegExp(`^${pattern}$`, 'i');
-            if (exactRegex.test(cleanPath)) return true;
+            if (cached.regex.test(cleanPath)) return true;
 
             // 2. Try segment-based suffix matching
             // This handles cases like:
             // Template: "api/AdminDashboard/customers/{id}"
             // Path: "AdminDashboard/customers/5"
-            return this.segmentsMatch(cleanTemplate, cleanPath);
+            return this.segmentsMatch(cached.cleanTemplate, cleanPath);
         } catch {
             return false;
         }
