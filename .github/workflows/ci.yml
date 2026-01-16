@@ -20,13 +20,23 @@ jobs:
         bun-version: latest
 
     - name: Install Dependencies
-      run: bun install --frozen-lockfile
+      run: |
+        cd language-server && bun install --frozen-lockfile
+        cd ../vscode-extension && bun install --frozen-lockfile
 
     - name: Install Linux Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y xvfb libasound2 libgbm1 libgtk-3-0 libnss3
 
-    - name: Run Tests
-      run: xvfb-run -a bun run test
+    - name: Run Language Server Tests & Benchmarks
+      working-directory: language-server
+      run: |
+        bun run test
+        bun run benchmark
+
+    - name: Run VS Code Extension Tests & Benchmarks
       working-directory: vscode-extension
+      run: |
+        xvfb-run -a bun run test
+        xvfb-run -a bun run benchmark
