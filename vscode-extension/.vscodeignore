@@ -14,3 +14,5 @@ TESTING.md
 esbuild.js
 out/**
 dist/**/*.map
+vs-extension
+dist/deeplens-lsp.exe

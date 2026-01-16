@@ -1,6 +1,13 @@
 import * as vscode from 'vscode';
-import { Config } from './config';
-import { SearchableItem, SearchItemType } from './core/types';
+import * as Fuzzysort from 'fuzzysort';
+import { Config } from '../../language-server/src/core/config';
+import { SearchableItem, SearchItemType, SearchResult, SearchScope } from '../../language-server/src/core/types';
+
+interface PreparedCommand {
+    item: SearchableItem;
+    preparedName: Fuzzysort.Prepared;
+    preparedDetail: Fuzzysort.Prepared | null;
+}
 
 /**
  * Indexes VS Code commands for search
@@ -8,6 +15,7 @@ import { SearchableItem, SearchItemType } from './core/types';
 export class CommandIndexer {
     private config: Config;
     private commandItems: SearchableItem[] = [];
+    private preparedItems: PreparedCommand[] = [];
 
     constructor(config: Config) {
         this.config = config;
@@ -18,6 +26,7 @@ export class CommandIndexer {
      */
     async indexCommands(): Promise<void> {
         this.commandItems = [];
+        this.preparedItems = [];
 
         try {
             // Get all available commands
@@ -31,8 +40,7 @@ export class CommandIndexer {
 
                 // Create a readable title from command ID
                 const title = this.commandIdToTitle(commandId);
-
-                this.commandItems.push({
+                const item: SearchableItem = {
                     id: `command:${commandId}`,
                     name: title,
                     type: SearchItemType.COMMAND,
@@ -40,6 +48,13 @@ export class CommandIndexer {
                     detail: commandId,
                     fullName: `${title} (${commandId})`,
                     commandId, // Store the actual command ID for execution
+                };
+
+                this.commandItems.push(item);
+                this.preparedItems.push({
+                    item,
+                    preparedName: Fuzzysort.prepare(item.name),
+                    preparedDetail: Fuzzysort.prepare(commandId),
                 });
             }
 
@@ -47,6 +62,26 @@ export class CommandIndexer {
         } catch (error) {
             console.error('Failed to index commands:', error);
         }
+    }
+
+    /**
+     * Search commands using fuzzy matching
+     */
+    search(query: string, limit: number = 20): SearchResult[] {
+        if (!query) return [];
+
+        const results = Fuzzysort.go(query, this.preparedItems, {
+            keys: ['preparedName', 'preparedDetail'],
+            limit: limit,
+            threshold: -10000,
+        });
+
+        return results.map((r) => ({
+            item: r.obj.item,
+            score: r.score,
+            highlights: undefined,
+            scope: SearchScope.COMMANDS,
+        }));
     }
 
     /**

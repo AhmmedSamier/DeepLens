@@ -91,6 +91,8 @@ export interface SearchOptions {
     excludePatterns?: string[];
     /** File extensions to include */
     fileExtensions?: string[];
+    /** Request ID for streaming correlation */
+    requestId?: number;
 }
 
 /**
@@ -109,4 +111,6 @@ export interface IndexStats {
     lastUpdate: number;
     /** Indexing in progress */
     indexing: boolean;
+    /** Size of the cache on disk in bytes */
+    cacheSize: number;
 }

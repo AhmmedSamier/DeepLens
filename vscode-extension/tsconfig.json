@@ -7,13 +7,15 @@
             "ES2020"
         ],
         "sourceMap": true,
-        "rootDir": "src",
-        "strict": true,
-        "esModuleInterop": true,
-        "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
-        "resolveJsonModule": true
+        "resolveJsonModule": true,
+        "skipLibCheck": true,
+        "esModuleInterop": true
     },
+    "include": [
+        "src/**/*",
+        "../language-server/src/**/*"
+    ],
     "exclude": [
         "node_modules",
         ".vscode-test",

@@ -2,40 +2,25 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "watch",
-            "type": "shell",
-            "command": "bun run watch",
-            "problemMatcher": {
-                "owner": "typescript",
-                "source": "esbuild",
-                "fileLocation": "relative",
-                "pattern": [
-                    {
-                        "regexp": "^✘ \\[ERROR\\] (.*)$",
-                        "message": 1
-                    },
-                    {
-                        "regexp": "^\\s+(.*):(\\d+):(\\d+):$",
-                        "file": 1,
-                        "line": 2,
-                        "column": 3,
-                        "loop": true
-                    }
-                ],
-                "background": {
-                    "activeOnStart": true,
-                    "beginsPattern": "^\\[watch\\] build started",
-                    "endsPattern": "^\\[watch\\] build finished"
-                }
-            },
-            "isBackground": true,
-            "presentation": {
-                "reveal": "never"
-            },
+            "type": "npm",
+            "script": "compile",
+            "path": "vscode-extension",
             "group": {
                 "kind": "build",
                 "isDefault": true
-            }
+            },
+            "problemMatcher": "$esbuild-problem-matcher",
+            "label": "npm: compile",
+            "detail": "Compile VS Code extension"
+        },
+        {
+            "type": "npm",
+            "script": "watch",
+            "path": "vscode-extension",
+            "group": "build",
+            "problemMatcher": "$esbuild-problem-matcher",
+            "label": "npm: watch",
+            "detail": "Watch VS Code extension"
         }
     ]
 }

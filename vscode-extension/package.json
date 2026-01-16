@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "0.0.5",
+    "version": "0.0.6",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
@@ -45,6 +45,16 @@
                 "command": "deeplens.search",
                 "key": "shift shift",
                 "mac": "shift shift"
+            },
+            {
+                "command": "editor.action.revealDeclaration",
+                "key": "f12",
+                "when": "editorTextFocus"
+            },
+            {
+                "command": "editor.action.peekImplementation",
+                "key": "ctrl+f12",
+                "when": "editorTextFocus"
             }
         ],
         "configuration": {
@@ -81,6 +91,13 @@
                     "default": true,
                     "description": "Respect .gitignore files when indexing (recommended)"
                 },
+                "deeplens.searchConcurrency": {
+                    "type": "number",
+                    "default": 60,
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Number of files to scan in parallel during text search. Higher values are faster but use more CPU/IO."
+                },
                 "deeplens.activity.enabled": {
                     "type": "boolean",
                     "default": true,
@@ -111,6 +128,22 @@
                         "php"
                     ],
                     "description": "File extensions to index for search"
+                },
+                "deeplens.codeLens.enabled": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show reference counts above classes and functions (like Rider's Code Vision)"
+                },
+                "deeplens.codeLens.minRefsToShow": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "description": "Minimum number of references to display code lens (0 = show all, including 'no references')"
+                },
+                "deeplens.codeLens.showImplementations": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show implementation counts above classes, interfaces and methods (Ctrl+F12)"
                 }
             }
         }
@@ -120,12 +153,14 @@
         "esbuild-base": "node esbuild.js",
         "esbuild": "bun run esbuild-base -- --sourcemap",
         "esbuild-watch": "bun run esbuild-base -- --sourcemap --watch",
-        "compile": "bun run esbuild",
+        "clean": "bun run scripts/clean.ts",
+        "compile": "bun run clean && bun run esbuild",
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
         "format": "prettier --write \"src/**/*.ts\" --cache",
         "package": "vsce package --allow-missing-repository",
-        "vsix": "bun run compile && bun run package"
+        "vsix": "bun run compile && bun run package",
+        "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3.3.3",
@@ -157,6 +192,9 @@
         "tree-sitter-python": "^0.25.0",
         "tree-sitter-ruby": "^0.23.1",
         "tree-sitter-typescript": "^0.23.2",
+        "vscode-languageclient": "^9.0.1",
+        "vscode-languageserver": "^9.0.1",
+        "vscode-languageserver-textdocument": "^1.0.12",
         "web-tree-sitter": "^0.26.3"
     }
 }

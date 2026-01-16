@@ -78,4 +78,20 @@ export class IndexPersistence {
             }
         }
     }
+
+    /**
+     * Get the size of the cache file in bytes
+     */
+    getCacheSize(): number {
+        const file = this.getCacheFile();
+        if (fs.existsSync(file)) {
+            try {
+                const stats = fs.statSync(file);
+                return stats.size;
+            } catch (error) {
+                console.error('Failed to get cache size:', error);
+            }
+        }
+        return 0;
+    }
 }
