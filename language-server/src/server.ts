@@ -294,7 +294,7 @@ connection.onRequest(ClearCacheRequest, async () => {
     await workspaceIndexer.indexWorkspace(undefined, true);
 });
 
-connection.onRequest(IndexStatsRequest, () => {
+connection.onRequest(IndexStatsRequest, async () => {
     const items = workspaceIndexer.getItems();
     const fileItems = items.filter(i => i.type === SearchItemType.FILE);
     const typeItems = items.filter(i =>
@@ -315,7 +315,7 @@ connection.onRequest(IndexStatsRequest, () => {
         totalSymbols: symbolItems.length,
         lastUpdate: Date.now(),
         indexing: workspaceIndexer.isIndexing(),
-        cacheSize: indexPersistence.getCacheSize()
+        cacheSize: await indexPersistence.getCacheSize()
     };
 });
 
