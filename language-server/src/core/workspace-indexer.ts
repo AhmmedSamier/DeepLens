@@ -421,11 +421,14 @@ export class WorkspaceIndexer {
      */
     private async indexFileSymbols(filePath: string): Promise<void> {
         let currentHash = this.fileHashes.get(filePath);
+        let content: string | undefined;
 
         // If no hash in memory, and this is an incremental update, calculate it
         if (!currentHash && !this.indexing) {
-            currentHash = await this.calculateSingleFileHash(filePath);
-            if (currentHash) {
+            const result = await this.readAndHashFile(filePath);
+            if (result) {
+                currentHash = result.hash;
+                content = result.content;
                 this.fileHashes.set(filePath, currentHash);
             }
         }
@@ -449,7 +452,7 @@ export class WorkspaceIndexer {
             if (!this.indexing) {
                 this.log(`Parsing file: ${relPath} ...`);
             }
-            const symbolsFound = await this.performSymbolExtraction(filePath);
+            const symbolsFound = await this.performSymbolExtraction(filePath, content);
 
             if (symbolsFound.length > 0) {
                 this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
@@ -460,10 +463,12 @@ export class WorkspaceIndexer {
         }
     }
 
-    private async calculateSingleFileHash(filePath: string): Promise<string | undefined> {
+    private async readAndHashFile(filePath: string): Promise<{ hash: string; content: string } | undefined> {
         try {
-            const content = await fs.promises.readFile(filePath);
-            return crypto.createHash('sha256').update(content).digest('hex');
+            const buffer = await fs.promises.readFile(filePath);
+            const content = buffer.toString('utf8');
+            const hash = crypto.createHash('sha256').update(buffer).digest('hex');
+            return { hash, content };
         } catch {
             return undefined;
         }
@@ -487,12 +492,12 @@ export class WorkspaceIndexer {
     /**
      * Core logic to extract symbols from a file
      */
-    private async performSymbolExtraction(filePath: string): Promise<SearchableItem[]> {
+    private async performSymbolExtraction(filePath: string, content?: string): Promise<SearchableItem[]> {
         const relPath = this.env.asRelativePath(filePath);
 
         // 1. Try Tree-sitter first (Turbo Path)
         try {
-            const treeSitterItems = await this.treeSitter.parseFile(filePath);
+            const treeSitterItems = await this.treeSitter.parseFile(filePath, content);
 
             if (treeSitterItems.length > 0) {
                 return treeSitterItems.map((item) => ({ ...item, relativeFilePath: relPath }));

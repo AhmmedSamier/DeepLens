@@ -142,7 +142,7 @@ export class TreeSitterParser {
     /**
      * Parse a file and extract symbols
      */
-    async parseFile(filePath: string): Promise<SearchableItem[]> {
+    async parseFile(filePath: string, content?: string): Promise<SearchableItem[]> {
         if (!this.isInitialized || !this.ParserClass) {
             return [];
         }
@@ -162,8 +162,8 @@ export class TreeSitterParser {
             }
             const parser = new this.ParserClass();
             parser.setLanguage(lang);
-            const content = fs.readFileSync(filePath, 'utf8');
-            const tree = parser.parse(content);
+            const fileContent = content !== undefined ? content : fs.readFileSync(filePath, 'utf8');
+            const tree = parser.parse(fileContent);
             const items: SearchableItem[] = [];
 
             this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
