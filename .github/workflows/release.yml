@@ -23,34 +23,40 @@ jobs:
         id: get_version
         run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
 
-      - name: Update package.json version
+      - name: Update package.json versions
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
           echo "Setting version to $VERSION"
-          bun x npm version $VERSION --no-git-tag-version --allow-same-version
+          cd language-server && bun x npm version $VERSION --no-git-tag-version --allow-same-version
+          cd ../vscode-extension && bun x npm version $VERSION --no-git-tag-version --allow-same-version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+        working-directory: vscode-extension
 
       - name: Build Extension
         run: bun run compile
+        working-directory: vscode-extension
 
       - name: Package Extension
         run: bun run package
+        working-directory: vscode-extension
 
       - name: Publish to VS Code Marketplace
         run: bunx @vscode/vsce publish -p ${{ secrets.VSCE_PAT }}
+        working-directory: vscode-extension
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Publish to Open VSX
         run: bunx ovsx publish -p ${{ secrets.OVSX_PAT }}
+        working-directory: vscode-extension
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: "*.vsix"
+          files: "vscode-extension/*.vsix"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
