@@ -5,7 +5,8 @@
     "main": "src/server.ts",
     "scripts": {
         "build": "bun build src/server.ts --outfile dist/server.js",
-        "benchmark": "bun run scripts/setup-benchmarks.ts && bun run benchmarks/index.ts"
+        "test": "bun run scripts/setup-parsers.ts && bun test",
+        "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts"
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",
