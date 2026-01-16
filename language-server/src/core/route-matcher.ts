@@ -1,23 +1,32 @@
 /**
  * Utility to match concrete URL paths against ASP.NET route templates.
  */
+
+export interface ParsedRoute {
+    cleanTemplate: string;
+    segments: string[];
+    regex: RegExp;
+}
+
+export interface ParsedPath {
+    cleanPath: string;
+    segments: string[];
+}
+
 export class RouteMatcher {
     /**
-     * Matches a concrete URL path against an ASP.NET route template.
-     * @param template e.g., "api/AdminDashboard/customers/{customerId}"
-     * @param concretePath e.g., "api/AdminDashboard/customers/5"
+     * Parses a route template into a reusable structure.
      */
-    static isMatch(template: string, concretePath: string): boolean {
+    static parseRoute(template: string): ParsedRoute | null {
         // 1. Clean up inputs
         // Remove HTTP methods like "[GET] " or "[POST] "
         const cleanTemplate = template
             .replace(/^\[[A-Z]+\]\s+/, '')
             .trim()
             .replace(/(^\/|\/$)/g, '');
-        const cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
 
-        if (!cleanTemplate || !cleanPath) {
-            return false;
+        if (!cleanTemplate) {
+            return null;
         }
 
         // 2. Convert template to a Regular Expression
@@ -37,22 +46,57 @@ export class RouteMatcher {
         pattern = pattern.replace(/___PARAM___/g, '([^\\/]+)');
         pattern = pattern.replace(/___CATCHALL___/g, '(.*)');
 
-        // Ensure we handle the escaped slashes correctly (they were escaped in the step above)
-        // No additional step needed for slashes as they are already escaped as \/
-
         try {
-            // 1. Try exact match first (Fastest)
-            const exactRegex = new RegExp(`^${pattern}$`, 'i');
-            if (exactRegex.test(cleanPath)) return true;
-
-            // 2. Try segment-based suffix matching
-            // This handles cases like:
-            // Template: "api/AdminDashboard/customers/{id}"
-            // Path: "AdminDashboard/customers/5"
-            return this.segmentsMatch(cleanTemplate, cleanPath);
+            const regex = new RegExp(`^${pattern}$`, 'i');
+            return {
+                cleanTemplate,
+                segments: cleanTemplate.split('/'),
+                regex
+            };
         } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Parses a concrete path into a reusable structure.
+     */
+    static parsePath(concretePath: string): ParsedPath | null {
+        const cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
+        if (!cleanPath) {
+            return null;
+        }
+        return {
+            cleanPath,
+            segments: cleanPath.split('/')
+        };
+    }
+
+    /**
+     * Matches a parsed path against a parsed route template.
+     */
+    static matchesParsed(route: ParsedRoute, path: ParsedPath): boolean {
+        // 1. Try exact match first (Fastest)
+        if (route.regex.test(path.cleanPath)) return true;
+
+        // 2. Try segment-based suffix matching
+        return this.segmentsMatchParsed(route.segments, path.segments);
+    }
+
+    /**
+     * Matches a concrete URL path against an ASP.NET route template.
+     * @param template e.g., "api/AdminDashboard/customers/{customerId}"
+     * @param concretePath e.g., "api/AdminDashboard/customers/5"
+     */
+    static isMatch(template: string, concretePath: string): boolean {
+        const route = this.parseRoute(template);
+        const path = this.parsePath(concretePath);
+
+        if (!route || !path) {
             return false;
         }
+
+        return this.matchesParsed(route, path);
     }
 
     /**
@@ -61,7 +105,10 @@ export class RouteMatcher {
     private static segmentsMatch(template: string, path: string): boolean {
         const tSegs = template.split('/');
         const pSegs = path.split('/');
+        return this.segmentsMatchParsed(tSegs, pSegs);
+    }
 
+    private static segmentsMatchParsed(tSegs: string[], pSegs: string[]): boolean {
         if (pSegs.length > tSegs.length) {
             return false;
         }

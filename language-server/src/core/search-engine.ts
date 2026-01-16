@@ -2,7 +2,7 @@ import * as Fuzzysort from 'fuzzysort';
 import * as fs from 'fs';
 import * as path from 'path';
 import { Config } from './config';
-import { RouteMatcher } from './route-matcher';
+import { RouteMatcher, ParsedRoute } from './route-matcher';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 import { ISearchProvider } from './search-interface';
 
@@ -12,6 +12,7 @@ interface PreparedItem {
     preparedFullName: Fuzzysort.Prepared | null;
     preparedPath: Fuzzysort.Prepared | null;
     preparedCombined: Fuzzysort.Prepared | null;
+    preparedRoute?: ParsedRoute | null;
 }
 
 /**
@@ -94,6 +95,7 @@ export class SearchEngine implements ISearchProvider {
             preparedCombined: item.relativeFilePath
                 ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`)
                 : null,
+            preparedRoute: item.type === SearchItemType.ENDPOINT ? RouteMatcher.parseRoute(item.name) : null,
         }));
 
         // Initialize arrays
@@ -330,12 +332,23 @@ export class SearchEngine implements ISearchProvider {
             return results;
         }
 
+        const parsedPath = RouteMatcher.parsePath(query);
+        if (!parsedPath) return results;
+
         const existingIds = new Set(results.map((r) => r.item.id));
         const urlMatches: SearchResult[] = [];
 
-        for (const { item } of items) {
+        for (const { item, preparedRoute } of items) {
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, query)) {
+                if (preparedRoute) {
+                    if (RouteMatcher.matchesParsed(preparedRoute, parsedPath)) {
+                        urlMatches.push({
+                            item,
+                            score: 1.5,
+                            scope: SearchScope.ENDPOINTS,
+                        });
+                    }
+                } else if (RouteMatcher.isMatch(item.name, query)) {
                     urlMatches.push({
                         item,
                         score: 1.5,
@@ -626,15 +639,27 @@ export class SearchEngine implements ISearchProvider {
         queryLower: string,
         maxResults: number,
     ): void {
+        const parsedPath = RouteMatcher.parsePath(queryLower);
+        if (!parsedPath) return;
+
         const existingIds = new Set(results.map((r) => r.item.id));
 
-        for (const { item } of items) {
+        for (const { item, preparedRoute } of items) {
             if (results.length >= maxResults) {
                 break;
             }
 
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, queryLower)) {
+                if (preparedRoute) {
+                    if (RouteMatcher.matchesParsed(preparedRoute, parsedPath)) {
+                        results.push({
+                            item,
+                            score: 2.0,
+                            scope: SearchScope.ENDPOINTS,
+                        });
+                        existingIds.add(item.id);
+                    }
+                } else if (RouteMatcher.isMatch(item.name, queryLower)) {
                     results.push({
                         item,
                         score: 2.0,
