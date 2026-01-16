@@ -162,7 +162,7 @@ export class TreeSitterParser {
             }
             const parser = new this.ParserClass();
             parser.setLanguage(lang);
-            const content = fs.readFileSync(filePath, 'utf8');
+            const content = await fs.promises.readFile(filePath, 'utf8');
             const tree = parser.parse(content);
             const items: SearchableItem[] = [];
 

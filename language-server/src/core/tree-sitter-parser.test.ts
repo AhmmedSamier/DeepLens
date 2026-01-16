@@ -58,7 +58,7 @@ namespace WebAPI.Controllers
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockUri = { fsPath: testFilePath } as any;
-            const items = await parser.parseFile(mockUri);
+            const items = await parser.parseFile(mockUri.fsPath);
 
             const endpoints = items.filter((item) => item.type === SearchItemType.ENDPOINT);
 
@@ -121,7 +121,7 @@ namespace WebAPI.Controllers.AdminDashboard
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockUri = { fsPath: testFilePath } as any;
-            const items = await parser.parseFile(mockUri);
+            const items = await parser.parseFile(mockUri.fsPath);
 
             const endpoints = items.filter((item) => item.type === SearchItemType.ENDPOINT);
 
@@ -161,7 +161,7 @@ public class MultiAttrController
         try {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const mockUri = { fsPath: testFilePath } as any;
-            const items = await parser.parseFile(mockUri);
+            const items = await parser.parseFile(mockUri.fsPath);
 
             const endpoints = items.filter((item) => item.type === SearchItemType.ENDPOINT);
 
