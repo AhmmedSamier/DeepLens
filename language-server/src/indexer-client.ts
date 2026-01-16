@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { glob } from 'glob';
 import { IndexerEnvironment } from './core/indexer-interfaces';
-import { Connection } from 'vscode-languageserver/node';
+import { Connection, FileChangeType } from 'vscode-languageserver/node';
 
 export class LspIndexerEnvironment implements IndexerEnvironment {
     private connection: Connection;
@@ -53,5 +53,36 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
     // without significant extra work. For now, we rely 100% on Tree-sitter.
     executeDocumentSymbolProvider = undefined;
     executeWorkspaceSymbolProvider = undefined;
-    createFileSystemWatcher = undefined;
+
+    createFileSystemWatcher = (pattern: string, onEvent: (path: string, type: 'create' | 'change' | 'delete') => void) => {
+        return this.connection.onDidChangeWatchedFiles((params) => {
+            for (const change of params.changes) {
+                let type: 'create' | 'change' | 'delete';
+                switch (change.type) {
+                    case FileChangeType.Created:
+                        type = 'create';
+                        break;
+                    case FileChangeType.Changed:
+                        type = 'change';
+                        break;
+                    case FileChangeType.Deleted:
+                        type = 'delete';
+                        break;
+                    default:
+                        continue;
+                }
+
+                const uri = change.uri;
+                let filePath = uri;
+                if (uri.startsWith('file:///')) {
+                    filePath = decodeURIComponent(uri.slice(8));
+                } else if (uri.startsWith('file://')) {
+                    filePath = decodeURIComponent(uri.slice(7));
+                }
+                filePath = path.normalize(filePath);
+
+                onEvent(filePath, type);
+            }
+        });
+    }
 }
