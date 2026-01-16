@@ -361,6 +361,8 @@ export class SearchProvider {
         let fuzzyTimeout: NodeJS.Timeout | undefined;
         let previewTimeout: NodeJS.Timeout | undefined;
         let accepted = false;
+        let lastActiveItemId: string | undefined;
+        let userHasNavigated = false;
 
         // Cleanup timeouts on hide
         const cleanupTimeouts = () => {
@@ -371,6 +373,9 @@ export class SearchProvider {
 
         quickPick.onDidChangeValue((query) => {
             cleanupTimeouts();
+            // Reset navigation tracking when query changes
+            userHasNavigated = false;
+            lastActiveItemId = undefined;
             this.handleQueryChange(
                 quickPick,
                 query,
@@ -384,10 +389,22 @@ export class SearchProvider {
 
             const item = items[0];
             if (item) {
-                previewTimeout = setTimeout(() => {
-                    // Preview item (preserve focus in QuickPick)
-                    this.navigateToItem(item.result, vscode.ViewColumn.Active, true);
-                }, 150);
+                const currentItemId = item.result.item.id;
+
+                // Only preview if user has actually navigated (not just auto-focus on first result)
+                // We detect navigation by checking if the active item changed from a previous value
+                if (lastActiveItemId !== undefined && lastActiveItemId !== currentItemId) {
+                    userHasNavigated = true;
+                }
+
+                lastActiveItemId = currentItemId;
+
+                if (userHasNavigated) {
+                    previewTimeout = setTimeout(() => {
+                        // Preview item (preserve focus in QuickPick)
+                        this.navigateToItem(item.result, vscode.ViewColumn.Active, true);
+                    }, 150);
+                }
             }
         });
 

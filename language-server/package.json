@@ -1,10 +1,10 @@
 {
     "name": "deeplens-language-server",
-    "version": "0.0.5",
+    "version": "0.0.6",
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
-        "build": "bun build src/server.ts --compile --outfile ../vscode-extension/dist/deeplens-lsp.exe"
+        "build": "bun build src/server.ts --outfile dist/server.js"
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",

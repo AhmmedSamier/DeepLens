@@ -8,7 +8,9 @@ import {
     InitializeResult,
     RequestType,
     RequestType0,
+    TextDocuments,
 } from 'vscode-languageserver/node';
+import { TextDocument } from 'vscode-languageserver-textdocument';
 
 import * as path from 'path';
 import * as fs from 'fs';
@@ -33,6 +35,9 @@ export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/in
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
 
+// Create a simple text document manager.
+const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
+
 let hasConfigurationCapability = false;
 
 let searchEngine: SearchEngine;
@@ -43,6 +48,7 @@ let config: Config;
 let activityTracker: ActivityTracker;
 
 let isInitialized = false;
+let isShuttingDown = false;
 
 connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
@@ -103,6 +109,21 @@ connection.onInitialize(async (params: InitializeParams) => {
         error: (msg) => connection.console.error(msg)
     });
 
+    // Sync active files for prioritization
+    const updateActiveFiles = () => {
+        const openFiles = documents.all().map(doc => {
+            const uri = doc.uri;
+            if (uri.startsWith('file:///')) return path.normalize(decodeURIComponent(uri.slice(8)));
+            if (uri.startsWith('file://')) return path.normalize(decodeURIComponent(uri.slice(7)));
+            return uri;
+        });
+        searchEngine.setActiveFiles(openFiles);
+    };
+
+    documents.onDidOpen(updateActiveFiles);
+    documents.onDidClose(updateActiveFiles);
+    documents.listen(connection);
+
     // Wire up search engine to indexer
     workspaceIndexer.onDidChangeItems((items) => searchEngine.setItems(items));
     searchEngine.setItems(workspaceIndexer.getItems());
@@ -112,6 +133,13 @@ connection.onInitialize(async (params: InitializeParams) => {
             (itemId) => activityTracker.getActivityScore(itemId),
             config.getActivityWeight()
         );
+    }
+
+    // Load initial configuration if possible
+    if (hasConfigurationCapability) {
+        connection.workspace.getConfiguration('deeplens').then(settings => {
+            config.update(settings);
+        });
     }
 
     const result: InitializeResult = {
@@ -137,6 +165,13 @@ connection.onInitialized(() => {
     });
 });
 
+connection.onDidChangeConfiguration(async () => {
+    if (hasConfigurationCapability) {
+        const settings = await connection.workspace.getConfiguration('deeplens');
+        config.update(settings);
+    }
+});
+
 /**
  * Run indexing with progress reporting
  */
@@ -155,11 +190,15 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
             }
             // Cap at 99% until explicitly done
             const percentage = Math.min(99, Math.round(currentPercentage));
-            connection.sendNotification('deeplens/progress', { token, message, percentage });
+            if (!isShuttingDown) {
+                connection.sendNotification('deeplens/progress', { token, message, percentage });
+            }
         }, force);
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        connection.sendNotification('deeplens/progress', { token, message: `Done (${duration}s)`, percentage: 100 });
+        if (!isShuttingDown) {
+            connection.sendNotification('deeplens/progress', { token, message: `Done (${duration}s)`, percentage: 100 });
+        }
     } catch (error) {
         connection.console.error(`Error reporting progress: ${error}`);
         // Fallback without progress
@@ -208,9 +247,11 @@ connection.onWorkspaceSymbol(async (params) => {
 
 // Custom handlers
 connection.onRequest(BurstSearchRequest, (options) => {
-    if (!isInitialized) return [];
+    if (!isInitialized || isShuttingDown) return [];
     return searchEngine.burstSearch(options, (result) => {
-        connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+        if (!isShuttingDown) {
+            connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+        }
     });
 });
 
@@ -228,9 +269,11 @@ connection.onRequest(GetRecentItemsRequest, (params) => {
 // We can also override the main search with a custom request that supports Scopes
 export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
 connection.onRequest(DeepLensSearchRequest, async (options) => {
-    if (!isInitialized) return [];
+    if (!isInitialized || isShuttingDown) return [];
     return await searchEngine.search(options, (result) => {
-        connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+        if (!isShuttingDown) {
+            connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+        }
     });
 });
 
@@ -241,10 +284,12 @@ connection.onRequest(RecordActivityRequest, (params) => {
 });
 
 connection.onRequest(RebuildIndexRequest, async (params) => {
+    if (isShuttingDown) return;
     await runIndexingWithProgress(params.force);
 });
 
 connection.onRequest(ClearCacheRequest, async () => {
+    if (isShuttingDown) return;
     await indexPersistence.clear();
     await workspaceIndexer.indexWorkspace(undefined, true);
 });
@@ -274,5 +319,38 @@ connection.onRequest(IndexStatsRequest, () => {
     };
 });
 
+// Handle shutdown gracefully
+connection.onShutdown(() => {
+    isShuttingDown = true;
+    connection.console.log('DeepLens Language Server shutting down');
+});
+
+connection.onExit(() => {
+    isShuttingDown = true;
+    process.exit(0);
+});
+
+// Global error handlers to prevent crashes
+process.on('uncaughtException', (error) => {
+    if (!isShuttingDown) {
+        try {
+            connection.console.error(`Uncaught exception: ${error.message}\n${error.stack}`);
+        } catch {
+            // Ignore if we can't log
+        }
+    }
+});
+
+process.on('unhandledRejection', (reason) => {
+    if (!isShuttingDown) {
+        try {
+            connection.console.error(`Unhandled rejection: ${reason}`);
+        } catch {
+            // Ignore if we can't log
+        }
+    }
+});
+
 // Listen on the connection
 connection.listen();
+

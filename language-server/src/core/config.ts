@@ -24,6 +24,7 @@ export class Config {
             maxResults: 50,
             enableTextSearch: true,
             enableCamelHumps: true,
+            searchConcurrency: 60,
             respectGitignore: true,
             'activity.enabled': true,
             'activity.weight': 0.3,
@@ -48,8 +49,22 @@ export class Config {
     /**
      * Update settings from a plain object (used in LSP)
      */
-    update(settings: Record<string, unknown>): void {
-        this.data = { ...this.data, ...settings };
+    update(settings: Record<string, any>): void {
+        const flattened: Record<string, any> = {};
+
+        const flatten = (obj: any, prefix = '') => {
+            for (const key in obj) {
+                const fullKey = prefix ? `${prefix}.${key}` : key;
+                if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
+                    flatten(obj[key], fullKey);
+                } else {
+                    flattened[fullKey] = obj[key];
+                }
+            }
+        };
+
+        flatten(settings);
+        this.data = { ...this.data, ...flattened };
     }
 
     /**
@@ -107,6 +122,13 @@ export class Config {
      */
     shouldRespectGitignore(): boolean {
         return this.get('respectGitignore', true);
+    }
+
+    /**
+     * Get search concurrency
+     */
+    getSearchConcurrency(): number {
+        return this.get('searchConcurrency', 60);
     }
 
     /**

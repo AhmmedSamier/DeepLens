@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind } from 'vscode-languageclient/node';
+import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind, ErrorAction, CloseAction, State } from 'vscode-languageclient/node';
 import * as path from 'path';
 import { SearchOptions, SearchResult, IndexStats } from '../../language-server/src/core/types';
 import { ISearchProvider } from '../../language-server/src/core/search-interface';
@@ -7,6 +7,8 @@ import { ISearchProvider } from '../../language-server/src/core/search-interface
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;
     private context: vscode.ExtensionContext;
+    private isStopping = false;
+    private startPromise: Promise<void> | undefined;
     public onProgress = new vscode.EventEmitter<{ state: 'start' | 'report' | 'end'; message?: string; percentage?: number }>();
     public onStreamResult = new vscode.EventEmitter<{ requestId?: number; result: SearchResult }>();
 
@@ -14,12 +16,29 @@ export class DeepLensLspClient implements ISearchProvider {
         this.context = context;
     }
 
+    /**
+     * Check if the client is ready to send requests
+     */
+    private isReady(): boolean {
+        return !!(this.client && !this.isStopping && this.client.isRunning());
+    }
+
     async start(): Promise<void> {
+        // Track the start operation so stop() can wait for it
+        this.startPromise = this.doStart();
+        try {
+            await this.startPromise;
+        } finally {
+            this.startPromise = undefined;
+        }
+    }
+
+    private async doStart(): Promise<void> {
         const serverPath = this.getServerPath();
 
         const serverOptions: ServerOptions = {
-            run: { module: serverPath, transport: TransportKind.stdio },
-            debug: { module: serverPath, transport: TransportKind.stdio }
+            run: { module: serverPath, transport: TransportKind.ipc },
+            debug: { module: serverPath, transport: TransportKind.ipc }
         };
 
         const clientOptions: LanguageClientOptions = {
@@ -30,6 +49,24 @@ export class DeepLensLspClient implements ISearchProvider {
             initializationOptions: {
                 storagePath: this.context.globalStorageUri.fsPath,
                 extensionPath: this.context.extensionPath
+            },
+            errorHandler: {
+                error: () => {
+                    // Suppress errors during shutdown
+                    if (this.isStopping) {
+                        return { action: ErrorAction.Shutdown };
+                    }
+                    // Default: shutdown on errors (don't keep a broken client running)
+                    return { action: ErrorAction.Shutdown };
+                },
+                closed: () => {
+                    // Don't restart if we're stopping
+                    if (this.isStopping) {
+                        return { action: CloseAction.DoNotRestart };
+                    }
+                    // Default: don't restart
+                    return { action: CloseAction.DoNotRestart };
+                }
             }
         };
 
@@ -39,6 +76,14 @@ export class DeepLensLspClient implements ISearchProvider {
             serverOptions,
             clientOptions
         );
+
+        // Listen for state changes to detect unexpected disconnects
+        this.client.onDidChangeState((event) => {
+            if (event.newState === State.Stopped) {
+                // Server stopped unexpectedly - set flag to prevent further errors
+                this.isStopping = true;
+            }
+        });
 
         await this.client.start();
 
@@ -112,50 +157,136 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     async search(options: SearchOptions): Promise<SearchResult[]> {
-        if (!this.client) return [];
-        return await this.client.sendRequest<SearchResult[]>('deeplens/search', options);
+        if (!this.isReady()) return [];
+        try {
+            return await this.client!.sendRequest<SearchResult[]>('deeplens/search', options);
+        } catch (error) {
+            // Silently handle errors during shutdown
+            if (!this.isStopping) {
+                console.error('DeepLens search error:', error);
+            }
+            return [];
+        }
     }
 
     async burstSearch(options: SearchOptions): Promise<SearchResult[]> {
-        if (!this.client) return [];
-        return await this.client.sendRequest<SearchResult[]>('deeplens/burstSearch', options);
+        if (!this.isReady()) return [];
+        try {
+            return await this.client!.sendRequest<SearchResult[]>('deeplens/burstSearch', options);
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens burstSearch error:', error);
+            }
+            return [];
+        }
     }
 
     async resolveItems(itemIds: string[]): Promise<SearchResult[]> {
-        if (!this.client) return [];
-        return await this.client.sendRequest<SearchResult[]>('deeplens/resolveItems', { itemIds });
+        if (!this.isReady()) return [];
+        try {
+            return await this.client!.sendRequest<SearchResult[]>('deeplens/resolveItems', { itemIds });
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens resolveItems error:', error);
+            }
+            return [];
+        }
     }
 
     async getRecentItems(count: number): Promise<SearchResult[]> {
-        if (!this.client) return [];
-        return await this.client.sendRequest<SearchResult[]>('deeplens/getRecentItems', { count });
+        if (!this.isReady()) return [];
+        try {
+            return await this.client!.sendRequest<SearchResult[]>('deeplens/getRecentItems', { count });
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens getRecentItems error:', error);
+            }
+            return [];
+        }
     }
 
     async recordActivity(itemId: string): Promise<void> {
-        if (!this.client) return;
-        await this.client.sendRequest('deeplens/recordActivity', { itemId });
+        if (!this.isReady()) return;
+        try {
+            await this.client!.sendRequest('deeplens/recordActivity', { itemId });
+        } catch (error) {
+            // Silently ignore activity recording errors - they're not critical
+        }
     }
 
     async rebuildIndex(force: boolean = false): Promise<void> {
-        if (!this.client) return;
-        await this.client.sendRequest('deeplens/rebuildIndex', { force });
+        if (!this.isReady()) return;
+        try {
+            await this.client!.sendRequest('deeplens/rebuildIndex', { force });
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens rebuildIndex error:', error);
+            }
+        }
     }
 
     async clearCache(): Promise<void> {
-        if (!this.client) return;
-        await this.client.sendRequest('deeplens/clearCache');
+        if (!this.isReady()) return;
+        try {
+            await this.client!.sendRequest('deeplens/clearCache');
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens clearCache error:', error);
+            }
+        }
     }
 
     async getIndexStats(): Promise<IndexStats | undefined> {
-        if (!this.client) return undefined;
-        return await this.client.sendRequest<IndexStats>('deeplens/indexStats');
+        if (!this.isReady()) return undefined;
+        try {
+            return await this.client!.sendRequest<IndexStats>('deeplens/indexStats');
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens getIndexStats error:', error);
+            }
+            return undefined;
+        }
     }
 
     async stop(): Promise<void> {
+        // Set flag first to prevent any new requests
+        this.isStopping = true;
+
+        // Wait for any ongoing start operation to complete
+        if (this.startPromise) {
+            try {
+                await this.startPromise;
+            } catch {
+                // Ignore start errors during stop
+            }
+        }
+
         if (this.client) {
-            await this.client.stop();
+            try {
+                // Check actual client state - only stop if running
+                const clientState = this.client.state;
+                if (clientState === State.Running) {
+                    await this.client.stop();
+                } else if (clientState === State.Starting) {
+                    // Client is still starting - just dispose, don't try to stop
+                    this.client.dispose();
+                } else {
+                    // Client is stopped or stopping - just dispose
+                    this.client.dispose();
+                }
+            } catch {
+                // Ignore errors during stop - the client may already be disconnected
+                // Try to dispose as a last resort cleanup
+                try {
+                    this.client.dispose();
+                } catch {
+                    // Ignore dispose errors too
+                }
+            }
+            this.client = undefined;
         }
         this.onProgress.dispose();
         this.onStreamResult.dispose();
     }
 }
+

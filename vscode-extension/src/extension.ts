@@ -227,7 +227,7 @@ interface GitAPI {
 /**
  * Setup git repository listener for branch changes
  */
-function setupGitListener(context: vscode.ExtensionContext): void {
+async function setupGitListener(context: vscode.ExtensionContext): Promise<void> {
     try {
         // Get the git extension
         const gitExtension = vscode.extensions.getExtension('vscode.git');
@@ -238,28 +238,27 @@ function setupGitListener(context: vscode.ExtensionContext): void {
         }
 
         // Activate git extension if not already active
-        gitExtension.exports
-            .getAPI(1)
-            .then((git: unknown) => {
-                const gitApi = git as GitAPI;
-                if (!gitApi || typeof gitApi !== 'object') {
-                    console.log('Failed to get git API object');
-                    return;
-                }
+        if (!gitExtension.isActive) {
+            await gitExtension.activate();
+        }
 
-                console.log('Git API obtained successfully');
+        // Get the API - getAPI returns synchronously after activation
+        const gitApi = gitExtension.exports?.getAPI?.(1) as GitAPI | undefined;
 
-                // Setup listeners for all current and future repositories
-                gitApi.repositories.forEach((repo) => setupRepositoryListener(repo));
-                context.subscriptions.push(gitApi.onDidOpenRepository((repo) => setupRepositoryListener(repo)));
+        if (!gitApi || typeof gitApi !== 'object') {
+            console.log('Failed to get git API object');
+            return;
+        }
 
-                console.log(
-                    `Git listener setup complete. Monitoring ${gitApi.repositories.length} repositories.`,
-                );
-            })
-            .catch((error: unknown) => {
-                console.error('Failed to get git API:', error);
-            });
+        console.log('Git API obtained successfully');
+
+        // Setup listeners for all current and future repositories
+        gitApi.repositories.forEach((repo) => setupRepositoryListener(repo));
+        context.subscriptions.push(gitApi.onDidOpenRepository((repo) => setupRepositoryListener(repo)));
+
+        console.log(
+            `Git listener setup complete. Monitoring ${gitApi.repositories.length} repositories.`,
+        );
     } catch (error) {
         console.error('Error setting up git listener:', error);
     }

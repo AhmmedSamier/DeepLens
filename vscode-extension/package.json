@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "0.0.5",
+    "version": "0.0.6",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
@@ -91,6 +91,13 @@
                     "default": true,
                     "description": "Respect .gitignore files when indexing (recommended)"
                 },
+                "deeplens.searchConcurrency": {
+                    "type": "number",
+                    "default": 60,
+                    "minimum": 1,
+                    "maximum": 200,
+                    "description": "Number of files to scan in parallel during text search. Higher values are faster but use more CPU/IO."
+                },
                 "deeplens.activity.enabled": {
                     "type": "boolean",
                     "default": true,
@@ -147,8 +154,7 @@
         "esbuild": "bun run esbuild-base -- --sourcemap",
         "esbuild-watch": "bun run esbuild-base -- --sourcemap --watch",
         "clean": "bun run scripts/clean.ts",
-        "compile-lsp-exe": "bun build ../language-server/src/server.ts --compile --outfile dist/deeplens-lsp.exe",
-        "compile": "bun run clean && bun run esbuild && bun run compile-lsp-exe",
+        "compile": "bun run clean && bun run esbuild",
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
         "format": "prettier --write \"src/**/*.ts\" --cache",
