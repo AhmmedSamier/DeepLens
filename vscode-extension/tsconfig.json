@@ -10,7 +10,12 @@
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,
         "skipLibCheck": true,
-        "esModuleInterop": true
+        "esModuleInterop": true,
+        "types": [
+            "node",
+            "vscode",
+            "mocha"
+        ]
     },
     "include": [
         "src/**/*",
@@ -19,6 +24,7 @@
     "exclude": [
         "node_modules",
         ".vscode-test",
-        "cognitive-lens"
+        "cognitive-lens",
+        "../language-server/**/*.test.ts"
     ]
 }

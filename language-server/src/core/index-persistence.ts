@@ -28,12 +28,16 @@ export class IndexPersistence {
      */
     async load(): Promise<void> {
         const file = this.getCacheFile();
-        if (fs.existsSync(file)) {
-            try {
-                const data = fs.readFileSync(file, 'utf8');
-                const parsed = JSON.parse(data);
-                this.cache = new Map(Object.entries(parsed));
-            } catch (error) {
+        try {
+            // Check existence first to avoid error if file doesn't exist
+            // Alternatively, just try catch ENOENT, but we use access here.
+            await fs.promises.access(file, fs.constants.F_OK);
+            const data = await fs.promises.readFile(file, 'utf8');
+            const parsed = JSON.parse(data);
+            this.cache = new Map(Object.entries(parsed));
+        } catch (error: any) {
+            // Ignore if file doesn't exist, log other errors
+            if (error.code !== 'ENOENT') {
                 console.error('Failed to load index cache:', error);
             }
         }
@@ -49,7 +53,7 @@ export class IndexPersistence {
             for (const [key, value] of this.cache.entries()) {
                 data[key] = value;
             }
-            fs.writeFileSync(file, JSON.stringify(data));
+            await fs.promises.writeFile(file, JSON.stringify(data));
         } catch (error) {
             console.error('Failed to save index cache:', error);
         }
@@ -70,10 +74,10 @@ export class IndexPersistence {
     async clear(): Promise<void> {
         this.cache.clear();
         const file = this.getCacheFile();
-        if (fs.existsSync(file)) {
-            try {
-                fs.unlinkSync(file);
-            } catch (error) {
+        try {
+            await fs.promises.unlink(file);
+        } catch (error: any) {
+            if (error.code !== 'ENOENT') {
                 console.error('Failed to delete cache file:', error);
             }
         }
@@ -82,16 +86,16 @@ export class IndexPersistence {
     /**
      * Get the size of the cache file in bytes
      */
-    getCacheSize(): number {
+    async getCacheSize(): Promise<number> {
         const file = this.getCacheFile();
-        if (fs.existsSync(file)) {
-            try {
-                const stats = fs.statSync(file);
-                return stats.size;
-            } catch (error) {
+        try {
+            const stats = await fs.promises.stat(file);
+            return stats.size;
+        } catch (error: any) {
+            if (error.code !== 'ENOENT') {
                 console.error('Failed to get cache size:', error);
             }
+            return 0;
         }
-        return 0;
     }
 }

@@ -72,7 +72,7 @@ export class TreeSitterParser {
                 path.resolve(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm'),
             );
 
-            if (!fs.existsSync(wasmPath)) {
+            if (!(await this.fileExists(wasmPath))) {
                 this.log(`ERROR: WASM file MISSING at: ${wasmPath}`);
             }
 
@@ -119,7 +119,7 @@ export class TreeSitterParser {
         try {
             const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
 
-            if (fs.existsSync(wasmPath)) {
+            if (await this.fileExists(wasmPath)) {
                 this.log(`Loading language ${langId} from ${wasmFile}...`);
                 // Ensure this.lib is not null before using it
                 if (!this.lib) {
@@ -162,7 +162,7 @@ export class TreeSitterParser {
             }
             const parser = new this.ParserClass();
             parser.setLanguage(lang);
-            const content = fs.readFileSync(filePath, 'utf8');
+            const content = await fs.promises.readFile(filePath, 'utf8');
             const tree = parser.parse(content);
             const items: SearchableItem[] = [];
 
@@ -602,5 +602,14 @@ export class TreeSitterParser {
             if (child && child.type === 'identifier') return child;
         }
         return null;
+    }
+
+    private async fileExists(path: string): Promise<boolean> {
+        try {
+            await fs.promises.access(path, fs.constants.F_OK);
+            return true;
+        } catch {
+            return false;
+        }
     }
 }

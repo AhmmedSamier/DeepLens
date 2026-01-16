@@ -15,6 +15,20 @@ interface PreparedItem {
     preparedRoute?: ParsedRoute | null;
 }
 
+const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
+    [SearchItemType.CLASS]: 1.5,
+    [SearchItemType.INTERFACE]: 1.35,
+    [SearchItemType.ENUM]: 1.3,
+    [SearchItemType.FUNCTION]: 1.25,
+    [SearchItemType.METHOD]: 1.25,
+    [SearchItemType.PROPERTY]: 1.1,
+    [SearchItemType.VARIABLE]: 1.0,
+    [SearchItemType.FILE]: 0.9,
+    [SearchItemType.TEXT]: 0.7,
+    [SearchItemType.COMMAND]: 1.2,
+    [SearchItemType.ENDPOINT]: 1.4,
+};
+
 /**
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
@@ -490,21 +504,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private applyItemTypeBoost(score: number, type: SearchItemType): number {
-        const boosts: Record<SearchItemType, number> = {
-            [SearchItemType.CLASS]: 1.5,
-            [SearchItemType.INTERFACE]: 1.35,
-            [SearchItemType.ENUM]: 1.3,
-            [SearchItemType.FUNCTION]: 1.25,
-            [SearchItemType.METHOD]: 1.25,
-            [SearchItemType.PROPERTY]: 1.1,
-            [SearchItemType.VARIABLE]: 1.0,
-            [SearchItemType.FILE]: 0.9,
-            [SearchItemType.TEXT]: 0.7,
-            [SearchItemType.COMMAND]: 1.2,
-            [SearchItemType.ENDPOINT]: 1.4,
-        };
-
-        return score * (boosts[type] || 1.0);
+        return score * (ITEM_TYPE_BOOSTS[type] || 1.0);
     }
 
     private getScopeForItemType(type: SearchItemType): SearchScope {

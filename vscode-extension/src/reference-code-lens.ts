@@ -310,4 +310,5 @@ interface CodeLensWithSymbol extends vscode.CodeLens {
     symbolKind?: vscode.SymbolKind;
     parentKind?: vscode.SymbolKind;
     documentUri?: vscode.Uri;
+    type?: CodeLensType;
 }

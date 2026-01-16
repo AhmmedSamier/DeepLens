@@ -14,10 +14,19 @@ export interface ParsedPath {
 }
 
 export class RouteMatcher {
+    private static cache = new Map<string, ParsedRoute>();
+    private static readonly CACHE_LIMIT = 1000;
+
     /**
      * Parses a route template into a reusable structure.
      */
     static parseRoute(template: string): ParsedRoute | null {
+        // Try to get from cache
+        const cached = this.cache.get(template);
+        if (cached) {
+            return cached;
+        }
+
         // 1. Clean up inputs
         // Remove HTTP methods like "[GET] " or "[POST] "
         const cleanTemplate = template
@@ -48,11 +57,20 @@ export class RouteMatcher {
 
         try {
             const regex = new RegExp(`^${pattern}$`, 'i');
-            return {
+            const parsed: ParsedRoute = {
                 cleanTemplate,
                 segments: cleanTemplate.split('/'),
                 regex
             };
+
+            // Update cache
+            if (this.cache.size >= this.CACHE_LIMIT) {
+                const firstKey = this.cache.keys().next().value;
+                if (firstKey) this.cache.delete(firstKey);
+            }
+            this.cache.set(template, parsed);
+
+            return parsed;
         } catch {
             return null;
         }

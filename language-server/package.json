@@ -4,7 +4,8 @@
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
-        "build": "bun build src/server.ts --outfile dist/server.js"
+        "build": "bun build src/server.ts --outfile dist/server.js",
+        "benchmark": "bun run scripts/setup-benchmarks.ts && bun run benchmarks/index.ts"
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",
