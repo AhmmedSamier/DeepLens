@@ -4,8 +4,13 @@ import * as vscode from 'vscode';
 suite('Extension Test Suite', () => {
 	vscode.window.showInformationMessage('Start all tests.');
 
-	test('Extension should be present', () => {
-		assert.ok(vscode.extensions.getExtension('AhmedSamir.deeplens'));
+	test('Extension should be present and active', async () => {
+		const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
+		assert.ok(extension, 'Extension should be present');
+		if (!extension.isActive) {
+			await extension.activate();
+		}
+		assert.ok(extension.isActive, 'Extension should be active');
 	});
 
 	test('Commands should be registered', async () => {
