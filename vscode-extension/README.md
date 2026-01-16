@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/AhmmedSamier/DeepLens/master/icon.png" width="80" alt="DeepLens Logo">
+  <img src="https://raw.githubusercontent.com/AhmmedSamier/DeepLens/master/vscode-extension/icon.png" width="80" alt="DeepLens Logo">
   <h1>DeepLens</h1>
   <p><b>High-performance "Search Everywhere" for VS Code and Visual Studio 2026</b></p>
 </div>
