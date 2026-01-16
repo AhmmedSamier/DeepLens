@@ -30,7 +30,11 @@ jobs:
           cd language-server && bun x npm version $VERSION --no-git-tag-version --allow-same-version
           cd ../vscode-extension && bun x npm version $VERSION --no-git-tag-version --allow-same-version
 
-      - name: Install dependencies
+      - name: Install language-server dependencies
+        run: bun install --frozen-lockfile
+        working-directory: language-server
+
+      - name: Install vscode-extension dependencies
         run: bun install --frozen-lockfile
         working-directory: vscode-extension
 
