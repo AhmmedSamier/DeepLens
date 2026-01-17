@@ -21,7 +21,8 @@ async function main() {
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
-            launchArgs: ['--no-sandbox', '--disable-gpu', '--headless']
+            launchArgs: ['--no-sandbox', '--disable-gpu', '--headless'],
+            extensionTestsEnv: process.env as Record<string, string>
         });
     } catch (err) {
         console.error('Failed to run benchmarks', err);
