@@ -48,3 +48,10 @@ jobs:
         if [ -f benchmark_report.md ]; then
           cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
         fi
+
+    - name: Upload Benchmark Report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: benchmark-report
+        path: benchmark_report.md
