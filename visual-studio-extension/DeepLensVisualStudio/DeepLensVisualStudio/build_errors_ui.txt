@@ -1,0 +1,48 @@
+  Determining projects to restore...
+  All projects are up-to-date for restore.
+  Building DeepLens Language Server...
+  bun install v1.2.18 (0d4089ea)
+  
+  Checked 32 installs across 33 packages (no changes) [24.00ms]
+  $ bun build src/server.ts --outfile dist/server.js --target node
+  Bundled 98 modules in 54ms
+  
+    server.js  0.78 MB  (entry point)
+  
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+          1 file(s) copied.
+CSC : warning CS1668: Invalid search path 'C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.44.35207\ATLMFC\lib\x64' specified in 'LIB environment variable' -- 'directory does not exist' [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+CSC : warning CS1668: Invalid search path 'C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.44.35207\lib\x64' specified in 'LIB environment variable' -- 'directory does not exist' [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(365,84): error CS1503: Argument 1: cannot convert from 'DeepLensVisualStudio.Services.SearchResult' to 'DeepLensVisualStudio.ToolWindows.SearchResultViewModel' [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(376,34): warning CS8601: Possible null reference assignment. [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(506,21): error CS0103: The name 'File' does not exist in the current context [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(253,52): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(407,17): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(420,17): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(434,17): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+
+Build FAILED.
+
+CSC : warning CS1668: Invalid search path 'C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.44.35207\ATLMFC\lib\x64' specified in 'LIB environment variable' -- 'directory does not exist' [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+CSC : warning CS1668: Invalid search path 'C:\Program Files\Microsoft Visual Studio\18\Insiders\VC\Tools\MSVC\14.44.35207\lib\x64' specified in 'LIB environment variable' -- 'directory does not exist' [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(376,34): warning CS8601: Possible null reference assignment. [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(253,52): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(407,17): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(420,17): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(434,17): warning VSTHRD010: Accessing "DeepLensVisualStudio.ToolWindows.SearchControl.NavigateToResult" should only be done on the main thread. Call Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread() first. (https://microsoft.github.io/vs-threading/analyzers/VSTHRD010.html) [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(365,84): error CS1503: Argument 1: cannot convert from 'DeepLensVisualStudio.Services.SearchResult' to 'DeepLensVisualStudio.ToolWindows.SearchResultViewModel' [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\ToolWindows\SearchControl.xaml.cs(506,21): error CS0103: The name 'File' does not exist in the current context [D:\source-code\deeplens\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\DeepLensVisualStudio.csproj]
+    7 Warning(s)
+    2 Error(s)
+
+Time Elapsed 00:00:06.05

@@ -1,0 +1,574 @@
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Globalization;
+using System.IO;
+using System.Runtime.CompilerServices;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Data;
+using System.Windows.Input;
+using DeepLensVisualStudio.Services;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+
+namespace DeepLensVisualStudio.ToolWindows
+{
+    /// <summary>
+    /// Converts a string to Visibility - Visible if not empty, Collapsed otherwise.
+    /// </summary>
+    public class StringToVisibilityConverter : IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            return string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class RelayCommand : ICommand
+    {
+        private readonly Action<object> _execute;
+        public RelayCommand(Action<object> execute) => _execute = execute;
+        public bool CanExecute(object parameter) => true;
+        public void Execute(object parameter) => _execute(parameter);
+
+        public event EventHandler CanExecuteChanged
+        {
+            add { }
+            remove { }
+        }
+    }
+
+    /// <summary>
+    /// View model item for search results display.
+    /// </summary>
+    public class SearchResultViewModel
+    {
+        public string Name { get; set; } = "";
+        public string Kind { get; set; } = "";
+        public string FilePath { get; set; } = "";
+        public string RelativePath { get; set; } = "";
+        public int Line { get; set; }
+        public string ContainerName { get; set; } = "";
+
+        public ICommand? OpenToSideCommand { get; set; }
+        public ICommand? RevealInExplorerCommand { get; set; }
+        public ICommand? CopyPathCommand { get; set; }
+
+        public string KindIcon
+        {
+            get
+            {
+                switch (Kind)
+                {
+                    case "Class": return "\uE734"; // Box/Cube
+                    case "Interface": return "\uE7AD"; // Types
+                    case "Method": return "\uE710"; // Symbol/List
+                    case "Property": return "\uE909"; // Wrench
+                    case "Field": return "\uE710"; // Symbol/List
+                    case "Enum": return "\uE710"; // Symbol/List
+                    case "Struct": return "\uE734"; // Box/Cube
+                    case "File": return "\uE8A5"; // Document
+                    case "Endpoint": return "\uE71B"; // Route
+                    default: return "\uE774"; // Everything/Globe
+                }
+            }
+        }
+
+        public string DirectoryPath
+        {
+            get
+            {
+                var path = !string.IsNullOrEmpty(RelativePath) ? RelativePath : FilePath;
+                try
+                {
+                    return Path.GetDirectoryName(path) ?? "";
+                }
+                catch
+                {
+                    return "";
+                }
+            }
+        }
+
+        public string Detail
+        {
+            get
+            {
+                string displayPath = !string.IsNullOrEmpty(RelativePath) ? RelativePath : FilePath;
+                return Kind == "File"
+                    ? displayPath
+                    : $"{ContainerName} - {displayPath}";
+            }
+        }
+
+        public string LineText => $":{Line}";
+    }
+
+    /// <summary>
+    /// Interaction logic for SearchControl.xaml
+    /// </summary>
+    public partial class SearchControl : UserControl, INotifyPropertyChanged
+    {
+        private readonly LspSearchService _searchService;
+        private CancellationTokenSource? _searchCts;
+        private string _searchQuery = "";
+        private string _statusText = "Ready";
+        private string _solutionRoot = "";
+        private bool _filterAll = true;
+        private bool _filterClasses;
+        private bool _filterMethods;
+        private bool _filterFiles;
+        private bool _filterEndpoints;
+        private bool _filterSymbols;
+        private bool _filterTypes;
+        private bool _filterText;
+
+
+        private SearchResultViewModel? _selectedResult;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        public ObservableCollection<SearchResultViewModel> Results { get; } =
+            new ObservableCollection<SearchResultViewModel>();
+
+        public ICommand OpenCommand { get; }
+
+        public string SearchQuery
+        {
+            get => _searchQuery;
+            set
+            {
+                if (_searchQuery != value)
+                {
+                    _searchQuery = value;
+                    OnPropertyChanged();
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public string StatusText
+        {
+            get => _statusText;
+            set
+            {
+                _statusText = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public string ResultCountText => Results.Count > 0 ? $"{Results.Count} results" : "";
+
+        public bool FilterAll
+        {
+            get => _filterAll;
+            set
+            {
+                if (_filterAll == value) return;
+                _filterAll = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterAll));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterClasses
+        {
+            get => _filterClasses;
+            set
+            {
+                if (_filterClasses == value) return;
+                _filterClasses = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterClasses));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterMethods
+        {
+            get => _filterMethods;
+            set
+            {
+                if (_filterMethods == value) return;
+                _filterMethods = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterMethods));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterFiles
+        {
+            get => _filterFiles;
+            set
+            {
+                if (_filterFiles == value) return;
+                _filterFiles = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterFiles));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterEndpoints
+        {
+            get => _filterEndpoints;
+            set
+            {
+                if (_filterEndpoints == value) return;
+                _filterEndpoints = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterEndpoints));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterSymbols
+        {
+            get => _filterSymbols;
+            set
+            {
+                if (_filterSymbols == value) return;
+                _filterSymbols = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterSymbols));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterTypes
+        {
+            get => _filterTypes;
+            set
+            {
+                if (_filterTypes == value) return;
+                _filterTypes = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterTypes));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public bool FilterText
+        {
+            get => _filterText;
+            set
+            {
+                if (_filterText == value) return;
+                _filterText = value;
+                OnPropertyChanged();
+                if (value)
+                {
+                    ClearOtherFilters(nameof(FilterText));
+                    _ = PerformSearchAsync();
+                }
+            }
+        }
+
+        public SearchResultViewModel? SelectedResult
+        {
+            get => _selectedResult;
+            set
+            {
+                _selectedResult = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public SearchControl()
+        {
+            InitializeComponent();
+            DataContext = this;
+            _searchService = new LspSearchService();
+            OpenCommand = new RelayCommand(p =>
+            {
+                if (p is SearchResultViewModel vm) NavigateToResult(vm);
+            });
+
+            // Focus search box on load
+            Loaded += (s, e) =>
+            {
+                SearchTextBox.Focus();
+                _ = InitializeLspAsync();
+            };
+
+            // Handle keyboard navigation
+            SearchTextBox.PreviewKeyDown += OnSearchBoxKeyDown;
+            ResultsList.MouseDoubleClick += OnResultDoubleClick;
+            ResultsList.KeyDown += OnResultsKeyDown;
+        }
+
+        private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
+        {
+            SearchQuery = "";
+            SearchTextBox.Focus();
+        }
+
+        private async Task InitializeLspAsync()
+        {
+            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            var solution = Package.GetGlobalService(typeof(SVsSolution)) as IVsSolution;
+            if (solution != null && solution.GetSolutionInfo(out string dir, out _, out _) == 0)
+            {
+                _solutionRoot = dir;
+                StatusText = "Initializing DeepLens LSP...";
+                if (await _searchService.InitializeAsync(dir, CancellationToken.None))
+                {
+                    StatusText = "DeepLens Ready";
+                }
+                else
+                {
+                    StatusText = _searchService.LastError ?? "LSP initialization failed";
+                }
+            }
+        }
+
+        private bool _isUpdatingFilters;
+
+        private void ClearOtherFilters(string currentFilter)
+        {
+            if (_isUpdatingFilters) return;
+            _isUpdatingFilters = true;
+
+            try
+            {
+                if (currentFilter != nameof(FilterAll)) FilterAll = false;
+                if (currentFilter != nameof(FilterClasses)) FilterClasses = false;
+                if (currentFilter != nameof(FilterMethods)) FilterMethods = false;
+                if (currentFilter != nameof(FilterFiles)) FilterFiles = false;
+                if (currentFilter != nameof(FilterEndpoints)) FilterEndpoints = false;
+                if (currentFilter != nameof(FilterSymbols)) FilterSymbols = false;
+                if (currentFilter != nameof(FilterTypes)) FilterTypes = false;
+                if (currentFilter != nameof(FilterText)) FilterText = false;
+            }
+            finally
+            {
+                _isUpdatingFilters = false;
+            }
+        }
+
+        private async Task PerformSearchAsync()
+        {
+            // Cancel previous search
+            _searchCts?.Cancel();
+            _searchCts = new CancellationTokenSource();
+            var token = _searchCts.Token;
+
+            var query = SearchQuery?.Trim() ?? "";
+            if (query.Length < 2)
+            {
+                Results.Clear();
+                OnPropertyChanged(nameof(ResultCountText));
+                StatusText = "Type at least 2 characters to search";
+                return;
+            }
+
+            StatusText = "Searching...";
+
+            // Clear results immediately so user knows search is in progress
+            Results.Clear();
+            OnPropertyChanged(nameof(ResultCountText));
+
+            try
+            {
+                // Add debounce
+                await Task.Delay(150, token);
+
+                string scope = "everything";
+                if (FilterClasses) scope = "types"; // classes are types in LSP
+                else if (FilterMethods) scope = "symbols";
+                else if (FilterFiles) scope = "files";
+                else if (FilterEndpoints) scope = "endpoints";
+                else if (FilterSymbols) scope = "symbols";
+                else if (FilterTypes) scope = "types";
+                else if (FilterText) scope = "text";
+
+                var searchResults = await _searchService.SearchAsync(query, scope, token);
+
+                if (token.IsCancellationRequested)
+                    return;
+
+                Results.Clear();
+                foreach (var result in searchResults)
+                {
+                    string relative = result.FilePath;
+                    if (!string.IsNullOrEmpty(_solutionRoot) &&
+                        relative.StartsWith(_solutionRoot, StringComparison.OrdinalIgnoreCase))
+                    {
+                        relative = relative.Substring(_solutionRoot.Length).TrimStart('\\', '/');
+                    }
+
+                    var vm = new SearchResultViewModel
+                    {
+                        Name = result.Name,
+                        Kind = result.Kind,
+                        FilePath = result.FilePath,
+                        RelativePath = relative,
+                        Line = result.Line,
+                        ContainerName = result.ContainerName,
+                    };
+
+                    vm.RevealInExplorerCommand = new RelayCommand(_ => RevealInExplorer(vm.FilePath));
+                    vm.CopyPathCommand = new RelayCommand(_ => Clipboard.SetText(vm.FilePath));
+
+                    Results.Add(vm);
+                }
+
+                OnPropertyChanged(nameof(ResultCountText));
+
+                // Show any errors from the service
+                if (Results.Count == 0 && !string.IsNullOrEmpty(_searchService.LastError))
+                {
+                    StatusText = _searchService.LastError;
+                }
+                else
+                {
+                    var timings = _searchService.LastTimings;
+                    var timingText = $"First: {timings.FirstResultMs}ms | Total: {timings.TotalMs}ms";
+                    StatusText = Results.Count > 0
+                        ? $"{Results.Count} results | {timingText}"
+                        : $"No results found | {timingText}";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Search cancelled, ignore
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error: {ex.Message}";
+            }
+        }
+
+        private void OnSearchBoxKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Down && Results.Count > 0)
+            {
+                ResultsList.Focus();
+                ResultsList.SelectedIndex = 0;
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Enter && Results.Count > 0)
+            {
+                NavigateToResult(Results[0]);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Escape)
+            {
+                // Close window - will be handled by parent
+            }
+        }
+
+        private void OnResultsKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && SelectedResult != null)
+            {
+                NavigateToResult(SelectedResult);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up && ResultsList.SelectedIndex == 0)
+            {
+                SearchTextBox.Focus();
+                e.Handled = true;
+            }
+        }
+
+        private void OnResultDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (SelectedResult != null)
+            {
+                NavigateToResult(SelectedResult);
+            }
+        }
+
+        private void NavigateToResult(SearchResultViewModel result)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            try
+            {
+                if (string.IsNullOrEmpty(result.FilePath))
+                    return;
+
+                // Open document
+                IVsWindowFrame? frame;
+
+                VsShellUtilities.OpenDocument(
+                    ServiceProvider.GlobalProvider,
+                    result.FilePath,
+                    Guid.Empty,
+                    out _,
+                    out _,
+                    out frame);
+
+
+                frame?.Show();
+
+                // Navigate to line
+                if (frame != null)
+                {
+                    var textView = VsShellUtilities.GetTextView(frame);
+                    if (textView != null)
+                    {
+                        textView.SetCaretPos(result.Line - 1, 0);
+                        textView.SetSelection(result.Line - 1, 0, result.Line - 1, 0);
+                        textView.CenterLines(result.Line - 1, 1);
+                    }
+                }
+
+                StatusText = $"Opened {result.Name}";
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error opening file: {ex.Message}";
+            }
+        }
+
+        private void RevealInExplorer(string filePath)
+        {
+            try
+            {
+                if (File.Exists(filePath))
+                {
+                    System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                StatusText = $"Error revealing in explorer: {ex.Message}";
+            }
+        }
+
+        protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+    }
+}
