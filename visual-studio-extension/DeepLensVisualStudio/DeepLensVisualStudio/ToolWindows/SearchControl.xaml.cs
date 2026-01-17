@@ -63,18 +63,28 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get
             {
-                switch (Kind)
+                // Match VSCode extension icons using exact codicon Unicode values
+                // Source: https://github.com/microsoft/vscode-codicons/blob/main/src/template/mapping.json
+                switch (Kind.ToLowerInvariant())
                 {
-                    case "Class": return "\uE734"; // Box/Cube
-                    case "Interface": return "\uE7AD"; // Types
-                    case "Method": return "\uE710"; // Symbol/List
-                    case "Property": return "\uE909"; // Wrench
-                    case "Field": return "\uE710"; // Symbol/List
-                    case "Enum": return "\uE710"; // Symbol/List
-                    case "Struct": return "\uE734"; // Box/Cube
-                    case "File": return "\uE8A5"; // Document
-                    case "Endpoint": return "\uE71B"; // Route
-                    default: return "\uE774"; // Everything/Globe
+                    case "class": return "\uEB5B"; // symbol-class (60251 = 0xEB5B)
+                    case "interface": return "\uEB61"; // symbol-interface (60257 = 0xEB61)
+                    case "enum": return "\uEA95"; // symbol-enum (60053 = 0xEA95) 
+                    case "function": return "\uEA8C"; // symbol-function (60044 = 0xEA8C)
+                    case "method": return "\uEA8C"; // symbol-method (60044 = 0xEA8C)
+                    case "property": return "\uEB65"; // symbol-property (60261 = 0xEB65)
+                    case "field": return "\uEB5F"; // symbol-field (60255 = 0xEB5F)
+                    case "variable": return "\uEA88"; // symbol-variable (60040 = 0xEA88)
+                    case "file": return "\uEA7B"; // file (60027 = 0xEA7B)
+                    case "text": return "\uEB7E"; // whole-word (60286 = 0xEB7E)
+                    case "command": return "\uEB2C"; // run (60204 = 0xEB2C)
+                    case "endpoint": return "\uEB01"; // globe (60161 = 0xEB01)
+                    case "struct": return "\uEA91"; // symbol-structure (60049 = 0xEA91)
+                    case "namespace": return "\uEA8B"; // symbol-namespace (60043 = 0xEA8B)
+                    case "event": return "\uEA86"; // symbol-event (60038 = 0xEA86)
+                    case "delegate": return "\uEA8B"; // symbol-object (60043 = 0xEA8B) - similar to namespace
+                    case "constructor": return "\uEA8C"; // symbol-constructor (60044 = 0xEA8C) - same as method
+                    default: return "\uEB63"; // symbol-misc (60259 = 0xEB63)
                 }
             }
         }

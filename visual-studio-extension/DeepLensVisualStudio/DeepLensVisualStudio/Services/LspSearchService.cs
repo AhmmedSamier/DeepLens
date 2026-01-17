@@ -199,8 +199,18 @@ namespace DeepLensVisualStudio.Services
                 case "interface": return "Interface";
                 case "enum": return "Enum";
                 case "method": return "Method";
-                case "function": return "Method";
+                case "function": return "Function";
                 case "property": return "Property";
+                case "field": return "Field";
+                case "variable": return "Variable";
+                case "text": return "Text";
+                case "endpoint": return "Endpoint";
+                case "command": return "Command";
+                case "struct": return "Struct";
+                case "namespace": return "Namespace";
+                case "event": return "Event";
+                case "delegate": return "Delegate";
+                case "constructor": return "Constructor";
                 default: return "Symbol";
             }
         }

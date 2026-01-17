@@ -28,6 +28,12 @@
     </Content>
   </ItemGroup>
 
+  <ItemGroup>
+    <Resource Include="Fonts\codicon.ttf">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Resource>
+  </ItemGroup>
+
   <Target Name="BuildLSP" BeforeTargets="BeforeBuild">
     <Message Importance="High" Text="Building DeepLens Language Server..." />
     <Exec Command="bun install" WorkingDirectory="..\..\..\language-server" ContinueOnError="true" />
