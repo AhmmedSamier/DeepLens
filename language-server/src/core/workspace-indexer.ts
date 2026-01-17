@@ -180,12 +180,19 @@ export class WorkspaceIndexer {
         for (const folderPath of workspaceFolders) {
             try {
                 // Get both tracked and untracked (but not ignored) files
-                const output = cp
-                    .execSync('git ls-files --cached --others --exclude-standard', {
-                        cwd: folderPath,
-                        maxBuffer: 10 * 1024 * 1024,
-                    })
-                    .toString();
+                const output = await new Promise<string>((resolve, reject) => {
+                    cp.exec(
+                        'git ls-files --cached --others --exclude-standard',
+                        {
+                            cwd: folderPath,
+                            maxBuffer: 10 * 1024 * 1024,
+                        },
+                        (error, stdout) => {
+                            if (error) reject(error);
+                            else resolve(stdout);
+                        }
+                    );
+                });
 
                 const lines = output.split('\n');
 
@@ -545,12 +552,19 @@ export class WorkspaceIndexer {
 
         for (const folderPath of workspaceFolders) {
             try {
-                const output = cp
-                    .execSync('git ls-files --stage', {
-                        cwd: folderPath,
-                        maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large repos
-                    })
-                    .toString();
+                const output = await new Promise<string>((resolve, reject) => {
+                    cp.exec(
+                        'git ls-files --stage',
+                        {
+                            cwd: folderPath,
+                            maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large repos
+                        },
+                        (error, stdout) => {
+                            if (error) reject(error);
+                            else resolve(stdout);
+                        }
+                    );
+                });
 
                 const lines = output.split('\n');
                 for (const line of lines) {

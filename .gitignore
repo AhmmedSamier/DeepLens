@@ -8,3 +8,5 @@ out
 cognitive-lens
 .eslintcache
 dist
+benchmark-results/
+benchmark_report.md

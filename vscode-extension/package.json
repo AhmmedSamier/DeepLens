@@ -160,22 +160,26 @@
         "format": "prettier --write \"src/**/*.ts\" --cache",
         "package": "vsce package --allow-missing-repository",
         "vsix": "bun run compile && bun run package",
-        "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js"
+        "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
+        "benchmark": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runBenchmark.js"
     },
     "devDependencies": {
         "@eslint/eslintrc": "^3.3.3",
         "@eslint/js": "^9.39.2",
         "@types/bun": "^1.3.5",
+        "@types/mocha": "^10.0.10",
         "@types/node": "^25.0.3",
         "@types/vscode": "^1.85.0",
         "@typescript-eslint/eslint-plugin": "^8.52.0",
         "@typescript-eslint/parser": "^8.52.0",
+        "@vscode/test-electron": "^2.5.2",
         "@vscode/vsce": "^3.7.1",
         "esbuild": "^0.27.2",
         "eslint": "^9.39.2",
         "eslint-plugin-sonarjs": "3.0.5",
         "glob": "^13.0.0",
         "globals": "^17.0.0",
+        "mocha": "^11.7.5",
         "prettier": "^3.7.4",
         "prettier-plugin-organize-imports": "^4.3.0",
         "typescript": "^5.9.3"
