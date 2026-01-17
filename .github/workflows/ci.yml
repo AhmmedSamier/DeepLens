@@ -29,14 +29,22 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y xvfb libasound2t64 libgbm1 libgtk-3-0t64 libnss3
 
-    - name: Run Language Server Tests & Benchmarks
+    - name: Run Language Server Tests
       working-directory: language-server
-      run: |
-        bun run test
-        bun run benchmark
+      run: bun run test
 
-    - name: Run VS Code Extension Tests & Benchmarks
+    - name: Run VS Code Extension Tests
       working-directory: vscode-extension
+      run: xvfb-run -a bun run test
+
+    - name: Run Benchmarks
       run: |
-        xvfb-run -a bun run test
-        xvfb-run -a bun run benchmark
+        chmod +x run_benchmarks.sh
+        ./run_benchmarks.sh
+
+    - name: Publish Benchmark Report
+      if: always()
+      run: |
+        if [ -f benchmark_report.md ]; then
+          cat benchmark_report.md >> $GITHUB_STEP_SUMMARY
+        fi
