@@ -1,0 +1,61 @@
+name: Visual Studio Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v1.1
+
+    - name: Restore NuGet packages
+      run: nuget restore visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj -SolutionDirectory visual-studio-extension/DeepLensVisualStudio
+
+    - name: Update VSIX Version
+      shell: pwsh
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        $manifestPath = "visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest"
+        [xml]$manifest = Get-Content $manifestPath
+        $manifest.PackageManifest.Metadata.Identity.Version = $version
+        $manifest.Save($manifestPath)
+        Write-Host "Updated VSIX version to $version"
+
+    - name: Build Extension
+      run: msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj /p:Configuration=Release /p:DeployExtension=false
+
+    # Publish to Visual Studio Marketplace
+    # Note: You must add VSCE_PAT to your repo secrets
+    - name: Publish to Marketplace
+      uses: heaths/vs-marketplace-action@v1
+      with:
+        # The path to your VSIX file
+        vsix: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+        # The manifest file (optional, but good for validation)
+        manifest: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest
+        # Your publisher ID and extension ID should match the manifest
+        # Personal Access Token from Marketplace
+        token: ${{ secrets.VSCE_PAT }}
+        # If true, just verifies the VSIX without uploading
+        # set to false or remove for actual publishing
+        dry-run: false
+
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -39,6 +39,7 @@ namespace DeepLensVisualStudio.Services
 
         public string? LastError => _lastError;
         public SearchTimings LastTimings => _lastTimings;
+        public string? ActiveRuntime { get; private set; }
 
         public async Task<bool> InitializeAsync(string solutionPath, CancellationToken ct)
         {
@@ -57,11 +58,36 @@ namespace DeepLensVisualStudio.Services
 
                 try
                 {
+                    string runtime = "bun";
+                    bool startSucceeded = false;
+
+                    try
+                    {
+                        var bunCheck = new Process
+                        {
+                            StartInfo = new ProcessStartInfo
+                            {
+                                FileName = "bun",
+                                Arguments = "--version",
+                                UseShellExecute = false,
+                                RedirectStandardOutput = true,
+                                CreateNoWindow = true
+                            }
+                        };
+                        bunCheck.Start();
+                        bunCheck.WaitForExit();
+                        startSucceeded = true;
+                    }
+                    catch
+                    {
+                        runtime = "node";
+                    }
+
                     _nodeProcess = new Process
                     {
                         StartInfo = new ProcessStartInfo
                         {
-                            FileName = "node",
+                            FileName = runtime,
                             Arguments = $"\"{serverPath}\" --stdio",
                             UseShellExecute = false,
                             RedirectStandardInput = true,
@@ -82,10 +108,13 @@ namespace DeepLensVisualStudio.Services
 
                     _nodeProcess.Start();
                     _nodeProcess.BeginErrorReadLine();
+                    ActiveRuntime = runtime;
+                    Debug.WriteLine($"DeepLens: Started LSP server using {runtime}");
                 }
                 catch (System.ComponentModel.Win32Exception)
                 {
-                    _lastError = "LSP Error: 'node' not found in PATH. Please install Node.js.";
+                    _lastError =
+                        "LSP Error: Neither 'bun' nor 'node' found in PATH. Please install Bun (preferred) or Node.js.";
                     return false;
                 }
 

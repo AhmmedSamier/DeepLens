@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Runtime.CompilerServices;
@@ -331,7 +332,7 @@ namespace DeepLensVisualStudio.ToolWindows
 
             // Handle keyboard navigation
             SearchTextBox.PreviewKeyDown += OnSearchBoxKeyDown;
-            ResultsList.MouseDoubleClick += OnResultDoubleClick;
+            ResultsList.PreviewMouseLeftButtonUp += OnResultSingleClick;
             ResultsList.KeyDown += OnResultsKeyDown;
         }
 
@@ -351,12 +352,34 @@ namespace DeepLensVisualStudio.ToolWindows
                 StatusText = "Initializing DeepLens LSP...";
                 if (await _searchService.InitializeAsync(dir, CancellationToken.None))
                 {
-                    StatusText = "DeepLens Ready";
+                    string runtimeInfo = !string.IsNullOrEmpty(_searchService.ActiveRuntime)
+                        ? $" ({char.ToUpper(_searchService.ActiveRuntime[0])}{_searchService.ActiveRuntime.Substring(1)})"
+                        : "";
+                    StatusText = $"DeepLens Ready{runtimeInfo}";
+                    ShowVsStatusBarMessage(StatusText);
                 }
                 else
                 {
                     StatusText = _searchService.LastError ?? "LSP initialization failed";
+                    ShowVsStatusBarMessage(StatusText);
                 }
+            }
+        }
+
+        private void ShowVsStatusBarMessage(string message)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                var statusBar = Package.GetGlobalService(typeof(SVsStatusbar)) as IVsStatusbar;
+                if (statusBar != null)
+                {
+                    statusBar.SetText(message);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Failed to update VS status bar: {ex.Message}");
             }
         }
 
@@ -510,8 +533,12 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
-        private void OnResultDoubleClick(object sender, MouseButtonEventArgs e)
+        private void OnResultSingleClick(object sender, MouseButtonEventArgs e)
         {
+            // Don't navigate if clicking on action buttons
+            if (e.OriginalSource is System.Windows.Controls.Button)
+                return;
+
             if (SelectedResult != null)
             {
                 NavigateToResult(SelectedResult);

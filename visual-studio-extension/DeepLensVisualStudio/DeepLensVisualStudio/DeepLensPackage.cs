@@ -1,18 +1,27 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Windows;
 using DeepLensVisualStudio.ToolWindows;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.VisualStudio.Extensibility;
+using Microsoft.VisualStudio;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
+using Task = System.Threading.Tasks.Task;
 
 namespace DeepLensVisualStudio
 {
     /// <summary>
-    /// Extension entrypoint for the VisualStudio.Extensibility extension.
+    /// AsyncPackage that initializes the double-shift keyboard hook when Visual Studio starts.
+    /// This ensures the shortcut works immediately without needing to invoke any command first.
     /// </summary>
-    [VisualStudioContribution]
-    internal class ExtensionEntrypoint : Extension
+    [PackageRegistration(UseManagedResourcesOnly = true, AllowsBackgroundLoading = true)]
+    [Guid(PackageGuidString)]
+    [ProvideAutoLoad(VSConstants.UICONTEXT.ShellInitialized_string, PackageAutoLoadFlags.BackgroundLoad)]
+    [ProvideBindingPath]
+    public sealed class DeepLensPackage : AsyncPackage
     {
+        public const string PackageGuidString = "a1b2c3d4-e5f6-4a5b-9c8d-7e6f5a4b3c2d";
+
         private static IntPtr _hookId = IntPtr.Zero;
         private static LowLevelKeyboardProc? _proc;
         private static DateTime _lastShiftPressTime = DateTime.MinValue;
@@ -50,34 +59,33 @@ namespace DeepLensVisualStudio
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
 
-        /// <inheritdoc />
-        public override ExtensionConfiguration ExtensionConfiguration => new()
+        protected override async Task InitializeAsync(CancellationToken cancellationToken,
+            IProgress<ServiceProgressData> progress)
         {
-            RequiresInProcessHosting = true,
-        };
+            await base.InitializeAsync(cancellationToken, progress);
 
-        /// <inheritdoc />
-        protected override void InitializeServices(IServiceCollection serviceCollection)
-        {
-            base.InitializeServices(serviceCollection);
+            // Switch to UI thread to install keyboard hook
+            await JoinableTaskFactory.SwitchToMainThreadAsync(cancellationToken);
 
-            // Install keyboard hook on the UI thread
-            Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            try
             {
-                await Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 InstallKeyboardHook();
-                Debug.WriteLine("DeepLens: Double-shift keyboard hook installed at extension initialization");
-            });
+                Debug.WriteLine("DeepLens: Double-shift keyboard hook installed at startup");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Failed to install keyboard hook: {ex.Message}");
+            }
         }
 
-        protected override void Dispose(bool isDisposing)
+        protected override void Dispose(bool disposing)
         {
-            if (isDisposing)
+            if (disposing)
             {
                 UninstallKeyboardHook();
             }
 
-            base.Dispose(isDisposing);
+            base.Dispose(disposing);
         }
 
         private static void InstallKeyboardHook()
@@ -92,7 +100,7 @@ namespace DeepLensVisualStudio
             if (curModule != null)
             {
                 _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
-                Debug.WriteLine($"DeepLens: Hook installed, ID: {_hookId}");
+                Debug.WriteLine($"DeepLens: Keyboard hook installed with ID: {_hookId}");
             }
         }
 
@@ -175,16 +183,16 @@ namespace DeepLensVisualStudio
             if (!IsVisualStudioFocused())
                 return;
 
-            Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
-                await Microsoft.VisualStudio.Shell.ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
                 ShowSearchWindow();
             });
         }
 
         private static void ShowSearchWindow()
         {
-            Microsoft.VisualStudio.Shell.ThreadHelper.ThrowIfNotOnUIThread();
+            ThreadHelper.ThrowIfNotOnUIThread();
 
             try
             {
