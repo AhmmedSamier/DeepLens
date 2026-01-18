@@ -40,18 +40,11 @@ jobs:
     # Publish to Visual Studio Marketplace
     # Note: You must add VSCE_PAT to your repo secrets
     - name: Publish to Marketplace
-      uses: heaths/vs-marketplace-action@v1
+      uses: mrluje/vs-marketplace-publisher@v2
       with:
-        # The path to your VSIX file
-        vsix: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
-        # The manifest file (optional, but good for validation)
-        manifest: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest
-        # Your publisher ID and extension ID should match the manifest
-        # Personal Access Token from Marketplace
-        token: ${{ secrets.VSCE_PAT }}
-        # If true, just verifies the VSIX without uploading
-        # set to false or remove for actual publishing
-        dry-run: false
+        pat: ${{ secrets.VSCE_PAT }}
+        manifestPath: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
+        vsixPath: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
