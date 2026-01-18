@@ -42,6 +42,14 @@ jobs:
     - name: Build Extension
       run: msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj /p:Configuration=Release /p:DeployExtension=false
 
+    - name: Setup VsixPublisher
+      shell: pwsh
+      run: |
+        $vsPath = vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
+        $vsixPublisherPath = Join-Path $vsPath "Common7\IDE"
+        Write-Host "Adding $vsixPublisherPath to PATH"
+        echo "$vsixPublisherPath" >> $env:GITHUB_PATH
+
     # Publish to Visual Studio Marketplace
     # Note: You must add VSCE_PAT to your repo secrets
     - name: Publish to Marketplace
