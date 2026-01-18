@@ -1,6 +1,8 @@
 {
   "$schema": "http://json.schemastore.org/vsix-publish",
-  "categories": [ "Coding" ],
+  "categories": [
+    "Coding"
+  ],
   "identity": {
     "internalName": "DeepLensVisualStudio.384dd271-c4ff-4bea-be51-6e3933f7d2cd"
   },
@@ -9,5 +11,7 @@
   "publisher": "AhmedSamir",
   "priceCategory": "free",
   "qna": true,
-  "repo": "https://github.com/AhmmedSamier/DeepLens"
+  "repo": "https://github.com/AhmmedSamier/DeepLens",
+  "overview": "README.md",
+  "icon": "icon.png"
 }
