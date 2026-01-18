@@ -6,12 +6,8 @@ import { RouteMatcher } from './route-matcher';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 import { ISearchProvider } from './search-interface';
 
-interface PreparedItem {
-    item: SearchableItem;
-    preparedName: Fuzzysort.Prepared;
-    preparedFullName: Fuzzysort.Prepared | null;
-    preparedPath: Fuzzysort.Prepared | null;
-}
+// REMOVED: PreparedItem interface
+// We now use parallel arrays to save memory (Struct of Arrays)
 
 const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
     [SearchItemType.CLASS]: 1.5,
@@ -31,9 +27,15 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
 export class SearchEngine implements ISearchProvider {
+    // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
-    private preparedItems: PreparedItem[] = [];
-    private scopedItems: Map<SearchScope, PreparedItem[]> = new Map();
+    private preparedNames: (Fuzzysort.Prepared | null)[] = [];
+    private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
+    private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
+
+    // Map Scope -> Array of Indices
+    private scopedIndices: Map<SearchScope, number[]> = new Map();
+
     private itemsMap: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
@@ -71,27 +73,40 @@ export class SearchEngine implements ISearchProvider {
      * Add items to the search index and update hot-arrays incrementally
      */
     addItems(items: SearchableItem[]): void {
+        // Pre-calculate start index for new items
+        const startIndex = this.items.length;
+
+        // Append items
         this.items.push(...items);
 
-        for (const item of items) {
+        for (let i = 0; i < items.length; i++) {
+            const item = items[i];
+            const globalIndex = startIndex + i;
+
             this.itemsMap.set(item.id, item);
 
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
             const shouldPrepareFullName =
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
 
-            const prepared: PreparedItem = {
-                item,
-                preparedName: Fuzzysort.prepare(item.name),
-                preparedFullName: shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null,
-                preparedPath: normalizedPath ? Fuzzysort.prepare(normalizedPath) : null,
-            };
+            // Push to parallel arrays
+            this.preparedNames.push(Fuzzysort.prepare(item.name));
+            this.preparedFullNames.push(
+                shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null
+            );
+            this.preparedPaths.push(
+                normalizedPath ? Fuzzysort.prepare(normalizedPath) : null
+            );
 
-            this.preparedItems.push(prepared);
-
+            // Update scopes
             const scope = this.getScopeForItemType(item.type);
-            this.scopedItems.get(scope)?.push(prepared);
-            this.scopedItems.get(SearchScope.EVERYTHING)?.push(prepared);
+
+            let indices = this.scopedIndices.get(scope);
+            if (!indices) {
+                indices = [];
+                this.scopedIndices.set(scope, indices);
+            }
+            indices.push(globalIndex);
         }
     }
 
@@ -99,55 +114,82 @@ export class SearchEngine implements ISearchProvider {
      * Remove items from a specific file and update hot-arrays incrementally
      */
     removeItemsByFile(filePath: string): void {
+        // Since we are using parallel arrays, splicing at random indices is expensive.
+        // And if we splice, all subsequent indices change, invalidating scopedIndices.
+        // Strategy: Filter all arrays to new arrays (O(N)), then rebuild scope map.
+
         const newItems: SearchableItem[] = [];
-        for (const item of this.items) {
+        const newPreparedNames: (Fuzzysort.Prepared | null)[] = [];
+        const newPreparedFullNames: (Fuzzysort.Prepared | null)[] = [];
+        const newPreparedPaths: (Fuzzysort.Prepared | null)[] = [];
+
+        const count = this.items.length;
+        for (let i = 0; i < count; i++) {
+            const item = this.items[i];
             if (item.filePath !== filePath) {
                 newItems.push(item);
+                newPreparedNames.push(this.preparedNames[i]);
+                newPreparedFullNames.push(this.preparedFullNames[i]);
+                newPreparedPaths.push(this.preparedPaths[i]);
             } else {
                 this.itemsMap.delete(item.id);
             }
         }
+
         this.items = newItems;
+        this.preparedNames = newPreparedNames;
+        this.preparedFullNames = newPreparedFullNames;
+        this.preparedPaths = newPreparedPaths;
 
-        // Efficiently filter prepared items without full rebuild
-        this.preparedItems = this.preparedItems.filter((p) => p.item.filePath !== filePath);
-
-        for (const [scope, items] of this.scopedItems) {
-            const filtered = items.filter((p) => p.item.filePath !== filePath);
-            this.scopedItems.set(scope, filtered);
-        }
+        // Rebuild scope indices
+        this.rebuildScopeIndices();
     }
 
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
     private rebuildHotArrays(): void {
-        this.scopedItems.clear();
-        this.preparedItems = this.items.map((item) => {
+        // Clear parallel arrays
+        this.preparedNames = [];
+        this.preparedFullNames = [];
+        this.preparedPaths = [];
+
+        // Prepare items
+        const count = this.items.length;
+        for (let i = 0; i < count; i++) {
+            const item = this.items[i];
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
             const shouldPrepareFullName =
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
 
-            return {
-                item,
-                preparedName: Fuzzysort.prepare(item.name),
-                preparedFullName: shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null,
-                preparedPath: normalizedPath ? Fuzzysort.prepare(normalizedPath) : null,
-            };
-        });
-
-        // Initialize arrays
-        for (const scope of Object.values(SearchScope)) {
-            this.scopedItems.set(scope, []);
+            this.preparedNames.push(Fuzzysort.prepare(item.name));
+            this.preparedFullNames.push(
+                shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null
+            );
+            this.preparedPaths.push(
+                normalizedPath ? Fuzzysort.prepare(normalizedPath) : null
+            );
         }
 
-        // Categorize items
-        for (const prepared of this.preparedItems) {
-            const scope = this.getScopeForItemType(prepared.item.type);
-            this.scopedItems.get(scope)?.push(prepared);
+        this.rebuildScopeIndices();
+    }
 
-            // All items belong to EVERYTHING scope
-            this.scopedItems.get(SearchScope.EVERYTHING)?.push(prepared);
+    private rebuildScopeIndices(): void {
+        this.scopedIndices.clear();
+
+        // Initialize arrays (optional, but good for cleanliness)
+        for (const scope of Object.values(SearchScope)) {
+            // EVERYTHING scope is handled implicitly by the main arrays,
+            // so we don't store indices for it to save memory.
+            if (scope !== SearchScope.EVERYTHING) {
+                this.scopedIndices.set(scope, []);
+            }
+        }
+
+        const count = this.items.length;
+        for (let i = 0; i < count; i++) {
+            const scope = this.getScopeForItemType(this.items[i].type);
+            this.scopedIndices.get(scope)?.push(i);
         }
     }
 
@@ -171,8 +213,11 @@ export class SearchEngine implements ISearchProvider {
      */
     clear(): void {
         this.items = [];
+        this.preparedNames = [];
+        this.preparedFullNames = [];
+        this.preparedPaths = [];
         this.itemsMap.clear();
-        this.scopedItems.clear();
+        this.scopedIndices.clear();
     }
 
     /**
@@ -194,7 +239,6 @@ export class SearchEngine implements ISearchProvider {
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
-        // If effectiveQuery is empty after stripping line number, return empty
         if (effectiveQuery.trim().length === 0) {
             return [];
         }
@@ -206,20 +250,21 @@ export class SearchEngine implements ISearchProvider {
 
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
 
-        // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
-        const filteredItems = this.filterByScope(scope);
-        let results = this.fuzzySearch(filteredItems, normalizedQuery);
+        // 1. Filter and search
+        // Pass the indices we want to search. undefined means "all"
+        const indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+
+        let results = this.fuzzySearch(indices, normalizedQuery);
 
         // 2. Add CamelHumps results if enabled
         if (enableCamelHumps) {
-            results = this.mergeWithCamelHumps(results, filteredItems, normalizedQuery);
+            results = this.mergeWithCamelHumps(results, indices, normalizedQuery);
         }
 
         // 2.5 Add URL matches if query looks like a path
         if (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) {
-            results = this.mergeWithUrlMatches(results, filteredItems, normalizedQuery);
+            results = this.mergeWithUrlMatches(results, indices, normalizedQuery);
         }
-
 
         // 3. Sort by score
         results.sort((a, b) => b.score - a.score);
@@ -367,7 +412,7 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private mergeWithUrlMatches(results: SearchResult[], items: PreparedItem[], query: string): SearchResult[] {
+    private mergeWithUrlMatches(results: SearchResult[], indices: number[] | undefined, query: string): SearchResult[] {
         if (!RouteMatcher.isPotentialUrl(query)) {
             return results;
         }
@@ -375,7 +420,9 @@ export class SearchEngine implements ISearchProvider {
         const existingIds = new Set(results.map((r) => r.item.id));
         const urlMatches: SearchResult[] = [];
 
-        for (const { item } of items) {
+        // Helper to process a single index
+        const checkItem = (i: number) => {
+            const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
                 if (RouteMatcher.isMatch(item.name, query)) {
                     urlMatches.push({
@@ -385,13 +432,19 @@ export class SearchEngine implements ISearchProvider {
                     });
                 }
             }
+        };
+
+        if (indices) {
+            for (const i of indices) checkItem(i);
+        } else {
+            for (let i = 0; i < this.items.length; i++) checkItem(i);
         }
 
         return [...results, ...urlMatches];
     }
 
-    private mergeWithCamelHumps(results: SearchResult[], items: PreparedItem[], query: string): SearchResult[] {
-        const camelHumpsResults = this.camelHumpsSearch(items, query);
+    private mergeWithCamelHumps(results: SearchResult[], indices: number[] | undefined, query: string): SearchResult[] {
+        const camelHumpsResults = this.camelHumpsSearch(indices, query);
         const existingIds = new Set(results.map((r) => r.item.id));
 
         for (const res of camelHumpsResults) {
@@ -419,29 +472,40 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
-    private filterByScope(scope: SearchScope): PreparedItem[] {
-        return this.scopedItems.get(scope) || this.preparedItems;
-    }
-
-    private fuzzySearch(items: PreparedItem[], query: string): SearchResult[] {
+    private fuzzySearch(indices: number[] | undefined, query: string): SearchResult[] {
         const results: SearchResult[] = [];
         const MIN_SCORE = 0.01;
 
-        for (const { item, preparedName, preparedFullName, preparedPath } of items) {
+        // Optimized inner loop function
+        const processItem = (i: number) => {
             const score = this.calculateItemScore(
                 query,
-                preparedName,
-                preparedFullName,
-                preparedPath,
+                this.preparedNames[i],
+                this.preparedFullNames[i],
+                this.preparedPaths[i],
                 MIN_SCORE,
             );
 
             if (score > MIN_SCORE) {
+                const item = this.items[i];
                 results.push({
                     item,
                     score: this.applyItemTypeBoost(score, item.type),
                     scope: this.getScopeForItemType(item.type),
                 });
+            }
+        };
+
+        if (indices) {
+            // Scope-restricted search
+            for (let k = 0; k < indices.length; k++) {
+                processItem(indices[k]);
+            }
+        } else {
+            // Full search (iterate direct array is faster than index indirection)
+            const count = this.items.length;
+            for (let i = 0; i < count; i++) {
+                processItem(i);
             }
         }
 
@@ -450,7 +514,7 @@ export class SearchEngine implements ISearchProvider {
 
     private calculateItemScore(
         query: string,
-        preparedName: Fuzzysort.Prepared,
+        preparedName: Fuzzysort.Prepared | null,
         preparedFullName: Fuzzysort.Prepared | null,
         preparedPath: Fuzzysort.Prepared | null,
         minScore: number,
@@ -458,19 +522,20 @@ export class SearchEngine implements ISearchProvider {
         let bestScore = -Infinity;
 
         // Name (Weight 1.0)
-        let result = Fuzzysort.single(query, preparedName);
-        if (result && result.score > minScore) {
-            const score = result.score;
-            if (score > bestScore) bestScore = score;
+        if (preparedName) {
+            const result = Fuzzysort.single(query, preparedName);
+            if (result && result.score > minScore) {
+                const score = result.score;
+                if (score > bestScore) bestScore = score;
+            }
         }
 
         // Optimization: Name has weight 1.0. Next best is FullName with 0.9.
-        // If we already have a score >= 0.9, we can't beat it.
         if (bestScore >= 0.9) return bestScore;
 
         // Full Name (Weight 0.9)
         if (preparedFullName) {
-            result = Fuzzysort.single(query, preparedFullName);
+            const result = Fuzzysort.single(query, preparedFullName);
             if (result && result.score > minScore) {
                 const score = result.score * 0.9;
                 if (score > bestScore) bestScore = score;
@@ -478,12 +543,11 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Optimization: Next best is Path with 0.8.
-        // If we already have a score >= 0.8, we can't beat it.
         if (bestScore >= 0.8) return bestScore;
 
         // Path (Weight 0.8)
         if (preparedPath) {
-            result = Fuzzysort.single(query, preparedPath);
+            const result = Fuzzysort.single(query, preparedPath);
             if (result && result.score > minScore) {
                 const score = result.score * 0.8;
                 if (score > bestScore) bestScore = score;
@@ -493,11 +557,12 @@ export class SearchEngine implements ISearchProvider {
         return bestScore;
     }
 
-    private camelHumpsSearch(items: PreparedItem[], query: string): SearchResult[] {
+    private camelHumpsSearch(indices: number[] | undefined, query: string): SearchResult[] {
         const results: SearchResult[] = [];
         const queryUpper = query.toUpperCase();
 
-        for (const { item } of items) {
+        const processItem = (i: number) => {
+            const item = this.items[i];
             const score = this.camelHumpsMatch(item.name, queryUpper);
             if (score > 0) {
                 results.push({
@@ -506,6 +571,12 @@ export class SearchEngine implements ISearchProvider {
                     scope: this.getScopeForItemType(item.type),
                 });
             }
+        };
+
+        if (indices) {
+            for (const i of indices) processItem(i);
+        } else {
+            for (let i = 0; i < this.items.length; i++) processItem(i);
         }
 
         return results;
@@ -586,9 +657,11 @@ export class SearchEngine implements ISearchProvider {
 
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
 
-        const filteredItems = this.filterByScope(scope);
+        // Pass indices for burst match
+        const indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+
         let results: SearchResult[] = this.findBurstMatches(
-            filteredItems,
+            indices,
             normalizedQuery.toLowerCase(),
             maxResults,
             onResult,
@@ -598,7 +671,7 @@ export class SearchEngine implements ISearchProvider {
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
             RouteMatcher.isPotentialUrl(normalizedQuery.toLowerCase())
         ) {
-            this.addUrlMatches(results, filteredItems, normalizedQuery.toLowerCase(), maxResults);
+            this.addUrlMatches(results, indices, normalizedQuery.toLowerCase(), maxResults);
         }
 
         if (this.getActivityScore) {
@@ -619,13 +692,18 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private findBurstMatches(
-        items: PreparedItem[],
+        indices: number[] | undefined,
         queryLower: string,
         maxResults: number,
         onResult?: (result: SearchResult) => void
     ): SearchResult[] {
         const results: SearchResult[] = [];
-        for (const { item } of items) {
+
+        const processItem = (i: number) => {
+             // Check max results break
+             if (results.length >= maxResults) return;
+
+            const item = this.items[i];
             const nameLower = item.name.toLowerCase();
 
             if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
@@ -639,11 +717,21 @@ export class SearchEngine implements ISearchProvider {
                     onResult(result);
                 }
             }
+        };
 
-            if (results.length >= maxResults) {
-                break;
+        if (indices) {
+             for (let k = 0; k < indices.length; k++) {
+                if (results.length >= maxResults) break;
+                processItem(indices[k]);
+             }
+        } else {
+            const count = this.items.length;
+            for (let i = 0; i < count; i++) {
+                if (results.length >= maxResults) break;
+                processItem(i);
             }
         }
+
         return results;
     }
 
@@ -662,18 +750,17 @@ export class SearchEngine implements ISearchProvider {
 
     private addUrlMatches(
         results: SearchResult[],
-        items: PreparedItem[],
+        indices: number[] | undefined,
         queryLower: string,
-        maxResults: number,
+        maxResults?: number,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
 
-        for (const { item } of items) {
-            if (results.length >= maxResults) {
-                break;
-            }
+        const checkItem = (i: number) => {
+             if (maxResults && results.length >= maxResults) return;
 
-            if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
+            const item = this.items[i];
+             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
                 if (RouteMatcher.isMatch(item.name, queryLower)) {
                     results.push({
                         item,
@@ -682,6 +769,18 @@ export class SearchEngine implements ISearchProvider {
                     });
                     existingIds.add(item.id);
                 }
+            }
+        };
+
+        if (indices) {
+            for (const i of indices) {
+                if (maxResults && results.length >= maxResults) break;
+                checkItem(i);
+            }
+        } else {
+            for (let i = 0; i < this.items.length; i++) {
+                if (maxResults && results.length >= maxResults) break;
+                checkItem(i);
             }
         }
     }
