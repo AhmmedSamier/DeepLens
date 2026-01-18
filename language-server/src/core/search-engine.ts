@@ -11,7 +11,6 @@ interface PreparedItem {
     preparedName: Fuzzysort.Prepared;
     preparedFullName: Fuzzysort.Prepared | null;
     preparedPath: Fuzzysort.Prepared | null;
-    preparedCombined: Fuzzysort.Prepared | null;
 }
 
 const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
@@ -78,14 +77,14 @@ export class SearchEngine implements ISearchProvider {
             this.itemsMap.set(item.id, item);
 
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+            const shouldPrepareFullName =
+                item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
+
             const prepared: PreparedItem = {
                 item,
                 preparedName: Fuzzysort.prepare(item.name),
-                preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
+                preparedFullName: shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null,
                 preparedPath: normalizedPath ? Fuzzysort.prepare(normalizedPath) : null,
-                preparedCombined: normalizedPath
-                    ? Fuzzysort.prepare(`${normalizedPath} ${item.fullName || item.name}`)
-                    : null,
             };
 
             this.preparedItems.push(prepared);
@@ -126,14 +125,14 @@ export class SearchEngine implements ISearchProvider {
         this.scopedItems.clear();
         this.preparedItems = this.items.map((item) => {
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+            const shouldPrepareFullName =
+                item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
+
             return {
                 item,
                 preparedName: Fuzzysort.prepare(item.name),
-                preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
+                preparedFullName: shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null,
                 preparedPath: normalizedPath ? Fuzzysort.prepare(normalizedPath) : null,
-                preparedCombined: normalizedPath
-                    ? Fuzzysort.prepare(`${normalizedPath} ${item.fullName || item.name}`)
-                    : null,
             };
         });
 
@@ -428,13 +427,12 @@ export class SearchEngine implements ISearchProvider {
         const results: SearchResult[] = [];
         const MIN_SCORE = 0.01;
 
-        for (const { item, preparedName, preparedFullName, preparedPath, preparedCombined } of items) {
+        for (const { item, preparedName, preparedFullName, preparedPath } of items) {
             const score = this.calculateItemScore(
                 query,
                 preparedName,
                 preparedFullName,
                 preparedPath,
-                preparedCombined,
                 MIN_SCORE,
             );
 
@@ -455,7 +453,6 @@ export class SearchEngine implements ISearchProvider {
         preparedName: Fuzzysort.Prepared,
         preparedFullName: Fuzzysort.Prepared | null,
         preparedPath: Fuzzysort.Prepared | null,
-        preparedCombined: Fuzzysort.Prepared | null,
         minScore: number,
     ): number {
         let bestScore = -Infinity;
@@ -465,15 +462,6 @@ export class SearchEngine implements ISearchProvider {
         if (result && result.score > minScore) {
             const score = result.score;
             if (score > bestScore) bestScore = score;
-        }
-
-        // Combined (Weight 0.95)
-        if (preparedCombined) {
-            result = Fuzzysort.single(query, preparedCombined);
-            if (result && result.score > minScore) {
-                const score = result.score * 0.95;
-                if (score > bestScore) bestScore = score;
-            }
         }
 
         // Full Name (Weight 0.9)

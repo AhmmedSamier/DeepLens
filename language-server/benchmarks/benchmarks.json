@@ -1,0 +1,27 @@
+[
+  {
+    "name": "Fuzzy Search 'File100'",
+    "avgMs": 79.36716922,
+    "totalMs": 7936.716922
+  },
+  {
+    "name": "CamelHumps Search 'FCC'",
+    "avgMs": 82.15623988000002,
+    "totalMs": 8215.623988000001
+  },
+  {
+    "name": "Burst Search 'calc'",
+    "avgMs": 0.012601969999996071,
+    "totalMs": 1.2601969999996072
+  },
+  {
+    "name": "Parse 500-method TS Class",
+    "avgMs": 85.7160534999999,
+    "totalMs": 857.1605349999991
+  },
+  {
+    "name": "Text Search 100 files",
+    "avgMs": 1.8882667000001674,
+    "totalMs": 18.882667000001675
+  }
+]

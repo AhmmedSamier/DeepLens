@@ -19,6 +19,12 @@ if ! bun run benchmark; then
     EXIT_CODE=1
 fi
 
+echo "Running Memory Benchmark..."
+if ! bun run benchmark:memory; then
+    echo "Language Server Memory Benchmark failed!"
+    EXIT_CODE=1
+fi
+
 echo "=== Running VS Code Extension Benchmarks ==="
 cd "$VSCODE_DIR"
 export BENCHMARK_OUTPUT="$ROOT_DIR/benchmark-results/vscode-extension.json"
