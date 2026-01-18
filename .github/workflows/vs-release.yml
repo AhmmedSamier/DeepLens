@@ -4,11 +4,12 @@ on:
   push:
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   build-and-publish:
     runs-on: windows-latest
+    permissions:
+      contents: write
     
     steps:
     - name: Checkout
@@ -42,20 +43,6 @@ jobs:
 
     - name: Build Extension
       run: msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj /p:Configuration=Release /p:DeployExtension=false
-
-    - name: Setup VsixPublisher
-      shell: pwsh
-      run: |
-        $vsPath = vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-        Write-Host "Searching for VsixPublisher.exe in $vsPath"
-        $publisher = Get-ChildItem -Path $vsPath -Filter "VsixPublisher.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
-        if ($publisher) {
-          $publisherDir = $publisher.DirectoryName
-          Write-Host "Found VsixPublisher.exe at $publisherDir"
-          echo "$publisherDir" >> $env:GITHUB_PATH
-        } else {
-          Write-Error "VsixPublisher.exe not found in $vsPath"
-        }
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
