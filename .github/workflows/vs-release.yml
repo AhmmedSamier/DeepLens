@@ -46,9 +46,13 @@ jobs:
       shell: pwsh
       run: |
         $vsPath = vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-        $vsixPublisherPath = Join-Path $vsPath "Common7\IDE"
-        Write-Host "Adding $vsixPublisherPath to PATH"
-        echo "$vsixPublisherPath" >> $env:GITHUB_PATH
+        $vsixPublisherPath = Join-Path $vsPath "VSSDK\VisualStudioIntegration\Tools\Bin"
+        if (Test-Path $vsixPublisherPath) {
+          Write-Host "Adding $vsixPublisherPath to PATH"
+          echo "$vsixPublisherPath" >> $env:GITHUB_PATH
+        } else {
+          Write-Error "VsixPublisher.exe path not found: $vsixPublisherPath"
+        }
 
     # Publish to Visual Studio Marketplace
     # Note: You must add VSCE_PAT to your repo secrets
