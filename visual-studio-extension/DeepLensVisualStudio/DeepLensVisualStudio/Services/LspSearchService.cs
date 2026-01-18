@@ -134,7 +134,7 @@ namespace DeepLensVisualStudio.Services
                     ["initializationOptions"] = new JObject
                     {
                         ["storagePath"] = Path.Combine(Path.GetTempPath(), "DeepLens"),
-                        ["extensionPath"] = Path.GetDirectoryName(serverPath)
+                        ["extensionPath"] = extensionDir
                     }
                 };
 
@@ -164,7 +164,7 @@ namespace DeepLensVisualStudio.Services
         private string? FindServerPath(string extensionDir)
         {
             // 1. Check relative to extension (production/bundled)
-            string prodPath = Path.Combine(extensionDir, "server.js");
+            string prodPath = Path.Combine(extensionDir, "dist", "server.js");
             if (File.Exists(prodPath)) return prodPath;
 
             // 2. Check development path
