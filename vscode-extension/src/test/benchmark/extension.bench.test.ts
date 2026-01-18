@@ -39,7 +39,7 @@ suite('Extension Performance Test Suite', () => {
 
     test('Activation Time', async () => {
         const start = performance.now();
-        const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
+        const extension = vscode.extensions.getExtension('AhmmedSamier.deeplens');
         assert.ok(extension, 'Extension should be present');
 
         if (!extension.isActive) {
@@ -55,7 +55,7 @@ suite('Extension Performance Test Suite', () => {
 
     test('Command Execution: deeplens.search', async () => {
         // Wait for extension to be ready
-        const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
+        const extension = vscode.extensions.getExtension('AhmmedSamier.deeplens');
         await extension?.activate();
 
         // Allow some time for language server to start
