@@ -18,15 +18,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Content Include="server.js">
-      <IncludeInVSIX>true</IncludeInVSIX>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="dist\parsers\*.wasm">
-      <IncludeInVSIX>true</IncludeInVSIX>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>dist\parsers\%(Filename)%(Extension)</Link>
-    </Content>
     <Content Include="icon.png">
       <IncludeInVSIX>true</IncludeInVSIX>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -59,12 +50,20 @@
     <Exec Command="copy node_modules\tree-sitter-ruby\tree-sitter-ruby.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
     <Exec Command="copy node_modules\tree-sitter-php\tree-sitter-php.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
 
-    <Copy SourceFiles="..\..\..\language-server\dist\server.js" DestinationFiles="server.js" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="..\..\..\language-server\dist\server.js" DestinationFiles="dist\server.js" SkipUnchangedFiles="true" />
     
     <!-- Sync parsers to local project for bundling -->
     <ItemGroup>
         <WasmFiles Include="..\..\..\language-server\dist\parsers\*.wasm" />
     </ItemGroup>
     <Copy SourceFiles="@(WasmFiles)" DestinationFolder="dist\parsers" SkipUnchangedFiles="true" />
+
+    <ItemGroup>
+      <Content Include="dist\**\*">
+        <IncludeInVSIX>true</IncludeInVSIX>
+        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
+      </Content>
+    </ItemGroup>
   </Target>
 </Project>
