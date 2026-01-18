@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-and-publish:
@@ -46,12 +47,14 @@ jobs:
       shell: pwsh
       run: |
         $vsPath = vswhere -latest -products * -requires Microsoft.Component.MSBuild -property installationPath
-        $vsixPublisherPath = Join-Path $vsPath "VSSDK\VisualStudioIntegration\Tools\Bin"
-        if (Test-Path $vsixPublisherPath) {
-          Write-Host "Adding $vsixPublisherPath to PATH"
-          echo "$vsixPublisherPath" >> $env:GITHUB_PATH
+        Write-Host "Searching for VsixPublisher.exe in $vsPath"
+        $publisher = Get-ChildItem -Path $vsPath -Filter "VsixPublisher.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($publisher) {
+          $publisherDir = $publisher.DirectoryName
+          Write-Host "Found VsixPublisher.exe at $publisherDir"
+          echo "$publisherDir" >> $env:GITHUB_PATH
         } else {
-          Write-Error "VsixPublisher.exe path not found: $vsixPublisherPath"
+          Write-Error "VsixPublisher.exe not found in $vsPath"
         }
 
     # Publish to Visual Studio Marketplace
