@@ -63,8 +63,8 @@ jobs:
       uses: mrluje/vs-marketplace-publisher@v2
       with:
         pat: ${{ secrets.VSCE_PAT }}
-        manifestPath: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
-        vsixPath: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+        manifestPath: ${{ github.workspace }}\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\publishManifest.json
+        vsixPath: ${{ github.workspace }}\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\bin\Release\net472\DeepLensVisualStudio.vsix
 
     - name: Create GitHub Release
       uses: softprops/action-gh-release@v1
