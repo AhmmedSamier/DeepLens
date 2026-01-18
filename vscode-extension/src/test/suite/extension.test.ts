@@ -5,7 +5,7 @@ suite('Extension Test Suite', () => {
 	vscode.window.showInformationMessage('Start all tests.');
 
 	test('Extension should be present and active', async () => {
-		const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
+		const extension = vscode.extensions.getExtension('AhmmedSamier.deeplens');
 		assert.ok(extension, 'Extension should be present');
 		if (!extension.isActive) {
 			await extension.activate();
