@@ -25,7 +25,7 @@ jobs:
         bun-version: latest
 
     - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.1
+      uses: microsoft/setup-msbuild@v1.0.2
 
     - name: Restore NuGet packages
       run: nuget restore visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj -SolutionDirectory visual-studio-extension/DeepLensVisualStudio
