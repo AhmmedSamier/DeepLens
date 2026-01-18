@@ -7,7 +7,7 @@
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
     "version": "0.0.7",
-    "publisher": "AhmmedSamier",
+    "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
         "vscode": "^1.85.0"
