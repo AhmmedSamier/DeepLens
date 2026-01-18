@@ -20,6 +20,9 @@ export class Config {
                 '**/out/**',
                 '**/.git/**',
                 '**/build/**',
+                '**/bin/**',
+                '**/obj/**',
+                '**/vendor/**',
             ],
             maxResults: 50,
             enableTextSearch: true,
@@ -93,6 +96,9 @@ export class Config {
             '**/out/**',
             '**/.git/**',
             '**/build/**',
+            '**/bin/**',
+            '**/obj/**',
+            '**/vendor/**',
         ]);
     }
 
