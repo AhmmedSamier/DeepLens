@@ -21,7 +21,7 @@ async function main() {
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
-            launchArgs: ['--no-sandbox', '--disable-gpu', '--headless'],
+            launchArgs: ['--no-sandbox', '--disable-gpu', '--headless', '--js-flags=--expose-gc'],
             extensionTestsEnv: process.env as Record<string, string>
         });
     } catch (err) {

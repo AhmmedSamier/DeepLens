@@ -196,6 +196,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Git listener for full re-index (server side does file watching, but git branch changes need full scan)
     setupGitListener(context);
+
+    return {
+        searchProvider,
+        lspClient
+    };
 }
 
 /**

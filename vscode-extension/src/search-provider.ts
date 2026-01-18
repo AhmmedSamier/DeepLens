@@ -757,6 +757,7 @@ export class SearchProvider {
         const results = await this.searchEngine.search(options);
 
         if (queryId !== this.lastQueryId) {
+            this.streamingResults.delete(queryId);
             return [];
         }
 
