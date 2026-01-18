@@ -10,102 +10,51 @@ jobs:
     runs-on: windows-latest
     permissions:
       contents: write
-
+    
     steps:
-      # --------------------------------------------------
-      # Checkout
-      # --------------------------------------------------
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v4
 
-      # --------------------------------------------------
-      # Setup Bun (required for LSP server)
-      # --------------------------------------------------
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v1
-        with:
-          bun-version: latest
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
 
-      - name: Install LSP dependencies
-        working-directory: lsp
-        run: bun install
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v1
+      with:
+        bun-version: latest
 
-      - name: Build LSP server
-        working-directory: lsp
-        run: bun run build
+    - name: Add MSBuild to PATH
+      uses: microsoft/setup-msbuild@v1.0.2
 
-      # --------------------------------------------------
-      # Setup MSBuild for VSIX
-      # --------------------------------------------------
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v1.0.2
+    - name: Restore NuGet packages
+      run: nuget restore visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj -SolutionDirectory visual-studio-extension/DeepLensVisualStudio
 
-      # --------------------------------------------------
-      # Restore & Version
-      # --------------------------------------------------
-      - name: Restore NuGet packages
-        run: nuget restore visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio.sln
+    - name: Update VSIX Version
+      shell: pwsh
+      run: |
+        $version = "${{ github.ref_name }}".TrimStart('v')
+        $manifestPath = "visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest"
+        [xml]$manifest = Get-Content $manifestPath
+        $manifest.PackageManifest.Metadata.Identity.Version = $version
+        $manifest.Save($manifestPath)
+        Write-Host "Updated VSIX version to $version"
 
-      - name: Update VSIX Version from Tag
-        shell: pwsh
-        run: |
-          $version = "${{ github.ref_name }}".TrimStart('v')
+    - name: Build Extension
+      run: msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj /p:Configuration=Release /p:DeployExtension=false
 
-          if ($version -notmatch '^\d+\.\d+\.\d+(\.\d+)?$') {
-            throw "Invalid version format: $version"
-          }
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-          $manifestPath = "visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest"
-          [xml]$manifest = Get-Content $manifestPath
-          $manifest.PackageManifest.Metadata.Identity.Version = $version
-          $manifest.Save($manifestPath)
-
-          Write-Host "VSIX version set to $version"
-
-      # --------------------------------------------------
-      # Build VSIX
-      # --------------------------------------------------
-      - name: Build Visual Studio Extension
-        run: |
-          msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj `
-            /p:Configuration=Release `
-            /p:DeployExtension=false
-
-      # --------------------------------------------------
-      # Verify VSIX Path (important for debugging)
-      # --------------------------------------------------
-      - name: Verify VSIX exists
-        shell: pwsh
-        run: |
-          $vsix = Get-ChildItem `
-            visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin `
-            -Recurse -Filter *.vsix
-
-          if (-not $vsix) {
-            throw "VSIX file not found!"
-          }
-
-          Write-Host "Found VSIX at:"
-          $vsix | ForEach-Object { Write-Host $_.FullName }
-
-      # --------------------------------------------------
-      # GitHub Release
-      # --------------------------------------------------
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          files: |
-            visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/**/*.vsix
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      # --------------------------------------------------
-      # Publish to Visual Studio Marketplace
-      # --------------------------------------------------
-      - name: Publish to Visual Studio Marketplace
-        uses: cezarypiatek/VsixPublisherAction@1.1
-        with:
-          extension-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
-          publish-manifest-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
-          personal-access-code: ${{ secrets.VSCE_PAT }}
+    # Publish to Visual Studio Marketplace
+    - name: Publish to Visual Studio Marketplace
+      uses: cezarypiatek/VsixPublisherAction@1.1
+      with:
+        extension-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+        publish-manifest-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
+        personal-access-code: ${{ secrets.VSCE_PAT }}}}
