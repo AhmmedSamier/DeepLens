@@ -6,7 +6,8 @@
     "scripts": {
         "build": "bun build src/server.ts --outfile dist/server.js --target node",
         "test": "bun run scripts/setup-parsers.ts && bun test",
-        "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts"
+        "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts",
+        "benchmark:memory": "bun run scripts/memory-benchmark.ts"
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",

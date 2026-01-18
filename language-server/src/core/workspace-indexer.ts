@@ -24,6 +24,7 @@ export class WorkspaceIndexer {
     private persistence: IndexPersistence;
     private fileHashes: Map<string, string> = new Map();
     private env: IndexerEnvironment;
+    private stringCache: Map<string, string> = new Map();
 
     constructor(
         config: Config,
@@ -65,6 +66,7 @@ export class WorkspaceIndexer {
 
         this.indexing = true;
         this.items = [];
+        this.stringCache.clear(); // Clear string cache on full re-index
 
         if (force) {
             await this.persistence.clear();
@@ -227,13 +229,15 @@ export class WorkspaceIndexer {
                     }
 
                     const fileName = path.basename(filePath);
-                    const relativePath = this.env.asRelativePath(filePath);
+                    const relativePath = this.intern(this.env.asRelativePath(filePath));
+                    const internedFilePath = this.intern(filePath);
+                    const internedFileName = this.intern(fileName);
 
                     this.items.push({
                         id: `file:${filePath}`,
-                        name: fileName,
+                        name: internedFileName,
                         type: SearchItemType.FILE,
-                        filePath: filePath,
+                        filePath: internedFilePath,
                         relativeFilePath: relativePath,
                         detail: relativePath,
                         fullName: relativePath,
@@ -444,7 +448,7 @@ export class WorkspaceIndexer {
         }
 
         try {
-            const relPath = this.env.asRelativePath(filePath);
+            const relPath = this.intern(this.env.asRelativePath(filePath));
             if (!this.indexing) {
                 this.log(`Parsing file: ${relPath} ...`);
             }
@@ -487,14 +491,22 @@ export class WorkspaceIndexer {
      * Core logic to extract symbols from a file
      */
     private async performSymbolExtraction(filePath: string): Promise<SearchableItem[]> {
-        const relPath = this.env.asRelativePath(filePath);
+        const relPath = this.intern(this.env.asRelativePath(filePath));
+        const internedFilePath = this.intern(filePath);
 
         // 1. Try Tree-sitter first (Turbo Path)
         try {
             const treeSitterItems = await this.treeSitter.parseFile(filePath);
 
             if (treeSitterItems.length > 0) {
-                return treeSitterItems.map((item) => ({ ...item, relativeFilePath: relPath }));
+                return treeSitterItems.map((item) => ({
+                    ...item,
+                    filePath: internedFilePath,
+                    relativeFilePath: relPath,
+                    name: this.intern(item.name),
+                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                    containerName: item.containerName ? this.intern(item.containerName) : undefined
+                }));
             }
         } catch (e) {
             if (!this.indexing) {
@@ -511,7 +523,7 @@ export class WorkspaceIndexer {
                 const symbols = await this.env.executeDocumentSymbolProvider(filePath);
                 if (symbols && symbols.length > 0) {
                     const localItems: SearchableItem[] = [];
-                    this.processSymbols(symbols, filePath, relPath, localItems);
+                    this.processSymbols(symbols, internedFilePath, relPath, localItems);
                     return localItems;
                 }
             } catch (error) {
@@ -572,25 +584,27 @@ export class WorkspaceIndexer {
      */
     private processSymbols(
         symbols: import('./indexer-interfaces').LeanDocumentSymbol[],
-        filePath: string,
-        relativeFilePath: string,
+        filePath: string, // Expected to be interned by caller
+        relativeFilePath: string, // Expected to be interned by caller
         collector: SearchableItem[],
         containerName?: string,
     ): void {
         for (const symbol of symbols) {
             const itemType = this.mapSymbolKindToItemType(symbol.kind);
             if (itemType) {
-                const fullName = containerName ? `${containerName}.${symbol.name}` : symbol.name;
+                const name = this.intern(symbol.name);
+                const internedContainerName = containerName ? this.intern(containerName) : undefined;
+                const fullName = this.intern(containerName ? `${containerName}.${symbol.name}` : symbol.name);
 
                 collector.push({
                     id: `symbol:${filePath}:${fullName}:${symbol.range.start.line}`,
-                    name: symbol.name,
+                    name: name,
                     type: itemType,
                     filePath,
                     relativeFilePath,
                     line: symbol.range.start.line,
                     column: symbol.range.start.character,
-                    containerName,
+                    containerName: internedContainerName,
                     fullName,
                     detail: symbol.detail,
                 });
@@ -710,14 +724,16 @@ export class WorkspaceIndexer {
         }
 
         const fileName = path.basename(filePath);
-        const relativePath = this.env.asRelativePath(filePath);
+        const relativePath = this.intern(this.env.asRelativePath(filePath));
+        const internedFilePath = this.intern(filePath);
+        const internedFileName = this.intern(fileName);
 
         // Add file item
         this.items.push({
             id: `file:${filePath}`,
-            name: fileName,
+            name: internedFileName,
             type: SearchItemType.FILE,
-            filePath: filePath,
+            filePath: internedFilePath,
             detail: relativePath,
             fullName: relativePath,
         });
@@ -793,6 +809,18 @@ export class WorkspaceIndexer {
     public log(message: string): void {
         this.env.log(message);
         console.log(`[Indexer] ${message}`);
+    }
+
+    /**
+     * Intern a string to save memory
+     */
+    private intern(str: string): string {
+        const cached = this.stringCache.get(str);
+        if (cached) {
+            return cached;
+        }
+        this.stringCache.set(str, str);
+        return str;
     }
 
     /**
