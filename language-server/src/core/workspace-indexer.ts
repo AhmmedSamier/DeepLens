@@ -2,6 +2,7 @@ import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import { minimatch } from 'minimatch';
 import { Config } from './config';
 import { IndexPersistence } from './index-persistence';
 import { SearchableItem, SearchItemType } from './types';
@@ -674,11 +675,27 @@ export class WorkspaceIndexer {
     }
 
     /**
+     * Check if a file should be excluded based on config patterns
+     */
+    private shouldExcludeFile(filePath: string): boolean {
+        const excludePatterns = this.config.getExcludePatterns();
+        const relativePath = this.env.asRelativePath(filePath);
+        // Normalize to forward slashes for matching
+        const normalizedPath = relativePath.replace(/\\/g, '/');
+
+        return excludePatterns.some((pattern) => minimatch(normalizedPath, pattern, { dot: true }));
+    }
+
+    /**
      * Handle file created
      */
     private async handleFileCreated(filePath: string): Promise<void> {
         if (this.indexing || !this.watchersActive) {
             return; // Skip during full re-index or cooldown
+        }
+
+        if (this.shouldExcludeFile(filePath)) {
+            return;
         }
 
         const fileName = path.basename(filePath);
@@ -711,6 +728,10 @@ export class WorkspaceIndexer {
             return; // Skip individual updates during full re-index or cooldown
         }
 
+        if (this.shouldExcludeFile(filePath)) {
+            return;
+        }
+
         // Remove old symbols for this file
         this.items = this.items.filter((item) => item.filePath !== filePath || item.type === SearchItemType.FILE);
 
@@ -725,6 +746,10 @@ export class WorkspaceIndexer {
      * Handle file deleted
      */
     private handleFileDeleted(filePath: string): void {
+        if (this.shouldExcludeFile(filePath)) {
+            return;
+        }
+
         // Remove all items for this file
         this.items = this.items.filter((item) => item.filePath !== filePath);
 
