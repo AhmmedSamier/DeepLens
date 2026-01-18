@@ -181,19 +181,10 @@ export class WorkspaceIndexer {
         for (const folderPath of workspaceFolders) {
             try {
                 // Get both tracked and untracked (but not ignored) files
-                const output = await new Promise<string>((resolve, reject) => {
-                    cp.exec(
-                        'git ls-files --cached --others --exclude-standard',
-                        {
-                            cwd: folderPath,
-                            maxBuffer: 10 * 1024 * 1024,
-                        },
-                        (error, stdout) => {
-                            if (error) reject(error);
-                            else resolve(stdout);
-                        }
-                    );
-                });
+                const output = await this.execGit(
+                    ['ls-files', '--cached', '--others', '--exclude-standard'],
+                    folderPath
+                );
 
                 const lines = output.split('\n');
 
@@ -553,19 +544,10 @@ export class WorkspaceIndexer {
 
         for (const folderPath of workspaceFolders) {
             try {
-                const output = await new Promise<string>((resolve, reject) => {
-                    cp.exec(
-                        'git ls-files --stage',
-                        {
-                            cwd: folderPath,
-                            maxBuffer: 10 * 1024 * 1024, // 10MB buffer for large repos
-                        },
-                        (error, stdout) => {
-                            if (error) reject(error);
-                            else resolve(stdout);
-                        }
-                    );
-                });
+                const output = await this.execGit(
+                    ['ls-files', '--stage'],
+                    folderPath
+                );
 
                 const lines = output.split('\n');
                 for (const line of lines) {
@@ -687,6 +669,31 @@ export class WorkspaceIndexer {
     }
 
     /**
+     * Check if a file is ignored by git
+     */
+    private async isGitIgnored(filePath: string): Promise<boolean> {
+        if (!this.config.shouldRespectGitignore()) {
+            return false;
+        }
+
+        const workspaceFolders = this.env.getWorkspaceFolders();
+        const folder = workspaceFolders.find((f) => filePath.startsWith(f));
+        if (!folder) {
+            return false;
+        }
+
+        try {
+            await this.execGit(['check-ignore', '-q', filePath], folder);
+            // If exec succeeds (exit code 0), it is ignored
+            return true;
+        } catch (error: any) {
+            // If exit code is 1, it is NOT ignored.
+            // If code is anything else (e.g. 128), git failed (not a repo?), so assume NOT ignored.
+            return false;
+        }
+    }
+
+    /**
      * Handle file created
      */
     private async handleFileCreated(filePath: string): Promise<void> {
@@ -695,6 +702,10 @@ export class WorkspaceIndexer {
         }
 
         if (this.shouldExcludeFile(filePath)) {
+            return;
+        }
+
+        if (await this.isGitIgnored(filePath)) {
             return;
         }
 
@@ -729,6 +740,10 @@ export class WorkspaceIndexer {
         }
 
         if (this.shouldExcludeFile(filePath)) {
+            return;
+        }
+
+        if (await this.isGitIgnored(filePath)) {
             return;
         }
 
@@ -778,6 +793,27 @@ export class WorkspaceIndexer {
     public log(message: string): void {
         this.env.log(message);
         console.log(`[Indexer] ${message}`);
+    }
+
+    /**
+     * Execute a git command (abstracted for testing and reuse)
+     * Uses execFile to avoid shell injection vulnerabilities
+     */
+    protected async execGit(args: string[], cwd: string): Promise<string> {
+        return new Promise<string>((resolve, reject) => {
+            cp.execFile(
+                'git',
+                args,
+                {
+                    cwd: cwd,
+                    maxBuffer: 10 * 1024 * 1024, // 10MB buffer
+                },
+                (error, stdout) => {
+                    if (error) reject(error);
+                    else resolve(stdout);
+                }
+            );
+        });
     }
 
     /**
