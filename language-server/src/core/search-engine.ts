@@ -77,13 +77,14 @@ export class SearchEngine implements ISearchProvider {
         for (const item of items) {
             this.itemsMap.set(item.id, item);
 
+            const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
             const prepared: PreparedItem = {
                 item,
                 preparedName: Fuzzysort.prepare(item.name),
                 preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
-                preparedPath: item.relativeFilePath ? Fuzzysort.prepare(item.relativeFilePath) : null,
-                preparedCombined: item.relativeFilePath
-                    ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`)
+                preparedPath: normalizedPath ? Fuzzysort.prepare(normalizedPath) : null,
+                preparedCombined: normalizedPath
+                    ? Fuzzysort.prepare(`${normalizedPath} ${item.fullName || item.name}`)
                     : null,
             };
 
@@ -123,15 +124,18 @@ export class SearchEngine implements ISearchProvider {
      */
     private rebuildHotArrays(): void {
         this.scopedItems.clear();
-        this.preparedItems = this.items.map((item) => ({
-            item,
-            preparedName: Fuzzysort.prepare(item.name),
-            preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
-            preparedPath: item.relativeFilePath ? Fuzzysort.prepare(item.relativeFilePath) : null,
-            preparedCombined: item.relativeFilePath
-                ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`)
-                : null,
-        }));
+        this.preparedItems = this.items.map((item) => {
+            const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+            return {
+                item,
+                preparedName: Fuzzysort.prepare(item.name),
+                preparedFullName: item.fullName ? Fuzzysort.prepare(item.fullName) : null,
+                preparedPath: normalizedPath ? Fuzzysort.prepare(normalizedPath) : null,
+                preparedCombined: normalizedPath
+                    ? Fuzzysort.prepare(`${normalizedPath} ${item.fullName || item.name}`)
+                    : null,
+            };
+        });
 
         // Initialize arrays
         for (const scope of Object.values(SearchScope)) {
@@ -201,18 +205,20 @@ export class SearchEngine implements ISearchProvider {
             return this.performTextSearch(effectiveQuery, maxResults, onResult);
         }
 
+        const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+
         // 1. Filter and search - NOW ULTRA FAST using Hot-Arrays
         const filteredItems = this.filterByScope(scope);
-        let results = this.fuzzySearch(filteredItems, effectiveQuery);
+        let results = this.fuzzySearch(filteredItems, normalizedQuery);
 
         // 2. Add CamelHumps results if enabled
         if (enableCamelHumps) {
-            results = this.mergeWithCamelHumps(results, filteredItems, effectiveQuery);
+            results = this.mergeWithCamelHumps(results, filteredItems, normalizedQuery);
         }
 
         // 2.5 Add URL matches if query looks like a path
         if (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) {
-            results = this.mergeWithUrlMatches(results, filteredItems, effectiveQuery);
+            results = this.mergeWithUrlMatches(results, filteredItems, normalizedQuery);
         }
 
 
@@ -582,19 +588,21 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
+        const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+
         const filteredItems = this.filterByScope(scope);
         let results: SearchResult[] = this.findBurstMatches(
             filteredItems,
-            effectiveQuery.toLowerCase(),
+            normalizedQuery.toLowerCase(),
             maxResults,
             onResult,
         );
 
         if (
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
-            RouteMatcher.isPotentialUrl(effectiveQuery.toLowerCase())
+            RouteMatcher.isPotentialUrl(normalizedQuery.toLowerCase())
         ) {
-            this.addUrlMatches(results, filteredItems, effectiveQuery.toLowerCase(), maxResults);
+            this.addUrlMatches(results, filteredItems, normalizedQuery.toLowerCase(), maxResults);
         }
 
         if (this.getActivityScore) {
