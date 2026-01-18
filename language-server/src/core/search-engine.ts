@@ -464,6 +464,10 @@ export class SearchEngine implements ISearchProvider {
             if (score > bestScore) bestScore = score;
         }
 
+        // Optimization: Name has weight 1.0. Next best is FullName with 0.9.
+        // If we already have a score >= 0.9, we can't beat it.
+        if (bestScore >= 0.9) return bestScore;
+
         // Full Name (Weight 0.9)
         if (preparedFullName) {
             result = Fuzzysort.single(query, preparedFullName);
@@ -472,6 +476,10 @@ export class SearchEngine implements ISearchProvider {
                 if (score > bestScore) bestScore = score;
             }
         }
+
+        // Optimization: Next best is Path with 0.8.
+        // If we already have a score >= 0.8, we can't beat it.
+        if (bestScore >= 0.8) return bestScore;
 
         // Path (Weight 0.8)
         if (preparedPath) {
