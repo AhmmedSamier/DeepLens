@@ -57,6 +57,13 @@ jobs:
           Write-Error "VsixPublisher.exe not found in $vsPath"
         }
 
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     # Publish to Visual Studio Marketplace
     # Note: You must add VSCE_PAT to your repo secrets
     - name: Publish to Marketplace
@@ -64,11 +71,4 @@ jobs:
       with:
         pat: ${{ secrets.VSCE_PAT }}
         manifestPath: ${{ github.workspace }}\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\publishManifest.json
-        vsixPath: ${{ github.workspace }}\visual-studio-extension\DeepLensVisualStudio\DeepLensVisualStudio\bin\Release\net472\DeepLensVisualStudio.vsix
-
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        useLatestReleaseAsset: true
