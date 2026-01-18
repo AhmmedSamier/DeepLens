@@ -57,4 +57,4 @@ jobs:
       with:
         extension-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
         publish-manifest-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
-        personal-access-code: ${{ secrets.VSCE_PAT }}}}
+        personal-access-code: ${{ secrets.VSCE_PAT }}
