@@ -683,16 +683,8 @@ export class SearchProvider {
                 let hasPrefix = false;
                 for (const [prefix] of this.PREFIX_MAP.entries()) {
                     if (currentQuery.toLowerCase().startsWith(prefix)) {
-                        // Replace existing prefix with new one (or empty if none)
-                        // If new scope is EVERYTHING, we typically don't force a prefix unless we want '/a '
-                        // But PREFIX_MAP has '/a ' for EVERYTHING.
-                        // However, usually "All" means no prefix.
-                        // Let's decide: if scope is EVERYTHING, remove prefix.
-                        // Wait, my PREFIX_MAP has '/a ' -> EVERYTHING.
-                        // If user clicks "All", do we want to insert '/a '?
-                        // Probably cleaner to remove prefix.
-
-                        const replacement = scope === SearchScope.EVERYTHING ? '' : newPrefix;
+                        // Clear the prefix when switching scopes via buttons
+                        const replacement = '';
                         quickPick.value = replacement + currentQuery.slice(prefix.length);
                         hasPrefix = true;
                         break;
@@ -929,12 +921,20 @@ export class SearchProvider {
             if (preview) return; // Don't do anything for preview
 
             const functionalPrefix = item.id.substring('slash-cmd:'.length);
-            this.currentQuickPick.value = functionalPrefix;
+
+            // Find scope for this prefix
+            const scope = this.PREFIX_MAP.get(functionalPrefix);
+            if (scope) {
+                this.currentScope = scope;
+                this.updateFilterButtons(this.currentQuickPick);
+                this.currentQuickPick.value = ''; // Clear the command text
+                this.currentQuickPick.placeholder = this.getPlaceholder();
+            }
 
             // Manually trigger handleQueryChange to force scope update
             this.handleQueryChange(
                 this.currentQuickPick,
-                functionalPrefix,
+                '',
                 () => { }, // No-op timeouts
                 () => { }
             );

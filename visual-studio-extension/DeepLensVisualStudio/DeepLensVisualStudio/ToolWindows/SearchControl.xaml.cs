@@ -389,7 +389,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     SearchTextBox.Text = text;
-                    SearchTextBox.CaretIndex = text.Length;
+                    SearchTextBox.SelectAll();
                     SearchTextBox.Focus();
                 }), System.Windows.Threading.DispatcherPriority.Loaded);
                 
@@ -536,6 +536,21 @@ namespace DeepLensVisualStudio.ToolWindows
             var token = _searchCts.Token;
 
             var query = SearchQuery?.Trim() ?? "";
+
+            // Check for slash commands first
+            if (query.StartsWith("/"))
+            {
+                Results.Clear();
+                var commands = GetSlashCommands(query);
+                if (commands.Any())
+                {
+                    foreach (var cmd in commands) Results.Add(cmd);
+                    OnPropertyChanged(nameof(ResultCountText));
+                    StatusText = "Select a command to switch filter";
+                    return;
+                }
+            }
+
             if (query.Length < 2)
             {
                 Results.Clear();
@@ -671,6 +686,12 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
+            if (result.Kind == "Command")
+            {
+                ExecuteSlashCommand(result.Name);
+                return;
+            }
+
             try
             {
                 if (string.IsNullOrEmpty(result.FilePath))
@@ -742,6 +763,66 @@ namespace DeepLensVisualStudio.ToolWindows
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private IEnumerable<SearchResultViewModel> GetSlashCommands(string query)
+        {
+            var commands = new List<SearchResultViewModel>();
+            string lowerQuery = query.ToLowerInvariant();
+
+            // Define available commands
+            var available = new[]
+            {
+                 (Name: "/all", Desc: "Search Everything", Aliases: new[] { "/a" }),
+                 (Name: "/classes", Desc: "Search Classes", Aliases: new[] { "/types", "/t" }),
+                 (Name: "/symbols", Desc: "Search Symbols", Aliases: new[] { "/s" }),
+                 (Name: "/files", Desc: "Search Files", Aliases: new[] { "/f" }),
+                 (Name: "/text", Desc: "Search Text", Aliases: new[] { "/txt" }),
+                 (Name: "/endpoints", Desc: "Search Endpoints", Aliases: new[] { "/e" })
+            };
+
+            foreach (var cmd in available)
+            {
+                bool match = cmd.Name.StartsWith(lowerQuery);
+                if (!match && cmd.Aliases != null)
+                {
+                    foreach (var alias in cmd.Aliases)
+                    {
+                        if (alias.StartsWith(lowerQuery))
+                        {
+                            match = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (match)
+                {
+                    commands.Add(new SearchResultViewModel
+                    {
+                        Name = cmd.Name,
+                        Kind = "Command",
+                        ContainerName = cmd.Desc,
+                        FilePath = "",
+                        RelativePath = ""
+                    });
+                }
+            }
+            return commands;
+        }
+
+        private void ExecuteSlashCommand(string commandName)
+        {
+            switch (commandName)
+            {
+                case "/all": FilterAll = true; break;
+                case "/classes": FilterClasses = true; break;
+                case "/symbols": FilterSymbols = true; break;
+                case "/files": FilterFiles = true; break;
+                case "/text": FilterText = true; break;
+                case "/endpoints": FilterEndpoints = true; break;
+            }
+            SearchQuery = "";
         }
     }
 }
