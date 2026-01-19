@@ -8,6 +8,7 @@ interface PreparedItem {
     preparedFullName: Fuzzysort.Prepared | null;
     preparedPath: Fuzzysort.Prepared | null;
     preparedCombined: Fuzzysort.Prepared | null;
+    camelHumps: string;
 }
 
 /**
@@ -45,6 +46,17 @@ export class SearchEngine {
     }
 
     /**
+     * Extracts capital letters and the first letter of a string for CamelHumps matching.
+     * e.g., "RequestForComment" -> "RFC"
+     */
+    private calculateCamelHumps(text: string): string {
+        if (!text) {
+            return '';
+        }
+        return text.charAt(0) + text.slice(1).replace(/[^A-Z]/g, '');
+    }
+
+    /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
     private rebuildHotArrays(): void {
@@ -57,6 +69,7 @@ export class SearchEngine {
             preparedCombined: item.relativeFilePath
                 ? Fuzzysort.prepare(`${item.relativeFilePath} ${item.fullName || item.name}`)
                 : null,
+            camelHumps: this.calculateCamelHumps(item.name),
         }));
 
         // Initialize arrays
@@ -268,13 +281,13 @@ export class SearchEngine {
         const results: SearchResult[] = [];
         const queryUpper = query.toUpperCase();
 
-        for (const { item } of items) {
-            const score = this.camelHumpsMatch(item.name, queryUpper);
+        for (const prepared of items) {
+            const score = this.camelHumpsMatch(prepared.camelHumps, queryUpper);
             if (score > 0) {
                 results.push({
-                    item,
-                    score: this.applyItemTypeBoost(score, item.type),
-                    scope: this.getScopeForItemType(item.type),
+                    item: prepared.item,
+                    score: this.applyItemTypeBoost(score, prepared.item.type),
+                    scope: this.getScopeForItemType(prepared.item.type),
                 });
             }
         }
@@ -285,14 +298,11 @@ export class SearchEngine {
     /**
      * Calculate CamelHumps match score
      */
-    private camelHumpsMatch(text: string, query: string): number {
-        // Extract capital letters and first letter
-        const capitals = text.charAt(0) + text.slice(1).replace(/[^A-Z]/g, '');
-
-        if (capitals.toUpperCase().includes(query)) {
+    private camelHumpsMatch(camelHumps: string, query: string): number {
+        if (camelHumps.toUpperCase().includes(query)) {
             // Calculate score based on match position and length
-            const matchIndex = capitals.toUpperCase().indexOf(query);
-            const lengthRatio = query.length / capitals.length;
+            const matchIndex = camelHumps.toUpperCase().indexOf(query);
+            const lengthRatio = query.length / camelHumps.length;
 
             // Boost score if match is at the beginning
             const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
