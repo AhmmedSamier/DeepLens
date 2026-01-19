@@ -18,11 +18,12 @@ namespace DeepLensVisualStudio
     [ProvideAutoLoad(VSConstants.UICONTEXT.ShellInitialized_string, PackageAutoLoadFlags.BackgroundLoad)]
     [ProvideToolWindow(typeof(ToolWindows.SearchToolWindow), Style = VsDockStyle.Float, Window = "DocumentWell")]
     [ProvideBindingPath]
-    public sealed class DeepLensPackage : AsyncPackage
+    public sealed class DeepLensPackage : AsyncPackage, IVsSolutionEvents
     {
         public const string PackageGuidString = "a1b2c3d4-e5f6-4a5b-9c8d-7e6f5a4b3c2d";
         
         private static DeepLensPackage? _instance;
+        private uint _solutionEventsCookie;
 
         private static IntPtr _keyboardHookId = IntPtr.Zero;
         private static LowLevelKeyboardProc? _keyboardProc;
@@ -74,10 +75,51 @@ namespace DeepLensVisualStudio
             {
                 InstallKeyboardHook();
                 Debug.WriteLine("DeepLens: Double-shift keyboard hook installed at startup");
+                
+                // Register for solution events to initialize LSP early
+                var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
+                if (solution != null)
+                {
+                    solution.AdviseSolutionEvents(this, out _solutionEventsCookie);
+                    
+                    // If solution is already open (e.g. reload), initialize now
+                    if (ErrorHandler.Succeeded(solution.GetProperty((int)__VSPROPID.VSPROPID_IsSolutionOpen, out object isOpen)) && (bool)isOpen)
+                    {
+                        _ = InitializeLspInBackgroundAsync();
+                    }
+                }
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"DeepLens: Failed to install keyboard hook: {ex.Message}");
+                Debug.WriteLine($"DeepLens: Initialization error: {ex.Message}");
+            }
+        }
+
+        private async Task InitializeLspInBackgroundAsync()
+        {
+            await Task.Yield(); // Don't block the UI thread during startup
+
+            try
+            {
+                string? solutionPath = null;
+                await JoinableTaskFactory.SwitchToMainThreadAsync();
+                
+                var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
+                if (solution != null && ErrorHandler.Succeeded(solution.GetProperty((int)__VSPROPID.VSPROPID_SolutionDirectory, out object dir)))
+                {
+                    solutionPath = dir as string;
+                }
+
+                if (!string.IsNullOrEmpty(solutionPath))
+                {
+                    Debug.WriteLine($"DeepLens: Initializing LSP in background for {solutionPath}");
+                    var service = SearchControl.GetLspService();
+                    await service.InitializeAsync(solutionPath!, DisposalToken);
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Background LSP init failed: {ex.Message}");
             }
         }
 
@@ -85,6 +127,15 @@ namespace DeepLensVisualStudio
         {
             if (disposing)
             {
+                if (_solutionEventsCookie != 0)
+                {
+                    if (GetService(typeof(SVsSolution)) is IVsSolution solution)
+                    {
+                        solution.UnadviseSolutionEvents(_solutionEventsCookie);
+                    }
+                    _solutionEventsCookie = 0;
+                }
+
                 UninstallKeyboardHook();
                 _instance = null;
             }
@@ -292,5 +343,23 @@ namespace DeepLensVisualStudio
 
             return string.Empty;
         }
+        #region IVsSolutionEvents members
+
+        public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded) => VSConstants.S_OK;
+        public int OnQueryCloseProject(IVsHierarchy pHierarchy, int fRemoving, ref int pfCancel) => VSConstants.S_OK;
+        public int OnBeforeCloseProject(IVsHierarchy pHierarchy, int fRemoved) => VSConstants.S_OK;
+        public int OnAfterLoadProject(IVsHierarchy pHierarchy, IVsHierarchy pStubHierarchy) => VSConstants.S_OK;
+        public int OnQueryUnloadProject(IVsHierarchy pRealHierarchy, ref int pfCancel) => VSConstants.S_OK;
+        public int OnBeforeUnloadProject(IVsHierarchy pRealHierarchy, IVsHierarchy pStubHierarchy) => VSConstants.S_OK;
+        public int OnAfterOpenSolution(object pUnkReserved, int fNewSolution)
+        {
+            _ = InitializeLspInBackgroundAsync();
+            return VSConstants.S_OK;
+        }
+        public int OnQueryCloseSolution(object pUnkReserved, ref int pfCancel) => VSConstants.S_OK;
+        public int OnBeforeCloseSolution(object pUnkReserved) => VSConstants.S_OK;
+        public int OnAfterCloseSolution(object pUnkReserved) => VSConstants.S_OK;
+
+        #endregion
     }
 }

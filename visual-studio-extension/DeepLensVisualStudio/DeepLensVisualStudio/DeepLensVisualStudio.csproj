@@ -52,57 +52,6 @@
     />
     <Exec Command="bun run build" WorkingDirectory="..\..\..\language-server" />
 
-    <!-- Build the parsers directory -->
-    <MakeDir Directories="..\..\..\language-server\dist\parsers" />
-    <Exec
-      Command="copy node_modules\web-tree-sitter\web-tree-sitter.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-c-sharp\tree-sitter-c_sharp.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-typescript\tree-sitter-typescript.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-typescript\tree-sitter-tsx.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-javascript\tree-sitter-javascript.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-python\tree-sitter-python.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-java\tree-sitter-java.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-go\tree-sitter-go.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-cpp\tree-sitter-cpp.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-c\tree-sitter-c.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-ruby\tree-sitter-ruby.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-    <Exec
-      Command="copy node_modules\tree-sitter-php\tree-sitter-php.wasm dist\parsers\ /y"
-      WorkingDirectory="..\..\..\language-server"
-    />
-
     <!-- Copy server.js to project dist folder -->
     <MakeDir Directories="dist\parsers" />
     <Copy
@@ -137,15 +86,15 @@
     />
   </Target>
 
-  <!-- Include dist files in VSIX -->
-  <ItemGroup>
-    <Content Include="dist\**\*" />
-  </ItemGroup>
-
   <Target Name="ForceIncludeDistInVsix" BeforeTargets="GetVsixSourceItems">
     <ItemGroup>
-      <VSIXSourceItem Include="dist\**\*">
+      <!-- Include server.js in dist/ -->
+      <VSIXSourceItem Include="dist\server.js">
         <VSIXSubPath>dist</VSIXSubPath>
+      </VSIXSourceItem>
+      <!-- Include all WASM files in dist/parsers/ -->
+      <VSIXSourceItem Include="dist\parsers\*.wasm">
+        <VSIXSubPath>dist\parsers</VSIXSubPath>
       </VSIXSourceItem>
     </ItemGroup>
   </Target>

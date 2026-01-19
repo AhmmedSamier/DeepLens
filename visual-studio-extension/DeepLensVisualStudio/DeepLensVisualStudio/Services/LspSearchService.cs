@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using StreamJsonRpc;
@@ -140,19 +139,27 @@ namespace DeepLensVisualStudio.Services
                     return false;
                 }
 
-                _rpc = new JsonRpc(_nodeProcess.StandardInput.BaseStream, _nodeProcess.StandardOutput.BaseStream);
+                try
+                {
+                    _rpc = new JsonRpc(_nodeProcess.StandardInput.BaseStream, _nodeProcess.StandardOutput.BaseStream);
 
-                // Handle streamed results for timing
-                _rpc.AddLocalRpcMethod("deeplens/streamResult", new Action<JToken>(OnStreamResult));
-                
-                // Handle progress notifications from LSP server
-                _rpc.AddLocalRpcMethod("deeplens/progress", new Action<JToken>(OnProgressNotification));
-                
-                // Handle the progress token creation request from LSP server
-                // This is required for progress to work - the server sends this request before sending notifications
-                _rpc.AddLocalRpcMethod("window/workDoneProgress/create", new Func<JToken, bool>(OnWorkDoneProgressCreate));
+                    // Handle streamed results for timing
+                    _rpc.AddLocalRpcMethod("deeplens/streamResult", new Action<JToken>(OnStreamResult));
+                    
+                    // Handle progress notifications from LSP server
+                    _rpc.AddLocalRpcMethod("deeplens/progress", new Action<JToken>(OnProgressNotification));
+                    
+                    // Handle the progress token creation request from LSP server
+                    _rpc.AddLocalRpcMethod("window/workDoneProgress/create", new Func<JToken, bool>(OnWorkDoneProgressCreate));
 
-                _rpc.StartListening();
+                    _rpc.StartListening();
+                }
+                catch (Exception ex)
+                {
+                    _lastError = $"Failed to setup RPC: {ex.Message}";
+                    _nodeProcess.Kill();
+                    return false;
+                }
 
                 var initializeParams = new JObject
                 {

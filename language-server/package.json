@@ -4,7 +4,7 @@
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
-        "build": "bun build src/server.ts --outfile dist/server.js --target node",
+        "build": "bun run scripts/setup-parsers.ts && bun build src/server.ts --outfile dist/server.js --target node",
         "test": "bun run scripts/setup-parsers.ts && bun test",
         "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts",
         "benchmark:memory": "bun run scripts/memory-benchmark.ts"

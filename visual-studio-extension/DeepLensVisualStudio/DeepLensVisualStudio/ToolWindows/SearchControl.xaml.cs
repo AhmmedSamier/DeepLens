@@ -148,6 +148,24 @@ namespace DeepLensVisualStudio.ToolWindows
 
 
         private SearchResultViewModel? _selectedResult;
+
+        /// <summary>
+        /// Gets the singleton LSP service instance, creating it if necessary.
+        /// </summary>
+        public static LspSearchService GetLspService()
+        {
+            if (_sharedSearchService == null)
+            {
+                lock (ServiceLock)
+                {
+                    if (_sharedSearchService == null)
+                    {
+                        _sharedSearchService = new LspSearchService();
+                    }
+                }
+            }
+            return _sharedSearchService;
+        }
         private readonly SearchToolWindow? _hostWindow;
 
         public event PropertyChangedEventHandler? PropertyChanged;
@@ -426,10 +444,14 @@ namespace DeepLensVisualStudio.ToolWindows
                 return;
             }
             
-            _solutionRoot = workspacePath;
+            _solutionRoot = workspacePath ?? "";
             
             // Check if already initialized with the same solution
-            if (_sharedSearchService.LastError == null && _sharedSearchService.ActiveRuntime != null)
+            bool isAlreadyInitialized = _sharedSearchService != null && 
+                                       _sharedSearchService.LastError == null && 
+                                       _sharedSearchService.ActiveRuntime != null;
+
+            if (isAlreadyInitialized && _sharedSearchService != null)
             {
                 string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
                     ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
@@ -439,17 +461,28 @@ namespace DeepLensVisualStudio.ToolWindows
             }
             
             StatusText = "Initializing DeepLens LSP...";
-            if (await _sharedSearchService.InitializeAsync(workspacePath, CancellationToken.None))
+            
+            var service = GetLspService();
+            if (workspacePath != null && await service.InitializeAsync(workspacePath, CancellationToken.None))
             {
-                string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
-                    ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                
+                string runtimeInfo = !string.IsNullOrEmpty(service.ActiveRuntime)
+                    ? $" ({char.ToUpper(service.ActiveRuntime[0])}{service.ActiveRuntime.Substring(1)})"
                     : "";
                 StatusText = $"DeepLens Ready{runtimeInfo}";
                 ShowVsStatusBarMessage(StatusText);
+                
+                // If it's the first time, we might want to show indexing status
+                if (service.IsIndexing)
+                {
+                    StatusText = "DeepLens Indexing...";
+                }
             }
             else
             {
-                StatusText = _sharedSearchService.LastError ?? "LSP initialization failed";
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                StatusText = service.LastError ?? "LSP initialization failed";
                 ShowVsStatusBarMessage(StatusText);
             }
         }
