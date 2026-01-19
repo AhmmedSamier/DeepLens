@@ -766,6 +766,9 @@ export class WorkspaceIndexer {
         // Remove old symbols for this file
         this.items = this.items.filter((item) => item.filePath !== filePath || item.type === SearchItemType.FILE);
 
+        // Invalidate hash to force re-calculation
+        this.fileHashes.delete(filePath);
+
         // Re-index symbols (it will check cache internally)
         await this.indexFileSymbols(filePath);
 
