@@ -1,33 +1,55 @@
-using Microsoft.VisualStudio.Extensibility;
-using Microsoft.VisualStudio.Extensibility.ToolWindows;
-using Microsoft.VisualStudio.RpcContracts.RemoteUI;
+using System;
+using System.Runtime.InteropServices;
+using Microsoft.VisualStudio.Shell;
 
 namespace DeepLensVisualStudio.ToolWindows
 {
     /// <summary>
-    /// Tool window for DeepLens Search functionality.
+    /// Tool window for the DeepLens search functionality.
+    /// This window hosts the SearchControl and integrates with VS's focus management.
     /// </summary>
-    [VisualStudioContribution]
-    public class SearchToolWindow : ToolWindow
+    [Guid("b2c3d4e5-f6a7-4b5c-9d8e-7f6a5b4c3d2e")]
+    public class SearchToolWindow : ToolWindowPane
     {
-        /// <summary>
-        /// Gets the configuration for this tool window.
-        /// </summary>
-        public override ToolWindowConfiguration ToolWindowConfiguration => new ToolWindowConfiguration
-        {
-            Placement = ToolWindowPlacement.Floating,
-            AllowAutoCreation = true,
-        };
+        private readonly SearchControl _searchControl;
 
         /// <summary>
-        /// Gets the content of the tool window.
+        /// Initializes a new instance of the SearchToolWindow class.
         /// </summary>
-        public override Task<IRemoteUserControl> GetContentAsync(CancellationToken cancellationToken)
+        public SearchToolWindow() : base(null)
         {
-            // Note: VisualStudio.Extensibility uses RemoteUI which requires a different approach
-            // For VSSDK compatibility mode, we use a traditional WPF control approach
-            // This requires hosting via AsyncPackage pattern
-            return Task.FromResult<IRemoteUserControl>(null!);
+            this.Caption = "DeepLens Search";
+            _searchControl = new SearchControl();
+            this.Content = _searchControl;
+        }
+
+        /// <summary>
+        /// Gets the SearchControl instance hosted in this tool window.
+        /// </summary>
+        public SearchControl SearchControl => _searchControl;
+
+        /// <summary>
+        /// Sets the initial search text in the search control.
+        /// </summary>
+        public void SetInitialSearchText(string text)
+        {
+            _searchControl?.SetInitialSearchText(text);
+        }
+
+        /// <summary>
+        /// Focuses the search textbox when the tool window is shown.
+        /// </summary>
+        public void FocusSearchBox()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            
+            // Use Dispatcher to focus after the window is fully shown
+            _searchControl?.Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var searchTextBox = _searchControl.FindName("SearchTextBox") as System.Windows.Controls.TextBox;
+                searchTextBox?.Focus();
+                System.Windows.Input.Keyboard.Focus(searchTextBox);
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
 }

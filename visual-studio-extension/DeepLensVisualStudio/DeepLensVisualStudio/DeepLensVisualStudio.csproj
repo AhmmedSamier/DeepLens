@@ -11,9 +11,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Sdk" Version="17.14.40608" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.VisualStudio.Extensibility.Build" Version="17.14.40608" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.VisualStudio.SDK" Version="17.14.40265" ExcludeAssets="runtime" />
+    <PackageReference
+      Include="Microsoft.VisualStudio.Extensibility.Sdk"
+      Version="17.14.40608"
+      PrivateAssets="all"
+    />
+    <PackageReference
+      Include="Microsoft.VisualStudio.Extensibility.Build"
+      Version="17.14.40608"
+      PrivateAssets="all"
+    />
+    <PackageReference
+      Include="Microsoft.VisualStudio.SDK"
+      Version="17.14.40265"
+      ExcludeAssets="runtime"
+    />
     <PackageReference Include="StreamJsonRpc" Version="2.22.23" />
   </ItemGroup>
 
@@ -30,40 +42,107 @@
     </Resource>
   </ItemGroup>
 
+  <!-- Build the language server before the main build -->
   <Target Name="BuildLSP" BeforeTargets="BeforeBuild">
     <Message Importance="High" Text="Building DeepLens Language Server..." />
-    <Exec Command="bun install" WorkingDirectory="..\..\..\language-server" ContinueOnError="true" />
+    <Exec
+      Command="bun install"
+      WorkingDirectory="..\..\..\language-server"
+      ContinueOnError="true"
+    />
     <Exec Command="bun run build" WorkingDirectory="..\..\..\language-server" />
-    
+
     <!-- Build the parsers directory -->
     <MakeDir Directories="..\..\..\language-server\dist\parsers" />
-    <Exec Command="copy node_modules\web-tree-sitter\web-tree-sitter.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-c-sharp\tree-sitter-c_sharp.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-typescript\tree-sitter-typescript.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-typescript\tree-sitter-tsx.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-javascript\tree-sitter-javascript.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-python\tree-sitter-python.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-java\tree-sitter-java.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-go\tree-sitter-go.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-cpp\tree-sitter-cpp.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-c\tree-sitter-c.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-ruby\tree-sitter-ruby.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
-    <Exec Command="copy node_modules\tree-sitter-php\tree-sitter-php.wasm dist\parsers\ /y" WorkingDirectory="..\..\..\language-server" />
+    <Exec
+      Command="copy node_modules\web-tree-sitter\web-tree-sitter.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-c-sharp\tree-sitter-c_sharp.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-typescript\tree-sitter-typescript.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-typescript\tree-sitter-tsx.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-javascript\tree-sitter-javascript.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-python\tree-sitter-python.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-java\tree-sitter-java.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-go\tree-sitter-go.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-cpp\tree-sitter-cpp.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-c\tree-sitter-c.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-ruby\tree-sitter-ruby.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
+    <Exec
+      Command="copy node_modules\tree-sitter-php\tree-sitter-php.wasm dist\parsers\ /y"
+      WorkingDirectory="..\..\..\language-server"
+    />
 
-    <Copy SourceFiles="..\..\..\language-server\dist\server.js" DestinationFiles="dist\server.js" SkipUnchangedFiles="true" />
-    
-    <!-- Sync parsers to local project for bundling -->
+    <!-- Copy server.js to project dist folder -->
+    <MakeDir Directories="dist\parsers" />
+    <Copy
+      SourceFiles="..\..\..\language-server\dist\server.js"
+      DestinationFiles="dist\server.js"
+      SkipUnchangedFiles="true"
+    />
+
+    <!-- Copy parsers to project dist folder -->
     <ItemGroup>
-        <WasmFiles Include="..\..\..\language-server\dist\parsers\*.wasm" />
+      <WasmFiles Include="..\..\..\language-server\dist\parsers\*.wasm" />
     </ItemGroup>
     <Copy SourceFiles="@(WasmFiles)" DestinationFolder="dist\parsers" SkipUnchangedFiles="true" />
-
-    <ItemGroup>
-      <Content Include="dist\**\*">
-        <IncludeInVSIX>true</IncludeInVSIX>
-        <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-        <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
-      </Content>
-    </ItemGroup>
   </Target>
+
+  <!-- Copy LSP files to output directory after build -->
+  <Target Name="CopyLspToOutput" AfterTargets="Build">
+    <Message Importance="High" Text="Copying LSP files to output..." />
+    <MakeDir Directories="$(OutputPath)dist\parsers" />
+    <Copy
+      SourceFiles="dist\server.js"
+      DestinationFiles="$(OutputPath)dist\server.js"
+      SkipUnchangedFiles="true"
+    />
+    <ItemGroup>
+      <LocalWasmFiles Include="dist\parsers\*.wasm" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(LocalWasmFiles)"
+      DestinationFolder="$(OutputPath)dist\parsers"
+      SkipUnchangedFiles="true"
+    />
+  </Target>
+
+  <!-- Include dist files in VSIX -->
+  <ItemGroup>
+    <Content Include="dist\**\*" Condition="Exists('dist\server.js')">
+      <IncludeInVSIX>true</IncludeInVSIX>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
+    </Content>
+  </ItemGroup>
 </Project>
