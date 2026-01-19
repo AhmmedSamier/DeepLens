@@ -125,7 +125,9 @@ namespace DeepLensVisualStudio.ToolWindows
     /// </summary>
     public partial class SearchControl : UserControl, INotifyPropertyChanged
     {
-        private readonly LspSearchService _searchService;
+        // Static singleton LSP service - initialized once and reused across window opens
+        private static LspSearchService? _sharedSearchService;
+        private static readonly object _serviceLock = new object();
         private CancellationTokenSource? _searchCts;
         private string _searchQuery = "";
         private string _statusText = "Ready";
@@ -141,6 +143,7 @@ namespace DeepLensVisualStudio.ToolWindows
 
 
         private SearchResultViewModel? _selectedResult;
+        private readonly SearchToolWindow? _hostWindow;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -313,11 +316,17 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
-        public SearchControl()
+        public SearchControl(SearchToolWindow? hostWindow = null)
         {
             InitializeComponent();
             DataContext = this;
-            _searchService = new LspSearchService();
+            _hostWindow = hostWindow;
+            
+            // Use shared singleton LSP service
+            lock (_serviceLock)
+            {
+                _sharedSearchService ??= new LspSearchService();
+            }
             OpenCommand = new RelayCommand(p =>
             {
                 if (p is SearchResultViewModel vm) NavigateToResult(vm);
@@ -342,25 +351,62 @@ namespace DeepLensVisualStudio.ToolWindows
             SearchTextBox.Focus();
         }
 
+        /// <summary>
+        /// Sets the initial search text (e.g., from selected text in the editor).
+        /// This will trigger a search immediately.
+        /// </summary>
+        public void SetInitialSearchText(string text)
+        {
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                _searchQuery = text; // Set directly to avoid double search
+                OnPropertyChanged(nameof(SearchQuery));
+                
+                // Move cursor to end of text
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    SearchTextBox.Text = text;
+                    SearchTextBox.CaretIndex = text.Length;
+                    SearchTextBox.Focus();
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
+                
+                _ = PerformSearchAsync();
+            }
+        }
+
         private async Task InitializeLspAsync()
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            
+            if (_sharedSearchService == null) return;
+            
             var solution = Package.GetGlobalService(typeof(SVsSolution)) as IVsSolution;
             if (solution != null && solution.GetSolutionInfo(out string dir, out _, out _) == 0)
             {
                 _solutionRoot = dir;
-                StatusText = "Initializing DeepLens LSP...";
-                if (await _searchService.InitializeAsync(dir, CancellationToken.None))
+                
+                // Check if already initialized with the same solution
+                if (_sharedSearchService.LastError == null && _sharedSearchService.ActiveRuntime != null)
                 {
-                    string runtimeInfo = !string.IsNullOrEmpty(_searchService.ActiveRuntime)
-                        ? $" ({char.ToUpper(_searchService.ActiveRuntime[0])}{_searchService.ActiveRuntime.Substring(1)})"
+                    string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
+                        ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
+                        : "";
+                    StatusText = $"DeepLens Ready{runtimeInfo}";
+                    return;
+                }
+                
+                StatusText = "Initializing DeepLens LSP...";
+                if (await _sharedSearchService.InitializeAsync(dir, CancellationToken.None))
+                {
+                    string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
+                        ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
                         : "";
                     StatusText = $"DeepLens Ready{runtimeInfo}";
                     ShowVsStatusBarMessage(StatusText);
                 }
                 else
                 {
-                    StatusText = _searchService.LastError ?? "LSP initialization failed";
+                    StatusText = _sharedSearchService.LastError ?? "LSP initialization failed";
                     ShowVsStatusBarMessage(StatusText);
                 }
             }
@@ -443,7 +489,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 else if (FilterTypes) scope = "types";
                 else if (FilterText) scope = "text";
 
-                var searchResults = await _searchService.SearchAsync(query, scope, token);
+                var searchResults = await _sharedSearchService.SearchAsync(query, scope, token);
 
                 if (token.IsCancellationRequested)
                     return;
@@ -477,13 +523,13 @@ namespace DeepLensVisualStudio.ToolWindows
                 OnPropertyChanged(nameof(ResultCountText));
 
                 // Show any errors from the service
-                if (Results.Count == 0 && !string.IsNullOrEmpty(_searchService.LastError))
+                if (Results.Count == 0 && !string.IsNullOrEmpty(_sharedSearchService.LastError))
                 {
-                    StatusText = _searchService.LastError;
+                    StatusText = _sharedSearchService.LastError;
                 }
                 else
                 {
-                    var timings = _searchService.LastTimings;
+                    var timings = _sharedSearchService.LastTimings;
                     var timingText = $"First: {timings.FirstResultMs}ms | Total: {timings.TotalMs}ms";
                     StatusText = Results.Count > 0
                         ? $"{Results.Count} results | {timingText}"
@@ -515,7 +561,8 @@ namespace DeepLensVisualStudio.ToolWindows
             }
             else if (e.Key == Key.Escape)
             {
-                // Close window - will be handled by parent
+                ReturnFocusToEditor();
+                e.Handled = true;
             }
         }
 
@@ -600,6 +647,20 @@ namespace DeepLensVisualStudio.ToolWindows
             catch (Exception ex)
             {
                 StatusText = $"Error revealing in explorer: {ex.Message}";
+            }
+        }
+
+        private void ReturnFocusToEditor()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                var dte = Package.GetGlobalService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+                dte?.ActiveDocument?.Activate();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Error returning focus to editor: {ex.Message}");
             }
         }
 
