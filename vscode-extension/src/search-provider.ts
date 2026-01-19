@@ -775,7 +775,7 @@ export class SearchProvider {
 
             // If we still have NO results at the end of Phase 2, then we clear the stale items (history)
             if (results.length === 0) {
-                quickPick.items = [];
+                quickPick.items = [this.getEmptyStateItem(trimmedQuery)];
                 this.updateTitle(quickPick, 0);
             } else {
                 quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
@@ -784,6 +784,30 @@ export class SearchProvider {
         }
 
         return results;
+    }
+
+    /**
+     * Get empty state item when no results are found
+     */
+    private getEmptyStateItem(query: string): SearchResultItem {
+        return {
+            label: 'No results found',
+            description: `No matching items found for '${query}'`,
+            detail: 'Try changing your search terms or filter scope',
+            alwaysShow: true,
+            iconPath: new vscode.ThemeIcon('search', new vscode.ThemeColor('descriptionForeground')),
+            result: {
+                item: {
+                    id: 'empty-state',
+                    name: 'No results found',
+                    type: SearchItemType.TEXT, // Dummy type
+                    filePath: '',
+                    detail: ''
+                },
+                score: 0,
+                scope: this.currentScope
+            }
+        };
     }
 
     /**
@@ -915,6 +939,11 @@ export class SearchProvider {
         preview: boolean = false,
     ): Promise<void> {
         const { item } = result;
+
+        // Palette: Ignore empty state item
+        if (item.id === 'empty-state') {
+            return;
+        }
 
         // Handle Slash Command Selection
         if (item.id.startsWith('slash-cmd:') && this.currentQuickPick) {
