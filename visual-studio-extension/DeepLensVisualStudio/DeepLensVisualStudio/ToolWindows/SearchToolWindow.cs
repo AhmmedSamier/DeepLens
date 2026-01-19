@@ -46,8 +46,12 @@ namespace DeepLensVisualStudio.ToolWindows
             _searchControl?.Dispatcher.BeginInvoke(new Action(() =>
             {
                 var searchTextBox = _searchControl.FindName("SearchTextBox") as System.Windows.Controls.TextBox;
-                searchTextBox?.Focus();
-                System.Windows.Input.Keyboard.Focus(searchTextBox);
+                if (searchTextBox != null)
+                {
+                    searchTextBox.Focus();
+                    searchTextBox.SelectAll();
+                    System.Windows.Input.Keyboard.Focus(searchTextBox);
+                }
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
     }
