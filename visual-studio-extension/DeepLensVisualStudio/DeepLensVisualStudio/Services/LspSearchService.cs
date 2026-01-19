@@ -5,7 +5,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.VisualStudio.Shell;
 using StreamJsonRpc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -33,17 +32,43 @@ namespace DeepLensVisualStudio.Services
         private JsonRpc? _rpc;
         private string? _lastError;
         private SearchTimings _lastTimings = new SearchTimings();
-        private bool _isInitialized = false;
-        private bool _firstRecorded = false;
+        private bool _isInitialized;
+        private bool _firstRecorded;
         private Stopwatch _searchSw = new Stopwatch();
 
         public string? LastError => _lastError;
         public SearchTimings LastTimings => _lastTimings;
         public string? ActiveRuntime { get; private set; }
+        public string? CurrentWorkspacePath { get; private set; }
+        
+        /// <summary>
+        /// Indicates whether the LSP server is currently indexing.
+        /// </summary>
+        public bool IsIndexing { get; private set; }
+
+        /// <summary>
+        /// Event fired when progress is reported during indexing.
+        /// </summary>
+        public event Action<ProgressInfo>? OnProgress;
 
         public async Task<bool> InitializeAsync(string solutionPath, CancellationToken ct)
         {
+            // If already initialized for a different workspace, reinitialize
+            if (_isInitialized && !string.Equals(CurrentWorkspacePath, solutionPath, StringComparison.OrdinalIgnoreCase))
+            {
+                await ReinitializeAsync(solutionPath, ct);
+                return _isInitialized;
+            }
+            
             if (_isInitialized) return true;
+
+            if (string.IsNullOrEmpty(solutionPath))
+            {
+                // If no solution is open, we can't initialize LSP properly with a workspace.
+                // We'll wait for a solution to be opened.
+                _lastError = "No solution or folder open. DeepLens LSP will initialize when a workspace is available.";
+                return false;
+            }
 
             try
             {
@@ -59,8 +84,6 @@ namespace DeepLensVisualStudio.Services
                 try
                 {
                     string runtime = "bun";
-                    bool startSucceeded = false;
-
                     try
                     {
                         var bunCheck = new Process
@@ -76,7 +99,6 @@ namespace DeepLensVisualStudio.Services
                         };
                         bunCheck.Start();
                         bunCheck.WaitForExit();
-                        startSucceeded = true;
                     }
                     catch
                     {
@@ -122,6 +144,13 @@ namespace DeepLensVisualStudio.Services
 
                 // Handle streamed results for timing
                 _rpc.AddLocalRpcMethod("deeplens/streamResult", new Action<JToken>(OnStreamResult));
+                
+                // Handle progress notifications from LSP server
+                _rpc.AddLocalRpcMethod("deeplens/progress", new Action<JToken>(OnProgressNotification));
+                
+                // Handle the progress token creation request from LSP server
+                // This is required for progress to work - the server sends this request before sending notifications
+                _rpc.AddLocalRpcMethod("window/workDoneProgress/create", new Func<JToken, bool>(OnWorkDoneProgressCreate));
 
                 _rpc.StartListening();
 
@@ -142,6 +171,7 @@ namespace DeepLensVisualStudio.Services
                 await _rpc.NotifyAsync("initialized");
 
                 _isInitialized = true;
+                CurrentWorkspacePath = solutionPath;
                 return true;
             }
             catch (Exception ex)
@@ -150,6 +180,50 @@ namespace DeepLensVisualStudio.Services
                 Debug.WriteLine($"[DeepLens] {_lastError}");
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Reinitializes the LSP server for a new solution/workspace.
+        /// </summary>
+        private async Task ReinitializeAsync(string newSolutionPath, CancellationToken ct)
+        {
+            Debug.WriteLine($"DeepLens: Reinitializing LSP for new workspace: {newSolutionPath}");
+            
+            // Shutdown existing process
+            Shutdown();
+            
+            // Reset state
+            _isInitialized = false;
+            CurrentWorkspacePath = null;
+            _lastError = null;
+            
+            // Initialize with new path
+            await InitializeAsync(newSolutionPath, ct);
+        }
+
+        /// <summary>
+        /// Cleanly shuts down the LSP server process.
+        /// </summary>
+        private void Shutdown()
+        {
+            try
+            {
+                _rpc?.Dispose();
+            }
+            catch { }
+
+            if (_nodeProcess != null && !_nodeProcess.HasExited)
+            {
+                try
+                {
+                    _nodeProcess.Kill();
+                }
+                catch { }
+            }
+
+            _nodeProcess?.Dispose();
+            _nodeProcess = null;
+            _rpc = null;
         }
 
         private void OnStreamResult(JToken parameters)
@@ -161,17 +235,106 @@ namespace DeepLensVisualStudio.Services
             }
         }
 
+        private bool OnWorkDoneProgressCreate(JToken parameters)
+        {
+            // Simply acknowledge the progress token creation - the server expects a response
+            Debug.WriteLine($"DeepLens: Progress token creation requested: {parameters}");
+            return true;
+        }
+
+        private void OnProgressNotification(JToken parameters)
+        {
+            try
+            {
+                Debug.WriteLine($"DeepLens: Received progress notification: {parameters}");
+                
+                string? message = null;
+                int? percentage = null;
+                
+                // Handle different parameter formats
+                if (parameters is JObject obj)
+                {
+                    message = obj["message"]?.ToString();
+                    percentage = obj["percentage"]?.Value<int>();
+                }
+                else
+                {
+                    // Try to get parameters from root
+                    message = parameters["message"]?.ToString();
+                    percentage = parameters["percentage"]?.Value<int>();
+                }
+                
+                Debug.WriteLine($"DeepLens: Progress - Message: {message}, Percentage: {percentage}");
+                
+                // Determine state based on message content
+                string state;
+                if (message?.StartsWith("Done") == true || percentage == 100)
+                {
+                    state = "end";
+                    IsIndexing = false;
+                }
+                else if (!IsIndexing)
+                {
+                    state = "start";
+                    IsIndexing = true;
+                }
+                else
+                {
+                    state = "report";
+                }
+
+                OnProgress?.Invoke(new ProgressInfo
+                {
+                    State = state,
+                    Message = message,
+                    Percentage = percentage
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Error processing progress notification: {ex.Message}");
+            }
+        }
+
         private string? FindServerPath(string extensionDir)
         {
+            Debug.WriteLine($"DeepLens: Searching for LSP server in: {extensionDir}");
+
             // 1. Check relative to extension (production/bundled)
-            string prodPath = Path.Combine(extensionDir, "dist", "server.js");
-            if (File.Exists(prodPath)) return prodPath;
+            string[] possiblePaths = new[]
+            {
+                Path.Combine(extensionDir, "dist", "server.js"),
+                Path.Combine(extensionDir, "server.js"),
+                Path.Combine(extensionDir, "..", "dist", "server.js"), // In case assembly is in a bin folder
+                Path.Combine(extensionDir, "..", "server.js"),
+            };
 
-            // 2. Check development path
-            string devPath =
-                Path.GetFullPath(Path.Combine(extensionDir, "..\\..\\..\\..\\..\\language-server\\dist\\server.js"));
-            if (File.Exists(devPath)) return devPath;
+            foreach (var path in possiblePaths)
+            {
+                if (File.Exists(path))
+                {
+                    Debug.WriteLine($"DeepLens: Found LSP server at: {path}");
+                    return path;
+                }
+            }
 
+            // 2. Check development path (climb up from bin/Debug/net472/...)
+            string current = extensionDir;
+            for (int i = 0; i < 10; i++)
+            {
+                string devPath = Path.Combine(current, "language-server", "dist", "server.js");
+                if (File.Exists(devPath))
+                {
+                    Debug.WriteLine($"DeepLens: Found dev LSP server at: {devPath}");
+                    return devPath;
+                }
+
+                string? parent = Path.GetDirectoryName(current);
+                if (string.IsNullOrEmpty(parent) || parent == current) break;
+                current = parent;
+            }
+
+            Debug.WriteLine("DeepLens: LSP server (server.js) not found in any expected location.");
             return null;
         }
 
@@ -216,6 +379,61 @@ namespace DeepLensVisualStudio.Services
             {
                 _lastError = $"LSP Search Error: {ex.Message}";
                 return Enumerable.Empty<SearchResult>();
+            }
+        }
+
+        /// <summary>
+        /// Gets index statistics from the LSP server.
+        /// </summary>
+        public async Task<IndexStats?> GetIndexStatsAsync()
+        {
+            if (!_isInitialized || _rpc == null) return null;
+
+            try
+            {
+                return await _rpc.InvokeAsync<IndexStats>("deeplens/indexStats");
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: GetIndexStats error: {ex.Message}");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Triggers a full re-index of the workspace.
+        /// </summary>
+        public async Task RebuildIndexAsync(bool force = false)
+        {
+            if (!_isInitialized || _rpc == null) return;
+
+            try
+            {
+                var rebuildParams = new JObject { ["force"] = force };
+                await _rpc.InvokeWithParameterObjectAsync("deeplens/rebuildIndex", rebuildParams);
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"LSP Rebuild Error: {ex.Message}";
+                Debug.WriteLine($"DeepLens: RebuildIndex error: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Clears the persistent index cache.
+        /// </summary>
+        public async Task ClearCacheAsync()
+        {
+            if (!_isInitialized || _rpc == null) return;
+
+            try
+            {
+                await _rpc.InvokeAsync("deeplens/clearCache");
+            }
+            catch (Exception ex)
+            {
+                _lastError = $"LSP Clear Cache Error: {ex.Message}";
+                Debug.WriteLine($"DeepLens: ClearCache error: {ex.Message}");
             }
         }
 

@@ -24,4 +24,19 @@ namespace DeepLensVisualStudio.Services
         public long FirstResultMs { get; set; }
         public long TotalMs { get; set; }
     }
+
+    public class IndexStats
+    {
+        public int TotalItems { get; set; }
+        public int TotalFiles { get; set; }
+        public int TotalSymbols { get; set; }
+        public long CacheSize { get; set; }
+    }
+
+    public class ProgressInfo
+    {
+        public string State { get; set; } = ""; // "start", "report", "end"
+        public string? Message { get; set; }
+        public int? Percentage { get; set; }
+    }
 }

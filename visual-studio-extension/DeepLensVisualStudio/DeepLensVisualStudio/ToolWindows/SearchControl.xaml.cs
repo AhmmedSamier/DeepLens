@@ -127,7 +127,12 @@ namespace DeepLensVisualStudio.ToolWindows
     {
         // Static singleton LSP service - initialized once and reused across window opens
         private static LspSearchService? _sharedSearchService;
-        private static readonly object _serviceLock = new object();
+        private static readonly object ServiceLock = new object();
+        
+        /// <summary>
+        /// Gets the shared LSP search service instance.
+        /// </summary>
+        public static LspSearchService? SharedSearchService => _sharedSearchService;
         private CancellationTokenSource? _searchCts;
         private string _searchQuery = "";
         private string _statusText = "Ready";
@@ -323,7 +328,7 @@ namespace DeepLensVisualStudio.ToolWindows
             _hostWindow = hostWindow;
             
             // Use shared singleton LSP service
-            lock (_serviceLock)
+            lock (ServiceLock)
             {
                 _sharedSearchService ??= new LspSearchService();
             }
@@ -380,35 +385,72 @@ namespace DeepLensVisualStudio.ToolWindows
             
             if (_sharedSearchService == null) return;
             
+            string? workspacePath = null;
+            
+            // Try to get solution directory from IVsSolution
             var solution = Package.GetGlobalService(typeof(SVsSolution)) as IVsSolution;
-            if (solution != null && solution.GetSolutionInfo(out string dir, out _, out _) == 0)
+            if (solution != null && solution.GetSolutionInfo(out string dir, out string solutionFile, out _) == 0)
             {
-                _solutionRoot = dir;
-                
-                // Check if already initialized with the same solution
-                if (_sharedSearchService.LastError == null && _sharedSearchService.ActiveRuntime != null)
+                // The dir might be null/empty but solution file path has the full path
+                if (!string.IsNullOrEmpty(dir))
                 {
-                    string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
-                        ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
-                        : "";
-                    StatusText = $"DeepLens Ready{runtimeInfo}";
-                    return;
+                    workspacePath = dir;
                 }
-                
-                StatusText = "Initializing DeepLens LSP...";
-                if (await _sharedSearchService.InitializeAsync(dir, CancellationToken.None))
+                else if (!string.IsNullOrEmpty(solutionFile))
                 {
-                    string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
-                        ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
-                        : "";
-                    StatusText = $"DeepLens Ready{runtimeInfo}";
-                    ShowVsStatusBarMessage(StatusText);
+                    // Fallback: use the solution file's directory
+                    workspacePath = Path.GetDirectoryName(solutionFile);
                 }
-                else
+            }
+            
+            // Fallback: Try DTE
+            if (string.IsNullOrEmpty(workspacePath))
+            {
+                try
                 {
-                    StatusText = _sharedSearchService.LastError ?? "LSP initialization failed";
-                    ShowVsStatusBarMessage(StatusText);
+                    var dte = Package.GetGlobalService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+                    if (dte?.Solution != null && !string.IsNullOrEmpty(dte.Solution.FullName))
+                    {
+                        workspacePath = Path.GetDirectoryName(dte.Solution.FullName);
+                    }
                 }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"DeepLens: Failed to get solution path from DTE: {ex.Message}");
+                }
+            }
+            
+            if (string.IsNullOrEmpty(workspacePath))
+            {
+                StatusText = "No solution open. DeepLens requires an open solution or folder.";
+                return;
+            }
+            
+            _solutionRoot = workspacePath;
+            
+            // Check if already initialized with the same solution
+            if (_sharedSearchService.LastError == null && _sharedSearchService.ActiveRuntime != null)
+            {
+                string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
+                    ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
+                    : "";
+                StatusText = $"DeepLens Ready{runtimeInfo}";
+                return;
+            }
+            
+            StatusText = "Initializing DeepLens LSP...";
+            if (await _sharedSearchService.InitializeAsync(workspacePath, CancellationToken.None))
+            {
+                string runtimeInfo = !string.IsNullOrEmpty(_sharedSearchService.ActiveRuntime)
+                    ? $" ({char.ToUpper(_sharedSearchService.ActiveRuntime[0])}{_sharedSearchService.ActiveRuntime.Substring(1)})"
+                    : "";
+                StatusText = $"DeepLens Ready{runtimeInfo}";
+                ShowVsStatusBarMessage(StatusText);
+            }
+            else
+            {
+                StatusText = _sharedSearchService.LastError ?? "LSP initialization failed";
+                ShowVsStatusBarMessage(StatusText);
             }
         }
 

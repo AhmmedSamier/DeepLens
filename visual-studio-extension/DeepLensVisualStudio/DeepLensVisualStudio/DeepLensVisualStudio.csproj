@@ -139,10 +139,18 @@
 
   <!-- Include dist files in VSIX -->
   <ItemGroup>
-    <Content Include="dist\**\*" Condition="Exists('dist\server.js')">
-      <IncludeInVSIX>true</IncludeInVSIX>
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>dist\%(RecursiveDir)%(Filename)%(Extension)</Link>
-    </Content>
+    <Content Include="dist\**\*" />
   </ItemGroup>
+
+  <Target Name="ForceIncludeDistInVsix" BeforeTargets="GetVsixSourceItems">
+    <ItemGroup>
+      <VSIXSourceItem Include="dist\**\*">
+        <VSIXSubPath>dist</VSIXSubPath>
+      </VSIXSourceItem>
+    </ItemGroup>
+  </Target>
+
+  <PropertyGroup>
+    <GetVsixSourceItemsDependsOn>$(GetVsixSourceItemsDependsOn);ForceIncludeDistInVsix</GetVsixSourceItemsDependsOn>
+  </PropertyGroup>
 </Project>
