@@ -143,6 +143,7 @@ namespace DeepLensVisualStudio.ToolWindows
 
 
         private SearchResultViewModel? _selectedResult;
+        private readonly SearchToolWindow? _hostWindow;
 
         public event PropertyChangedEventHandler? PropertyChanged;
 
@@ -315,10 +316,11 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
-        public SearchControl()
+        public SearchControl(SearchToolWindow? hostWindow = null)
         {
             InitializeComponent();
             DataContext = this;
+            _hostWindow = hostWindow;
             
             // Use shared singleton LSP service
             lock (_serviceLock)
@@ -559,9 +561,7 @@ namespace DeepLensVisualStudio.ToolWindows
             }
             else if (e.Key == Key.Escape)
             {
-                // Close parent window
-                var parentWindow = Window.GetWindow(this);
-                parentWindow?.Close();
+                ReturnFocusToEditor();
                 e.Handled = true;
             }
         }
@@ -628,10 +628,6 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 StatusText = $"Opened {result.Name}";
-
-                // Close the parent window after navigation
-                var parentWindow = Window.GetWindow(this);
-                parentWindow?.Close();
             }
             catch (Exception ex)
             {
@@ -651,6 +647,20 @@ namespace DeepLensVisualStudio.ToolWindows
             catch (Exception ex)
             {
                 StatusText = $"Error revealing in explorer: {ex.Message}";
+            }
+        }
+
+        private void ReturnFocusToEditor()
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+            try
+            {
+                var dte = Package.GetGlobalService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+                dte?.ActiveDocument?.Activate();
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Error returning focus to editor: {ex.Message}");
             }
         }
 

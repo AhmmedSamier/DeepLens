@@ -1,4 +1,3 @@
-using System;
 using System.Runtime.InteropServices;
 using Microsoft.VisualStudio.Shell;
 
@@ -19,7 +18,7 @@ namespace DeepLensVisualStudio.ToolWindows
         public SearchToolWindow() : base(null)
         {
             this.Caption = "DeepLens Search";
-            _searchControl = new SearchControl();
+            _searchControl = new SearchControl(this);
             this.Content = _searchControl;
         }
 
