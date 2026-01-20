@@ -134,6 +134,7 @@ namespace DeepLensVisualStudio.ToolWindows
         /// </summary>
         public static LspSearchService? SharedSearchService => _sharedSearchService;
         private readonly HistoryService _historyService;
+        private readonly SlashCommandService _slashCommandService;
         private CancellationTokenSource? _searchCts;
         private string _searchQuery = "";
         private string _statusText = "Ready";
@@ -381,6 +382,7 @@ namespace DeepLensVisualStudio.ToolWindows
             }
 
             _historyService = new HistoryService();
+            _slashCommandService = new SlashCommandService();
             GetLspService().OnProgress += OnLspProgress;
 
             OpenCommand = new RelayCommand(p =>
@@ -606,10 +608,20 @@ namespace DeepLensVisualStudio.ToolWindows
             if (query.StartsWith("/"))
             {
                 Results.Clear();
-                var commands = GetSlashCommands(query);
+                var commands = _slashCommandService.GetCommands(query);
                 if (commands.Any())
                 {
-                    foreach (var cmd in commands) Results.Add(cmd);
+                    foreach (var cmd in commands)
+                    {
+                        Results.Add(new SearchResultViewModel
+                        {
+                            Name = cmd.Name,
+                            Kind = "Command",
+                            ContainerName = cmd.Description,
+                            FilePath = "",
+                            RelativePath = ""
+                        });
+                    }
                     OnPropertyChanged(nameof(ResultCountText));
                     StatusText = "Select a command to switch filter";
                     return;
@@ -861,52 +873,6 @@ namespace DeepLensVisualStudio.ToolWindows
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
-        }
-
-        private IEnumerable<SearchResultViewModel> GetSlashCommands(string query)
-        {
-            var commands = new List<SearchResultViewModel>();
-            string lowerQuery = query.ToLowerInvariant();
-
-            // Define available commands
-            var available = new[]
-            {
-                 (Name: "/all", Desc: "Search Everything", Aliases: new[] { "/a" }),
-                 (Name: "/classes", Desc: "Search Classes", Aliases: new[] { "/types", "/t" }),
-                 (Name: "/symbols", Desc: "Search Symbols", Aliases: new[] { "/s" }),
-                 (Name: "/files", Desc: "Search Files", Aliases: new[] { "/f" }),
-                 (Name: "/text", Desc: "Search Text", Aliases: new[] { "/txt" }),
-                 (Name: "/endpoints", Desc: "Search Endpoints", Aliases: new[] { "/e" })
-            };
-
-            foreach (var cmd in available)
-            {
-                bool match = cmd.Name.StartsWith(lowerQuery);
-                if (!match && cmd.Aliases != null)
-                {
-                    foreach (var alias in cmd.Aliases)
-                    {
-                        if (alias.StartsWith(lowerQuery))
-                        {
-                            match = true;
-                            break;
-                        }
-                    }
-                }
-
-                if (match)
-                {
-                    commands.Add(new SearchResultViewModel
-                    {
-                        Name = cmd.Name,
-                        Kind = "Command",
-                        ContainerName = cmd.Desc,
-                        FilePath = "",
-                        RelativePath = ""
-                    });
-                }
-            }
-            return commands;
         }
 
         private void ExecuteSlashCommand(string commandName)

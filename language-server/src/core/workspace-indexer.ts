@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { Worker } from 'worker_threads';
-import { minimatch } from 'minimatch';
+import { Minimatch } from 'minimatch';
 import { Config } from './config';
 import { IndexPersistence } from './index-persistence';
 import { SearchableItem, SearchItemType } from './types';
@@ -28,6 +28,7 @@ export class WorkspaceIndexer {
     private env: IndexerEnvironment;
     private stringCache: Map<string, string> = new Map();
     private extensionPath: string;
+    private excludeMatchers: Minimatch[] = [];
 
     constructor(
         config: Config,
@@ -41,6 +42,12 @@ export class WorkspaceIndexer {
         this.persistence = persistence;
         this.env = env;
         this.extensionPath = extensionPath;
+        this.updateExcludeMatchers();
+    }
+
+    private updateExcludeMatchers(): void {
+        const patterns = this.config.getExcludePatterns();
+        this.excludeMatchers = patterns.map(p => new Minimatch(p, { dot: true }));
     }
 
     public onItemsAdded(listener: (items: SearchableItem[]) => void) {
@@ -87,6 +94,7 @@ export class WorkspaceIndexer {
 
         this.indexing = true;
         this.stringCache.clear(); // Clear string cache on full re-index
+        this.updateExcludeMatchers(); // Ensure matchers are up-to-date
 
         if (force) {
             await this.persistence.clear();
@@ -882,12 +890,11 @@ export class WorkspaceIndexer {
      * Check if a file should be excluded based on config patterns
      */
     private shouldExcludeFile(filePath: string): boolean {
-        const excludePatterns = this.config.getExcludePatterns();
         const relativePath = this.env.asRelativePath(filePath);
         // Normalize to forward slashes for matching
         const normalizedPath = relativePath.replace(/\\/g, '/');
 
-        return excludePatterns.some((pattern) => minimatch(normalizedPath, pattern, { dot: true }));
+        return this.excludeMatchers.some((matcher) => matcher.match(normalizedPath));
     }
 
     /**

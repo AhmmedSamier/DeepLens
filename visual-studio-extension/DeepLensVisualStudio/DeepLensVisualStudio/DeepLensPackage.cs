@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using DeepLensVisualStudio.Services;
 using DeepLensVisualStudio.ToolWindows;
 using Microsoft.VisualStudio;
 using Microsoft.VisualStudio.Shell;
@@ -24,41 +25,7 @@ namespace DeepLensVisualStudio
         
         private static DeepLensPackage? _instance;
         private uint _solutionEventsCookie;
-
-        private static IntPtr _keyboardHookId = IntPtr.Zero;
-        private static LowLevelKeyboardProc? _keyboardProc;
-        private static DateTime _lastShiftPressTime = DateTime.MinValue;
-        private static bool _wasShiftPressed;
-        private const int DoubleShiftThresholdMs = 400;
-
-        // Win32 constants for keyboard hook
-        private const int WH_KEYBOARD_LL = 13;
-        private const int WM_KEYDOWN = 0x0100;
-        private const int WM_KEYUP = 0x0101;
-        private const int VK_SHIFT = 0x10;
-        private const int VK_LSHIFT = 0xA0;
-        private const int VK_RSHIFT = 0xA1;
-
-        private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
-        [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
-        private static extern IntPtr GetModuleHandle(string lpModuleName);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
+        private KeyboardHookService? _keyboardHookService;
 
         protected override async Task InitializeAsync(CancellationToken cancellationToken,
             IProgress<ServiceProgressData> progress)
@@ -73,7 +40,10 @@ namespace DeepLensVisualStudio
 
             try
             {
-                InstallKeyboardHook();
+                _keyboardHookService = new KeyboardHookService();
+                _keyboardHookService.DoubleShiftDetected += OnDoubleShiftDetected;
+                _keyboardHookService.Install();
+
                 Debug.WriteLine("DeepLens: Double-shift keyboard hook installed at startup");
                 
                 // Register for solution events to initialize LSP early
@@ -93,6 +63,14 @@ namespace DeepLensVisualStudio
             {
                 Debug.WriteLine($"DeepLens: Initialization error: {ex.Message}");
             }
+        }
+
+        private void OnDoubleShiftDetected(object sender, EventArgs e)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ShowSearchToolWindowAsync();
+            });
         }
 
         private async Task InitializeLspInBackgroundAsync()
@@ -136,153 +114,29 @@ namespace DeepLensVisualStudio
                     _solutionEventsCookie = 0;
                 }
 
-                UninstallKeyboardHook();
+                _keyboardHookService?.Dispose();
+                _keyboardHookService = null;
                 _instance = null;
             }
 
             base.Dispose(disposing);
         }
 
-        private static void InstallKeyboardHook()
-        {
-            if (_keyboardHookId != IntPtr.Zero)
-                return;
-
-            _keyboardProc = KeyboardHookCallback;
-            using var curProcess = Process.GetCurrentProcess();
-            using var curModule = curProcess.MainModule;
-
-            if (curModule != null)
-            {
-                _keyboardHookId = SetWindowsHookEx(WH_KEYBOARD_LL, _keyboardProc, GetModuleHandle(curModule.ModuleName), 0);
-                Debug.WriteLine($"DeepLens: Keyboard hook installed with ID: {_keyboardHookId}");
-            }
-        }
-
-        private static void UninstallKeyboardHook()
-        {
-            if (_keyboardHookId != IntPtr.Zero)
-            {
-                UnhookWindowsHookEx(_keyboardHookId);
-                _keyboardHookId = IntPtr.Zero;
-            }
-        }
-
-        private static IntPtr KeyboardHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
-        {
-            if (nCode >= 0)
-            {
-                int vkCode = Marshal.ReadInt32(lParam);
-                bool isShiftKey = vkCode == VK_SHIFT || vkCode == VK_LSHIFT || vkCode == VK_RSHIFT;
-
-                if (isShiftKey)
-                {
-                    if (wParam == (IntPtr)WM_KEYDOWN)
-                    {
-                        if (!_wasShiftPressed)
-                        {
-                            _wasShiftPressed = true;
-                        }
-                    }
-                    else if (wParam == (IntPtr)WM_KEYUP)
-                    {
-                        if (_wasShiftPressed)
-                        {
-                            _wasShiftPressed = false;
-                            var now = DateTime.Now;
-                            var timeSinceLastPress = (now - _lastShiftPressTime).TotalMilliseconds;
-
-                            if (timeSinceLastPress < DoubleShiftThresholdMs && timeSinceLastPress > 50)
-                            {
-                                _lastShiftPressTime = DateTime.MinValue;
-                                OnDoubleShiftDetected();
-                            }
-                            else
-                            {
-                                _lastShiftPressTime = now;
-                            }
-                        }
-                    }
-                }
-                else if (wParam == (IntPtr)WM_KEYDOWN)
-                {
-                    _lastShiftPressTime = DateTime.MinValue;
-                    _wasShiftPressed = false;
-                }
-            }
-
-            return CallNextHookEx(_keyboardHookId, nCode, wParam, lParam);
-        }
-
-        private static bool IsVisualStudioFocused()
-        {
-            try
-            {
-                IntPtr foregroundWindow = GetForegroundWindow();
-                if (foregroundWindow == IntPtr.Zero)
-                    return false;
-
-                GetWindowThreadProcessId(foregroundWindow, out uint foregroundProcessId);
-                uint currentProcessId = (uint)Process.GetCurrentProcess().Id;
-
-                return foregroundProcessId == currentProcessId;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-        private static void OnDoubleShiftDetected()
-        {
-            if (!IsVisualStudioFocused())
-                return;
-
-            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-            {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                ToggleSearchWindow();
-            });
-        }
-
-        private static void ToggleSearchWindow()
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            
-            if (_instance == null)
-            {
-                Debug.WriteLine("DeepLens: Package instance not available");
-                return;
-            }
-
-            // Use JoinableTaskFactory to call async method
-            _instance.JoinableTaskFactory.RunAsync(async () =>
-            {
-                await ShowSearchToolWindowAsync();
-            });
-        }
-
-        private static async System.Threading.Tasks.Task ShowSearchToolWindowAsync()
+        private async System.Threading.Tasks.Task ShowSearchToolWindowAsync()
         {
             await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
 
             try
             {
-                if (_instance == null)
-                {
-                    Debug.WriteLine("DeepLens: Package instance not available");
-                    return;
-                }
-
                 // Get selected text before showing window
                 string selectedText = GetSelectedText();
 
                 // Find or create the tool window
-                var window = await _instance.FindToolWindowAsync(
+                var window = await FindToolWindowAsync(
                     typeof(ToolWindows.SearchToolWindow), 
                     0, 
                     true, 
-                    _instance.DisposalToken) as ToolWindows.SearchToolWindow;
+                    DisposalToken) as ToolWindows.SearchToolWindow;
 
                 if (window?.Frame is IVsWindowFrame frame)
                 {
@@ -314,13 +168,13 @@ namespace DeepLensVisualStudio
         /// <summary>
         /// Gets the selected text from the active text editor, if any.
         /// </summary>
-        private static string GetSelectedText()
+        private string GetSelectedText()
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
             try
             {
-                var dte = Package.GetGlobalService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
+                var dte = GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
                 if (dte?.ActiveDocument != null)
                 {
                     var textSelection = dte.ActiveDocument.Selection as EnvDTE.TextSelection;

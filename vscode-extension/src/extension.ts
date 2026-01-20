@@ -5,21 +5,21 @@ import { Config } from '../../language-server/src/core/config';
 import { SearchProvider } from './search-provider';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
+import { logger } from './services/logging-service';
+import { GitService } from './services/git-service';
 
 let lspClient: DeepLensLspClient;
 let searchProvider: SearchProvider;
 let config: Config;
 let activityTracker: ActivityTracker;
 let commandIndexer: CommandIndexer;
-
-// Debounce timer for git changes
-let gitChangeDebounce: NodeJS.Timeout | undefined;
+let gitService: GitService;
 
 /**
  * Extension activation
  */
 export async function activate(context: vscode.ExtensionContext) {
-    console.log('DeepLens extension is now active');
+    logger.log('DeepLens extension is now active');
 
     // Initialize
     config = new Config(vscode.workspace.getConfiguration('deeplens'));
@@ -181,21 +181,22 @@ export async function activate(context: vscode.ExtensionContext) {
         }),
     );
 
+    // Initialize Git Service
+    gitService = new GitService(async () => {
+        await indexWorkspace(false);
+    });
+    context.subscriptions.push(gitService);
+    await gitService.setupGitListener(context);
+
     // Register listener for disposal
     context.subscriptions.push({
         dispose: () => {
             lspClient.stop();
-            if (gitChangeDebounce) {
-                clearTimeout(gitChangeDebounce);
-            }
         },
     });
 
     // Index commands initially
     await commandIndexer.indexCommands();
-
-    // Git listener for full re-index (server side does file watching, but git branch changes need full scan)
-    setupGitListener(context);
 
     return {
         searchProvider,
@@ -211,102 +212,6 @@ async function indexWorkspace(force: boolean = false): Promise<void> {
     await lspClient.rebuildIndex(force);
 }
 
-
-
-interface GitRepository {
-    rootUri: vscode.Uri;
-    state: {
-        HEAD?: {
-            commit?: string;
-            name?: string;
-        };
-        onDidChange: (cb: () => void) => vscode.Disposable;
-    };
-}
-
-interface GitAPI {
-    repositories: GitRepository[];
-    onDidOpenRepository: (cb: (repo: GitRepository) => void) => vscode.Disposable;
-}
-
-/**
- * Setup git repository listener for branch changes
- */
-async function setupGitListener(context: vscode.ExtensionContext): Promise<void> {
-    try {
-        // Get the git extension
-        const gitExtension = vscode.extensions.getExtension('vscode.git');
-
-        if (!gitExtension) {
-            console.log('Git extension not found - skipping git change detection');
-            return;
-        }
-
-        // Activate git extension if not already active
-        if (!gitExtension.isActive) {
-            await gitExtension.activate();
-        }
-
-        // Get the API - getAPI returns synchronously after activation
-        const gitApi = gitExtension.exports?.getAPI?.(1) as GitAPI | undefined;
-
-        if (!gitApi || typeof gitApi !== 'object') {
-            console.log('Failed to get git API object');
-            return;
-        }
-
-        console.log('Git API obtained successfully');
-
-        // Setup listeners for all current and future repositories
-        gitApi.repositories.forEach((repo) => setupRepositoryListener(repo));
-        context.subscriptions.push(gitApi.onDidOpenRepository((repo) => setupRepositoryListener(repo)));
-
-        console.log(
-            `Git listener setup complete. Monitoring ${gitApi.repositories.length} repositories.`,
-        );
-    } catch (error) {
-        console.error('Error setting up git listener:', error);
-    }
-}
-
-/**
- * Setup listener for individual repository
- */
-function setupRepositoryListener(repository: GitRepository): void {
-    if (!repository || typeof repository !== 'object') {
-        return;
-    }
-
-    // Keep track of the last known HEAD to detect branch switches/commits
-    let lastHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
-    console.log(`Monitoring repository at ${repository.rootUri.fsPath} (Initial HEAD: ${lastHead})`);
-
-    // Listen for state changes (branch switches, commits, pull/push updates)
-    repository.state.onDidChange(() => {
-        const currentHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
-
-        if (currentHead !== lastHead) {
-            console.log(
-                `Git detected HEAD change in ${repository.rootUri.fsPath}: ${lastHead} -> ${currentHead}`,
-            );
-            lastHead = currentHead;
-
-            if (gitChangeDebounce) {
-                clearTimeout(gitChangeDebounce);
-            }
-
-            gitChangeDebounce = setTimeout(async () => {
-                console.log(
-                    `[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`,
-                );
-                // Trigger index with progress visible to user
-                await indexWorkspace(false);
-                console.log('[Git Event] Workspace refresh finished.');
-            }, 3000); // 3 second pause to ensure disk settling after checkout/pull
-        }
-    });
-}
-
 /**
  * Extension deactivation
  */
@@ -317,7 +222,7 @@ export function deactivate() {
     if (activityTracker) {
         activityTracker.dispose();
     }
-    if (gitChangeDebounce) {
-        clearTimeout(gitChangeDebounce);
+    if (gitService) {
+        gitService.dispose();
     }
 }
