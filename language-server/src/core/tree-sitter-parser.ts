@@ -92,30 +92,25 @@ export class TreeSitterParser {
             throw new Error('Parser class not found');
         }
 
-        // Load languages from dist/parsers
-        const languageMap = [
-            { id: 'typescript', wasm: 'tree-sitter-typescript.wasm' },
-            { id: 'typescriptreact', wasm: 'tree-sitter-tsx.wasm' },
-            { id: 'javascript', wasm: 'tree-sitter-javascript.wasm' },
-            { id: 'javascriptreact', wasm: 'tree-sitter-tsx.wasm' },
-            { id: 'csharp', wasm: 'tree-sitter-c_sharp.wasm' },
-            { id: 'python', wasm: 'tree-sitter-python.wasm' },
-            { id: 'java', wasm: 'tree-sitter-java.wasm' },
-            { id: 'go', wasm: 'tree-sitter-go.wasm' },
-            { id: 'cpp', wasm: 'tree-sitter-cpp.wasm' },
-            { id: 'c', wasm: 'tree-sitter-c.wasm' },
-            { id: 'ruby', wasm: 'tree-sitter-ruby.wasm' },
-            { id: 'php', wasm: 'tree-sitter-php.wasm' },
-        ];
-
-        for (const lang of languageMap) {
-            await this.loadLanguage(lang.id, lang.wasm);
-        }
-
         this.isInitialized = true;
     }
 
-    private async loadLanguage(langId: string, wasmFile: string): Promise<void> {
+    private static LANGUAGE_MAP: Record<string, string> = {
+        typescript: 'tree-sitter-typescript.wasm',
+        typescriptreact: 'tree-sitter-tsx.wasm',
+        javascript: 'tree-sitter-javascript.wasm',
+        javascriptreact: 'tree-sitter-tsx.wasm',
+        csharp: 'tree-sitter-c_sharp.wasm',
+        python: 'tree-sitter-python.wasm',
+        java: 'tree-sitter-java.wasm',
+        go: 'tree-sitter-go.wasm',
+        cpp: 'tree-sitter-cpp.wasm',
+        c: 'tree-sitter-c.wasm',
+        ruby: 'tree-sitter-ruby.wasm',
+        php: 'tree-sitter-php.wasm',
+    };
+
+    private async loadLanguage(langId: string, wasmFile: string): Promise<boolean> {
         try {
             const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
 
@@ -124,18 +119,21 @@ export class TreeSitterParser {
                 // Ensure this.lib is not null before using it
                 if (!this.lib) {
                     this.log(`ERROR: TreeSitter library not initialized when trying to load ${langId}`);
-                    return;
+                    return false;
                 }
                 // Use plain absolute path string - do NOT use file:// URLs on Windows for this library
                 const absoluteWasmPath = path.normalize(wasmPath);
                 const lang = await this.lib.Language.load(absoluteWasmPath);
                 this.languages.set(langId, lang);
                 this.log(`Successfully loaded ${langId}`);
+                return true;
             } else {
                 this.log(`WARNING: WASM file not found for ${langId} at ${wasmPath}`);
+                return false;
             }
         } catch (error) {
             this.log(`ERROR: Failed to load ${langId}: ${error}`);
+            return false;
         }
     }
 
@@ -148,10 +146,23 @@ export class TreeSitterParser {
         }
 
         const langId = this.getLanguageId(filePath);
-        const lang = this.languages.get(langId);
+        let lang = this.languages.get(langId);
+
         if (!lang) {
-            if (langId === 'csharp' || langId === 'typescript') {
-                this.log(`WARNING: Requested parse for ${langId} but language not loaded.`);
+            // Lazy load language
+            const wasmFile = TreeSitterParser.LANGUAGE_MAP[langId];
+            if (wasmFile) {
+                const loaded = await this.loadLanguage(langId, wasmFile);
+                if (loaded) {
+                    lang = this.languages.get(langId);
+                }
+            }
+        }
+
+        if (!lang) {
+            // Only warn if it is a supported language but failed to load
+            if (TreeSitterParser.LANGUAGE_MAP[langId]) {
+                 // Suppress spamming warnings for missing languages if file extension is common but no parser
             }
             return [];
         }
