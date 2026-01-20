@@ -105,40 +105,40 @@ export class SearchProvider {
 
         this.filterButtons.set(SearchScope.EVERYTHING, {
             iconPath: new vscode.ThemeIcon('search', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'All',
+            tooltip: this.INACTIVE_PREFIX + 'All (/all)',
         });
 
         this.filterButtons.set(SearchScope.TYPES, {
             iconPath: new vscode.ThemeIcon(this.ICON_CLASS, dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Classes',
+            tooltip: this.INACTIVE_PREFIX + 'Classes (/t)',
         });
 
         this.filterButtons.set(SearchScope.SYMBOLS, {
             iconPath: new vscode.ThemeIcon('symbol-method', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Symbols',
+            tooltip: this.INACTIVE_PREFIX + 'Symbols (/s)',
         });
 
         this.filterButtons.set(SearchScope.FILES, {
             iconPath: new vscode.ThemeIcon('file', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Files',
+            tooltip: this.INACTIVE_PREFIX + 'Files (/f)',
         });
 
         this.filterButtons.set(SearchScope.TEXT, {
             iconPath: new vscode.ThemeIcon('whole-word', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Text',
+            tooltip: this.INACTIVE_PREFIX + 'Text (/txt)',
         });
 
         this.filterButtons.set(SearchScope.COMMANDS, {
             iconPath: new vscode.ThemeIcon('run', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Commands',
+            tooltip: this.INACTIVE_PREFIX + 'Commands (/c)',
         });
         this.filterButtons.set(SearchScope.PROPERTIES, {
             iconPath: new vscode.ThemeIcon('symbol-property', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Properties',
+            tooltip: this.INACTIVE_PREFIX + 'Properties (/p)',
         });
         this.filterButtons.set(SearchScope.ENDPOINTS, {
             iconPath: new vscode.ThemeIcon('globe', dimmedColor),
-            tooltip: this.INACTIVE_PREFIX + 'Endpoints',
+            tooltip: this.INACTIVE_PREFIX + 'Endpoints (/e)',
         });
     }
 
@@ -424,6 +424,9 @@ export class SearchProvider {
             } else if (e.button.tooltip === 'Reveal in File Explorer') {
                 const uri = vscode.Uri.file(result.item.filePath);
                 vscode.commands.executeCommand('revealInExplorer', uri);
+            } else if (e.button.tooltip === 'Rebuild Index') {
+                vscode.commands.executeCommand('deeplens.rebuildIndex');
+                quickPick.hide();
             }
         });
 
@@ -796,6 +799,12 @@ export class SearchProvider {
             detail: 'Try changing your search terms or filter scope',
             alwaysShow: true,
             iconPath: new vscode.ThemeIcon('search', new vscode.ThemeColor('descriptionForeground')),
+            buttons: [
+                {
+                    iconPath: new vscode.ThemeIcon('refresh'),
+                    tooltip: 'Rebuild Index'
+                }
+            ],
             result: {
                 item: {
                     id: 'empty-state',
