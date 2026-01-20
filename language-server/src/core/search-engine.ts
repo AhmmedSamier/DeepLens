@@ -32,6 +32,7 @@ export class SearchEngine implements ISearchProvider {
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
+    private preparedCapitals: (string | null)[] = [];
 
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
@@ -97,6 +98,7 @@ export class SearchEngine implements ISearchProvider {
             this.preparedPaths.push(
                 normalizedPath ? Fuzzysort.prepare(normalizedPath) : null
             );
+            this.preparedCapitals.push(this.extractCapitals(item.name));
 
             // Update scopes
             const scope = this.getScopeForItemType(item.type);
@@ -122,6 +124,7 @@ export class SearchEngine implements ISearchProvider {
         const newPreparedNames: (Fuzzysort.Prepared | null)[] = [];
         const newPreparedFullNames: (Fuzzysort.Prepared | null)[] = [];
         const newPreparedPaths: (Fuzzysort.Prepared | null)[] = [];
+        const newPreparedCapitals: (string | null)[] = [];
 
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
@@ -131,6 +134,7 @@ export class SearchEngine implements ISearchProvider {
                 newPreparedNames.push(this.preparedNames[i]);
                 newPreparedFullNames.push(this.preparedFullNames[i]);
                 newPreparedPaths.push(this.preparedPaths[i]);
+                newPreparedCapitals.push(this.preparedCapitals[i]);
             } else {
                 this.itemsMap.delete(item.id);
             }
@@ -140,6 +144,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedNames = newPreparedNames;
         this.preparedFullNames = newPreparedFullNames;
         this.preparedPaths = newPreparedPaths;
+        this.preparedCapitals = newPreparedCapitals;
 
         // Rebuild scope indices
         this.rebuildScopeIndices();
@@ -153,6 +158,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedNames = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
+        this.preparedCapitals = [];
 
         // Prepare items
         const count = this.items.length;
@@ -169,6 +175,7 @@ export class SearchEngine implements ISearchProvider {
             this.preparedPaths.push(
                 normalizedPath ? Fuzzysort.prepare(normalizedPath) : null
             );
+            this.preparedCapitals.push(this.extractCapitals(item.name));
         }
 
         this.rebuildScopeIndices();
@@ -216,6 +223,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedNames = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
+        this.preparedCapitals = [];
         this.itemsMap.clear();
         this.scopedIndices.clear();
     }
@@ -562,9 +570,12 @@ export class SearchEngine implements ISearchProvider {
         const queryUpper = query.toUpperCase();
 
         const processItem = (i: number) => {
-            const item = this.items[i];
-            const score = this.camelHumpsMatch(item.name, queryUpper);
+            const capitals = this.preparedCapitals[i];
+            if (!capitals) return;
+
+            const score = this.camelHumpsMatch(capitals, queryUpper);
             if (score > 0) {
+                const item = this.items[i];
                 results.push({
                     item,
                     score: this.applyItemTypeBoost(score, item.type),
@@ -582,11 +593,13 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private camelHumpsMatch(text: string, query: string): number {
-        const capitals = text.charAt(0) + text.slice(1).replace(/[^A-Z]/g, '');
+    private extractCapitals(text: string): string {
+        return (text.charAt(0) + text.slice(1).replace(/[^A-Z]/g, '')).toUpperCase();
+    }
 
-        if (capitals.toUpperCase().includes(query)) {
-            const matchIndex = capitals.toUpperCase().indexOf(query);
+    private camelHumpsMatch(capitals: string, query: string): number {
+        if (capitals.includes(query)) {
+            const matchIndex = capitals.indexOf(query);
             const lengthRatio = query.length / capitals.length;
             const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
             return lengthRatio * positionBoost * 0.8;
