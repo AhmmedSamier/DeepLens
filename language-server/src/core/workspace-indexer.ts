@@ -697,18 +697,6 @@ export class WorkspaceIndexer {
     }
 
     /**
-     * Attempt to load symbols from persistent cache
-     */
-    private tryLoadFromCache(filePath: string, mtime: number, hash?: string): boolean {
-        const cached = this.persistence.get(filePath);
-        if (cached && (hash ? cached.hash === hash : cached.mtime === mtime)) {
-            this.items.push(...cached.symbols);
-            return true;
-        }
-        return false;
-    }
-
-    /**
      * Core logic to extract symbols from a file
      */
     /**
