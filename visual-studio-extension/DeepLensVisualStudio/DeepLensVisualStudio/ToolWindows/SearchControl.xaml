@@ -18,6 +18,7 @@
 
         <!--  String to Visibility Converter  -->
         <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <!-- Colors replaced by VS Theme Brushes -->
 
@@ -399,12 +400,30 @@
                 Background="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBackgroundKey}}"
                 BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBorderKey}}"
                 BorderThickness="0,1,0,0">
-                <TextBlock
-                    HorizontalAlignment="Left"
-                    VerticalAlignment="Center"
-                    FontSize="11"
-                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
-                    Text="{Binding StatusText}" />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <TextBlock
+                        Grid.Column="0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        FontSize="11"
+                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                        Text="{Binding StatusText}" />
+
+                    <ProgressBar
+                        Grid.Column="1"
+                        Width="100"
+                        Height="10"
+                        Margin="10,0,0,0"
+                        Maximum="100"
+                        Minimum="0"
+                        Value="{Binding IndexingProgress}"
+                        Visibility="{Binding IsIndexing, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                </Grid>
             </Border>
         </Grid>
     </Border>

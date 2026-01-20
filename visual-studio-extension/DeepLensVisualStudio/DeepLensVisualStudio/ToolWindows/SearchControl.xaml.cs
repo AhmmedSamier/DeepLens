@@ -133,9 +133,12 @@ namespace DeepLensVisualStudio.ToolWindows
         /// Gets the shared LSP search service instance.
         /// </summary>
         public static LspSearchService? SharedSearchService => _sharedSearchService;
+        private readonly HistoryService _historyService;
         private CancellationTokenSource? _searchCts;
         private string _searchQuery = "";
         private string _statusText = "Ready";
+        private int _indexingProgress;
+        private bool _isIndexing;
         private string _solutionRoot = "";
         private bool _filterAll = true;
         private bool _filterClasses;
@@ -196,6 +199,32 @@ namespace DeepLensVisualStudio.ToolWindows
             {
                 _statusText = value;
                 OnPropertyChanged();
+            }
+        }
+
+        public int IndexingProgress
+        {
+            get => _indexingProgress;
+            set
+            {
+                if (_indexingProgress != value)
+                {
+                    _indexingProgress = value;
+                    OnPropertyChanged();
+                }
+            }
+        }
+
+        public bool IsIndexing
+        {
+            get => _isIndexing;
+            set
+            {
+                if (_isIndexing != value)
+                {
+                    _isIndexing = value;
+                    OnPropertyChanged();
+                }
             }
         }
 
@@ -350,6 +379,10 @@ namespace DeepLensVisualStudio.ToolWindows
             {
                 _sharedSearchService ??= new LspSearchService();
             }
+
+            _historyService = new HistoryService();
+            GetLspService().OnProgress += OnLspProgress;
+
             OpenCommand = new RelayCommand(p =>
             {
                 if (p is SearchResultViewModel vm) NavigateToResult(vm);
@@ -366,6 +399,31 @@ namespace DeepLensVisualStudio.ToolWindows
             SearchTextBox.PreviewKeyDown += OnSearchBoxKeyDown;
             ResultsList.PreviewMouseLeftButtonUp += OnResultSingleClick;
             ResultsList.KeyDown += OnResultsKeyDown;
+        }
+
+        private void OnLspProgress(ProgressInfo info)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                if (info.State == "start")
+                {
+                    IsIndexing = true;
+                    IndexingProgress = 0;
+                }
+                else if (info.State == "end")
+                {
+                    IsIndexing = false;
+                    IndexingProgress = 100;
+                }
+                else if (info.State == "report")
+                {
+                    IsIndexing = true;
+                    if (info.Percentage.HasValue) IndexingProgress = info.Percentage.Value;
+                }
+
+                if (!string.IsNullOrEmpty(info.Message)) StatusText = info.Message;
+            });
         }
 
         private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
@@ -477,6 +535,13 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (service.IsIndexing)
                 {
                     StatusText = "DeepLens Indexing...";
+                    IsIndexing = true;
+                }
+
+                // Load history if query is empty
+                if (string.IsNullOrEmpty(SearchQuery))
+                {
+                    _ = PerformSearchAsync();
                 }
             }
             else
@@ -554,8 +619,30 @@ namespace DeepLensVisualStudio.ToolWindows
             if (query.Length < 2)
             {
                 Results.Clear();
+
+                if (string.IsNullOrWhiteSpace(query))
+                {
+                    var history = _historyService.GetHistory();
+                    foreach (var item in history)
+                    {
+                        Results.Add(new SearchResultViewModel
+                        {
+                            Name = item.Name,
+                            Kind = item.Kind,
+                            FilePath = item.FilePath,
+                            RelativePath = item.RelativePath,
+                            Line = item.Line,
+                            ContainerName = item.ContainerName
+                        });
+                    }
+                    StatusText = Results.Count > 0 ? "Recent items" : "Ready";
+                }
+                else
+                {
+                    StatusText = "Type at least 2 characters to search";
+                }
+
                 OnPropertyChanged(nameof(ResultCountText));
-                StatusText = "Type at least 2 characters to search";
                 return;
             }
 
@@ -724,6 +811,17 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 StatusText = $"Opened {result.Name}";
+
+                // Add to history
+                _historyService.AddItem(new HistoryItem
+                {
+                    Name = result.Name,
+                    Kind = result.Kind,
+                    FilePath = result.FilePath,
+                    RelativePath = result.RelativePath,
+                    Line = result.Line,
+                    ContainerName = result.ContainerName
+                });
             }
             catch (Exception ex)
             {
