@@ -26,6 +26,14 @@ class TestWorkspaceIndexer extends WorkspaceIndexer {
     public async checkIsGitIgnored(filePath: string): Promise<boolean> {
         return (this as any).isGitIgnored(filePath);
     }
+
+    public checkShouldExcludeFile(filePath: string): boolean {
+        return (this as any).shouldExcludeFile(filePath);
+    }
+
+    public triggerUpdateExcludeMatchers(): void {
+        (this as any).updateExcludeMatchers();
+    }
 }
 
 describe('WorkspaceIndexer', () => {
@@ -103,5 +111,41 @@ describe('WorkspaceIndexer', () => {
 
         const result = await indexer.checkIsGitIgnored('/root/file.txt');
         expect(result).toBe(false);
+    });
+
+    it('should exclude files based on default exclude patterns', () => {
+        const indexer = new TestWorkspaceIndexer(
+            mockConfig,
+            mockTreeSitter,
+            mockPersistence,
+            mockEnv,
+            process.cwd()
+        );
+
+        expect(indexer.checkShouldExcludeFile('/root/node_modules/package.json')).toBe(true);
+        expect(indexer.checkShouldExcludeFile('/root/dist/bundle.js')).toBe(true);
+        expect(indexer.checkShouldExcludeFile('/root/src/index.ts')).toBe(false);
+    });
+
+    it('should update exclude patterns when config changes', () => {
+        const customConfig = new Config();
+        const indexer = new TestWorkspaceIndexer(
+            customConfig,
+            mockTreeSitter,
+            mockPersistence,
+            mockEnv,
+            process.cwd()
+        );
+
+        // Initially matches defaults
+        expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(false);
+
+        // Update config
+        customConfig.update({ excludePatterns: ['**/temp/**'] });
+
+        // Trigger update (simulating what happens in indexWorkspace or manually)
+        indexer.triggerUpdateExcludeMatchers();
+
+        expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(true);
     });
 });
