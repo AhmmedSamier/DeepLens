@@ -634,36 +634,47 @@ export class SearchEngine implements ISearchProvider {
         const results: SearchResult[] = [];
         const MIN_SCORE = 0.01;
 
-        // Optimized inner loop function
-        const processItem = (i: number) => {
-            const score = this.calculateItemScore(
-                query,
-                this.preparedNames[i],
-                this.preparedFullNames[i],
-                this.preparedPaths[i],
-                MIN_SCORE,
-            );
-
-            if (score > MIN_SCORE) {
-                const item = this.items[i];
-                results.push({
-                    item,
-                    score: this.applyItemTypeBoost(score, item.type),
-                    scope: this.getScopeForItemType(item.type),
-                });
-            }
-        };
-
         if (indices) {
             // Scope-restricted search
             for (let k = 0; k < indices.length; k++) {
-                processItem(indices[k]);
+                const i = indices[k];
+                const score = this.calculateItemScore(
+                    query,
+                    this.preparedNames[i],
+                    this.preparedFullNames[i],
+                    this.preparedPaths[i],
+                    MIN_SCORE,
+                );
+
+                if (score > MIN_SCORE) {
+                    const item = this.items[i];
+                    results.push({
+                        item,
+                        score: this.applyItemTypeBoost(score, item.type),
+                        scope: this.getScopeForItemType(item.type),
+                    });
+                }
             }
         } else {
             // Full search (iterate direct array is faster than index indirection)
             const count = this.items.length;
             for (let i = 0; i < count; i++) {
-                processItem(i);
+                const score = this.calculateItemScore(
+                    query,
+                    this.preparedNames[i],
+                    this.preparedFullNames[i],
+                    this.preparedPaths[i],
+                    MIN_SCORE,
+                );
+
+                if (score > MIN_SCORE) {
+                    const item = this.items[i];
+                    results.push({
+                        item,
+                        score: this.applyItemTypeBoost(score, item.type),
+                        scope: this.getScopeForItemType(item.type),
+                    });
+                }
             }
         }
 
@@ -677,20 +688,17 @@ export class SearchEngine implements ISearchProvider {
         preparedPath: Fuzzysort.Prepared | null,
         minScore: number,
     ): number {
-        // Fast path: if query is significantly longer than name, give up (approximate)
-        // preparedName.target is the string
-        if (preparedName && query.length > preparedName.target.length + 5) {
-             // allow some slack, but usually if query is longer, it's a mismatch or very low score
-        }
-
         let bestScore = -Infinity;
+        const queryLen = query.length;
 
         // Name (Weight 1.0)
         if (preparedName) {
-            const result = Fuzzysort.single(query, preparedName);
-            if (result && result.score > minScore) {
-                const score = result.score;
-                if (score > bestScore) bestScore = score;
+            if (queryLen <= preparedName.target.length) {
+                const result = Fuzzysort.single(query, preparedName);
+                if (result && result.score > minScore) {
+                    const score = result.score;
+                    if (score > bestScore) bestScore = score;
+                }
             }
         }
 
@@ -699,10 +707,12 @@ export class SearchEngine implements ISearchProvider {
 
         // Full Name (Weight 0.9)
         if (preparedFullName) {
-            const result = Fuzzysort.single(query, preparedFullName);
-            if (result && result.score > minScore) {
-                const score = result.score * 0.9;
-                if (score > bestScore) bestScore = score;
+            if (queryLen <= preparedFullName.target.length) {
+                const result = Fuzzysort.single(query, preparedFullName);
+                if (result && result.score > minScore) {
+                    const score = result.score * 0.9;
+                    if (score > bestScore) bestScore = score;
+                }
             }
         }
 
@@ -711,10 +721,12 @@ export class SearchEngine implements ISearchProvider {
 
         // Path (Weight 0.8)
         if (preparedPath) {
-            const result = Fuzzysort.single(query, preparedPath);
-            if (result && result.score > minScore) {
-                const score = result.score * 0.8;
-                if (score > bestScore) bestScore = score;
+            if (queryLen <= preparedPath.target.length) {
+                const result = Fuzzysort.single(query, preparedPath);
+                if (result && result.score > minScore) {
+                    const score = result.score * 0.8;
+                    if (score > bestScore) bestScore = score;
+                }
             }
         }
 
@@ -754,8 +766,8 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private camelHumpsMatch(capitals: string, query: string): number {
-        if (capitals.includes(query)) {
-            const matchIndex = capitals.indexOf(query);
+        const matchIndex = capitals.indexOf(query);
+        if (matchIndex !== -1) {
             const lengthRatio = query.length / capitals.length;
             const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
             return lengthRatio * positionBoost * 0.8;
