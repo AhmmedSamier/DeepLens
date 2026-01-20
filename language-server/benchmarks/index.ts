@@ -1,6 +1,7 @@
 import { runSearchBenchmarks } from './search.bench';
 import { runParserBenchmarks } from './parser.bench';
 import { runTextSearchBenchmarks } from './text-search.bench';
+import { runIndexingBenchmark } from './indexing.bench';
 import { saveBenchmarks } from './utils';
 import * as path from 'path';
 
@@ -10,6 +11,7 @@ async function main() {
     await runSearchBenchmarks();
     await runParserBenchmarks();
     await runTextSearchBenchmarks();
+    await runIndexingBenchmark();
 
     console.log("Benchmarks completed.");
 

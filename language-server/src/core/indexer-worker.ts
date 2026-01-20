@@ -18,21 +18,32 @@ const logger: Logger = {
 const parser = new TreeSitterParser(extensionPath, logger);
 let isInitialized = false;
 
-parentPort.on('message', async (message: { filePath: string }) => {
+parentPort.on('message', async (message: { filePaths: string[] }) => {
     try {
         if (!isInitialized) {
             await parser.init();
             isInitialized = true;
         }
 
-        const { filePath } = message;
-        const items = await parser.parseFile(filePath);
+        const { filePaths } = message;
+        const allItems: SearchableItem[] = [];
 
-        parentPort?.postMessage({ type: 'result', filePath, items });
+        for (const filePath of filePaths) {
+            // parser.parseFile handles internal errors and returns empty array if failed
+            const items = await parser.parseFile(filePath);
+            allItems.push(...items);
+        }
+
+        // Send back all items and the count of processed files
+        parentPort?.postMessage({
+            type: 'result',
+            items: allItems,
+            count: filePaths.length
+        });
+
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
-            filePath: message.filePath,
             error: error instanceof Error ? error.message : String(error)
         });
     }

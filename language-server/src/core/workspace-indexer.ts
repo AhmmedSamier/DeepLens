@@ -313,11 +313,14 @@ export class WorkspaceIndexer {
             return;
         }
 
-        // HIGH-PERFORMANCE PASS 1: Try workspace-wide symbol extraction
-        await this.scanWorkspaceSymbols(progressCallback);
+        // Run both passes concurrently
+        await Promise.all([
+            // HIGH-PERFORMANCE PASS 1: Try workspace-wide symbol extraction
+            this.scanWorkspaceSymbols(progressCallback),
 
-        // HIGH-PERFORMANCE PASS 2: Worker Thread Pool
-        await this.runFileIndexingPool(fileItems, progressCallback);
+            // HIGH-PERFORMANCE PASS 2: Worker Thread Pool
+            this.runFileIndexingPool(fileItems, progressCallback),
+        ]);
     }
 
     /**
@@ -349,6 +352,7 @@ export class WorkspaceIndexer {
     ): Promise<void> {
         const totalFiles = fileItems.length;
         const workerCount = Math.max(1, os.cpus().length - 1);
+        const BATCH_SIZE = 50;
 
         let processed = 0;
         let nextReportingPercentage = 0;
@@ -391,7 +395,7 @@ export class WorkspaceIndexer {
                     if (message.type === 'log') {
                         // this.log(`[Worker ${i}] ${message.message}`);
                     } else if (message.type === 'result') {
-                        const { items } = message;
+                        const { items, count } = message;
                         if (items && items.length > 0) {
                              // Re-intern strings from worker to share memory in main thread
                              const internedItems = items.map((item: SearchableItem) => ({
@@ -407,19 +411,19 @@ export class WorkspaceIndexer {
                         }
 
                         // Mark task complete
-                        processed++;
+                        const itemsProcessed = count || 1;
+                        processed += itemsProcessed;
                         activeTasks--;
 
                         // Update progress
-                        if (processed % 100 === 0 || (processed === totalFiles && !logged100)) {
-                             if (processed === totalFiles) logged100 = true;
+                        if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
+                             if (processed >= totalFiles) logged100 = true;
                              this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
                         }
                         if (progressCallback) {
                              const percentage = (processed / totalFiles) * 100;
                              if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                                 const fileName = path.basename(message.filePath);
-                                 progressCallback(`Indexing ${fileName} (${processed}/${totalFiles})`, percentage);
+                                 progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
                                  nextReportingPercentage = percentage + 5;
                              }
                         }
@@ -429,7 +433,9 @@ export class WorkspaceIndexer {
                     } else if (message.type === 'error') {
                         // Log error but continue
                         // console.debug(`Worker error on ${message.filePath}: ${message.error}`);
-                        processed++;
+                        // The worker handles batches, so an error might be generic or per file.
+                        // Ideally we count the processed items even on error, or just continue.
+                        // Assuming batch error means we lost that batch's progress, but for robustness:
                         activeTasks--;
                         assignTask(worker);
                     }
@@ -445,37 +451,34 @@ export class WorkspaceIndexer {
             }
 
             const assignTask = (worker: Worker) => {
-                // If we need to filter/check hash before parsing, do it here
-                // Note: indexOneFile logic (checking cache) needs to happen BEFORE sending to worker?
-                // Or inside worker?
-                // The current indexOneFile checks persistence cache.
-                // We should check cache on main thread to avoid serialization overhead if cached.
+                const batchFiles: string[] = [];
 
-                // Find next file that needs indexing
-                while (pendingItems.length > 0) {
+                // Fill batch
+                while (pendingItems.length > 0 && batchFiles.length < BATCH_SIZE) {
                     const fileItem = pendingItems.shift()!;
 
-                    // Check cache logic here to skip worker
-                    // This duplicates indexOneFile logic slightly but is necessary for efficiency
+                    // Check cache logic here
                     if (this.shouldSkipIndexing(fileItem.filePath)) {
                         processed++;
-                        // Progress update (simplified)
-                         if (processed % 100 === 0) {
+                        if (processed % 100 === 0) {
                              this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
                         }
                         continue;
                     }
 
-                    activeTasks++;
-                    worker.postMessage({ filePath: fileItem.filePath });
-                    return;
+                    batchFiles.push(fileItem.filePath);
                 }
 
-                // No more tasks
-                freeWorkers.push(worker);
-                if (activeTasks === 0 && pendingItems.length === 0) {
-                    terminateWorkers();
-                    resolveAll();
+                if (batchFiles.length > 0) {
+                    activeTasks++;
+                    worker.postMessage({ filePaths: batchFiles });
+                } else {
+                    // No more tasks
+                    freeWorkers.push(worker);
+                    if (activeTasks === 0 && pendingItems.length === 0) {
+                        terminateWorkers();
+                        resolveAll();
+                    }
                 }
             };
 
