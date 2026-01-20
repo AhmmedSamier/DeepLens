@@ -1042,18 +1042,30 @@ export class WorkspaceIndexer {
      */
     protected async execGit(args: string[], cwd: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
-            cp.execFile(
-                'git',
-                args,
-                {
-                    cwd: cwd,
-                    maxBuffer: 10 * 1024 * 1024, // 10MB buffer
-                },
-                (error, stdout) => {
-                    if (error) reject(error);
-                    else resolve(stdout);
+            const child = cp.spawn('git', args, { cwd });
+
+            let stdout = '';
+            let stderr = '';
+
+            child.stdout.on('data', (chunk) => {
+                stdout += chunk.toString();
+            });
+
+            child.stderr.on('data', (chunk) => {
+                stderr += chunk.toString();
+            });
+
+            child.on('error', (err) => {
+                reject(err);
+            });
+
+            child.on('close', (code) => {
+                if (code === 0) {
+                    resolve(stdout);
+                } else {
+                    reject(new Error(`Git exited with code ${code}: ${stderr}`));
                 }
-            );
+            });
         });
     }
 

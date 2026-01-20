@@ -43,92 +43,96 @@ export class RipgrepService {
             const tmpDir = os.tmpdir();
             const fileListPath = path.join(tmpDir, `deeplens-rg-${Date.now()}.txt`);
 
-            try {
-                fs.writeFileSync(fileListPath, files.join('\n'), 'utf8');
-            } catch (err) {
-                return reject(err);
-            }
+            const writeStream = fs.createWriteStream(fileListPath, { encoding: 'utf8' });
 
-            const args = [
-                '--json',
-                '--case-insensitive',
-                '--files-from', fileListPath,
-                '--max-count', maxResults.toString(), // limit matches per file? No, rg --max-count usually limits lines per file.
-                // We want global limit? rg doesn't strictly support global limit easily without piping.
-                // We will limit processing output.
-                '--',
-                query
-            ];
-
-            const child = cp.spawn(this.rgPath, args, {
-                stdio: ['ignore', 'pipe', 'pipe']
-            });
-
-            const results: RgMatch[] = [];
-            let buffer = '';
-            let errorBuffer = '';
-            let hitLimit = false;
-
-            child.stdout.on('data', (chunk: Buffer) => {
-                if (hitLimit) return;
-
-                buffer += chunk.toString();
-                const lines = buffer.split('\n');
-                buffer = lines.pop() || '';
-
-                for (const line of lines) {
-                    if (!line.trim()) continue;
-                    try {
-                        const msg = JSON.parse(line);
-                        if (msg.type === 'match') {
-                            const data = msg.data;
-                            results.push({
-                                path: data.path.text,
-                                line: data.line_number - 1, // rg is 1-based
-                                column: data.submatches[0]?.start || 0,
-                                text: data.lines.text.trim(),
-                                match: data.submatches[0]?.match?.text || '',
-                                submatches: data.submatches
-                            });
-
-                            if (results.length >= maxResults) {
-                                hitLimit = true;
-                                child.kill();
-                                break;
-                            }
-                        }
-                    } catch {
-                        // ignore parse errors
-                    }
-                }
-            });
-
-            child.stderr.on('data', (chunk) => {
-                errorBuffer += chunk.toString();
-            });
-
-            child.on('close', (code) => {
-                try {
-                    if (fs.existsSync(fileListPath)) {
-                        fs.unlinkSync(fileListPath);
-                    }
-                } catch {}
-
-                if (hitLimit || code === 0 || code === 1) { // 1 means no matches found
-                    resolve(results);
-                } else {
-                    reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
-                }
-            });
-
-            child.on('error', (err) => {
-                 try {
-                    if (fs.existsSync(fileListPath)) {
-                        fs.unlinkSync(fileListPath);
-                    }
-                } catch {}
+            writeStream.on('error', (err) => {
                 reject(err);
             });
+
+            writeStream.on('finish', () => {
+                const args = [
+                    '--json',
+                    '--case-insensitive',
+                    '--files-from', fileListPath,
+                    '--max-count', maxResults.toString(),
+                    '--',
+                    query
+                ];
+
+                const child = cp.spawn(this.rgPath, args, {
+                    stdio: ['ignore', 'pipe', 'pipe']
+                });
+
+                const results: RgMatch[] = [];
+                let buffer = '';
+                let errorBuffer = '';
+                let hitLimit = false;
+
+                child.stdout.on('data', (chunk: Buffer) => {
+                    if (hitLimit) return;
+
+                    buffer += chunk.toString();
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+                        try {
+                            const msg = JSON.parse(line);
+                            if (msg.type === 'match') {
+                                const data = msg.data;
+                                results.push({
+                                    path: data.path.text,
+                                    line: data.line_number - 1, // rg is 1-based
+                                    column: data.submatches[0]?.start || 0,
+                                    text: data.lines.text.trim(),
+                                    match: data.submatches[0]?.match?.text || '',
+                                    submatches: data.submatches
+                                });
+
+                                if (results.length >= maxResults) {
+                                    hitLimit = true;
+                                    child.kill();
+                                    break;
+                                }
+                            }
+                        } catch {
+                            // ignore parse errors
+                        }
+                    }
+                });
+
+                child.stderr.on('data', (chunk) => {
+                    errorBuffer += chunk.toString();
+                });
+
+                child.on('close', (code) => {
+                    try {
+                        if (fs.existsSync(fileListPath)) {
+                            fs.unlinkSync(fileListPath);
+                        }
+                    } catch {}
+
+                    if (hitLimit || code === 0 || code === 1) { // 1 means no matches found
+                        resolve(results);
+                    } else {
+                        reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
+                    }
+                });
+
+                child.on('error', (err) => {
+                    try {
+                        if (fs.existsSync(fileListPath)) {
+                            fs.unlinkSync(fileListPath);
+                        }
+                    } catch {}
+                    reject(err);
+                });
+            });
+
+            // Write files to stream
+            files.forEach(f => writeStream.write(f + '\n'));
+            writeStream.end();
         });
     }
 }

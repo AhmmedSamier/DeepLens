@@ -34,6 +34,7 @@ export class SearchEngine implements ISearchProvider {
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
     private preparedCapitals: (string | null)[] = [];
+    private filePaths: string[] = [];
 
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
@@ -73,6 +74,7 @@ export class SearchEngine implements ISearchProvider {
     setItems(items: SearchableItem[]): void {
         this.items = items;
         this.itemsMap.clear();
+        this.filePaths = [];
         for (const item of items) {
             this.itemsMap.set(item.id, item);
         }
@@ -94,6 +96,11 @@ export class SearchEngine implements ISearchProvider {
             const globalIndex = startIndex + i;
 
             this.itemsMap.set(item.id, item);
+
+            // Update file paths cache
+            if (item.type === SearchItemType.FILE) {
+                this.filePaths.push(item.filePath);
+            }
 
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
             const shouldPrepareFullName =
@@ -153,6 +160,9 @@ export class SearchEngine implements ISearchProvider {
             this.preparedPaths.length = write;
             this.preparedCapitals.length = write;
 
+            // Update file paths cache (filter out the removed file)
+            this.filePaths = this.filePaths.filter(p => p !== filePath);
+
             // Rebuild scope indices
             this.rebuildScopeIndices();
         }
@@ -172,6 +182,11 @@ export class SearchEngine implements ISearchProvider {
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
             const item = this.items[i];
+
+            if (item.type === SearchItemType.FILE) {
+                this.filePaths.push(item.filePath);
+            }
+
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
             const shouldPrepareFullName =
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
@@ -348,15 +363,13 @@ export class SearchEngine implements ISearchProvider {
         onResult?: (result: SearchResult) => void
     ): Promise<SearchResult[]> {
         const startTime = Date.now();
-        const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
 
         // Try Ripgrep first
         if (this.ripgrep && this.ripgrep.isAvailable()) {
             this.logger?.log(`--- Starting LSP Text Search (Ripgrep): "${query}" ---`);
             try {
-                // Pass all file paths to ripgrep
-                const filePaths = fileItems.map(f => f.filePath);
-                const matches = await this.ripgrep.search(query, filePaths, maxResults);
+                // Pass cached file paths to ripgrep (No mapping/filtering needed)
+                const matches = await this.ripgrep.search(query, this.filePaths, maxResults);
 
                 const results: SearchResult[] = [];
                 for (const match of matches) {
@@ -396,6 +409,10 @@ export class SearchEngine implements ISearchProvider {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const results: SearchResult[] = [];
         const queryLower = query.toLowerCase();
+
+        // Fallback: Node.js Stream Search
+        // We still need fileItems for the fallback implementation
+        const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
 
         // Zed Optimization: Prioritize active/open files
         const prioritizedFiles = fileItems.sort((a, b) => {
