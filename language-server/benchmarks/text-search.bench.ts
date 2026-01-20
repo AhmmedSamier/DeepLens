@@ -19,6 +19,8 @@ export async function runTextSearchBenchmarks() {
     } as unknown as Config;
 
     engine.setConfig(config);
+    // Point to language-server root to find dist/bin/rg
+    engine.setExtensionPath(path.resolve(__dirname, '..'));
 
     const tempDir = path.join(__dirname, 'temp_text_search');
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
