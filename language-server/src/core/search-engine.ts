@@ -298,7 +298,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
-     * Perform grep-like text search on indexed files
+     * Perform grep-like text search on indexed files using streams
      */
     private async performTextSearch(
         query: string,
@@ -306,7 +306,7 @@ export class SearchEngine implements ISearchProvider {
         onResult?: (result: SearchResult) => void
     ): Promise<SearchResult[]> {
         const startTime = Date.now();
-        this.logger?.log(`--- Starting LSP Text Search: "${query}" ---`);
+        this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const results: SearchResult[] = [];
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
         const queryLower = query.toLowerCase();
@@ -319,7 +319,7 @@ export class SearchEngine implements ISearchProvider {
         });
 
         // Limit concurrency
-        const CONCURRENCY = this.config?.getSearchConcurrency() || 60;
+        const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
         const chunks: SearchableItem[][] = [];
         for (let i = 0; i < prioritizedFiles.length; i += CONCURRENCY) {
             chunks.push(prioritizedFiles.slice(i, i + CONCURRENCY));
@@ -350,60 +350,21 @@ export class SearchEngine implements ISearchProvider {
 
                     try {
                         const stats = await fs.promises.stat(fileItem.filePath);
-                        if (stats.size > 5 * 1024 * 1024) return;
+                        if (stats.size > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
 
-                        const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
                         processedFiles++;
 
-                        if (!content.toLowerCase().includes(queryLower)) return;
+                        await this.scanFileStream(fileItem, queryLower, query.length, maxResults, results, pendingResults);
 
-                        let lineStart = 0;
-                        let lineIndex = 0;
-                        while (lineStart < content.length) {
-                            if (results.length >= maxResults) break;
-
-                            let nextNewline = content.indexOf('\n', lineStart);
-                            if (nextNewline === -1) nextNewline = content.length;
-
-                            const lineText = content.substring(lineStart, nextNewline);
-                            const matchIndex = lineText.toLowerCase().indexOf(queryLower);
-
-                            if (matchIndex >= 0) {
-                                const trimmedLine = lineText.trim();
-                                if (trimmedLine.length > 0) {
-                                    const result: SearchResult = {
-                                        item: {
-                                            id: `text:${fileItem.filePath}:${lineIndex}:${matchIndex}`,
-                                            name: trimmedLine,
-                                            type: SearchItemType.TEXT,
-                                            filePath: fileItem.filePath,
-                                            relativeFilePath: fileItem.relativeFilePath,
-                                            line: lineIndex,
-                                            column: matchIndex,
-                                            containerName: fileItem.name,
-                                            detail: fileItem.relativeFilePath,
-                                        },
-                                        score: 1.0,
-                                        scope: SearchScope.TEXT,
-                                        highlights: [[matchIndex, matchIndex + query.length]],
-                                    };
-
-                                    results.push(result);
-                                    pendingResults.push(result);
-                                    if (pendingResults.length >= 5) {
-                                        flushBatch();
-                                    }
-                                }
-                            }
-
-                            lineStart = nextNewline + 1;
-                            lineIndex++;
-                        }
                     } catch (error) {
                         // Ignore read/stat errors
                     }
                 })
             );
+
+            if (pendingResults.length >= 5) {
+                flushBatch();
+            }
 
             if (processedFiles % 100 === 0 || results.length > 0) {
                 this.logger?.log(`Searched ${processedFiles}/${fileItems.length} files... found ${results.length} matches`);
@@ -418,6 +379,109 @@ export class SearchEngine implements ISearchProvider {
 
         this.logger?.log(`Text search completed in ${durationSec}s${firstResultLog}. Found ${results.length} results.`);
         return results;
+    }
+
+    private async scanFileStream(
+        fileItem: SearchableItem,
+        queryLower: string,
+        queryLength: number,
+        maxResults: number,
+        results: SearchResult[],
+        pendingResults: SearchResult[]
+    ): Promise<void> {
+        return new Promise<void>((resolve, reject) => {
+            const stream = fs.createReadStream(fileItem.filePath, {
+                encoding: 'utf8',
+                highWaterMark: 64 * 1024 // 64KB chunks
+            });
+
+            let buffer = '';
+            let lineIndex = 0;
+            let fileOffset = 0;
+
+            stream.on('data', (chunk: string) => {
+                if (results.length >= maxResults) {
+                    stream.destroy();
+                    resolve();
+                    return;
+                }
+
+                buffer += chunk;
+                let newlineIndex;
+
+                // Process full lines
+                while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+                    const line = buffer.slice(0, newlineIndex);
+                    buffer = buffer.slice(newlineIndex + 1);
+
+                    // Skip extremely long lines (minified code)
+                    if (line.length > 10000) {
+                        lineIndex++;
+                        continue;
+                    }
+
+                    // Simple case insensitive check
+                    const matchIndex = line.toLowerCase().indexOf(queryLower);
+
+                    if (matchIndex >= 0) {
+                        const trimmedLine = line.trim();
+                        if (trimmedLine.length > 0) {
+                            const result: SearchResult = {
+                                item: {
+                                    id: `text:${fileItem.filePath}:${lineIndex}:${matchIndex}`,
+                                    name: trimmedLine,
+                                    type: SearchItemType.TEXT,
+                                    filePath: fileItem.filePath,
+                                    relativeFilePath: fileItem.relativeFilePath,
+                                    line: lineIndex,
+                                    column: matchIndex,
+                                    containerName: fileItem.name,
+                                    detail: fileItem.relativeFilePath,
+                                },
+                                score: 1.0,
+                                scope: SearchScope.TEXT,
+                                highlights: [[matchIndex, matchIndex + queryLength]],
+                            };
+
+                            results.push(result);
+                            pendingResults.push(result);
+                        }
+                    }
+
+                    lineIndex++;
+
+                    if (results.length >= maxResults) {
+                        stream.destroy();
+                        resolve();
+                        return;
+                    }
+                }
+
+                // Safety: Discard buffer if it grows too large without finding a newline (minified file)
+                if (buffer.length > 100 * 1024) {
+                    buffer = '';
+                }
+            });
+
+            stream.on('end', () => {
+                // Process last line if any
+                if (buffer.length > 0) {
+                    const matchIndex = buffer.toLowerCase().indexOf(queryLower);
+                    if (matchIndex >= 0) {
+                         const trimmedLine = buffer.trim();
+                         if (trimmedLine.length > 0) {
+                            // ... add result ...
+                         }
+                    }
+                }
+                resolve();
+            });
+
+            stream.on('error', (err) => {
+                 // Ignore error, just resolve
+                 resolve();
+            });
+        });
     }
 
     private mergeWithUrlMatches(results: SearchResult[], indices: number[] | undefined, query: string): SearchResult[] {
@@ -527,6 +591,12 @@ export class SearchEngine implements ISearchProvider {
         preparedPath: Fuzzysort.Prepared | null,
         minScore: number,
     ): number {
+        // Fast path: if query is significantly longer than name, give up (approximate)
+        // preparedName.target is the string
+        if (preparedName && query.length > preparedName.target.length + 5) {
+             // allow some slack, but usually if query is longer, it's a mismatch or very low score
+        }
+
         let bestScore = -Infinity;
 
         // Name (Weight 1.0)

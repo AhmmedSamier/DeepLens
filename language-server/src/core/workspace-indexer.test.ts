@@ -46,7 +46,8 @@ describe('WorkspaceIndexer', () => {
             mockConfig,
             mockTreeSitter,
             mockPersistence,
-            mockEnv
+            mockEnv,
+            process.cwd()
         );
 
         // Mock git behavior: success = ignored
@@ -61,7 +62,8 @@ describe('WorkspaceIndexer', () => {
             mockConfig,
             mockTreeSitter,
             mockPersistence,
-            mockEnv
+            mockEnv,
+            process.cwd()
         );
 
         // Mock git behavior: failure with code 1 = not ignored
@@ -76,7 +78,8 @@ describe('WorkspaceIndexer', () => {
             mockConfig,
             mockTreeSitter,
             mockPersistence,
-            mockEnv
+            mockEnv,
+            process.cwd()
         );
 
         const result = await indexer.checkIsGitIgnored('/outside/file.txt');
@@ -91,7 +94,8 @@ describe('WorkspaceIndexer', () => {
             customConfig,
             mockTreeSitter,
             mockPersistence,
-            mockEnv
+            mockEnv,
+            process.cwd()
         );
 
         // Even if git would say ignored...

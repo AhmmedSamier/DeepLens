@@ -2,6 +2,8 @@ import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
+import { Worker } from 'worker_threads';
 import { minimatch } from 'minimatch';
 import { Config } from './config';
 import { IndexPersistence } from './index-persistence';
@@ -25,17 +27,20 @@ export class WorkspaceIndexer {
     private fileHashes: Map<string, string> = new Map();
     private env: IndexerEnvironment;
     private stringCache: Map<string, string> = new Map();
+    private extensionPath: string;
 
     constructor(
         config: Config,
         treeSitter: import('./tree-sitter-parser').TreeSitterParser,
         persistence: IndexPersistence,
-        env: IndexerEnvironment
+        env: IndexerEnvironment,
+        extensionPath: string
     ) {
         this.config = config;
         this.treeSitter = treeSitter;
         this.persistence = persistence;
         this.env = env;
+        this.extensionPath = extensionPath;
     }
 
     public onDidChangeItems(listener: (items: SearchableItem[]) => void) {
@@ -293,7 +298,7 @@ export class WorkspaceIndexer {
         // HIGH-PERFORMANCE PASS 1: Try workspace-wide symbol extraction
         await this.scanWorkspaceSymbols(progressCallback);
 
-        // HIGH-PERFORMANCE PASS 2: Sliding Window Concurrent Pool
+        // HIGH-PERFORMANCE PASS 2: Worker Thread Pool
         await this.runFileIndexingPool(fileItems, progressCallback);
     }
 
@@ -318,9 +323,211 @@ export class WorkspaceIndexer {
     }
 
     /**
-     * Run concurrent file-by-file indexing pool
+     * Run concurrent file-by-file indexing pool using Worker Threads
      */
     private async runFileIndexingPool(
+        fileItems: SearchableItem[],
+        progressCallback?: (message: string, increment?: number) => void,
+    ): Promise<void> {
+        const totalFiles = fileItems.length;
+        const workerCount = Math.max(1, os.cpus().length - 1);
+
+        let processed = 0;
+        let nextReportingPercentage = 0;
+        let logged100 = false;
+
+        // Determine worker script path
+        const isTs = __filename.endsWith('.ts');
+        const workerScript = isTs
+            ? path.join(__dirname, 'indexer-worker.ts')
+            : path.join(__dirname, 'indexer-worker.js');
+
+        this.log(`Starting ${workerCount} indexing workers (Script: ${path.basename(workerScript)})...`);
+
+        try {
+            // Verify worker script exists
+            if (!fs.existsSync(workerScript)) {
+                this.log(`Worker script not found at ${workerScript}. Falling back to main thread.`);
+                return this.runFileIndexingFallback(fileItems, progressCallback);
+            }
+
+            const workers: Worker[] = [];
+            const freeWorkers: Worker[] = [];
+            const pendingItems = [...fileItems];
+            let activeTasks = 0;
+            let resolveAll: () => void;
+            let rejectAll: (err: any) => void;
+
+            const promise = new Promise<void>((resolve, reject) => {
+                resolveAll = resolve;
+                rejectAll = reject;
+            });
+
+            // Initialize workers
+            for (let i = 0; i < workerCount; i++) {
+                const worker = new Worker(workerScript, {
+                    workerData: { extensionPath: this.extensionPath }
+                });
+
+                worker.on('message', (message) => {
+                    if (message.type === 'log') {
+                        // this.log(`[Worker ${i}] ${message.message}`);
+                    } else if (message.type === 'result') {
+                        const { items } = message;
+                        if (items && items.length > 0) {
+                             // Re-intern strings from worker to share memory in main thread
+                             const internedItems = items.map((item: SearchableItem) => ({
+                                 ...item,
+                                 name: this.intern(item.name),
+                                 fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                                 containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                                 relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
+                                 filePath: this.intern(item.filePath)
+                             }));
+
+                             this.ensureSymbolsInItems(internedItems, message.filePath);
+                        }
+
+                        // Mark task complete
+                        processed++;
+                        activeTasks--;
+
+                        // Update progress
+                        if (processed % 100 === 0 || (processed === totalFiles && !logged100)) {
+                             if (processed === totalFiles) logged100 = true;
+                             this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
+                        }
+                        if (progressCallback) {
+                             const percentage = (processed / totalFiles) * 100;
+                             if (percentage >= nextReportingPercentage || processed === totalFiles) {
+                                 const fileName = path.basename(message.filePath);
+                                 progressCallback(`Indexing ${fileName} (${processed}/${totalFiles})`, percentage);
+                                 nextReportingPercentage = percentage + 5;
+                             }
+                        }
+
+                        // Pick next task
+                        assignTask(worker);
+                    } else if (message.type === 'error') {
+                        // Log error but continue
+                        // console.debug(`Worker error on ${message.filePath}: ${message.error}`);
+                        processed++;
+                        activeTasks--;
+                        assignTask(worker);
+                    }
+                });
+
+                worker.on('error', (err) => {
+                    this.log(`Worker ${i} error: ${err}`);
+                    // If a worker dies, we lose its capacity. Ideally restart it, but for now just ignore.
+                });
+
+                workers.push(worker);
+                freeWorkers.push(worker);
+            }
+
+            const assignTask = (worker: Worker) => {
+                // If we need to filter/check hash before parsing, do it here
+                // Note: indexOneFile logic (checking cache) needs to happen BEFORE sending to worker?
+                // Or inside worker?
+                // The current indexOneFile checks persistence cache.
+                // We should check cache on main thread to avoid serialization overhead if cached.
+
+                // Find next file that needs indexing
+                while (pendingItems.length > 0) {
+                    const fileItem = pendingItems.shift()!;
+
+                    // Check cache logic here to skip worker
+                    // This duplicates indexOneFile logic slightly but is necessary for efficiency
+                    if (this.shouldSkipIndexing(fileItem.filePath)) {
+                        processed++;
+                        // Progress update (simplified)
+                         if (processed % 100 === 0) {
+                             this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
+                        }
+                        continue;
+                    }
+
+                    activeTasks++;
+                    worker.postMessage({ filePath: fileItem.filePath });
+                    return;
+                }
+
+                // No more tasks
+                freeWorkers.push(worker);
+                if (activeTasks === 0 && pendingItems.length === 0) {
+                    terminateWorkers();
+                    resolveAll();
+                }
+            };
+
+            const terminateWorkers = () => {
+                for (const w of workers) w.terminate();
+            };
+
+            // Start initial tasks
+            while (freeWorkers.length > 0 && pendingItems.length > 0) {
+                 const w = freeWorkers.pop()!;
+                 assignTask(w);
+            }
+
+            // If we ran out of items before using all workers
+            if (pendingItems.length === 0 && activeTasks === 0) {
+                terminateWorkers();
+                resolveAll();
+            }
+
+            await promise;
+
+        } catch (error) {
+            this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
+            return this.runFileIndexingFallback(fileItems, progressCallback);
+        }
+    }
+
+    /**
+     * Check if we can skip indexing this file (cache hit)
+     * Returns true if symbols were loaded from cache and added to items.
+     */
+    private shouldSkipIndexing(filePath: string): boolean {
+        let currentHash = this.fileHashes.get(filePath);
+
+        // Calculate hash if missing (blocking in main thread here is risky for large files,
+        // but we assume hashing is fast or was pre-calculated in populateFileHashes)
+        if (!currentHash && !this.indexing) {
+             try {
+                 const content = fs.readFileSync(filePath);
+                 currentHash = crypto.createHash('sha256').update(content).digest('hex');
+                 this.fileHashes.set(filePath, currentHash);
+             } catch {
+                 return false;
+             }
+        }
+
+        const cached = this.persistence.get(filePath);
+        if (cached && currentHash && cached.hash === currentHash) {
+            this.items.push(...cached.symbols);
+            return true;
+        }
+
+        // If mtime matches and we have a cache (fallback if hash missing)
+        if (cached && !currentHash) {
+             try {
+                const stats = fs.statSync(filePath);
+                if (Number(cached.mtime) === Number(stats.mtime)) {
+                    this.items.push(...cached.symbols);
+                    return true;
+                }
+             } catch { return false; }
+        }
+
+        return false;
+    }
+
+    /**
+     * Fallback: Index files in main thread (original logic)
+     */
+    private async runFileIndexingFallback(
         fileItems: SearchableItem[],
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
@@ -349,7 +556,6 @@ export class WorkspaceIndexer {
                 processed++;
                 activeWorkers--;
 
-                // Log granular progress for the output channel every 100 files
                 if (processed % 100 === 0 || (processed === totalFiles && !logged100)) {
                     if (processed === totalFiles) {
                         logged100 = true;
@@ -361,9 +567,8 @@ export class WorkspaceIndexer {
 
                 if (progressCallback) {
                     const percentage = (processed / totalFiles) * 100;
-                    const fileName = path.basename(fileItem.filePath);
-                    // Only report to UI every 5% to avoid overwhelming the extension host
                     if (percentage >= nextReportingPercentage || processed === totalFiles) {
+                         const fileName = path.basename(fileItem.filePath);
                         progressCallback(`Indexing ${fileName} (${processed}/${totalFiles})`, percentage);
                         nextReportingPercentage = percentage + 5;
                     }

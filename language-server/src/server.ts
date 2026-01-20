@@ -99,7 +99,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     indexPersistence = new IndexPersistence(storagePath);
 
     const indexerEnv = new LspIndexerEnvironment(connection, folders);
-    workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence, indexerEnv);
+    workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence, indexerEnv, extensionPath);
 
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();
