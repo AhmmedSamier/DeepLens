@@ -5,6 +5,7 @@ import { Config } from './config';
 import { RouteMatcher } from './route-matcher';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 import { ISearchProvider } from './search-interface';
+import { RipgrepService } from './ripgrep-service';
 
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
@@ -43,6 +44,7 @@ export class SearchEngine implements ISearchProvider {
     private config?: Config;
     private logger?: { log: (msg: string) => void; error: (msg: string) => void };
     private activeFiles: Set<string> = new Set();
+    private ripgrep: RipgrepService | undefined;
 
     /**
      * Set logger
@@ -56,6 +58,13 @@ export class SearchEngine implements ISearchProvider {
      */
     setConfig(config: Config): void {
         this.config = config;
+    }
+
+    /**
+     * Set extension path for locating binaries
+     */
+    setExtensionPath(extensionPath: string): void {
+        this.ripgrep = new RipgrepService(extensionPath);
     }
 
     /**
@@ -114,40 +123,39 @@ export class SearchEngine implements ISearchProvider {
 
     /**
      * Remove items from a specific file and update hot-arrays incrementally
+     * Optimized: Uses in-place compaction to avoid allocating new arrays.
      */
     removeItemsByFile(filePath: string): void {
-        // Since we are using parallel arrays, splicing at random indices is expensive.
-        // And if we splice, all subsequent indices change, invalidating scopedIndices.
-        // Strategy: Filter all arrays to new arrays (O(N)), then rebuild scope map.
-
-        const newItems: SearchableItem[] = [];
-        const newPreparedNames: (Fuzzysort.Prepared | null)[] = [];
-        const newPreparedFullNames: (Fuzzysort.Prepared | null)[] = [];
-        const newPreparedPaths: (Fuzzysort.Prepared | null)[] = [];
-        const newPreparedCapitals: (string | null)[] = [];
-
         const count = this.items.length;
-        for (let i = 0; i < count; i++) {
-            const item = this.items[i];
+        let write = 0;
+
+        for (let read = 0; read < count; read++) {
+            const item = this.items[read];
             if (item.filePath !== filePath) {
-                newItems.push(item);
-                newPreparedNames.push(this.preparedNames[i]);
-                newPreparedFullNames.push(this.preparedFullNames[i]);
-                newPreparedPaths.push(this.preparedPaths[i]);
-                newPreparedCapitals.push(this.preparedCapitals[i]);
+                if (read !== write) {
+                    this.items[write] = item;
+                    this.preparedNames[write] = this.preparedNames[read];
+                    this.preparedFullNames[write] = this.preparedFullNames[read];
+                    this.preparedPaths[write] = this.preparedPaths[read];
+                    this.preparedCapitals[write] = this.preparedCapitals[read];
+                }
+                write++;
             } else {
                 this.itemsMap.delete(item.id);
             }
         }
 
-        this.items = newItems;
-        this.preparedNames = newPreparedNames;
-        this.preparedFullNames = newPreparedFullNames;
-        this.preparedPaths = newPreparedPaths;
-        this.preparedCapitals = newPreparedCapitals;
+        // Truncate arrays if items were removed
+        if (write < count) {
+            this.items.length = write;
+            this.preparedNames.length = write;
+            this.preparedFullNames.length = write;
+            this.preparedPaths.length = write;
+            this.preparedCapitals.length = write;
 
-        // Rebuild scope indices
-        this.rebuildScopeIndices();
+            // Rebuild scope indices
+            this.rebuildScopeIndices();
+        }
     }
 
     /**
@@ -236,6 +244,40 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
+     * Get detailed index statistics
+     */
+    getStats(): { totalItems: number; fileCount: number; typeCount: number; symbolCount: number } {
+        let fileCount = 0;
+        let typeCount = 0;
+        let symbolCount = 0;
+
+        for (const item of this.items) {
+            if (item.type === SearchItemType.FILE) {
+                fileCount++;
+            } else if (
+                item.type === SearchItemType.CLASS ||
+                item.type === SearchItemType.INTERFACE ||
+                item.type === SearchItemType.ENUM
+            ) {
+                typeCount++;
+            } else if (
+                item.type === SearchItemType.METHOD ||
+                item.type === SearchItemType.FUNCTION ||
+                item.type === SearchItemType.PROPERTY
+            ) {
+                symbolCount++;
+            }
+        }
+
+        return {
+            totalItems: this.items.length,
+            fileCount,
+            typeCount,
+            symbolCount,
+        };
+    }
+
+    /**
      * Perform search
      */
     async search(options: SearchOptions, onResult?: (result: SearchResult) => void): Promise<SearchResult[]> {
@@ -298,7 +340,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
-     * Perform grep-like text search on indexed files using streams
+     * Perform grep-like text search on indexed files using streams or ripgrep
      */
     private async performTextSearch(
         query: string,
@@ -306,9 +348,53 @@ export class SearchEngine implements ISearchProvider {
         onResult?: (result: SearchResult) => void
     ): Promise<SearchResult[]> {
         const startTime = Date.now();
+        const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
+
+        // Try Ripgrep first
+        if (this.ripgrep && this.ripgrep.isAvailable()) {
+            this.logger?.log(`--- Starting LSP Text Search (Ripgrep): "${query}" ---`);
+            try {
+                // Pass all file paths to ripgrep
+                const filePaths = fileItems.map(f => f.filePath);
+                const matches = await this.ripgrep.search(query, filePaths, maxResults);
+
+                const results: SearchResult[] = [];
+                for (const match of matches) {
+                    // Find original item
+                    const fileItem = this.itemsMap.get(`file:${match.path}`);
+                    if (!fileItem) continue;
+
+                    const result: SearchResult = {
+                        item: {
+                            id: `text:${match.path}:${match.line}:${match.column}`,
+                            name: match.text,
+                            type: SearchItemType.TEXT,
+                            filePath: match.path,
+                            relativeFilePath: fileItem.relativeFilePath,
+                            line: match.line,
+                            column: match.column,
+                            containerName: fileItem.name,
+                            detail: fileItem.relativeFilePath,
+                        },
+                        score: 1.0,
+                        scope: SearchScope.TEXT,
+                        highlights: match.submatches.map(sm => [sm.start, sm.end])
+                    };
+                    results.push(result);
+                    if (onResult) onResult(result);
+                }
+
+                const durationMs = Date.now() - startTime;
+                this.logger?.log(`Ripgrep search completed in ${(durationMs/1000).toFixed(3)}s. Found ${results.length} results.`);
+                return results;
+
+            } catch (error) {
+                this.logger?.error(`Ripgrep failed: ${error}. Falling back to Node.js stream.`);
+            }
+        }
+
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const results: SearchResult[] = [];
-        const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
         const queryLower = query.toLowerCase();
 
         // Zed Optimization: Prioritize active/open files

@@ -14,8 +14,8 @@ import { IndexerEnvironment } from './indexer-interfaces';
  * Workspace indexer that scans files and extracts symbols
  */
 export class WorkspaceIndexer {
-    private items: SearchableItem[] = [];
-    private onDidChangeItemsListeners: ((items: SearchableItem[]) => void)[] = [];
+    private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
+    private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
 
     private indexing: boolean = false;
     private watchersActive: boolean = true;
@@ -43,18 +43,34 @@ export class WorkspaceIndexer {
         this.extensionPath = extensionPath;
     }
 
-    public onDidChangeItems(listener: (items: SearchableItem[]) => void) {
-        this.onDidChangeItemsListeners.push(listener);
+    public onItemsAdded(listener: (items: SearchableItem[]) => void) {
+        this.onItemsAddedListeners.push(listener);
         return {
             dispose: () => {
-                this.onDidChangeItemsListeners = this.onDidChangeItemsListeners.filter(l => l !== listener);
+                this.onItemsAddedListeners = this.onItemsAddedListeners.filter(l => l !== listener);
             }
         };
     }
 
-    private fireDidChangeItems(items: SearchableItem[]) {
-        for (const listener of this.onDidChangeItemsListeners) {
+    public onItemsRemoved(listener: (filePath: string) => void) {
+        this.onItemsRemovedListeners.push(listener);
+        return {
+            dispose: () => {
+                this.onItemsRemovedListeners = this.onItemsRemovedListeners.filter(l => l !== listener);
+            }
+        };
+    }
+
+    private fireItemsAdded(items: SearchableItem[]) {
+        if (items.length === 0) return;
+        for (const listener of this.onItemsAddedListeners) {
             listener(items);
+        }
+    }
+
+    private fireItemsRemoved(filePath: string) {
+        for (const listener of this.onItemsRemovedListeners) {
+            listener(filePath);
         }
     }
 
@@ -70,7 +86,6 @@ export class WorkspaceIndexer {
         }
 
         this.indexing = true;
-        this.items = [];
         this.stringCache.clear(); // Clear string cache on full re-index
 
         if (force) {
@@ -94,12 +109,19 @@ export class WorkspaceIndexer {
             // Index files (PRO: now parallelized)
             this.log('Step 2/5: Scanning workspace files...');
             progressCallback?.('Scanning files...', 5);
-            await this.indexFiles();
+            // We pass a collector callback to indexFiles
+            const fileItems: SearchableItem[] = [];
+            await this.indexFiles((items) => {
+                fileItems.push(...items);
+                this.fireItemsAdded(items);
+            });
 
             // Index symbols from files
-            this.log(`Step 3/5: Extracting symbols from ${this.items.length} files...`);
+            this.log(`Step 3/5: Extracting symbols from ${fileItems.length} files...`);
             let reportedStepProgress = 0;
-            await this.indexSymbols((message, totalPercentage) => {
+
+            // For symbols, we will emit them directly as they are found
+            await this.indexSymbols(fileItems, (message, totalPercentage) => {
                 if (totalPercentage !== undefined) {
                     // This step is allocated 80% of total progress (from 10% to 90%)
                     const targetStepProgress = totalPercentage * 0.8;
@@ -126,22 +148,12 @@ export class WorkspaceIndexer {
 
             this.log('Index Workspace complete.');
 
-            // Log summary
-            const endpointCount = this.items.filter((i) => i.type === SearchItemType.ENDPOINT).length;
-            this.log(`Final Index Summary: ${this.items.length} total items, ${endpointCount} endpoints.`);
+            // We can't log final summary count here easily without keeping track, but that's fine.
+            this.log(`Final Index Summary: Completed.`);
 
-            // Notify listeners that items have updated
-            this.fireDidChangeItems(this.items);
         } finally {
             this.indexing = false;
         }
-    }
-
-    /**
-     * Get all indexed items
-     */
-    getItems(): SearchableItem[] {
-        return this.items;
     }
 
     /**
@@ -154,13 +166,13 @@ export class WorkspaceIndexer {
     /**
      * Index all files in workspace
      */
-    private async indexFiles(): Promise<void> {
+    private async indexFiles(collector: (items: SearchableItem[]) => void): Promise<void> {
         const fileExtensions = this.config.getFileExtensions();
 
         // TURBO PATH: Try to use git ls-files for instant listing if it's a git repo
         const gitFiles = await this.listGitFiles(fileExtensions);
         if (gitFiles.length > 0) {
-            await this.processFileList(gitFiles);
+            await this.processFileList(gitFiles, collector);
             return;
         }
 
@@ -172,7 +184,7 @@ export class WorkspaceIndexer {
         const excludePattern = `{${excludePatterns.join(',')}}`;
         const files = await this.env.findFiles(includePattern, excludePattern);
 
-        await this.processFileList(files);
+        await this.processFileList(files, collector);
     }
 
     /**
@@ -214,7 +226,7 @@ export class WorkspaceIndexer {
     /**
      * Process a list of file paths into searchable items in parallel
      */
-    private async processFileList(files: string[]): Promise<void> {
+    private async processFileList(files: string[], collector: (items: SearchableItem[]) => void): Promise<void> {
         const CONCURRENCY = 100; // Higher concurrency for metadata checks
         const chunks: string[][] = [];
 
@@ -223,6 +235,7 @@ export class WorkspaceIndexer {
         }
 
         for (const chunk of chunks) {
+            const batch: SearchableItem[] = [];
             await Promise.all(
                 chunk.map(async (filePath) => {
                     // Skip C# auto-generated files in parallel
@@ -238,7 +251,7 @@ export class WorkspaceIndexer {
                     const internedFilePath = this.intern(filePath);
                     const internedFileName = this.intern(fileName);
 
-                    this.items.push({
+                    batch.push({
                         id: `file:${filePath}`,
                         name: internedFileName,
                         type: SearchItemType.FILE,
@@ -249,6 +262,9 @@ export class WorkspaceIndexer {
                     });
                 }),
             );
+            if (batch.length > 0) {
+                collector(batch);
+            }
         }
     }
 
@@ -287,8 +303,10 @@ export class WorkspaceIndexer {
     /**
      * Index symbols from all files with optimized concurrency (Sliding Window)
      */
-    private async indexSymbols(progressCallback?: (message: string, increment?: number) => void): Promise<void> {
-        const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
+    private async indexSymbols(
+        fileItems: SearchableItem[],
+        progressCallback?: (message: string, increment?: number) => void
+    ): Promise<void> {
         const totalFiles = fileItems.length;
 
         if (totalFiles === 0) {
@@ -385,7 +403,7 @@ export class WorkspaceIndexer {
                                  filePath: this.intern(item.filePath)
                              }));
 
-                             this.ensureSymbolsInItems(internedItems, message.filePath);
+                             this.fireItemsAdded(internedItems);
                         }
 
                         // Mark task complete
@@ -506,7 +524,7 @@ export class WorkspaceIndexer {
 
         const cached = this.persistence.get(filePath);
         if (cached && currentHash && cached.hash === currentHash) {
-            this.items.push(...cached.symbols);
+            this.fireItemsAdded(cached.symbols);
             return true;
         }
 
@@ -515,7 +533,7 @@ export class WorkspaceIndexer {
              try {
                 const stats = fs.statSync(filePath);
                 if (Number(cached.mtime) === Number(stats.mtime)) {
-                    this.items.push(...cached.symbols);
+                    this.fireItemsAdded(cached.symbols);
                     return true;
                 }
              } catch { return false; }
@@ -599,6 +617,7 @@ export class WorkspaceIndexer {
      * Process symbols from workspace provider
      */
     private processWorkspaceSymbols(symbols: import('./indexer-interfaces').LeanSymbolInformation[]): void {
+        const batch: SearchableItem[] = [];
         for (const symbol of symbols) {
             const itemType = this.mapSymbolKindToItemType(symbol.kind);
             if (!itemType) {
@@ -606,11 +625,9 @@ export class WorkspaceIndexer {
             }
 
             const id = `symbol:${symbol.location.uri}:${symbol.name}:${symbol.location.range.start.line}`;
-            if (this.items.some((i) => i.id === id)) {
-                continue;
-            }
+            // Duplication check removed as we don't hold state.
 
-            this.items.push({
+            batch.push({
                 id,
                 name: symbol.name,
                 type: itemType,
@@ -622,6 +639,7 @@ export class WorkspaceIndexer {
                 fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
             });
         }
+        this.fireItemsAdded(batch);
     }
 
     /**
@@ -640,7 +658,7 @@ export class WorkspaceIndexer {
 
         const cached = this.persistence.get(filePath);
         if (cached && currentHash && cached.hash === currentHash) {
-            this.items.push(...cached.symbols);
+            this.fireItemsAdded(cached.symbols);
             return;
         }
 
@@ -648,7 +666,7 @@ export class WorkspaceIndexer {
         const mtime = Number(stats.mtime);
 
         if (cached && !currentHash && Number(cached.mtime) === mtime) {
-            this.items.push(...cached.symbols);
+            this.fireItemsAdded(cached.symbols);
             return;
         }
 
@@ -661,7 +679,8 @@ export class WorkspaceIndexer {
 
             if (symbolsFound.length > 0) {
                 this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
-                this.items.push(...symbolsFound.map((s) => ({ ...s, relativeFilePath: relPath })));
+                const processed = symbolsFound.map((s) => ({ ...s, relativeFilePath: relPath }));
+                this.fireItemsAdded(processed);
             }
         } catch (error) {
             this.log(`Error indexing ${filePath}: ${error}`);
@@ -741,13 +760,9 @@ export class WorkspaceIndexer {
 
     /**
      * Ensure extracted symbols are added to the main list
+     * (Deprecated: Logic moved to event firing)
      */
-    private ensureSymbolsInItems(symbols: SearchableItem[], filePath: string): void {
-        const alreadyInItems = this.items.some((i) => i.filePath === filePath && i.type !== SearchItemType.FILE);
-        if (!alreadyInItems) {
-            this.items.push(...symbols);
-        }
-    }
+    // private ensureSymbolsInItems(symbols: SearchableItem[], filePath: string): void { ... }
 
     /**
      * Get git hashes for files (Fast Cache Key)
@@ -934,22 +949,20 @@ export class WorkspaceIndexer {
         const internedFileName = this.intern(fileName);
 
         // Add file item
-        this.items.push({
+        const fileItem: SearchableItem = {
             id: `file:${filePath}`,
             name: internedFileName,
             type: SearchItemType.FILE,
             filePath: internedFilePath,
             detail: relativePath,
             fullName: relativePath,
-        });
+        };
+        this.fireItemsAdded([fileItem]);
 
         // Index symbols
         await this.indexFileSymbols(filePath);
 
         this.log(`Indexed new file: ${relativePath}`);
-
-        // Notify that items have changed
-        this.fireDidChangeItems(this.items);
     }
 
     /**
@@ -969,16 +982,13 @@ export class WorkspaceIndexer {
         }
 
         // Remove old symbols for this file
-        this.items = this.items.filter((item) => item.filePath !== filePath || item.type === SearchItemType.FILE);
+        this.fireItemsRemoved(filePath);
 
         // Invalidate hash to force re-calculation
         this.fileHashes.delete(filePath);
 
         // Re-index symbols (it will check cache internally)
         await this.indexFileSymbols(filePath);
-
-        // Notify that items have changed
-        this.fireDidChangeItems(this.items);
     }
 
     /**
@@ -990,10 +1000,7 @@ export class WorkspaceIndexer {
         }
 
         // Remove all items for this file
-        this.items = this.items.filter((item) => item.filePath !== filePath);
-
-        // Notify that items have changed
-        this.fireDidChangeItems(this.items);
+        this.fireItemsRemoved(filePath);
     }
 
     /**

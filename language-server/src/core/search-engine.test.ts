@@ -84,4 +84,21 @@ describe('SearchEngine', () => {
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].item.line).toBeUndefined();
     });
+
+    it('should remove items by file correctly', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'Class1', SearchItemType.CLASS, 'src/File1.ts'),
+            createTestItem('3', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+
+        engine.removeItemsByFile('/src/File1.ts');
+
+        expect(engine.getItemCount()).toBe(1);
+        const results = await engine.search({ query: 'File', scope: SearchScope.EVERYTHING });
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('File2.ts');
+    });
 });

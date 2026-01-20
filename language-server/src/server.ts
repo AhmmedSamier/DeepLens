@@ -104,6 +104,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();
     searchEngine.setConfig(config);
+    searchEngine.setExtensionPath(extensionPath);
     searchEngine.setLogger({
         log: (msg) => connection.console.log(msg),
         error: (msg) => connection.console.error(msg)
@@ -125,8 +126,8 @@ connection.onInitialize(async (params: InitializeParams) => {
     documents.listen(connection);
 
     // Wire up search engine to indexer
-    workspaceIndexer.onDidChangeItems((items) => searchEngine.setItems(items));
-    searchEngine.setItems(workspaceIndexer.getItems());
+    workspaceIndexer.onItemsAdded((items) => searchEngine.addItems(items));
+    workspaceIndexer.onItemsRemoved((filePath) => searchEngine.removeItemsByFile(filePath));
 
     if (config.isActivityTrackingEnabled()) {
         searchEngine.setActivityCallback(
@@ -295,24 +296,13 @@ connection.onRequest(ClearCacheRequest, async () => {
 });
 
 connection.onRequest(IndexStatsRequest, async () => {
-    const items = workspaceIndexer.getItems();
-    const fileItems = items.filter(i => i.type === SearchItemType.FILE);
-    const typeItems = items.filter(i =>
-        i.type === SearchItemType.CLASS ||
-        i.type === SearchItemType.INTERFACE ||
-        i.type === SearchItemType.ENUM
-    );
-    const symbolItems = items.filter(i =>
-        i.type === SearchItemType.METHOD ||
-        i.type === SearchItemType.FUNCTION ||
-        i.type === SearchItemType.PROPERTY
-    );
+    const stats = searchEngine.getStats();
 
     return {
-        totalItems: items.length,
-        totalFiles: fileItems.length,
-        totalTypes: typeItems.length,
-        totalSymbols: symbolItems.length,
+        totalItems: stats.totalItems,
+        totalFiles: stats.fileCount,
+        totalTypes: stats.typeCount,
+        totalSymbols: stats.symbolCount,
         lastUpdate: Date.now(),
         indexing: workspaceIndexer.isIndexing(),
         cacheSize: await indexPersistence.getCacheSize()

@@ -5,7 +5,7 @@ import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { IndexPersistence } from './index-persistence';
 import { TreeSitterParser } from './tree-sitter-parser';
-import { SearchItemType } from './types';
+import { SearchItemType, SearchableItem } from './types';
 
 // Mock dependencies
 const mockConfig = new Config();
@@ -37,7 +37,7 @@ describe('WorkspaceIndexer Events', () => {
     beforeEach(() => {
         persistence = new IndexPersistence('/tmp');
         treeSitter = new MockTreeSitter() as any;
-        indexer = new WorkspaceIndexer(mockConfig, treeSitter, persistence, mockEnv);
+        indexer = new WorkspaceIndexer(mockConfig, treeSitter, persistence, mockEnv, '/tmp');
 
         // Mock fs.promises.stat to avoid ENOENT
         spyOn(fs.promises, 'stat').mockImplementation(async () => ({
@@ -92,18 +92,24 @@ describe('WorkspaceIndexer Events', () => {
         (indexer as any).performSymbolExtraction = async () => [newSymbol];
 
         // 2. Trigger handleFileChanged
+        const addedItems: SearchableItem[] = [];
+        const removedFiles: string[] = [];
+        indexer.onItemsAdded(items => addedItems.push(...items));
+        indexer.onItemsRemoved(path => removedFiles.push(path));
+
         // Access private method
         await (indexer as any).handleFileChanged(filePath);
 
         // 3. Assertions
-        const items = indexer.getItems();
-        const fileItems = items.filter(i => i.filePath === filePath && i.type !== SearchItemType.FILE);
 
-        // If the bug exists, it will use the cached (old) hash, match persistence, and return old symbols
-        const hasOldSymbol = fileItems.some(i => i.name === 'OldSymbol');
-        const hasNewSymbol = fileItems.some(i => i.name === 'NewSymbol');
+        // Should have emitted remove event
+        expect(removedFiles).toContain(filePath);
 
-        // We expect OldSymbol to be GONE and NewSymbol to be PRESENT
+        // Should have emitted add event with new symbols
+        const hasOldSymbol = addedItems.some(i => i.name === 'OldSymbol');
+        const hasNewSymbol = addedItems.some(i => i.name === 'NewSymbol');
+
+        // We expect OldSymbol to be GONE (never emitted in this batch) and NewSymbol to be PRESENT
         expect(hasOldSymbol).toBe(false);
         expect(hasNewSymbol).toBe(true);
     });
