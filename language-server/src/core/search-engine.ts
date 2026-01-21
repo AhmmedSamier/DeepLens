@@ -510,12 +510,14 @@ export class SearchEngine implements ISearchProvider {
                 }
 
                 buffer += chunk;
+                let lastIndex = 0;
                 let newlineIndex;
 
                 // Process full lines
-                while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-                    const line = buffer.slice(0, newlineIndex);
-                    buffer = buffer.slice(newlineIndex + 1);
+                while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
+                    // Optimized: Avoid slicing buffer repeatedly. Only slice the line we need.
+                    const line = buffer.slice(lastIndex, newlineIndex);
+                    lastIndex = newlineIndex + 1;
 
                     // Skip extremely long lines (minified code)
                     if (line.length > 10000) {
@@ -558,6 +560,11 @@ export class SearchEngine implements ISearchProvider {
                         resolve();
                         return;
                     }
+                }
+
+                // Keep remainder
+                if (lastIndex > 0) {
+                    buffer = buffer.slice(lastIndex);
                 }
 
                 // Safety: Discard buffer if it grows too large without finding a newline (minified file)
