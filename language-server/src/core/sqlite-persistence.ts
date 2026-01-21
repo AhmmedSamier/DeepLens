@@ -1,15 +1,12 @@
-import Database from 'better-sqlite3';
+import initSqlite, { Database } from '@sqlite.org/sqlite-wasm';
 import * as path from 'path';
 import * as fs from 'fs';
 import { CacheData } from './types';
 
 export class SQLitePersistence {
-    private db: Database.Database | undefined;
+    private db: Database | undefined;
     private storagePath: string;
-    private insertStmt: Database.Statement | undefined;
-    private getStmt: Database.Statement | undefined;
-    private deleteStmt: Database.Statement | undefined;
-    private countStmt: Database.Statement | undefined;
+    private initPromise: Promise<void> | undefined;
 
     constructor(storagePath: string) {
         this.storagePath = storagePath;
@@ -25,46 +22,66 @@ export class SQLitePersistence {
     /**
      * Open the database
      */
-    init(): void {
-        const dbPath = this.getDbPath();
-        try {
-            this.db = new Database(dbPath);
-            this.db.pragma('journal_mode = WAL'); // Faster writes, concurrency friendly
+    async init(): Promise<void> {
+        if (this.db) return;
+        if (this.initPromise) return this.initPromise;
 
-            this.db.exec(`
-                CREATE TABLE IF NOT EXISTS files (
-                    path TEXT PRIMARY KEY,
-                    mtime INTEGER,
-                    hash TEXT,
-                    symbols TEXT
-                )
-            `);
+        this.initPromise = (async () => {
+            try {
+                const sqlite3 = await initSqlite();
+                const dbPath = this.getDbPath();
 
-            this.prepareStatements();
-        } catch (error) {
-            console.error('Failed to initialize SQLite persistence:', error);
-        }
-    }
+                // oo1: Object Oriented 1 API (synchronous-like wrapper)
+                if ('opfs' in sqlite3) {
+                     // In Node.js environment we use direct file system via 'kvvfs' or default if available?
+                     // sqlite-wasm in Node usually requires some polyfills or specific handling.
+                     // But strictly speaking, the basic WASM build works in Node if we provide the right file IO.
+                     // However, @sqlite.org/sqlite-wasm tries to detect environment.
 
-    private prepareStatements() {
-        if (!this.db) return;
-        this.insertStmt = this.db.prepare('INSERT OR REPLACE INTO files (path, mtime, hash, symbols) VALUES (?, ?, ?, ?)');
-        this.getStmt = this.db.prepare('SELECT mtime, hash, symbols FROM files WHERE path = ?');
-        this.deleteStmt = this.db.prepare('DELETE FROM files WHERE path = ?');
-        this.countStmt = this.db.prepare('SELECT COUNT(*) as count FROM files');
+                     // For VS Code extension (Node/Electron), we should check if we can use the default filename.
+                     this.db = new sqlite3.oo1.DB(dbPath, 'c');
+                } else {
+                     // Fallback
+                     this.db = new sqlite3.oo1.DB(dbPath, 'c');
+                }
+
+                this.db.exec([
+                    'PRAGMA journal_mode = WAL;',
+                    `CREATE TABLE IF NOT EXISTS files (
+                        path TEXT PRIMARY KEY,
+                        mtime INTEGER,
+                        hash TEXT,
+                        symbols TEXT
+                    );`
+                ]);
+            } catch (error) {
+                console.error('Failed to initialize SQLite persistence:', error);
+                this.db = undefined;
+            }
+        })();
+
+        return this.initPromise;
     }
 
     /**
      * Get cached data for a file
      */
     get(filePath: string): CacheData | undefined {
-        if (!this.db || !this.getStmt) return undefined;
+        if (!this.db) return undefined;
         try {
-            const row = this.getStmt.get(filePath) as { mtime: number, hash: string, symbols: string } | undefined;
-            if (!row) return undefined;
+            // exec returns array of rows. bind uses ? params.
+            const rows = this.db.exec({
+                sql: 'SELECT mtime, hash, symbols FROM files WHERE path = ?',
+                bind: [filePath],
+                returnValue: 'resultRows',
+                rowMode: 'object'
+            });
+
+            if (rows.length === 0) return undefined;
+            const row = rows[0] as any;
 
             return {
-                mtime: Number(row.mtime), // Ensure number
+                mtime: Number(row.mtime),
                 hash: row.hash,
                 symbols: JSON.parse(row.symbols)
             };
@@ -78,9 +95,12 @@ export class SQLitePersistence {
      * Set cached data for a file
      */
     set(filePath: string, data: CacheData): void {
-        if (!this.db || !this.insertStmt) return;
+        if (!this.db) return;
         try {
-            this.insertStmt.run(filePath, data.mtime, data.hash || null, JSON.stringify(data.symbols));
+            this.db.exec({
+                sql: 'INSERT OR REPLACE INTO files (path, mtime, hash, symbols) VALUES (?, ?, ?, ?)',
+                bind: [filePath, data.mtime, data.hash || null, JSON.stringify(data.symbols)]
+            });
         } catch (e) {
             console.error(`Failed to set cache for ${filePath}:`, e);
         }
@@ -90,16 +110,17 @@ export class SQLitePersistence {
      * Insert multiple items in a single transaction
      */
     insertBatch(items: { filePath: string; data: CacheData }[]): void {
-        if (!this.db || !this.insertStmt) return;
+        if (!this.db) return;
 
         try {
-            const insert = this.insertStmt;
-            const transaction = this.db.transaction((itemsToInsert: { filePath: string; data: CacheData }[]) => {
-                for (const item of itemsToInsert) {
-                    insert.run(item.filePath, item.data.mtime, item.data.hash || null, JSON.stringify(item.data.symbols));
+            this.db.transaction(() => {
+                for (const item of items) {
+                     this.db!.exec({
+                        sql: 'INSERT OR REPLACE INTO files (path, mtime, hash, symbols) VALUES (?, ?, ?, ?)',
+                        bind: [item.filePath, item.data.mtime, item.data.hash || null, JSON.stringify(item.data.symbols)]
+                    });
                 }
             });
-            transaction(items);
         } catch (e) {
             console.error('Failed to insert batch:', e);
         }
@@ -109,19 +130,23 @@ export class SQLitePersistence {
      * Delete cache for a file
      */
     delete(filePath: string): void {
-        if (!this.db || !this.deleteStmt) return;
+        if (!this.db) return;
         try {
-            this.deleteStmt.run(filePath);
+             this.db.exec({
+                sql: 'DELETE FROM files WHERE path = ?',
+                bind: [filePath]
+            });
         } catch (e) {
             console.error(`Failed to delete cache for ${filePath}:`, e);
         }
     }
 
     /**
-     * Clear the entire cache (drop/recreate or delete file)
+     * Clear the entire cache
      */
     async clear(): Promise<void> {
         this.close();
+        this.initPromise = undefined;
 
         const dbPath = this.getDbPath();
         const extensions = ['', '-wal', '-shm'];
@@ -140,7 +165,7 @@ export class SQLitePersistence {
         }
 
         // Re-initialize
-        this.init();
+        await this.init();
     }
 
     /**
@@ -174,26 +199,16 @@ export class SQLitePersistence {
      * Get total item count (for stats)
      */
     getItemCount(): number {
-         if (!this.db || !this.countStmt) return 0;
+         if (!this.db) return 0;
          try {
-             const result = this.countStmt.get() as { count: number };
-             return result.count;
+             const result = this.db.exec({
+                 sql: 'SELECT COUNT(*) as count FROM files',
+                 returnValue: 'resultRows',
+                 rowMode: 'object'
+             });
+             return (result[0] as any).count;
          } catch {
              return 0;
          }
-    }
-
-    /**
-     * Compatibility methods for old interface
-     */
-    async load(): Promise<void> {
-        // No-op for SQLite, we lazy load. Just ensure init.
-        if (!this.db) {
-            this.init();
-        }
-    }
-
-    async save(): Promise<void> {
-        // No-op, we save incrementally
     }
 }

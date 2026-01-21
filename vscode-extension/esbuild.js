@@ -40,6 +40,29 @@ function copyWasmFiles() {
     fs.copyFileSync(webTreeSitterWasm, path.join(parsersDir, 'web-tree-sitter.wasm'));
     console.log(`Copied web-tree-sitter.wasm`);
 
+    // 1.1 Copy sqlite3.wasm
+    // We need to resolve where @sqlite.org/sqlite-wasm is located in language-server's node_modules
+    // Since we are in vscode-extension, we need to look up relative to repo root or similar.
+    // However, esbuild bundles the JS, so the JS will look for sqlite3.wasm relative to itself or similar.
+    // The @sqlite.org/sqlite-wasm package usually has the wasm file next to the main entry point.
+    try {
+        const sqliteWasmPath = require.resolve('@sqlite.org/sqlite-wasm/sqlite3.wasm', { paths: [path.join(__dirname, '../language-server')] });
+        fs.copyFileSync(sqliteWasmPath, path.join(__dirname, 'dist', 'sqlite3.wasm'));
+        console.log(`Copied sqlite3.wasm`);
+    } catch (e) {
+        // Fallback or error if not found
+        console.warn('Could not find sqlite3.wasm in language-server dependencies');
+
+        // Try manual path if resolution fails
+        const manualPath = path.join(__dirname, '../language-server/node_modules/@sqlite.org/sqlite-wasm/sqlite3.wasm');
+        if (fs.existsSync(manualPath)) {
+            fs.copyFileSync(manualPath, path.join(__dirname, 'dist', 'sqlite3.wasm'));
+            console.log(`Copied sqlite3.wasm (manual path)`);
+        } else {
+             console.error('Failed to copy sqlite3.wasm');
+        }
+    }
+
     // 2. Find and copy language parsers
     const languageMap = {
         'tree-sitter-typescript': ['tree-sitter-typescript.wasm', 'tree-sitter-tsx.wasm'],
@@ -103,7 +126,7 @@ async function main() {
         sourcesContent: false,
         platform: 'node',
         outdir: 'dist',
-        external: ['vscode', 'better-sqlite3'], // Exclude vscode API to preserve its internal logic
+        external: ['vscode'], // Exclude vscode API to preserve its internal logic
         logLevel: 'silent',
         plugins: [
             /* add to the end of plugins array */

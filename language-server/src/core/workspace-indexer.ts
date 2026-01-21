@@ -107,7 +107,7 @@ export class WorkspaceIndexer {
             }
 
             // Init persistence
-            this.persistence.init();
+            await this.persistence.init();
 
             // Try to get git hashes first (TURBO: used for metadata-free indexing)
             this.log('Step 1/5: Analyzing repository structure and file hashes...');

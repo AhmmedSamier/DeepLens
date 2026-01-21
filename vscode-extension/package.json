@@ -185,7 +185,6 @@
         "typescript": "^5.9.3"
     },
     "dependencies": {
-        "better-sqlite3": "^12.6.2",
         "fuzzysort": "^3.1.0",
         "tree-sitter-c": "^0.24.1",
         "tree-sitter-c-sharp": "^0.23.1",

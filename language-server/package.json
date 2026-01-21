@@ -10,8 +10,8 @@
         "benchmark:memory": "bun run scripts/memory-benchmark.ts"
     },
     "dependencies": {
+        "@sqlite.org/sqlite-wasm": "^3.51.2-build2",
         "@vscode/ripgrep": "^1.17.0",
-        "better-sqlite3": "^12.6.2",
         "fuzzysort": "^3.1.0",
         "glob": "^13.0.0",
         "minimatch": "^10.1.1",

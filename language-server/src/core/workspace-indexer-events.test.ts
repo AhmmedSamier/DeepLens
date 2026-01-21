@@ -1,23 +1,19 @@
 import { describe, it, expect, mock, beforeEach, spyOn } from 'bun:test';
 import * as fs from 'fs';
 
-// Mock better-sqlite3
-mock.module('better-sqlite3', () => {
-    return class Database {
-        constructor() {}
-        pragma() {}
-        exec() {}
-        prepare() {
-            return {
-                run: () => {},
-                get: () => {},
-                all: () => {}
-            };
-        }
-        transaction(fn: any) {
-            return fn;
-        }
-        close() {}
+// Mock sqlite-wasm
+mock.module('@sqlite.org/sqlite-wasm', () => {
+    return async () => {
+        return {
+            oo1: {
+                DB: class DB {
+                    constructor() {}
+                    exec() { return []; }
+                    transaction(fn: any) { fn(); }
+                    close() {}
+                }
+            }
+        };
     };
 });
 
