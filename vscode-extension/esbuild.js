@@ -103,7 +103,7 @@ async function main() {
         sourcesContent: false,
         platform: 'node',
         outdir: 'dist',
-        external: ['vscode'], // Exclude vscode API to preserve its internal logic
+        external: ['vscode', 'better-sqlite3'], // Exclude vscode API to preserve its internal logic
         logLevel: 'silent',
         plugins: [
             /* add to the end of plugins array */

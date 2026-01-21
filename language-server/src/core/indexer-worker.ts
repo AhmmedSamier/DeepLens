@@ -38,6 +38,7 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
         parentPort?.postMessage({
             type: 'result',
             items: allItems,
+            filePaths,
             count: filePaths.length
         });
 

@@ -17,7 +17,7 @@ import * as fs from 'fs';
 import { SearchEngine } from './core/search-engine';
 import { WorkspaceIndexer } from './core/workspace-indexer';
 import { TreeSitterParser } from './core/tree-sitter-parser';
-import { IndexPersistence } from './core/index-persistence';
+import { SQLitePersistence } from './core/sqlite-persistence';
 import { Config } from './core/config';
 import { SearchItemType, SearchScope, SearchOptions, SearchResult, IndexStats } from './core/types';
 import { ActivityTracker } from './core/activity-tracker';
@@ -43,7 +43,7 @@ let hasConfigurationCapability = false;
 let searchEngine: SearchEngine;
 let workspaceIndexer: WorkspaceIndexer;
 let treeSitterParser: TreeSitterParser;
-let indexPersistence: IndexPersistence;
+let indexPersistence: SQLitePersistence;
 let config: Config;
 let activityTracker: ActivityTracker;
 
@@ -96,7 +96,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     });
     await treeSitterParser.init();
 
-    indexPersistence = new IndexPersistence(storagePath);
+    indexPersistence = new SQLitePersistence(storagePath);
 
     const indexerEnv = new LspIndexerEnvironment(connection, folders);
     workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence, indexerEnv, extensionPath);

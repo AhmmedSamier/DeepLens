@@ -6,8 +6,8 @@ import * as os from 'os';
 import { Worker } from 'worker_threads';
 import { Minimatch } from 'minimatch';
 import { Config } from './config';
-import { IndexPersistence } from './index-persistence';
-import { SearchableItem, SearchItemType } from './types';
+import { SQLitePersistence } from './sqlite-persistence';
+import { CacheData, SearchableItem, SearchItemType } from './types';
 import { IndexerEnvironment } from './indexer-interfaces';
 
 /**
@@ -23,7 +23,7 @@ export class WorkspaceIndexer {
     private config: Config;
     private fileWatcher: { dispose(): void } | undefined;
     private treeSitter: import('./tree-sitter-parser').TreeSitterParser;
-    private persistence: IndexPersistence;
+    private persistence: SQLitePersistence;
     private fileHashes: Map<string, string> = new Map();
     private env: IndexerEnvironment;
     private stringCache: Map<string, string> = new Map();
@@ -33,7 +33,7 @@ export class WorkspaceIndexer {
     constructor(
         config: Config,
         treeSitter: import('./tree-sitter-parser').TreeSitterParser,
-        persistence: IndexPersistence,
+        persistence: SQLitePersistence,
         env: IndexerEnvironment,
         extensionPath: string
     ) {
@@ -106,8 +106,8 @@ export class WorkspaceIndexer {
                 return;
             }
 
-            // Load cache
-            await this.persistence.load();
+            // Init persistence
+            this.persistence.init();
 
             // Try to get git hashes first (TURBO: used for metadata-free indexing)
             this.log('Step 1/5: Analyzing repository structure and file hashes...');
@@ -144,11 +144,6 @@ export class WorkspaceIndexer {
                     progressCallback?.(message);
                 }
             });
-
-            // Save cache
-            this.log('Step 4/5: Saving index cache...');
-            progressCallback?.('Saving index cache...', 5);
-            await this.persistence.save();
 
             // Set up file watchers for incremental updates
             this.log('Step 5/5: Setting up file watchers...');
@@ -399,14 +394,16 @@ export class WorkspaceIndexer {
                     workerData: { extensionPath: this.extensionPath }
                 });
 
-                worker.on('message', (message) => {
+                worker.on('message', async (message) => {
                     if (message.type === 'log') {
                         // this.log(`[Worker ${i}] ${message.message}`);
                     } else if (message.type === 'result') {
-                        const { items, count } = message;
+                        const { items, count, filePaths } = message;
+
+                        // Re-intern strings from worker to share memory in main thread
+                        let internedItems: SearchableItem[] = [];
                         if (items && items.length > 0) {
-                             // Re-intern strings from worker to share memory in main thread
-                             const internedItems = items.map((item: SearchableItem) => ({
+                             internedItems = items.map((item: SearchableItem) => ({
                                  ...item,
                                  name: this.intern(item.name),
                                  fullName: item.fullName ? this.intern(item.fullName) : undefined,
@@ -416,6 +413,40 @@ export class WorkspaceIndexer {
                              }));
 
                              this.fireItemsAdded(internedItems);
+                        }
+
+                        // Save to persistence
+                        const batch: { filePath: string, data: CacheData }[] = [];
+                        const itemsByFile = new Map<string, SearchableItem[]>();
+
+                        for (const item of internedItems) {
+                             const list = itemsByFile.get(item.filePath) || [];
+                             list.push(item);
+                             itemsByFile.set(item.filePath, list);
+                        }
+
+                        if (filePaths) {
+                            for (const filePath of (filePaths as string[])) {
+                                const fileItems = itemsByFile.get(this.intern(filePath)) || [];
+                                const hash = this.fileHashes.get(filePath);
+                                try {
+                                    const stats = await fs.promises.stat(filePath);
+                                    batch.push({
+                                        filePath,
+                                        data: {
+                                            mtime: stats.mtimeMs,
+                                            hash,
+                                            symbols: fileItems
+                                        }
+                                    });
+                                } catch {
+                                    // File access failed, skip caching
+                                }
+                            }
+                        }
+
+                        if (batch.length > 0) {
+                            this.persistence.insertBatch(batch);
                         }
 
                         // Mark task complete

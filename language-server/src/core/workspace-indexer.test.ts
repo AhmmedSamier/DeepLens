@@ -1,8 +1,29 @@
 import { describe, it, expect, mock } from 'bun:test';
+
+// Mock better-sqlite3 before importing anything that uses it
+mock.module('better-sqlite3', () => {
+    return class Database {
+        constructor() {}
+        pragma() {}
+        exec() {}
+        prepare() {
+            return {
+                run: () => {},
+                get: () => {},
+                all: () => {}
+            };
+        }
+        transaction(fn: any) {
+            return fn;
+        }
+        close() {}
+    };
+});
+
 import { WorkspaceIndexer } from './workspace-indexer';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
-import { IndexPersistence } from './index-persistence';
+import { SQLitePersistence } from './sqlite-persistence';
 import { TreeSitterParser } from './tree-sitter-parser';
 
 // Subclass to override execGit
@@ -44,8 +65,11 @@ describe('WorkspaceIndexer', () => {
         findFiles: async () => [],
         asRelativePath: (p) => p.replace('/root/', ''),
         log: () => {},
+        executeWorkspaceSymbolProvider: async () => [],
+        executeDocumentSymbolProvider: async () => [],
+        createFileSystemWatcher: () => ({ dispose: () => {} })
     };
-    const mockPersistence = new IndexPersistence('/tmp');
+    const mockPersistence = new SQLitePersistence('/tmp');
     // We can cast mock to any because we won't strictly use all methods
     const mockTreeSitter = {} as unknown as TreeSitterParser;
 

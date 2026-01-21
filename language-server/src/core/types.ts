@@ -114,3 +114,12 @@ export interface IndexStats {
     /** Size of the cache on disk in bytes */
     cacheSize: number;
 }
+
+/**
+ * Cached data for a file
+ */
+export interface CacheData {
+    mtime: number;
+    hash?: string;
+    symbols: SearchableItem[];
+}

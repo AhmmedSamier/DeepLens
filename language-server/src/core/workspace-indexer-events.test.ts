@@ -1,9 +1,30 @@
 import { describe, it, expect, mock, beforeEach, spyOn } from 'bun:test';
 import * as fs from 'fs';
+
+// Mock better-sqlite3
+mock.module('better-sqlite3', () => {
+    return class Database {
+        constructor() {}
+        pragma() {}
+        exec() {}
+        prepare() {
+            return {
+                run: () => {},
+                get: () => {},
+                all: () => {}
+            };
+        }
+        transaction(fn: any) {
+            return fn;
+        }
+        close() {}
+    };
+});
+
 import { WorkspaceIndexer } from './workspace-indexer';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
-import { IndexPersistence } from './index-persistence';
+import { SQLitePersistence } from './sqlite-persistence';
 import { TreeSitterParser } from './tree-sitter-parser';
 import { SearchItemType, SearchableItem } from './types';
 
@@ -31,17 +52,18 @@ class MockTreeSitter extends TreeSitterParser {
 
 describe('WorkspaceIndexer Events', () => {
     let indexer: WorkspaceIndexer;
-    let persistence: IndexPersistence;
+    let persistence: SQLitePersistence;
     let treeSitter: MockTreeSitter;
 
     beforeEach(() => {
-        persistence = new IndexPersistence('/tmp');
+        persistence = new SQLitePersistence('/tmp');
         treeSitter = new MockTreeSitter() as any;
         indexer = new WorkspaceIndexer(mockConfig, treeSitter, persistence, mockEnv, '/tmp');
 
         // Mock fs.promises.stat to avoid ENOENT
         spyOn(fs.promises, 'stat').mockImplementation(async () => ({
-            mtime: 200 // newer mtime
+            mtime: 200, // newer mtime
+            mtimeMs: 200
         } as any));
     });
 
