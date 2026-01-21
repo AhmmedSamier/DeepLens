@@ -28,7 +28,12 @@ export class SQLitePersistence {
 
         this.initPromise = (async () => {
             try {
-                const sqlite3 = await initSqlite();
+                // Ensure we pass the correct location of the WASM file
+                // In the bundled server, __dirname points to 'dist' where sqlite3.wasm is copied
+                const sqlite3 = await initSqlite({
+                    wasmFile: path.join(__dirname, 'sqlite3.wasm')
+                } as any); // cast to any as types might not expose locateFile directly in this version wrapper
+
                 const dbPath = this.getDbPath();
 
                 // oo1: Object Oriented 1 API (synchronous-like wrapper)
