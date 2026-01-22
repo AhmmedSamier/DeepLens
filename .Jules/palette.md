@@ -9,3 +9,7 @@
 ## 2024-05-24 - [Empty State Actionability]
 **Learning:** Highlighting "Rebuild Index" in empty states is tricky. Users might click it unnecessarily.
 **Action:** Adding "(Fix missing files)" to the tooltip clarifies intent without cluttering the UI.
+
+## 2026-01-22 - Live Status Indicators
+**Learning:** Static status labels (like "Index Status") are often ignored. Adding live data (e.g., "15,230 items indexed") to tooltips transforms a passive indicator into a confidence-building status check without cluttering the UI.
+**Action:** When adding status bar items, always try to expose relevant "health" or "quantity" metrics in the tooltip.

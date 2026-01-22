@@ -64,6 +64,14 @@ export async function activate(context: vscode.ExtensionContext) {
     statusItem.show();
     context.subscriptions.push(statusItem);
 
+    // Initial stats update
+    lspClient.getIndexStats().then((stats) => {
+        if (stats) {
+            const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(1);
+            statusItem.tooltip = `DeepLens: ${stats.totalItems.toLocaleString()} items indexed (${sizeInMB} MB)`;
+        }
+    });
+
     // Register show index stats command
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         const stats = await lspClient.getIndexStats();
@@ -114,13 +122,20 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(showStatsCommand);
 
     // Listen to progress to update status bar
-    lspClient.onProgress.event((e) => {
+    lspClient.onProgress.event(async (e) => {
         if (e.state === 'start') {
             statusItem.text = '$(sync~spin) Indexing...';
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
-            statusItem.tooltip = 'DeepLens Index Status';
+
+            const stats = await lspClient.getIndexStats();
+            if (stats) {
+                const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(1);
+                statusItem.tooltip = `DeepLens: ${stats.totalItems.toLocaleString()} items indexed (${sizeInMB} MB)`;
+            } else {
+                statusItem.tooltip = 'DeepLens Index Status';
+            }
         }
     });
 
