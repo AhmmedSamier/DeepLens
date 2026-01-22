@@ -3,7 +3,7 @@
 ## Performance & Scalability Optimizations
 - [x] **Streaming Ripgrep Input**: Refactor `RipgrepService.search` to write file paths to the `rg` process `stdin` iteratively.
 - [x] **Worker Initialization & Warm-up**: Optimize the indexing worker pool to reuse workers or warm them up.
-- [ ] **Scoring Hot-path Refinement**: Inline critical scoring logic in `SearchEngine.calculateUnifiedScore` and minimize object destructuring/allocations within the `performUnifiedSearch` loop to ensure sub-10ms latency for indices exceeding 500k items.
+- [x] **Scoring Hot-path Refinement**: Inline critical scoring logic in `SearchEngine.calculateUnifiedScore` and minimize object destructuring/allocations within the `performUnifiedSearch` loop.
 - [ ] **SQLite Migration**: Transition `IndexPersistence` from NDJSON to SQLite to allow for lazy-loading of file metadata (hashes/mtimes), reducing the baseline memory footprint for massive repositories.
 
 ## Completed

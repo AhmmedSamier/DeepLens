@@ -810,16 +810,80 @@ export class SearchEngine implements ISearchProvider {
         heap: MinHeap<SearchResult>
     ): void {
         const item = this.items[i];
+        const queryLen = query.length;
         
-        const { score, resultScope } = this.calculateUnifiedScore(
-            i,
-            item,
-            query,
-            queryUpper,
-            enableCamelHumps,
-            isPotentialUrl,
-            minScore
-        );
+        // --- INLINED calculateUnifiedScore ---
+        let score = -1;
+        let resultScope = this.getScopeForItemType(item.type);
+
+        // 1. Fuzzy Scoring (Inlined calculateBasicScore -> calculateItemScore)
+        let bestFuzzyScore = -Infinity;
+
+        // Name (Weight 1.0)
+        const preparedName = this.preparedNames[i];
+        if (preparedName && queryLen <= preparedName.target.length) {
+            const result = Fuzzysort.single(query, preparedName);
+            if (result && result.score > minScore) {
+                bestFuzzyScore = result.score;
+            }
+        }
+
+        // Optimization: Name has weight 1.0. Next best is FullName with 0.9.
+        if (bestFuzzyScore < 0.9) {
+            // Full Name (Weight 0.9)
+            const preparedFullName = this.preparedFullNames[i];
+            if (preparedFullName && queryLen <= preparedFullName.target.length) {
+                const result = Fuzzysort.single(query, preparedFullName);
+                if (result && result.score * 0.9 > bestFuzzyScore) {
+                    bestFuzzyScore = result.score * 0.9;
+                }
+            }
+
+            if (bestFuzzyScore < 0.8) {
+                // Path (Weight 0.8)
+                const preparedPath = this.preparedPaths[i];
+                if (preparedPath && queryLen <= preparedPath.target.length) {
+                    const result = Fuzzysort.single(query, preparedPath);
+                    if (result && result.score * 0.8 > bestFuzzyScore) {
+                        bestFuzzyScore = result.score * 0.8;
+                    }
+                }
+            }
+        }
+
+        if (bestFuzzyScore > minScore) {
+            score = bestFuzzyScore * (ITEM_TYPE_BOOSTS[item.type] || 1.0);
+        } else if (enableCamelHumps) {
+            // CamelHumps fallback
+            const capitals = this.preparedCapitals[i];
+            if (capitals) {
+                const matchIndex = capitals.indexOf(queryUpper);
+                if (matchIndex !== -1) {
+                    const lengthRatio = queryLen / capitals.length;
+                    const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                    score = (lengthRatio * positionBoost * 0.8) * (ITEM_TYPE_BOOSTS[item.type] || 1.0);
+                }
+            }
+        }
+
+        // 2. URL/Endpoint Match
+        if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
+             if (RouteMatcher.isMatch(item.name, query)) {
+                const urlScore = 1.5;
+                if (urlScore > score) {
+                    score = urlScore;
+                    resultScope = SearchScope.ENDPOINTS;
+                }
+            }
+        }
+
+        // 3. Activity Boosting
+        if (score > minScore && this.getActivityScore) {
+            const activityScore = this.getActivityScore(item.id);
+            if (activityScore > 0 && score > 0.05) {
+                score = score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+            }
+        }
 
         if (score > minScore) {
             // Optimization: Skip allocation if heap is full and score is too low
@@ -847,6 +911,7 @@ export class SearchEngine implements ISearchProvider {
         isPotentialUrl: boolean,
         minScore: number
     ): { score: number; resultScope: SearchScope } {
+        // Kept for backward compatibility if needed, but not used in hot path
         let score = -1;
         let resultScope = this.getScopeForItemType(item.type);
 
