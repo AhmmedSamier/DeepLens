@@ -349,7 +349,16 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (this.preparedLowCache.size > 20000) {
-            this.preparedLowCache.clear();
+            const usedNames = new Set<string>();
+            for (let i = 0; i < this.itemCount; i++) {
+                usedNames.add(this.names[i]);
+            }
+
+            for (const [key] of this.preparedLowCache) {
+                if (!usedNames.has(key)) {
+                    this.preparedLowCache.delete(key);
+                }
+            }
         }
     }
 
