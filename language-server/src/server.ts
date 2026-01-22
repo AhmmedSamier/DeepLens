@@ -104,6 +104,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     const indexerEnv = new LspIndexerEnvironment(connection, folders);
     workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence, indexerEnv, extensionPath);
+    workspaceIndexer.warmup(); // Proactively boot workers
 
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();

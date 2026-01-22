@@ -29,6 +29,8 @@ export class WorkspaceIndexer {
     private stringCache: Map<string, string> = new Map();
     private extensionPath: string;
     private excludeMatchers: Minimatch[] = [];
+    private workers: Worker[] = [];
+    private workersInitialized: boolean = false;
 
     constructor(
         config: Config,
@@ -43,6 +45,44 @@ export class WorkspaceIndexer {
         this.env = env;
         this.extensionPath = extensionPath;
         this.updateExcludeMatchers();
+    }
+
+    /**
+     * Proactively initialize workers and Tree-sitter to speed up first index
+     */
+    public async warmup(): Promise<void> {
+        if (this.workersInitialized) return;
+        this.log('Warming up indexing workers...');
+        this.getWorkers();
+    }
+
+    private getWorkers(): Worker[] {
+        if (this.workersInitialized) {
+            return this.workers;
+        }
+
+        const workerCount = Math.max(1, os.cpus().length - 1);
+        const isTs = __filename.endsWith('.ts');
+        const workerScript = isTs
+            ? path.join(__dirname, 'indexer-worker.ts')
+            : path.join(__dirname, 'indexer-worker.js');
+
+        if (!fs.existsSync(workerScript)) {
+            return [];
+        }
+
+        for (let i = 0; i < workerCount; i++) {
+            const worker = new Worker(workerScript, {
+                workerData: { extensionPath: this.extensionPath },
+            });
+            worker.on('error', (err) => {
+                this.log(`Worker ${i} error: ${err}`);
+            });
+            this.workers.push(worker);
+        }
+
+        this.workersInitialized = true;
+        return this.workers;
     }
 
     private updateExcludeMatchers(): void {
@@ -356,30 +396,21 @@ export class WorkspaceIndexer {
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
         const totalFiles = fileItems.length;
-        const workerCount = Math.max(1, os.cpus().length - 1);
         const BATCH_SIZE = 50;
 
         let processed = 0;
         let nextReportingPercentage = 0;
         let logged100 = false;
 
-        // Determine worker script path
-        const isTs = __filename.endsWith('.ts');
-        const workerScript = isTs
-            ? path.join(__dirname, 'indexer-worker.ts')
-            : path.join(__dirname, 'indexer-worker.js');
+        const workers = this.getWorkers();
+        if (workers.length === 0) {
+            this.log(`No indexing workers available. Falling back to main thread.`);
+            return this.runFileIndexingFallback(fileItems, progressCallback);
+        }
 
-        this.log(`Starting ${workerCount} indexing workers (Script: ${path.basename(workerScript)})...`);
+        this.log(`Using ${workers.length} persistent indexing workers...`);
 
         try {
-            // Verify worker script exists
-            if (!fs.existsSync(workerScript)) {
-                this.log(`Worker script not found at ${workerScript}. Falling back to main thread.`);
-                return this.runFileIndexingFallback(fileItems, progressCallback);
-            }
-
-            const workers: Worker[] = [];
-            const freeWorkers: Worker[] = [];
             const pendingItems = [...fileItems];
             let activeTasks = 0;
             let resolveAll: () => void;
@@ -387,10 +418,6 @@ export class WorkspaceIndexer {
             const promise = new Promise<void>((resolve) => {
                 resolveAll = resolve;
             });
-
-            const terminateWorkers = () => {
-                for (const w of workers) w.terminate();
-            };
 
             const assignTask = async (worker: Worker) => {
                 const batchFiles: string[] = [];
@@ -416,126 +443,74 @@ export class WorkspaceIndexer {
                 if (batchFiles.length > 0) {
                     activeTasks++;
                     worker.postMessage({ filePaths: batchFiles });
-                } else {
-                    // No more tasks
-                    freeWorkers.push(worker);
-                    if (activeTasks === 0 && pendingItems.length === 0) {
-                        terminateWorkers();
-                        resolveAll();
-                    }
+                } else if (activeTasks === 0 && pendingItems.length === 0) {
+                    resolveAll();
                 }
             };
 
-            // Initialize workers
-            for (let i = 0; i < workerCount; i++) {
-                const worker = new Worker(workerScript, {
-                    workerData: { extensionPath: this.extensionPath },
-                });
+            // Set up listeners for this run
+            const cleanupListeners: (() => void)[] = [];
 
-                this.setupWorkerListeners(
-                    worker,
-                    i,
-                    totalFiles,
-                    () => processed,
-                    (p) => (processed = p),
-                    () => activeTasks,
-                    (a) => (activeTasks = a),
-                    () => logged100,
-                    (l) => (logged100 = l),
-                    () => nextReportingPercentage,
-                    (n) => (nextReportingPercentage = n),
-                    progressCallback,
-                    assignTask
-                );
+            for (let i = 0; i < workers.length; i++) {
+                const worker = workers[i];
+                
+                const onMessage = (message: any) => {
+                    if (message.type === 'result') {
+                        const { items, count } = message;
+                        if (items && items.length > 0) {
+                            const internedItems = items.map((item: SearchableItem) => ({
+                                ...item,
+                                name: this.intern(item.name),
+                                fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                                containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                                relativeFilePath: item.relativeFilePath
+                                    ? this.intern(item.relativeFilePath)
+                                    : undefined,
+                                filePath: this.intern(item.filePath),
+                            }));
+                            this.fireItemsAdded(internedItems);
+                        }
 
-                workers.push(worker);
-                freeWorkers.push(worker);
-            }
+                        const itemsProcessed = count || 1;
+                        processed += itemsProcessed;
+                        activeTasks--;
 
-            // Start initial tasks
-            while (freeWorkers.length > 0 && pendingItems.length > 0) {
-                const w = freeWorkers.pop()!;
-                assignTask(w);
-            }
+                        this.updateWorkerProgress(
+                            totalFiles,
+                            itemsProcessed,
+                            () => processed,
+                            () => logged100,
+                            (v) => (logged100 = v),
+                            () => nextReportingPercentage,
+                            (v) => (nextReportingPercentage = v),
+                            progressCallback,
+                        );
 
-            // If we ran out of items before using all workers
-            if (pendingItems.length === 0 && activeTasks === 0) {
-                terminateWorkers();
-                resolveAll();
+                        assignTask(worker);
+                    } else if (message.type === 'error') {
+                        activeTasks--;
+                        assignTask(worker);
+                    }
+                };
+
+                worker.on('message', onMessage);
+                cleanupListeners.push(() => worker.removeListener('message', onMessage));
+
+                // Start initial task for this worker
+                assignTask(worker);
             }
 
             await promise;
+            
+            // Cleanup listeners so they don't fire on the next run
+            for (const cleanup of cleanupListeners) {
+                cleanup();
+            }
+
         } catch (error) {
             this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
             return this.runFileIndexingFallback(fileItems, progressCallback);
         }
-    }
-
-    private setupWorkerListeners(
-        worker: Worker,
-        workerIndex: number,
-        totalFiles: number,
-        getProcessed: () => number,
-        setProcessed: (v: number) => void,
-        getActiveTasks: () => number,
-        setActiveTasks: (v: number) => void,
-        getLogged100: () => boolean,
-        setLogged100: (v: boolean) => void,
-        getNextReportingPercentage: () => number,
-        setNextReportingPercentage: (v: number) => void,
-        progressCallback: ((message: string, increment?: number) => void) | undefined,
-        assignTask: (worker: Worker) => Promise<void> | void
-    ) {
-        worker.on('message', (message) => {
-            if (message.type === 'log') {
-                // Log message handling
-            } else if (message.type === 'result') {
-                const { items, count } = message;
-                if (items && items.length > 0) {
-                    // Re-intern strings from worker to share memory in main thread
-                    const internedItems = items.map((item: SearchableItem) => ({
-                        ...item,
-                        name: this.intern(item.name),
-                        fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                        containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                        relativeFilePath: item.relativeFilePath
-                            ? this.intern(item.relativeFilePath)
-                            : undefined,
-                        filePath: this.intern(item.filePath),
-                    }));
-
-                    this.fireItemsAdded(internedItems);
-                }
-
-                // Mark task complete
-                const itemsProcessed = count || 1;
-                setProcessed(getProcessed() + itemsProcessed);
-                setActiveTasks(getActiveTasks() - 1);
-
-                this.updateWorkerProgress(
-                    totalFiles,
-                    itemsProcessed,
-                    getProcessed,
-                    getLogged100,
-                    setLogged100,
-                    getNextReportingPercentage,
-                    setNextReportingPercentage,
-                    progressCallback
-                );
-
-                // Pick next task
-                assignTask(worker);
-            } else if (message.type === 'error') {
-                // Log error but continue
-                setActiveTasks(getActiveTasks() - 1);
-                assignTask(worker);
-            }
-        });
-
-        worker.on('error', (err) => {
-            this.log(`Worker ${workerIndex} error: ${err}`);
-            // If a worker dies, we lose its capacity. Ideally restart it, but for now just ignore.
-        });
     }
 
     private updateWorkerProgress(
@@ -1127,5 +1102,9 @@ export class WorkspaceIndexer {
      */
     dispose(): void {
         this.fileWatcher?.dispose();
+        for (const worker of this.workers) {
+            worker.terminate();
+        }
+        this.workers = [];
     }
 }
