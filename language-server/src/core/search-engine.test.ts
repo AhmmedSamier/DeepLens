@@ -117,4 +117,35 @@ describe('SearchEngine', () => {
         // The objects should be referentially strictly equal
         expect(preparedNames[0]).toBe(preparedNames[1]);
     });
+
+    it('should prune cache after removing items', () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'UniqueName1', SearchItemType.CLASS, 'src/File1.ts'),
+            createTestItem('2', 'UniqueName2', SearchItemType.INTERFACE, 'src/File2.ts'),
+            createTestItem('3', 'UniqueName3', SearchItemType.ENUM, 'src/File3.ts'),
+        ];
+        engine.setItems(items);
+
+        const preparedCache = (engine as any).preparedCache as Map<string, any>;
+        const initialCacheSize = preparedCache.size;
+        expect(initialCacheSize).toBeGreaterThan(0);
+
+        // Remove item 2
+        engine.removeItemsByFile('/src/File2.ts');
+
+        // Verify cache size hasn't changed yet (lazy pruning)
+        expect(preparedCache.size).toBe(initialCacheSize);
+
+        // Manually trigger prune for testing
+        (engine as any).pruneCache();
+
+        // Verify cache size decreased
+        expect(preparedCache.size).toBeLessThan(initialCacheSize);
+
+        // Ensure UniqueName2 is gone
+        expect(preparedCache.has('UniqueName2')).toBe(false);
+        // Ensure others remain
+        expect(preparedCache.has('UniqueName1')).toBe(true);
+    });
 });
