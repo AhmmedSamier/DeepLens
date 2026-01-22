@@ -700,6 +700,14 @@ export class SearchEngine implements ISearchProvider {
                      }
                 }
 
+                // Optimization: Skip allocation if heap is full and score is too low
+                if (heap.isFull()) {
+                    const minItem = heap.peek();
+                    if (minItem && score <= minItem.score) {
+                        return;
+                    }
+                }
+
                 heap.push({
                     item,
                     score,

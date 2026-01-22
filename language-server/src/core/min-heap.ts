@@ -12,6 +12,10 @@ export class MinHeap<T> {
         this.compare = compare;
     }
 
+    isFull(): boolean {
+        return this.heap.length >= this.maxSize;
+    }
+
     push(item: T): void {
         if (this.heap.length < this.maxSize) {
             this.heap.push(item);
