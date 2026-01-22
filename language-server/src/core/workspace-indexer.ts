@@ -392,7 +392,7 @@ export class WorkspaceIndexer {
                 for (const w of workers) w.terminate();
             };
 
-            const assignTask = (worker: Worker) => {
+            const assignTask = async (worker: Worker) => {
                 const batchFiles: string[] = [];
 
                 // Fill batch
@@ -400,7 +400,7 @@ export class WorkspaceIndexer {
                     const fileItem = pendingItems.shift()!;
 
                     // Check cache logic here
-                    if (this.shouldSkipIndexing(fileItem.filePath)) {
+                    if (await this.shouldSkipIndexing(fileItem.filePath)) {
                         processed++;
                         if (processed % 100 === 0) {
                             this.log(
@@ -484,7 +484,7 @@ export class WorkspaceIndexer {
         getNextReportingPercentage: () => number,
         setNextReportingPercentage: (v: number) => void,
         progressCallback: ((message: string, increment?: number) => void) | undefined,
-        assignTask: (worker: Worker) => void
+        assignTask: (worker: Worker) => Promise<void> | void
     ) {
         worker.on('message', (message) => {
             if (message.type === 'log') {
@@ -574,17 +574,16 @@ export class WorkspaceIndexer {
      * Check if we can skip indexing this file (cache hit)
      * Returns true if symbols were loaded from cache and added to items.
      */
-    private shouldSkipIndexing(filePath: string): boolean {
+    private async shouldSkipIndexing(filePath: string): Promise<boolean> {
         let currentHash = this.fileHashes.get(filePath);
 
         // Calculate hash if missing (blocking in main thread here is risky for large files,
         // but we assume hashing is fast or was pre-calculated in populateFileHashes)
         if (!currentHash && !this.indexing) {
-            try {
-                const content = fs.readFileSync(filePath);
-                currentHash = crypto.createHash('sha256').update(content).digest('hex');
+            currentHash = await this.calculateSingleFileHash(filePath);
+            if (currentHash) {
                 this.fileHashes.set(filePath, currentHash);
-            } catch {
+            } else {
                 return false;
             }
         }
@@ -598,7 +597,7 @@ export class WorkspaceIndexer {
         // If mtime matches and we have a cache (fallback if hash missing)
         if (cached && !currentHash) {
             try {
-                const stats = fs.statSync(filePath);
+                const stats = await fs.promises.stat(filePath);
                 if (Number(cached.mtime) === Number(stats.mtime)) {
                     this.fireItemsAdded(cached.symbols);
                     return true;
