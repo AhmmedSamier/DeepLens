@@ -178,6 +178,10 @@ connection.onDidChangeConfiguration(async () => {
  */
 async function runIndexingWithProgress(force: boolean): Promise<void> {
     const token = 'indexing-' + Date.now();
+
+    // Clear existing items to prevent duplicates on rebuild
+    searchEngine.clear();
+
     try {
         // We need to wait a small bit for the client to be ready for requests immediately after initialized
         // but creating the progress token handles the handshake
@@ -203,6 +207,8 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
     } catch (error) {
         connection.console.error(`Error reporting progress: ${error}`);
         // Fallback without progress
+        // Clear again in case partial indexing occurred before error
+        searchEngine.clear();
         await workspaceIndexer.indexWorkspace(undefined, force);
     }
 }
