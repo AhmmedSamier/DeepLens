@@ -38,6 +38,7 @@ export class SearchEngine implements ISearchProvider {
 
     // Deduplication cache for prepared strings
     private preparedCache: Map<string, Fuzzysort.Prepared> = new Map();
+    private removedSinceLastPrune: number = 0;
 
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
@@ -169,6 +170,32 @@ export class SearchEngine implements ISearchProvider {
 
             // Rebuild scope indices
             this.rebuildScopeIndices();
+
+            // Periodic cache pruning
+            this.removedSinceLastPrune++;
+            if (this.removedSinceLastPrune > 2000 && this.preparedCache.size > 10000) {
+                this.pruneCache();
+                this.removedSinceLastPrune = 0;
+            }
+        }
+    }
+
+    /**
+     * Remove unused entries from the prepared cache to prevent memory leaks
+     */
+    private pruneCache(): void {
+        const usedPrepared = new Set<Fuzzysort.Prepared>();
+
+        // Collect used prepared objects
+        for (const p of this.preparedNames) if (p) usedPrepared.add(p);
+        for (const p of this.preparedFullNames) if (p) usedPrepared.add(p);
+        for (const p of this.preparedPaths) if (p) usedPrepared.add(p);
+
+        // Remove unused from cache
+        for (const [key, prepared] of this.preparedCache) {
+            if (!usedPrepared.has(prepared)) {
+                this.preparedCache.delete(key);
+            }
         }
     }
 
