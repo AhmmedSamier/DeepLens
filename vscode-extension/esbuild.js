@@ -93,9 +93,7 @@ async function main() {
 
     const ctx = await esbuild.context({
         entryPoints: {
-            extension: 'src/extension.ts',
-            server: '../language-server/src/server.ts',
-            'indexer-worker': '../language-server/src/core/indexer-worker.ts'
+            extension: 'src/extension.ts'
         },
         bundle: true,
         format: 'cjs',

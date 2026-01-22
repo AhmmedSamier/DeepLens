@@ -1,12 +1,10 @@
 import * as cp from 'child_process';
-import * as crypto from 'crypto';
 import * as fs from 'fs';
 import { Minimatch } from 'minimatch';
 import * as os from 'os';
 import * as path from 'path';
 import { Worker } from 'worker_threads';
 import { Config } from './config';
-import { IndexPersistence } from './index-persistence';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { SearchableItem, SearchItemType } from './types';
 
@@ -23,8 +21,6 @@ export class WorkspaceIndexer {
     private config: Config;
     private fileWatcher: { dispose(): void } | undefined;
     private treeSitter: import('./tree-sitter-parser').TreeSitterParser;
-    private persistence: IndexPersistence;
-    private fileHashes: Map<string, string> = new Map();
     private env: IndexerEnvironment;
     private stringCache: Map<string, string> = new Map();
     private extensionPath: string;
@@ -35,13 +31,11 @@ export class WorkspaceIndexer {
     constructor(
         config: Config,
         treeSitter: import('./tree-sitter-parser').TreeSitterParser,
-        persistence: IndexPersistence,
         env: IndexerEnvironment,
         extensionPath: string,
     ) {
         this.config = config;
         this.treeSitter = treeSitter;
-        this.persistence = persistence;
         this.env = env;
         this.extensionPath = extensionPath;
         this.updateExcludeMatchers();
@@ -62,12 +56,29 @@ export class WorkspaceIndexer {
         }
 
         const workerCount = Math.max(1, os.cpus().length - 1);
-        const isTs = __filename.endsWith('.ts');
-        const workerScript = isTs
-            ? path.join(__dirname, 'indexer-worker.ts')
-            : path.join(__dirname, 'indexer-worker.js');
+        
+        // Try to find the worker script in multiple locations
+        // We prioritize .js because Node.js (VS Code) cannot run .ts directly in workers
+        const possibleScripts = [
+            path.join(this.extensionPath, 'dist', 'indexer-worker.js'), // Production path
+            path.join(__dirname, 'indexer-worker.js'), // Relative to current file (prod)
+        ];
 
-        if (!fs.existsSync(workerScript)) {
+        // Only add .ts if we are running in Bun
+        if (typeof Bun !== 'undefined') {
+            possibleScripts.push(path.join(__dirname, 'indexer-worker.ts'));
+        }
+
+        let workerScript = '';
+        for (const script of possibleScripts) {
+            if (fs.existsSync(script)) {
+                workerScript = script;
+                break;
+            }
+        }
+
+        if (!workerScript) {
+            this.log(`ERROR: Worker script not found. Searched in: ${possibleScripts.join(', ')}`);
             return [];
         }
 
@@ -121,9 +132,6 @@ export class WorkspaceIndexer {
         }
     }
 
-    /**
-     * Start indexing the workspace
-     */
     async indexWorkspace(
         progressCallback?: (message: string, increment?: number) => void,
         force: boolean = false,
@@ -133,12 +141,8 @@ export class WorkspaceIndexer {
         }
 
         this.indexing = true;
-        this.stringCache.clear(); // Clear string cache on full re-index
-        this.updateExcludeMatchers(); // Ensure matchers are up-to-date
-
-        if (force) {
-            await this.persistence.clear();
-        }
+        this.stringCache.clear();
+        this.updateExcludeMatchers();
 
         try {
             const workspaceFolders = this.env.getWorkspaceFolders();
@@ -146,33 +150,26 @@ export class WorkspaceIndexer {
                 return;
             }
 
-            // Load cache
-            await this.persistence.load();
+            this.log('Step 1/4: Analyzing repository structure...');
+            progressCallback?.('Analyzing repository structure...', 10);
 
-            // Try to get git hashes first (TURBO: used for metadata-free indexing)
-            this.log('Step 1/5: Analyzing repository structure and file hashes...');
-            progressCallback?.('Analyzing repository structure...', 5);
-            await this.populateFileHashes();
-
-            // Index files (PRO: now parallelized)
-            this.log('Step 2/5: Scanning workspace files...');
-            progressCallback?.('Scanning files...', 5);
-            // We pass a collector callback to indexFiles
+            // Step 2: Index files (Always fresh)
+            this.log('Step 2/4: Scanning workspace files...');
+            progressCallback?.('Scanning files...', 10);
             const fileItems: SearchableItem[] = [];
             await this.indexFiles((items) => {
                 fileItems.push(...items);
                 this.fireItemsAdded(items);
             });
 
-            // Index symbols from files
-            this.log(`Step 3/5: Extracting symbols from ${fileItems.length} files...`);
+            // Step 3: Index symbols
+            this.log(`Step 3/4: Extracting symbols from ${fileItems.length} files...`);
             let reportedStepProgress = 0;
 
-            // For symbols, we will emit them directly as they are found
             await this.indexSymbols(fileItems, (message, totalPercentage) => {
                 if (totalPercentage !== undefined) {
-                    // This step is allocated 80% of total progress (from 10% to 90%)
-                    const targetStepProgress = totalPercentage * 0.8;
+                    // Symbol extraction gets 70% of progress
+                    const targetStepProgress = totalPercentage * 0.7;
                     const delta = targetStepProgress - reportedStepProgress;
                     if (delta > 0) {
                         progressCallback?.(message, delta);
@@ -185,19 +182,12 @@ export class WorkspaceIndexer {
                 }
             });
 
-            // Save cache
-            this.log('Step 4/5: Saving index cache...');
-            progressCallback?.('Saving index cache...', 5);
-            await this.persistence.save();
-
-            // Set up file watchers for incremental updates
-            this.log('Step 5/5: Setting up file watchers...');
+            // Step 4: Finalize
+            this.log('Step 4/4: Setting up file watchers...');
+            progressCallback?.('Finalizing...', 10);
             this.setupFileWatchers();
 
             this.log('Index Workspace complete.');
-
-            // We can't log final summary count here easily without keeping track, but that's fine.
-            this.log(`Final Index Summary: Completed.`);
         } finally {
             this.indexing = false;
         }
@@ -381,7 +371,7 @@ export class WorkspaceIndexer {
             const workspaceSymbols = await this.env.executeWorkspaceSymbolProvider();
 
             if (workspaceSymbols && workspaceSymbols.length > 0) {
-                this.processWorkspaceSymbols(workspaceSymbols);
+                await this.processWorkspaceSymbols(workspaceSymbols);
             }
         } catch (error) {
             console.debug('Workspace symbol pass failed, moving to file-by-file:', error);
@@ -413,6 +403,7 @@ export class WorkspaceIndexer {
         try {
             const pendingItems = [...fileItems];
             let activeTasks = 0;
+            let finished = false;
             let resolveAll: () => void;
 
             const promise = new Promise<void>((resolve) => {
@@ -420,31 +411,37 @@ export class WorkspaceIndexer {
             });
 
             const assignTask = async (worker: Worker) => {
+                if (finished) return;
+
                 const batchFiles: string[] = [];
 
-                // Fill batch
-                while (pendingItems.length > 0 && batchFiles.length < BATCH_SIZE) {
-                    const fileItem = pendingItems.shift()!;
+                // We increment activeTasks BEFORE doing anything async to prevent premature resolution
+                activeTasks++;
 
-                    // Check cache logic here
-                    if (await this.shouldSkipIndexing(fileItem.filePath)) {
-                        processed++;
-                        if (processed % 100 === 0) {
-                            this.log(
-                                `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
-                            );
-                        }
-                        continue;
+                try {
+                    // Fill batch
+                    while (pendingItems.length > 0 && batchFiles.length < BATCH_SIZE) {
+                        const fileItem = pendingItems.shift()!;
+                        batchFiles.push(fileItem.filePath);
                     }
 
-                    batchFiles.push(fileItem.filePath);
-                }
-
-                if (batchFiles.length > 0) {
-                    activeTasks++;
-                    worker.postMessage({ filePaths: batchFiles });
-                } else if (activeTasks === 0 && pendingItems.length === 0) {
-                    resolveAll();
+                    if (batchFiles.length > 0) {
+                        worker.postMessage({ filePaths: batchFiles });
+                    } else {
+                        // No items for this worker
+                        activeTasks--;
+                        if (activeTasks === 0 && pendingItems.length === 0 && !finished) {
+                            finished = true;
+                            resolveAll();
+                        }
+                    }
+                } catch (err) {
+                    this.log(`Error assigning task: ${err}`);
+                    activeTasks--;
+                    if (activeTasks === 0 && pendingItems.length === 0 && !finished) {
+                        finished = true;
+                        resolveAll();
+                    }
                 }
             };
 
@@ -457,6 +454,7 @@ export class WorkspaceIndexer {
                 const onMessage = (message: any) => {
                     if (message.type === 'result') {
                         const { items, count } = message;
+                        
                         if (items && items.length > 0) {
                             const internedItems = items.map((item: SearchableItem) => ({
                                 ...item,
@@ -486,18 +484,36 @@ export class WorkspaceIndexer {
                             progressCallback,
                         );
 
-                        assignTask(worker);
+                        if (pendingItems.length > 0) {
+                            assignTask(worker);
+                        } else if (activeTasks === 0 && !finished) {
+                            finished = true;
+                            resolveAll!();
+                        }
                     } else if (message.type === 'error') {
                         activeTasks--;
-                        assignTask(worker);
+                        if (pendingItems.length > 0) {
+                            assignTask(worker);
+                        } else if (activeTasks === 0 && !finished) {
+                            finished = true;
+                            resolveAll!();
+                        }
                     }
                 };
 
                 worker.on('message', onMessage);
                 cleanupListeners.push(() => worker.removeListener('message', onMessage));
+            }
 
-                // Start initial task for this worker
-                assignTask(worker);
+            // Start initial tasks
+            const initialCount = Math.min(workers.length, pendingItems.length);
+            if (initialCount === 0) {
+                finished = true;
+                resolveAll!();
+            } else {
+                for (let i = 0; i < initialCount; i++) {
+                    assignTask(workers[i]);
+                }
             }
 
             await promise;
@@ -546,121 +562,11 @@ export class WorkspaceIndexer {
     }
 
     /**
-     * Check if we can skip indexing this file (cache hit)
-     * Returns true if symbols were loaded from cache and added to items.
-     */
-    private async shouldSkipIndexing(filePath: string): Promise<boolean> {
-        let currentHash = this.fileHashes.get(filePath);
-
-        // Calculate hash if missing (blocking in main thread here is risky for large files,
-        // but we assume hashing is fast or was pre-calculated in populateFileHashes)
-        if (!currentHash && !this.indexing) {
-            currentHash = await this.calculateSingleFileHash(filePath);
-            if (currentHash) {
-                this.fileHashes.set(filePath, currentHash);
-            } else {
-                return false;
-            }
-        }
-
-        const cached = this.persistence.get(filePath);
-        if (cached && currentHash && cached.hash === currentHash) {
-            this.fireItemsAdded(cached.symbols);
-            return true;
-        }
-
-        // If mtime matches and we have a cache (fallback if hash missing)
-        if (cached && !currentHash) {
-            try {
-                const stats = await fs.promises.stat(filePath);
-                if (Number(cached.mtime) === Number(stats.mtime)) {
-                    this.fireItemsAdded(cached.symbols);
-                    return true;
-                }
-            } catch {
-                return false;
-            }
-        }
-
-        return false;
-    }
-
-    /**
-     * Fallback: Index files in main thread (original logic)
-     */
-    private async runFileIndexingFallback(
-        fileItems: SearchableItem[],
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<void> {
-        const totalFiles = fileItems.length;
-        const CONCURRENCY = 50;
-        let processed = 0;
-        let activeWorkers = 0;
-        let currentIndex = 0;
-        let logged100 = false;
-        let nextReportingPercentage = 0;
-
-        return new Promise((resolve) => {
-            const startNextWorker = async () => {
-                if (currentIndex >= totalFiles) {
-                    if (activeWorkers === 0) {
-                        resolve();
-                    }
-                    return;
-                }
-
-                const fileItem = fileItems[currentIndex++];
-                activeWorkers++;
-
-                await this.indexOneFile(fileItem);
-
-                processed++;
-                activeWorkers--;
-
-                if (processed % 100 === 0 || (processed === totalFiles && !logged100)) {
-                    if (processed === totalFiles) {
-                        logged100 = true;
-                    }
-                    this.log(
-                        `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
-                    );
-                }
-
-                if (progressCallback) {
-                    const percentage = (processed / totalFiles) * 100;
-                    if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                        const fileName = path.basename(fileItem.filePath);
-                        progressCallback(`Indexing ${fileName} (${processed}/${totalFiles})`, percentage);
-                        nextReportingPercentage = percentage + 5;
-                    }
-                }
-
-                startNextWorker();
-            };
-
-            for (let i = 0; i < Math.min(CONCURRENCY, totalFiles); i++) {
-                startNextWorker();
-            }
-        });
-    }
-
-    /**
-     * Index a single file and handle errors
-     */
-    private async indexOneFile(fileItem: SearchableItem): Promise<void> {
-        try {
-            await this.indexFileSymbols(fileItem.filePath);
-        } catch (error) {
-            // Fail silently but log for debug
-            console.debug(`Indexing failed for ${fileItem.filePath}:`, error);
-        }
-    }
-
-    /**
      * Process symbols from workspace provider
      */
-    private processWorkspaceSymbols(symbols: import('./indexer-interfaces').LeanSymbolInformation[]): void {
+    private async processWorkspaceSymbols(symbols: import('./indexer-interfaces').LeanSymbolInformation[]): Promise<void> {
         const batch: SearchableItem[] = [];
+
         for (const symbol of symbols) {
             const itemType = this.mapSymbolKindToItemType(symbol.kind);
             if (!itemType) {
@@ -668,9 +574,7 @@ export class WorkspaceIndexer {
             }
 
             const id = `symbol:${symbol.location.uri}:${symbol.name}:${symbol.location.range.start.line}`;
-            // Duplication check removed as we don't hold state.
-
-            batch.push({
+            const item: SearchableItem = {
                 id,
                 name: symbol.name,
                 type: itemType,
@@ -680,151 +584,16 @@ export class WorkspaceIndexer {
                 column: symbol.location.range.start.character,
                 containerName: symbol.containerName,
                 fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
-            });
+            };
+
+            batch.push(item);
         }
+
         this.fireItemsAdded(batch);
     }
 
-    /**
-     * Index symbols from a single file with caching
-     */
-    private async indexFileSymbols(filePath: string): Promise<void> {
-        let currentHash = this.fileHashes.get(filePath);
-
-        // If no hash in memory, and this is an incremental update, calculate it
-        if (!currentHash && !this.indexing) {
-            currentHash = await this.calculateSingleFileHash(filePath);
-            if (currentHash) {
-                this.fileHashes.set(filePath, currentHash);
-            }
-        }
-
-        const cached = this.persistence.get(filePath);
-        if (cached && currentHash && cached.hash === currentHash) {
-            this.fireItemsAdded(cached.symbols);
-            return;
-        }
-
-        const stats = await fs.promises.stat(filePath);
-        const mtime = Number(stats.mtime);
-
-        if (cached && !currentHash && Number(cached.mtime) === mtime) {
-            this.fireItemsAdded(cached.symbols);
-            return;
-        }
-
-        try {
-            const relPath = this.intern(this.env.asRelativePath(filePath));
-            if (!this.indexing) {
-                this.log(`Parsing file: ${relPath} ...`);
-            }
-            const symbolsFound = await this.performSymbolExtraction(filePath);
-
-            if (symbolsFound.length > 0) {
-                this.persistence.set(filePath, { mtime, hash: currentHash, symbols: symbolsFound });
-                const processed = symbolsFound.map((s) => ({ ...s, relativeFilePath: relPath }));
-                this.fireItemsAdded(processed);
-            }
-        } catch (error) {
-            this.log(`Error indexing ${filePath}: ${error}`);
-        }
-    }
-
-    private async calculateSingleFileHash(filePath: string): Promise<string | undefined> {
-        try {
-            const content = await fs.promises.readFile(filePath);
-            return crypto.createHash('sha256').update(content).digest('hex');
-        } catch {
-            return undefined;
-        }
-    }
-
-    /**
-     * Core logic to extract symbols from a file
-     */
-    /**
-     * Core logic to extract symbols from a file
-     */
-    private async performSymbolExtraction(filePath: string): Promise<SearchableItem[]> {
-        const relPath = this.intern(this.env.asRelativePath(filePath));
-        const internedFilePath = this.intern(filePath);
-
-        // 1. Try Tree-sitter first (Turbo Path)
-        try {
-            const treeSitterItems = await this.treeSitter.parseFile(filePath);
-
-            if (treeSitterItems.length > 0) {
-                return treeSitterItems.map((item) => ({
-                    ...item,
-                    filePath: internedFilePath,
-                    relativeFilePath: relPath,
-                    name: this.intern(item.name),
-                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                }));
-            }
-        } catch (e) {
-            if (!this.indexing) {
-                this.log(`Tree-sitter extraction failed for ${relPath}: ${e}`);
-            }
-        }
-
-        // 2. Fallback to Environement symbol provider (e.g. VS Code's provider)
-        if (this.env.executeDocumentSymbolProvider) {
-            if (!this.indexing) {
-                this.log(`Falling back to environment symbol provider for ${relPath}...`);
-            }
-            try {
-                const symbols = await this.env.executeDocumentSymbolProvider(filePath);
-                if (symbols && symbols.length > 0) {
-                    const localItems: SearchableItem[] = [];
-                    this.processSymbols(symbols, internedFilePath, relPath, localItems);
-                    return localItems;
-                }
-            } catch (error) {
-                this.log(`Environment symbol provider failed for ${relPath}: ${error}`);
-            }
-        }
-
-        return [];
-    }
-
-    /**
-     * Ensure extracted symbols are added to the main list
-     * (Deprecated: Logic moved to event firing)
-     */
-    // private ensureSymbolsInItems(symbols: SearchableItem[], filePath: string): void { ... }
-
-    /**
-     * Get git hashes for files (Fast Cache Key)
-     */
     private async populateFileHashes(): Promise<void> {
-        this.fileHashes.clear();
-        const workspaceFolders = this.env.getWorkspaceFolders();
-        if (workspaceFolders.length === 0) {
-            return;
-        }
-
-        for (const folderPath of workspaceFolders) {
-            try {
-                const output = await this.execGit(['ls-files', '--stage'], folderPath);
-
-                const lines = output.split('\n');
-                for (const line of lines) {
-                    // Format: <mode> SP <object> SP <stage> TAB <file>
-                    const match = line.match(/^(\d+) ([a-f0-9]+) (\d+)\t(.*)$/);
-                    if (match) {
-                        const hash = match[2];
-                        const relPath = match[4];
-                        const fullPath = path.join(folderPath, relPath);
-                        this.fileHashes.set(fullPath, hash);
-                    }
-                }
-            } catch (error) {
-                // Git failed or not a repo, skip hashing
-                console.debug(`Git hash population failed for ${folderPath}:`, error);
-            }
-        }
+        // Redundant - can be removed entirely if desired, keeping only if needed elsewhere
     }
 
     /**

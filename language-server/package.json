@@ -4,7 +4,7 @@
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
-        "build": "bun run scripts/setup-parsers.ts && bun build src/server.ts --outfile dist/server.js --target node && bun build src/core/indexer-worker.ts --outfile dist/indexer-worker.js --target node && bun run scripts/copy-ripgrep.ts",
+        "build": "bun run scripts/setup-parsers.ts && bun build src/server.ts --outfile dist/server.js --target node --format cjs && bun build src/core/indexer-worker.ts --outfile dist/indexer-worker.js --target node --format cjs && bun run scripts/copy-ripgrep.ts",
         "test": "bun run scripts/setup-parsers.ts && bun test",
         "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts",
         "benchmark:memory": "bun run scripts/memory-benchmark.ts",
@@ -31,17 +31,17 @@
         "web-tree-sitter": "^0.26.3"
     },
     "devDependencies": {
-        "@types/node": "^25.0.3",
-        "typescript": "^5.9.3",
-        "@types/vscode": "^1.85.0",
         "@eslint/eslintrc": "^3.3.3",
         "@eslint/js": "^9.39.2",
+        "@types/node": "^25.0.3",
+        "@types/vscode": "^1.85.0",
         "@typescript-eslint/eslint-plugin": "^8.52.0",
         "@typescript-eslint/parser": "^8.52.0",
         "eslint": "^9.39.2",
         "eslint-plugin-sonarjs": "3.0.5",
         "globals": "^17.0.0",
         "prettier": "^3.7.4",
-        "prettier-plugin-organize-imports": "^4.3.0"
+        "prettier-plugin-organize-imports": "^4.3.0",
+        "typescript": "^5.9.3"
     }
 }

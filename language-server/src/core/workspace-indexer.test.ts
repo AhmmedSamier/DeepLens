@@ -2,7 +2,6 @@
 /* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, expect, it } from 'bun:test';
 import { Config } from './config';
-import { IndexPersistence } from './index-persistence';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { TreeSitterParser } from './tree-sitter-parser';
 import { WorkspaceIndexer } from './workspace-indexer';
@@ -26,15 +25,18 @@ class TestWorkspaceIndexer extends WorkspaceIndexer {
 
     // Expose protected method for testing
     public async checkIsGitIgnored(filePath: string): Promise<boolean> {
-        return (this as any).isGitIgnored(filePath);
+        // @ts-ignore
+        return this.isGitIgnored(filePath);
     }
 
     public checkShouldExcludeFile(filePath: string): boolean {
-        return (this as any).shouldExcludeFile(filePath);
+        // @ts-ignore
+        return this.shouldExcludeFile(filePath);
     }
 
     public triggerUpdateExcludeMatchers(): void {
-        (this as any).updateExcludeMatchers();
+        // @ts-ignore
+        this.updateExcludeMatchers();
     }
 }
 
@@ -47,12 +49,12 @@ describe('WorkspaceIndexer', () => {
         asRelativePath: (p) => p.replace('/root/', ''),
         log: () => {},
     };
-    const mockPersistence = new IndexPersistence('/tmp');
+    
     // We can cast mock to any because we won't strictly use all methods
     const mockTreeSitter = {} as unknown as TreeSitterParser;
 
     it('should return true if git check-ignore succeeds (exit code 0)', async () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockPersistence, mockEnv, process.cwd());
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
         // Mock git behavior: success = ignored
         indexer.gitResults['check-ignore'] = { stdout: '/root/ignored.txt' };
@@ -62,7 +64,7 @@ describe('WorkspaceIndexer', () => {
     });
 
     it('should return false if git check-ignore fails (exit code 1)', async () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockPersistence, mockEnv, process.cwd());
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
         // Mock git behavior: failure with code 1 = not ignored
         indexer.gitResults['check-ignore'] = { error: { code: 1 } };
@@ -72,7 +74,7 @@ describe('WorkspaceIndexer', () => {
     });
 
     it('should return false if not in a workspace folder', async () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockPersistence, mockEnv, process.cwd());
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
         const result = await indexer.checkIsGitIgnored('/outside/file.txt');
         expect(result).toBe(false);
@@ -82,7 +84,7 @@ describe('WorkspaceIndexer', () => {
         const customConfig = new Config();
         customConfig.update({ respectGitignore: false });
 
-        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockPersistence, mockEnv, process.cwd());
+        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
 
         // Even if git would say ignored...
         indexer.gitResults['check-ignore'] = { stdout: 'ignored' };
@@ -92,7 +94,7 @@ describe('WorkspaceIndexer', () => {
     });
 
     it('should exclude files based on default exclude patterns', () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockPersistence, mockEnv, process.cwd());
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
         expect(indexer.checkShouldExcludeFile('/root/node_modules/package.json')).toBe(true);
         expect(indexer.checkShouldExcludeFile('/root/dist/bundle.js')).toBe(true);
@@ -101,7 +103,7 @@ describe('WorkspaceIndexer', () => {
 
     it('should update exclude patterns when config changes', () => {
         const customConfig = new Config();
-        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockPersistence, mockEnv, process.cwd());
+        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
 
         // Initially matches defaults
         expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(false);

@@ -96,6 +96,32 @@ export interface SearchOptions {
 }
 
 /**
+ * Search context for providers
+ */
+export interface SearchContext {
+    query: string;
+    normalizedQuery: string;
+    queryUpper: string;
+    scope: SearchScope;
+    maxResults: number;
+    enableCamelHumps: boolean;
+    isPotentialUrl: boolean;
+}
+
+/**
+ * Interface for search functionality
+ */
+export interface ISearchProvider {
+    id?: string;
+    priority?: number;
+    search(options: SearchOptions | SearchContext, token?: any): Promise<SearchResult[]> | SearchResult[];
+    burstSearch?(options: SearchOptions, token?: any): Promise<SearchResult[]> | SearchResult[];
+    resolveItems?(itemIds: string[]): Promise<SearchResult[]> | SearchResult[];
+    getRecentItems?(count: number): Promise<SearchResult[]> | SearchResult[];
+    recordActivity?(itemId: string): Promise<void> | void;
+}
+
+/**
  * Index statistics
  */
 export interface IndexStats {

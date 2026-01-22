@@ -9,8 +9,7 @@ import {
     State,
     TransportKind,
 } from 'vscode-languageclient/node';
-import { ISearchProvider } from '../../language-server/src/core/search-interface';
-import { IndexStats, SearchOptions, SearchResult } from '../../language-server/src/core/types';
+import { IndexStats, ISearchProvider, SearchOptions, SearchResult } from '../../language-server/src/core/types';
 
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;

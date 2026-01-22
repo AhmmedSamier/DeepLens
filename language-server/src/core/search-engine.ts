@@ -6,8 +6,7 @@ import { Config } from './config';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
 import { RouteMatcher } from './route-matcher';
-import { ISearchProvider } from './search-interface';
-import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
+import { ISearchProvider, SearchContext, SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
@@ -30,6 +29,10 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
 export class SearchEngine implements ISearchProvider {
+    id = 'engine';
+    priority = 0;
+    private providers: ISearchProvider[] = [];
+
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
@@ -47,7 +50,7 @@ export class SearchEngine implements ISearchProvider {
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
 
-    private itemsMap: Map<string, SearchableItem> = new Map();
+    public itemsMap: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
     private config?: Config;
@@ -60,6 +63,11 @@ export class SearchEngine implements ISearchProvider {
      */
     setLogger(logger: { log: (msg: string) => void; error: (msg: string) => void }): void {
         this.logger = logger;
+    }
+
+    public registerProvider(provider: ISearchProvider) {
+        this.providers.push(provider);
+        this.providers.sort((a, b) => b.priority - a.priority);
     }
 
     /**
@@ -350,6 +358,19 @@ export class SearchEngine implements ISearchProvider {
         return this.items.length;
     }
 
+    private createSearchContext(options: SearchOptions): SearchContext {
+        const query = options.query || '';
+        return {
+            query,
+            normalizedQuery: query.replace(/\\/g, '/'),
+            queryUpper: query.toUpperCase(),
+            scope: options.scope || SearchScope.EVERYTHING,
+            maxResults: options.maxResults || 50,
+            enableCamelHumps: options.enableCamelHumps !== false,
+            isPotentialUrl: RouteMatcher.isPotentialUrl(query)
+        };
+    }
+
     /**
      * Get detailed index statistics
      */
@@ -394,7 +415,15 @@ export class SearchEngine implements ISearchProvider {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
-            return [];
+            // New: Handle Phase 0 (Recent/Instant) via providers
+            const context = this.createSearchContext(options);
+            const results: SearchResult[] = [];
+            for (const provider of this.providers) {
+                const providerResults = await provider.search(context);
+                results.push(...providerResults);
+                if (results.length >= maxResults) break;
+            }
+            return results;
         }
 
         const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
@@ -409,6 +438,38 @@ export class SearchEngine implements ISearchProvider {
         // Special handling for text search
         if (scope === SearchScope.TEXT && this.config?.isTextSearchEnabled()) {
             return this.performTextSearch(effectiveQuery, maxResults, onResult);
+        }
+
+        const context = this.createSearchContext({
+            ...options,
+            query: effectiveQuery,
+            maxResults
+        });
+
+        // Use providers if any are registered, otherwise fallback to internal logic
+        if (this.providers.length > 0) {
+            let allResults: SearchResult[] = [];
+            for (const provider of this.providers) {
+                const providerResults = await provider.search(context);
+                allResults.push(...providerResults);
+                if (onResult) {
+                    providerResults.forEach(r => onResult(r));
+                }
+            }
+
+            // Post-process: sort and limit
+            allResults.sort((a, b) => b.score - a.score);
+            if (allResults.length > maxResults) {
+                allResults = allResults.slice(0, maxResults);
+            }
+
+            if (targetLine !== undefined) {
+                allResults = allResults.map((r) => ({
+                    ...r,
+                    item: { ...r.item, line: targetLine },
+                }));
+            }
+            return allResults;
         }
 
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
@@ -759,6 +820,34 @@ export class SearchEngine implements ISearchProvider {
             scope: SearchScope.TEXT,
             highlights: [[matchIndex, matchIndex + queryLength]],
         };
+    }
+
+    public performSymbolSearch(context: SearchContext): SearchResult[] {
+        const indices = context.scope === SearchScope.EVERYTHING ? 
+            this.scopedIndices.get(SearchScope.SYMBOLS)?.concat(
+                this.scopedIndices.get(SearchScope.TYPES) || [],
+                this.scopedIndices.get(SearchScope.PROPERTIES) || [],
+                this.scopedIndices.get(SearchScope.ENDPOINTS) || []
+            ) : this.scopedIndices.get(context.scope);
+
+        return this.performUnifiedSearch(
+            indices,
+            context.normalizedQuery,
+            context.enableCamelHumps,
+            context.maxResults,
+            context.scope
+        );
+    }
+
+    public performFileSearch(context: SearchContext): SearchResult[] {
+        const indices = this.scopedIndices.get(SearchScope.FILES);
+        return this.performUnifiedSearch(
+            indices,
+            context.normalizedQuery,
+            context.enableCamelHumps,
+            context.maxResults,
+            context.scope
+        );
     }
 
     private performUnifiedSearch(

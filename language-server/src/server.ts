@@ -16,8 +16,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
-import { IndexPersistence } from './core/index-persistence';
 import { SearchEngine } from './core/search-engine';
+import { RecentProvider } from './core/providers/recent-provider';
+import { FileProvider } from './core/providers/file-provider';
+import { SymbolProvider } from './core/providers/symbol-provider';
 import { TreeSitterParser } from './core/tree-sitter-parser';
 import { IndexStats, SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
 import { WorkspaceIndexer } from './core/workspace-indexer';
@@ -47,7 +49,6 @@ let hasConfigurationCapability = false;
 let searchEngine: SearchEngine;
 let workspaceIndexer: WorkspaceIndexer;
 let treeSitterParser: TreeSitterParser;
-let indexPersistence: IndexPersistence;
 let config: Config;
 let activityTracker: ActivityTracker;
 
@@ -100,14 +101,18 @@ connection.onInitialize(async (params: InitializeParams) => {
     });
     await treeSitterParser.init();
 
-    indexPersistence = new IndexPersistence(storagePath);
-
     const indexerEnv = new LspIndexerEnvironment(connection, folders);
-    workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexPersistence, indexerEnv, extensionPath);
+    workspaceIndexer = new WorkspaceIndexer(config, treeSitterParser, indexerEnv, extensionPath);
     workspaceIndexer.warmup(); // Proactively boot workers
 
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();
+
+    // Register Providers
+    searchEngine.registerProvider(new RecentProvider(activityTracker));
+    searchEngine.registerProvider(new FileProvider(searchEngine));
+    searchEngine.registerProvider(new SymbolProvider(searchEngine));
+
     searchEngine.setConfig(config);
     searchEngine.setExtensionPath(extensionPath);
     searchEngine.setLogger({
@@ -292,8 +297,7 @@ connection.onRequest(ResolveItemsRequest, (params) => {
 
 connection.onRequest(GetRecentItemsRequest, (params) => {
     if (!isInitialized || !activityTracker) return [];
-    const itemIds = activityTracker.getRecentItems(params.count);
-    return searchEngine.resolveItems(itemIds);
+    return activityTracker.getRecentItems(params.count);
 });
 
 // We can also override the main search with a custom request that supports Scopes
@@ -308,8 +312,11 @@ connection.onRequest(DeepLensSearchRequest, async (options) => {
 });
 
 connection.onRequest(RecordActivityRequest, (params) => {
-    if (activityTracker) {
-        activityTracker.recordAccess(params.itemId);
+    if (activityTracker && searchEngine) {
+        const item = (searchEngine as any).itemsMap.get(params.itemId);
+        if (item) {
+            activityTracker.recordAccess(item);
+        }
     }
 });
 
@@ -320,8 +327,8 @@ connection.onRequest(RebuildIndexRequest, async (params) => {
 
 connection.onRequest(ClearCacheRequest, async () => {
     if (isShuttingDown) return;
-    await indexPersistence.clear();
-    await workspaceIndexer.indexWorkspace(undefined, true);
+    if (activityTracker) await activityTracker.clearAll();
+    await runIndexingWithProgress(true);
 });
 
 connection.onRequest(IndexStatsRequest, async () => {
@@ -334,13 +341,16 @@ connection.onRequest(IndexStatsRequest, async () => {
         totalSymbols: stats.symbolCount,
         lastUpdate: Date.now(),
         indexing: workspaceIndexer.isIndexing(),
-        cacheSize: await indexPersistence.getCacheSize(),
+        cacheSize: 0,
     };
 });
 
 // Handle shutdown gracefully
 connection.onShutdown(() => {
     isShuttingDown = true;
+    if (activityTracker) {
+        activityTracker.saveActivities();
+    }
     connection.console.log('DeepLens Language Server shutting down');
 });
 

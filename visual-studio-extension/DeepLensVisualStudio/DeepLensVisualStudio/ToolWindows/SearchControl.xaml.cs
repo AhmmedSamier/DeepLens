@@ -634,18 +634,46 @@ namespace DeepLensVisualStudio.ToolWindows
 
                 if (string.IsNullOrWhiteSpace(query))
                 {
-                    var history = _historyService.GetHistory();
-                    foreach (var item in history)
+                    var lspService = GetLspService();
+                    if (lspService != null)
                     {
-                        Results.Add(new SearchResultViewModel
+                        var recentItems = await lspService.GetRecentItemsAsync(20, token);
+                        foreach (var item in recentItems)
                         {
-                            Name = item.Name,
-                            Kind = item.Kind,
-                            FilePath = item.FilePath,
-                            RelativePath = item.RelativePath,
-                            Line = item.Line,
-                            ContainerName = item.ContainerName
-                        });
+                            string relative = item.FilePath;
+                            if (!string.IsNullOrEmpty(_solutionRoot) &&
+                                relative.StartsWith(_solutionRoot, StringComparison.OrdinalIgnoreCase))
+                            {
+                                relative = relative.Substring(_solutionRoot.Length).TrimStart('\\', '/');
+                            }
+
+                            Results.Add(new SearchResultViewModel
+                            {
+                                Name = item.Name,
+                                Kind = item.Kind,
+                                FilePath = item.FilePath,
+                                RelativePath = relative,
+                                Line = item.Line,
+                                ContainerName = item.ContainerName
+                            });
+                        }
+                    }
+                    
+                    if (Results.Count == 0)
+                    {
+                        var history = _historyService.GetHistory();
+                        foreach (var item in history)
+                        {
+                            Results.Add(new SearchResultViewModel
+                            {
+                                Name = item.Name,
+                                Kind = item.Kind,
+                                FilePath = item.FilePath,
+                                RelativePath = item.RelativePath,
+                                Line = item.Line,
+                                ContainerName = item.ContainerName
+                            });
+                        }
                     }
                     StatusText = Results.Count > 0 ? "Recent items" : "Ready";
                 }
@@ -823,6 +851,19 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 StatusText = $"Opened {result.Name}";
+
+                // Notify LSP of selection
+                var lspService = GetLspService();
+                if (lspService != null)
+                {
+                    // Assuming we have a way to get the ID, or the ID is symbol:filePath:fullName:line
+                    string itemId = result.Kind == "File" ? $"file:{result.FilePath}" : $"symbol:{result.FilePath}:{result.Name}:{result.Line - 1}";
+                    _ = Task.Run(async () => {
+                        try {
+                            await _sharedSearchService.InvokeNotifyAsync("deeplens/recordActivity", new { itemId });
+                        } catch { }
+                    });
+                }
 
                 // Add to history
                 _historyService.AddItem(new HistoryItem

@@ -345,6 +345,30 @@ namespace DeepLensVisualStudio.Services
             return null;
         }
 
+        public async Task<IEnumerable<SearchResult>> GetRecentItemsAsync(int count, CancellationToken ct)
+        {
+            if (!_isInitialized || _rpc == null) return Enumerable.Empty<SearchResult>();
+
+            try
+            {
+                var lspResults = await _rpc.InvokeWithParameterObjectAsync<List<LspSearchResult>>("deeplens/getRecentItems", new { count });
+                return lspResults.Select(r => new SearchResult
+                {
+                    Name = r.Item.Name,
+                    Kind = MapLspKind(r.Item.Type),
+                    FilePath = r.Item.FilePath,
+                    Line = (r.Item.Line ?? 0) + 1,
+                    ContainerName = r.Item.ContainerName,
+                    Score = (int)(r.Score * 10000)
+                });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: GetRecentItems error: {ex.Message}");
+                return Enumerable.Empty<SearchResult>();
+            }
+        }
+
         public async Task<IEnumerable<SearchResult>> SearchAsync(string query, string scope, CancellationToken ct)
         {
             if (!_isInitialized || _rpc == null) return Enumerable.Empty<SearchResult>();

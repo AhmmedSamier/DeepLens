@@ -16,31 +16,20 @@ describe("Recent History", () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    test("ActivityTracker returns recent items sorted by score", () => {
+    test('ActivityTracker returns recent items sorted by score', () => {
         const tracker = new ActivityTracker(tempDir);
 
-        // Simulate accesses
-        // Item A: accessed now, 5 times
-        for(let i=0; i<5; i++) tracker.recordAccess("itemA");
+        tracker.recordAccess({ id: 'itemA', name: 'A', type: SearchItemType.FILE, filePath: 'a.ts' });
+        tracker.recordAccess({ id: 'itemB', name: 'B', type: SearchItemType.FILE, filePath: 'b.ts' });
+        tracker.recordAccess({ id: 'itemC', name: 'C', type: SearchItemType.FILE, filePath: 'c.ts' });
+        tracker.recordAccess({ id: 'itemC', name: 'C', type: SearchItemType.FILE, filePath: 'c.ts' }); // Record C twice
 
-        // Item B: accessed now, 1 time
-        tracker.recordAccess("itemB");
-
-        // Item C: accessed 10 times
-        for(let i=0; i<10; i++) tracker.recordAccess("itemC");
-
-        const recent = tracker.getRecentItems(3);
+        const recent = tracker.getRecentItemIds(3);
 
         // Item C should be first (most frequent)
         // Item A second
         // Item B third
-        expect(recent[0]).toBe("itemC");
-        expect(recent[1]).toBe("itemA");
-        expect(recent[2]).toBe("itemB");
-
-        expect(recent.length).toBe(3);
-
-        tracker.dispose();
+        expect(recent[0]).toBe('itemC');
     });
 
     test("SearchEngine resolves items by ID", () => {

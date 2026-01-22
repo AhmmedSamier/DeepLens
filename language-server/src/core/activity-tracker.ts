@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { SearchableItem, SearchResult, SearchScope } from './types';
 
 /**
  * Record of user activity for a specific item (file or symbol)
@@ -9,6 +10,7 @@ export interface ActivityRecord {
     lastAccessed: number; // Timestamp of last access
     accessCount: number; // Total number of accesses
     score: number; // Calculated activity score (0-1)
+    item?: SearchableItem; // Optional: stored item for history reconstruction
 }
 
 /**
@@ -20,7 +22,7 @@ export interface ActivityStorage {
 }
 
 /**
- * Tracks user activity to personalize search results
+ * Tracks user activity to personalize search results and provide history
  */
 export class ActivityTracker {
     private activities: Map<string, ActivityRecord> = new Map();
@@ -83,25 +85,30 @@ export class ActivityTracker {
     /**
      * Record access to an item
      */
-    recordAccess(itemId: string): void {
+    recordAccess(item: SearchableItem): void {
         const now = Date.now();
-        const existing = this.activities.get(itemId);
+        const existing = this.activities.get(item.id);
 
         if (existing) {
             existing.lastAccessed = now;
             existing.accessCount += 1;
+            existing.item = item; // Update item metadata
             existing.score = this.calculateScore(existing);
         } else {
-            this.activities.set(itemId, {
-                itemId,
+            this.activities.set(item.id, {
+                itemId: item.id,
                 lastAccessed: now,
                 accessCount: 1,
-                score: this.calculateScore({ itemId, lastAccessed: now, accessCount: 1, score: 0 }),
+                item: item,
+                score: this.calculateScore({ itemId: item.id, lastAccessed: now, accessCount: 1, score: 0 }),
             });
         }
 
         // Recalculate all scores to maintain relative rankings
         this.recalculateAllScores();
+        
+        // Immediate save for history reliability
+        this.saveActivities();
     }
 
     /**
@@ -110,6 +117,33 @@ export class ActivityTracker {
     getActivityScore(itemId: string): number {
         const activity = this.activities.get(itemId);
         return activity ? activity.score : 0;
+    }
+
+    /**
+     * Get the most recent item IDs sorted by score
+     */
+    getRecentItemIds(count: number): string[] {
+        const sorted = Array.from(this.activities.values())
+            .sort((a, b) => b.score - a.score)
+            .slice(0, count);
+
+        return sorted.map((r) => r.itemId);
+    }
+
+    /**
+     * Get the most recent items sorted by recency
+     */
+    getRecentItems(count: number): SearchResult[] {
+        const sorted = Array.from(this.activities.values())
+            .filter(a => a.item)
+            .sort((a, b) => b.lastAccessed - a.lastAccessed)
+            .slice(0, count);
+
+        return sorted.map((a) => ({
+            item: a.item!,
+            score: 2.0,
+            scope: SearchScope.EVERYTHING
+        }));
     }
 
     /**
@@ -207,18 +241,6 @@ export class ActivityTracker {
         this.saveTimer = setInterval(() => {
             this.saveActivities();
         }, this.SAVE_INTERVAL);
-    }
-
-    /**
-     * Get the most recent items sorted by score
-     */
-    getRecentItems(count: number): string[] {
-        // Sort activities by score descending
-        const sorted = Array.from(this.activities.values())
-            .sort((a, b) => b.score - a.score)
-            .slice(0, count);
-
-        return sorted.map((r) => r.itemId);
     }
 
     /**
