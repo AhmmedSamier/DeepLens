@@ -4,7 +4,6 @@
 - [x] **Streaming Ripgrep Input**: Refactor `RipgrepService.search` to write file paths to the `rg` process `stdin` iteratively.
 - [x] **Worker Initialization & Warm-up**: Optimize the indexing worker pool to reuse workers or warm them up.
 - [x] **Scoring Hot-path Refinement**: Inline critical scoring logic in `SearchEngine.calculateUnifiedScore` and minimize object destructuring/allocations within the `performUnifiedSearch` loop.
-- [ ] **SQLite Migration**: Transition `IndexPersistence` from NDJSON to SQLite to allow for lazy-loading of file metadata (hashes/mtimes), reducing the baseline memory footprint for massive repositories.
 
 ## Completed
 - [x] **Struct of Arrays**: Refactored `SearchEngine` to use parallel arrays for searchable items, significantly reducing object overhead.
