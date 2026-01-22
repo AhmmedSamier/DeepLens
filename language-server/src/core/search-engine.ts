@@ -6,6 +6,7 @@ import { RouteMatcher } from './route-matcher';
 import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 import { ISearchProvider } from './search-interface';
 import { RipgrepService } from './ripgrep-service';
+import { MinHeap } from './min-heap';
 
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
@@ -361,21 +362,20 @@ export class SearchEngine implements ISearchProvider {
         const indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
 
         // Unified search (Fuzzy + CamelHumps in single pass)
-        let results = this.performUnifiedSearch(indices, normalizedQuery, enableCamelHumps);
+        let results = this.performUnifiedSearch(
+            indices,
+            normalizedQuery,
+            enableCamelHumps,
+            maxResults,
+            scope
+        );
 
-        // 2. Add URL matches if query looks like a path
-        if (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) {
-            results = this.mergeWithUrlMatches(results, indices, normalizedQuery);
-        }
-
-        // 3. Sort by score
-        results.sort((a, b) => b.score - a.score);
+        // 3. Sort by score (Actually results are already sorted descending by performUnifiedSearch)
+        // But in case we want to be safe or if we changed logic later.
+        // performUnifiedSearch returns sorted array.
 
         // 4. Boost by activity and re-sort final time
-        if (this.getActivityScore) {
-            this.applyPersonalizedBoosting(results);
-            results.sort((a, b) => b.score - a.score);
-        }
+        // Optimization: Boosting is now done INSIDE performUnifiedSearch.
 
         // Apply target line if found
         if (targetLine !== undefined) {
@@ -388,7 +388,7 @@ export class SearchEngine implements ISearchProvider {
             }));
         }
 
-        return results.slice(0, maxResults);
+        return results;
     }
 
     /**
@@ -631,144 +631,95 @@ export class SearchEngine implements ISearchProvider {
         });
     }
 
-    private mergeWithUrlMatches(results: SearchResult[], indices: number[] | undefined, query: string): SearchResult[] {
-        if (!RouteMatcher.isPotentialUrl(query)) {
-            return results;
-        }
+    private performUnifiedSearch(
+        indices: number[] | undefined,
+        query: string,
+        enableCamelHumps: boolean,
+        maxResults: number,
+        scope: SearchScope
+    ): SearchResult[] {
+        const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
+        const MIN_SCORE = 0.01;
+        const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
+        const isPotentialUrl = (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
+                               RouteMatcher.isPotentialUrl(query);
 
-        const existingIds = new Set(results.map((r) => r.item.id));
-        const urlMatches: SearchResult[] = [];
-
-        // Helper to process a single index
-        const checkItem = (i: number) => {
+        const processIndex = (i: number) => {
             const item = this.items[i];
-            if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, query)) {
-                    urlMatches.push({
-                        item,
-                        score: 1.5,
-                        scope: SearchScope.ENDPOINTS,
-                    });
+            let score = -1;
+            let resultScope = this.getScopeForItemType(item.type);
+
+            // 1. Fuzzy Search
+            const fuzzyScore = this.calculateItemScore(
+                query,
+                this.preparedNames[i],
+                this.preparedFullNames[i],
+                this.preparedPaths[i],
+                MIN_SCORE,
+            );
+
+            if (fuzzyScore > MIN_SCORE) {
+                score = this.applyItemTypeBoost(fuzzyScore, item.type);
+            } else if (enableCamelHumps) {
+                 // 2. CamelHumps Search (only if fuzzy didn't match)
+                const capitals = this.preparedCapitals[i];
+                if (capitals) {
+                    const camelScore = this.camelHumpsMatch(capitals, queryUpper);
+                    if (camelScore > 0) {
+                        score = this.applyItemTypeBoost(camelScore, item.type);
+                    }
                 }
+            }
+
+            // 3. URL/Endpoint Match (Inline logic)
+            // If item is endpoint and score is low (or not matched yet), check if it matches URL pattern
+            // Note: In original logic, it added a DUPLICATE entry. Here we upgrade the score/scope if better.
+            // Or should we support duplicates?
+            // In typical usage, seeing the same item twice (once as symbol, once as endpoint) is rare or confusing.
+            // Better to show it once with the best match relevance.
+            // RouteMatcher.isMatch returns boolean.
+            if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
+                 if (RouteMatcher.isMatch(item.name, query)) {
+                     // URL match is strong (1.5 in original code)
+                     // If we already have a score, take the max.
+                     // URL match usually implies ENDPOINTS scope.
+                     const urlScore = 1.5;
+                     if (urlScore > score) {
+                         score = urlScore;
+                         resultScope = SearchScope.ENDPOINTS;
+                     }
+                 }
+            }
+
+            if (score > MIN_SCORE) {
+                // 4. Activity Boosting (Inline)
+                if (this.getActivityScore) {
+                     const activityScore = this.getActivityScore(item.id);
+                     if (activityScore > 0 && score > 0.05) {
+                         score = score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                     }
+                }
+
+                heap.push({
+                    item,
+                    score,
+                    scope: resultScope
+                });
             }
         };
 
         if (indices) {
-            for (const i of indices) checkItem(i);
-        } else {
-            for (let i = 0; i < this.items.length; i++) checkItem(i);
-        }
-
-        return [...results, ...urlMatches];
-    }
-
-    private applyPersonalizedBoosting(results: SearchResult[]): void {
-        if (!this.getActivityScore) {
-            return;
-        }
-
-        for (const result of results) {
-            const activityScore = this.getActivityScore(result.item.id);
-            if (activityScore > 0) {
-                const baseScore = result.score;
-                if (baseScore > 0.05) {
-                    result.score = baseScore * (1 - this.activityWeight) + activityScore * this.activityWeight;
-                }
-            }
-        }
-    }
-
-    private performUnifiedSearch(
-        indices: number[] | undefined,
-        query: string,
-        enableCamelHumps: boolean
-    ): SearchResult[] {
-        const results: SearchResult[] = [];
-        const MIN_SCORE = 0.01;
-        const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
-
-        // Note: Fuzzysort caches prepared queries internally when passed as string
-
-        if (indices) {
             for (let k = 0; k < indices.length; k++) {
-                const i = indices[k];
-
-                // 1. Fuzzy Search
-                const fuzzyScore = this.calculateItemScore(
-                    query,
-                    this.preparedNames[i],
-                    this.preparedFullNames[i],
-                    this.preparedPaths[i],
-                    MIN_SCORE,
-                );
-
-                if (fuzzyScore > MIN_SCORE) {
-                    const item = this.items[i];
-                    results.push({
-                        item,
-                        score: this.applyItemTypeBoost(fuzzyScore, item.type),
-                        scope: this.getScopeForItemType(item.type),
-                    });
-                    continue; // Matched fuzzy, skip camel
-                }
-
-                // 2. CamelHumps Search (only if fuzzy didn't match)
-                if (enableCamelHumps) {
-                    const capitals = this.preparedCapitals[i];
-                    if (capitals) {
-                        const camelScore = this.camelHumpsMatch(capitals, queryUpper);
-                        if (camelScore > 0) {
-                            const item = this.items[i];
-                            results.push({
-                                item,
-                                score: this.applyItemTypeBoost(camelScore, item.type),
-                                scope: this.getScopeForItemType(item.type),
-                            });
-                        }
-                    }
-                }
+                processIndex(indices[k]);
             }
         } else {
             const count = this.items.length;
             for (let i = 0; i < count; i++) {
-                // 1. Fuzzy Search
-                const fuzzyScore = this.calculateItemScore(
-                    query,
-                    this.preparedNames[i],
-                    this.preparedFullNames[i],
-                    this.preparedPaths[i],
-                    MIN_SCORE,
-                );
-
-                if (fuzzyScore > MIN_SCORE) {
-                    const item = this.items[i];
-                    results.push({
-                        item,
-                        score: this.applyItemTypeBoost(fuzzyScore, item.type),
-                        scope: this.getScopeForItemType(item.type),
-                    });
-                    continue; // Matched fuzzy, skip camel
-                }
-
-                // 2. CamelHumps Search (only if fuzzy didn't match)
-                if (enableCamelHumps) {
-                    const capitals = this.preparedCapitals[i];
-                    if (capitals) {
-                        const camelScore = this.camelHumpsMatch(capitals, queryUpper);
-                        if (camelScore > 0) {
-                            const item = this.items[i];
-                            results.push({
-                                item,
-                                score: this.applyItemTypeBoost(camelScore, item.type),
-                                scope: this.getScopeForItemType(item.type),
-                            });
-                        }
-                    }
-                }
+                processIndex(i);
             }
         }
 
-        return results;
+        return heap.getSorted();
     }
 
     private calculateItemScore(
@@ -992,6 +943,7 @@ export class SearchEngine implements ISearchProvider {
         return { effectiveQuery: query };
     }
 
+    // Kept for burstSearch usage
     private addUrlMatches(
         results: SearchResult[],
         indices: number[] | undefined,
@@ -1025,6 +977,23 @@ export class SearchEngine implements ISearchProvider {
             for (let i = 0; i < this.items.length; i++) {
                 if (maxResults && results.length >= maxResults) break;
                 checkItem(i);
+            }
+        }
+    }
+
+    // Kept for burstSearch usage
+    private applyPersonalizedBoosting(results: SearchResult[]): void {
+        if (!this.getActivityScore) {
+            return;
+        }
+
+        for (const result of results) {
+            const activityScore = this.getActivityScore(result.item.id);
+            if (activityScore > 0) {
+                const baseScore = result.score;
+                if (baseScore > 0.05) {
+                    result.score = baseScore * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                }
             }
         }
     }
