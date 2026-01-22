@@ -32,6 +32,7 @@ export class SearchEngine implements ISearchProvider {
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
+    private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
     private preparedCapitals: (string | null)[] = [];
@@ -39,6 +40,7 @@ export class SearchEngine implements ISearchProvider {
 
     // Deduplication cache for prepared strings
     private preparedCache: Map<string, Fuzzysort.Prepared> = new Map();
+    private preparedLowCache: Map<string, string> = new Map();
     private removedSinceLastPrune: number = 0;
 
     // Map Scope -> Array of Indices
@@ -80,6 +82,7 @@ export class SearchEngine implements ISearchProvider {
         this.items = items;
         this.itemsMap.clear();
         this.preparedCache.clear();
+        this.preparedLowCache.clear();
         this.filePaths = [];
         for (const item of items) {
             this.itemsMap.set(item.id, item);
@@ -114,6 +117,7 @@ export class SearchEngine implements ISearchProvider {
 
             // Push to parallel arrays
             this.preparedNames.push(this.getPrepared(item.name));
+            this.preparedNamesLow.push(this.getPreparedLow(item.name));
             this.preparedFullNames.push(
                 shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null
             );
@@ -148,6 +152,7 @@ export class SearchEngine implements ISearchProvider {
                 if (read !== write) {
                     this.items[write] = item;
                     this.preparedNames[write] = this.preparedNames[read];
+                    this.preparedNamesLow[write] = this.preparedNamesLow[read];
                     this.preparedFullNames[write] = this.preparedFullNames[read];
                     this.preparedPaths[write] = this.preparedPaths[read];
                     this.preparedCapitals[write] = this.preparedCapitals[read];
@@ -162,6 +167,7 @@ export class SearchEngine implements ISearchProvider {
         if (write < count) {
             this.items.length = write;
             this.preparedNames.length = write;
+            this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
             this.preparedPaths.length = write;
             this.preparedCapitals.length = write;
@@ -198,6 +204,11 @@ export class SearchEngine implements ISearchProvider {
                 this.preparedCache.delete(key);
             }
         }
+
+        // Prune low string cache if it grows too large (prevent leaks)
+        if (this.preparedLowCache.size > 20000) {
+            this.preparedLowCache.clear();
+        }
     }
 
     /**
@@ -206,6 +217,7 @@ export class SearchEngine implements ISearchProvider {
     private rebuildHotArrays(): void {
         // Clear parallel arrays
         this.preparedNames = [];
+        this.preparedNamesLow = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
@@ -224,6 +236,7 @@ export class SearchEngine implements ISearchProvider {
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
 
             this.preparedNames.push(this.getPrepared(item.name));
+            this.preparedNamesLow.push(this.getPreparedLow(item.name));
             this.preparedFullNames.push(
                 shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null
             );
@@ -243,6 +256,15 @@ export class SearchEngine implements ISearchProvider {
             this.preparedCache.set(text, prepared);
         }
         return prepared;
+    }
+
+    private getPreparedLow(text: string): string {
+        let low = this.preparedLowCache.get(text);
+        if (!low) {
+            low = text.toLowerCase();
+            this.preparedLowCache.set(text, low);
+        }
+        return low;
     }
 
     private rebuildScopeIndices(): void {
@@ -285,12 +307,14 @@ export class SearchEngine implements ISearchProvider {
     clear(): void {
         this.items = [];
         this.preparedNames = [];
+        this.preparedNamesLow = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
         this.itemsMap.clear();
         this.scopedIndices.clear();
         this.preparedCache.clear();
+        this.preparedLowCache.clear();
     }
 
     /**
@@ -907,7 +931,7 @@ export class SearchEngine implements ISearchProvider {
              if (results.length >= maxResults) return;
 
             const item = this.items[i];
-            const nameLower = item.name.toLowerCase();
+            const nameLower = this.preparedNamesLow[i] || item.name.toLowerCase();
 
             if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
                 const result: SearchResult = {
