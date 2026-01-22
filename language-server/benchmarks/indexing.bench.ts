@@ -16,7 +16,7 @@ export async function runIndexingBenchmark() {
     console.log(`Using temp dir: ${tempDir}`);
 
     // Generate files
-    const FILE_COUNT = 200;
+    const FILE_COUNT = 1000;
     console.log(`Generating ${FILE_COUNT} files...`);
     for (let i = 0; i < FILE_COUNT; i++) {
         const content = `

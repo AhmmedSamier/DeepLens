@@ -6,7 +6,7 @@ export async function runSearchBenchmarks() {
     console.log("=== Search Engine Benchmarks ===");
 
     const engine = new SearchEngine();
-    const itemCount = 50000;
+    const itemCount = 5000;
 
     // Setup items
     const items = [];

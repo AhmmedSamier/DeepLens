@@ -17,10 +17,10 @@ async function runMemoryBenchmark() {
     console.log("Initial Memory:", getMemoryUsage());
 
     const engine = new SearchEngine();
-    const itemCount = 200000; // Simulate a large repo (200k files + symbols -> ~1M items)
+    const itemCount = 5000; // Simulate a realistic full-stack app (5k files + symbols -> ~25k items)
     const items = [];
 
-    console.log(`Generating ${itemCount} files (approx 1M items total)...`);
+    console.log(`Generating ${itemCount} files (approx 25k items total)...`);
 
     for (let i = 0; i < itemCount; i++) {
         const fileName = `File${i}Component.ts`;
