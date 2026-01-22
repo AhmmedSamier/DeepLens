@@ -110,9 +110,10 @@ export class RipgrepService {
                 reject(err);
             });
 
-            // Write files to stdin
-            const fileList = files.join('\n');
-            child.stdin.write(fileList);
+            // Write files to stdin line by line to avoid large string allocation
+            for (const file of files) {
+                child.stdin.write(file + '\n');
+            }
             child.stdin.end();
         });
     }
