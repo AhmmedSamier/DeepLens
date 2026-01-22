@@ -3,53 +3,33 @@
 ## Primary Objective: Memory Optimization
 Target: Reduce memory footprint for large repositories (~1M items) while maintaining or improving search latency.
 
-## Task 1: Refactor `SearchEngine` Internal Storage (High Priority)
-The current implementation wraps every `SearchableItem` in a `PreparedItem` object and potentially duplicates these in scope arrays.
+## Completed Tasks
 
-**Current Structure:**
-```typescript
-interface PreparedItem {
-    item: SearchableItem;
-    preparedName: Fuzzysort.Prepared;
-    preparedFullName: Fuzzysort.Prepared | null;
-    preparedPath: Fuzzysort.Prepared | null;
-}
-private preparedItems: PreparedItem[];
-```
+### Task 1: Refactor `SearchEngine` Internal Storage (Done)
+The `SearchEngine` now uses a "Struct of Arrays" (Flyweight) pattern.
+- Removed `items: SearchableItem[]` and `itemsMap`.
+- Implemented parallel arrays: `ids`, `names`, `itemTypes`, `itemFileIds`, `itemLines`, etc.
+- Deduplicated file paths using `uniqueFiles` and `itemFileIds`.
+- Optimized `setItems`, `addItems`, `removeItemsByFile`, and search methods to use this new structure.
+- Objects are only reconstructed on-demand during search results generation.
 
-**Proposed Refactor (Struct of Arrays / Parallel Arrays):**
-Flatten the storage to reduce object header overhead and pointer chasing.
-```typescript
-private items: SearchableItem[];
-private preparedNames: (Fuzzysort.Prepared | null)[];
-private preparedFullNames: (Fuzzysort.Prepared | null)[];
-private preparedPaths: (Fuzzysort.Prepared | null)[];
-```
+### Task 2: Optimize Scope Storage (Done)
+- `scopedIndices` now stores `number[]` (indices) instead of object references.
+- `SearchScope.EVERYTHING` is handled implicitly (no storage).
 
-**Actions:**
-1.  Remove `PreparedItem` interface.
-2.  Change `SearchEngine` properties to use parallel arrays.
-3.  Update `addItems` to populate all arrays synchronously.
-4.  Update `removeItemsByFile` to splice/filter all arrays at the exact same indices.
-5.  Refactor `rebuildHotArrays`.
-6.  Remove `SearchScope.EVERYTHING` from `scopedItems` map (it is redundant with the main arrays).
-7.  Update `search` and `fuzzySearch` logic to iterate via index `i` from `0` to `items.length` and access properties from parallel arrays.
+### Task 3: Test Coverage (Done)
+- Added unit tests for `MinHeap`.
+- Verified `SearchEngine` refactor with existing tests.
 
-## Task 2: Optimize Scope Storage (High Priority)
-Currently, `scopedItems` is a `Map<SearchScope, PreparedItem[]>`.
-For `SearchScope.EVERYTHING`, this is a full duplicate of `preparedItems` (referenced).
-For other scopes, it's a filtered list of references.
+## Future Tasks
 
-**Actions:**
-1.  Remove `SearchScope.EVERYTHING` from the map.
-2.  Use the main parallel arrays when scope is `EVERYTHING`.
-3.  (Optional) For specific scopes, consider storing `number[]` (indices) instead of object references if memory is still tight, though the current "array of references" is acceptable if `PreparedItem` wrapper is gone.
+### Task 4: WorkspaceIndexer Optimizations
+1.  **Direct Component Emission**: Currently `WorkspaceIndexer` still creates `SearchableItem` objects which are then decomposed by `SearchEngine`. To further optimize (reduce GC pressure during indexing), `WorkspaceIndexer` could emit "chunks" of component arrays directly (e.g., `names: string[], types: Uint8Array[]`).
+2.  **Optimize `excludePatterns`**: Pre-compile minimatch patterns (Already done in `WorkspaceIndexer`).
 
-## Task 3: WorkspaceIndexer Optimizations (Secondary)
-1.  **Flyweight SearchableItem**: The indexer creates full objects for every symbol.
-2.  **Defer Object Creation**: Only create full `SearchableItem` objects when needed (e.g., keeping data in flat buffers until search time).
-3.  **Optimize `excludePatterns`**: Pre-compile minimatch patterns.
+### Task 5: Search Loop Optimization
+1.  **Loop Unrolling**: In `fuzzySearch`, standard `for` loops are faster than `forEach` or `map`. (Already using `for` loops).
+2.  **SIMD**: Explore using WASM or native modules for the core scoring loop if JS performance hits a ceiling.
 
-## Task 4: Search Loop Optimization
-1.  **Loop Unrolling**: In `fuzzySearch`, standard `for` loops are faster than `forEach` or `map`.
-2.  **Access Pattern**: Accessing `this.preparedNames[i]` is fast.
+### Task 6: Visual Studio Extension
+- Review `DeepLensVisualStudio` for similar optimizations if it maintains its own index (it likely uses the LSP, so this benefit propagates).
