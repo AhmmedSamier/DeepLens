@@ -36,6 +36,9 @@ export class SearchEngine implements ISearchProvider {
     private preparedCapitals: (string | null)[] = [];
     private filePaths: string[] = [];
 
+    // Deduplication cache for prepared strings
+    private preparedCache: Map<string, Fuzzysort.Prepared> = new Map();
+
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
 
@@ -74,6 +77,7 @@ export class SearchEngine implements ISearchProvider {
     setItems(items: SearchableItem[]): void {
         this.items = items;
         this.itemsMap.clear();
+        this.preparedCache.clear();
         this.filePaths = [];
         for (const item of items) {
             this.itemsMap.set(item.id, item);
@@ -107,12 +111,12 @@ export class SearchEngine implements ISearchProvider {
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
 
             // Push to parallel arrays
-            this.preparedNames.push(Fuzzysort.prepare(item.name));
+            this.preparedNames.push(this.getPrepared(item.name));
             this.preparedFullNames.push(
-                shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null
+                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null
             );
             this.preparedPaths.push(
-                normalizedPath ? Fuzzysort.prepare(normalizedPath) : null
+                normalizedPath ? this.getPrepared(normalizedPath) : null
             );
             this.preparedCapitals.push(this.extractCapitals(item.name));
 
@@ -191,17 +195,26 @@ export class SearchEngine implements ISearchProvider {
             const shouldPrepareFullName =
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
 
-            this.preparedNames.push(Fuzzysort.prepare(item.name));
+            this.preparedNames.push(this.getPrepared(item.name));
             this.preparedFullNames.push(
-                shouldPrepareFullName && item.fullName ? Fuzzysort.prepare(item.fullName) : null
+                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null
             );
             this.preparedPaths.push(
-                normalizedPath ? Fuzzysort.prepare(normalizedPath) : null
+                normalizedPath ? this.getPrepared(normalizedPath) : null
             );
             this.preparedCapitals.push(this.extractCapitals(item.name));
         }
 
         this.rebuildScopeIndices();
+    }
+
+    private getPrepared(text: string): Fuzzysort.Prepared {
+        let prepared = this.preparedCache.get(text);
+        if (!prepared) {
+            prepared = Fuzzysort.prepare(text);
+            this.preparedCache.set(text, prepared);
+        }
+        return prepared;
     }
 
     private rebuildScopeIndices(): void {
@@ -249,6 +262,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCapitals = [];
         this.itemsMap.clear();
         this.scopedIndices.clear();
+        this.preparedCache.clear();
     }
 
     /**

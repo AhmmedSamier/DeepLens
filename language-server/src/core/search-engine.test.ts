@@ -101,4 +101,20 @@ describe('SearchEngine', () => {
         expect(results.length).toBe(1);
         expect(results[0].item.name).toBe('File2.ts');
     });
+
+    it('should deduplicate prepared strings', () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'CommonName', SearchItemType.CLASS, 'src/File1.ts'),
+            createTestItem('2', 'CommonName', SearchItemType.INTERFACE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+
+        // Access private members via casting to any
+        const preparedNames = (engine as any).preparedNames;
+
+        expect(preparedNames.length).toBe(2);
+        // The objects should be referentially strictly equal
+        expect(preparedNames[0]).toBe(preparedNames[1]);
+    });
 });
