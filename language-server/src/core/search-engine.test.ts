@@ -148,4 +148,36 @@ describe('SearchEngine', () => {
         // Ensure others remain
         expect(preparedCache.has('UniqueName1')).toBe(true);
     });
+
+    it('should preserve used items in low cache during pruning even when full', () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [];
+
+        // Add enough items to exceed the 20000 limit
+        // We need 20001 unique names
+        for (let i = 0; i < 20005; i++) {
+            items.push(createTestItem(`${i}`, `Item${i}`, SearchItemType.CLASS, `src/File${i}.ts`));
+        }
+
+        engine.setItems(items);
+
+        const preparedLowCache = (engine as any).preparedLowCache as Map<string, string>;
+
+        // Verify cache is full
+        expect(preparedLowCache.size).toBeGreaterThan(20000);
+
+        // Trigger prune (simulate conditions)
+        // Force prune even if removals haven't happened, but logic checks removedSinceLastPrune
+        (engine as any).removedSinceLastPrune = 2001;
+
+        // Trigger prune
+        (engine as any).pruneCache();
+
+        // With current implementation, size should be 0 because it wipes all
+        // With FIX, it should be 20005
+
+        // Expectation for the FIX:
+        expect(preparedLowCache.size).toBeGreaterThan(20000);
+        expect(preparedLowCache.has('Item0')).toBe(true);
+    });
 });

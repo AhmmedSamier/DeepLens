@@ -207,7 +207,16 @@ export class SearchEngine implements ISearchProvider {
 
         // Prune low string cache if it grows too large (prevent leaks)
         if (this.preparedLowCache.size > 20000) {
-            this.preparedLowCache.clear();
+            const usedNames = new Set<string>();
+            for (const item of this.items) {
+                usedNames.add(item.name);
+            }
+
+            for (const [key] of this.preparedLowCache) {
+                if (!usedNames.has(key)) {
+                    this.preparedLowCache.delete(key);
+                }
+            }
         }
     }
 
