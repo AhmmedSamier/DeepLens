@@ -146,8 +146,35 @@ export class TreeSitterParser {
         }
 
         const langId = this.getLanguageId(filePath);
-        let lang = this.languages.get(langId);
+        const lang = await this.ensureLanguageLoaded(langId);
 
+        if (!lang) {
+            return [];
+        }
+
+        try {
+            this.logDebugStart(langId, filePath);
+            
+            const parser = new this.ParserClass();
+            parser.setLanguage(lang);
+            const content = await fs.promises.readFile(filePath, 'utf8');
+            const tree = parser.parse(content);
+            const items: SearchableItem[] = [];
+
+            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
+
+            this.logDebugEnd(langId, filePath, items, tree);
+
+            tree.delete();
+            return items;
+        } catch (error) {
+            console.error(`Error tree-sitter parsing ${filePath}:`, error);
+            return [];
+        }
+    }
+
+    private async ensureLanguageLoaded(langId: string): Promise<unknown> {
+        let lang = this.languages.get(langId);
         if (!lang) {
             // Lazy load language
             const wasmFile = TreeSitterParser.LANGUAGE_MAP[langId];
@@ -158,46 +185,28 @@ export class TreeSitterParser {
                 }
             }
         }
+        return lang;
+    }
 
-        if (!lang) {
-            // Only warn if it is a supported language but failed to load
-            if (TreeSitterParser.LANGUAGE_MAP[langId]) {
-                // Suppress spamming warnings for missing languages if file extension is common but no parser
-            }
-            return [];
+    private logDebugStart(langId: string, filePath: string) {
+        if (langId === 'csharp') {
+            console.log(`[TreeSitter] Starting C# parse: ${filePath}`);
         }
+    }
 
-        try {
-            if (langId === 'csharp') {
-                console.log(`[TreeSitter] Starting C# parse: ${filePath}`);
-            }
-            const parser = new this.ParserClass();
-            parser.setLanguage(lang);
-            const content = await fs.promises.readFile(filePath, 'utf8');
-            const tree = parser.parse(content);
-            const items: SearchableItem[] = [];
-
-            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
-
-            if (langId === 'csharp') {
-                const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
-                console.log(
-                    `[TreeSitter] Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
+    private logDebugEnd(langId: string, filePath: string, items: SearchableItem[], tree: { rootNode: unknown }) {
+        if (langId === 'csharp') {
+            const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
+            console.log(
+                `[TreeSitter] Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
+            );
+            if (endpoints.length > 0) {
+                endpoints.forEach((e) => console.log(`  - Found Endpoint: ${e.name}`));
+            } else if (items.length === 0) {
+                 console.log(
+                    `[TreeSitter] Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
                 );
-                if (endpoints.length > 0) {
-                    endpoints.forEach((e) => console.log(`  - Found Endpoint: ${e.name}`));
-                } else if (items.length === 0) {
-                    console.log(
-                        `[TreeSitter] Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
-                    );
-                }
             }
-
-            tree.delete();
-            return items;
-        } catch (error) {
-            console.error(`Error tree-sitter parsing ${filePath}:`, error);
-            return [];
         }
     }
 

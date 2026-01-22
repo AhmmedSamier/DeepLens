@@ -20,7 +20,7 @@ export class LoggingService {
         this.outputChannel.appendLine(`[${timestamp}] [INFO] ${message}`);
     }
 
-    public error(message: string, error?: any): void {
+    public error(message: string, error?: unknown): void {
         const timestamp = new Date().toLocaleTimeString();
         let errorMsg = message;
         if (error) {

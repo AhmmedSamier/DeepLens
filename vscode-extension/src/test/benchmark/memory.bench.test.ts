@@ -1,12 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import * as assert from 'assert';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as vscode from 'vscode';
 
 // Define gc
-declare const global: any;
+declare const global: { gc: () => void };
 
-const results: { name: string; memory: any; extra?: any }[] = [];
+const results: { name: string; memory: unknown; extra?: unknown }[] = [];
 
 function getMemoryUsage() {
     const used = process.memoryUsage();
@@ -18,9 +19,25 @@ function getMemoryUsage() {
     };
 }
 
+function createDelayedSearchEngine(originalSearchEngine: any) {
+    return new Proxy(originalSearchEngine, {
+        get(target, prop, receiver) {
+            if (prop === 'burstSearch' || prop === 'search') {
+                return async (...args: any[]) => {
+                    // Delay 200ms to ensure we can change the queryId while this is pending
+                    // Must be longer than the loop iteration wait but shorter than overall timeout
+                    await new Promise((r) => setTimeout(r, 200));
+                    return target[prop](...args);
+                };
+            }
+            return Reflect.get(target, prop, receiver);
+        },
+    });
+}
+
 suite('Extension Memory Benchmark', () => {
-    let extension: vscode.Extension<any>;
-    let api: any;
+    let extension: vscode.Extension<unknown>;
+    let api: any; // Keeping api as any as the export type isn't readily available/easy to mock
 
     suiteSetup(async () => {
         extension = vscode.extensions.getExtension('AhmedSamir.deeplens')!;
@@ -59,19 +76,7 @@ suite('Extension Memory Benchmark', () => {
 
         // Mock searchEngine to delay execution, forcing the race condition
         const originalSearchEngine = (searchProvider as any).searchEngine;
-        const delayedSearchEngine = new Proxy(originalSearchEngine, {
-            get(target, prop, receiver) {
-                if (prop === 'burstSearch' || prop === 'search') {
-                    return async (...args: any[]) => {
-                        // Delay 200ms to ensure we can change the queryId while this is pending
-                        // Must be longer than the loop iteration wait but shorter than overall timeout
-                        await new Promise((r) => setTimeout(r, 200));
-                        return target[prop](...args);
-                    };
-                }
-                return Reflect.get(target, prop, receiver);
-            },
-        });
+        const delayedSearchEngine = createDelayedSearchEngine(originalSearchEngine);
         (searchProvider as any).searchEngine = delayedSearchEngine;
 
         // Simulate Type-Pause-Type sequence
@@ -85,8 +90,8 @@ suite('Extension Memory Benchmark', () => {
             (searchProvider as any).handleQueryChange(
                 quickPick,
                 query,
-                (t: any) => {},
-                (t: any) => {},
+                () => {},
+                () => {},
             );
 
             // Wait 120ms.

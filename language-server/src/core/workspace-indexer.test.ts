@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { describe, expect, it } from 'bun:test';
 import { Config } from './config';
 import { IndexPersistence } from './index-persistence';

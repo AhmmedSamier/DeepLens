@@ -101,39 +101,40 @@ export class SearchEngine implements ISearchProvider {
         this.items.push(...items);
 
         for (let i = 0; i < items.length; i++) {
-            const item = items[i];
-            const globalIndex = startIndex + i;
-
-            this.itemsMap.set(item.id, item);
-
-            // Update file paths cache
-            if (item.type === SearchItemType.FILE) {
-                this.filePaths.push(item.filePath);
-            }
-
-            const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
-            const shouldPrepareFullName =
-                item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
-
-            // Push to parallel arrays
-            this.preparedNames.push(this.getPrepared(item.name));
-            this.preparedNamesLow.push(this.getPreparedLow(item.name));
-            this.preparedFullNames.push(
-                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
-            );
-            this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
-            this.preparedCapitals.push(this.extractCapitals(item.name));
-
-            // Update scopes
-            const scope = this.getScopeForItemType(item.type);
-
-            let indices = this.scopedIndices.get(scope);
-            if (!indices) {
-                indices = [];
-                this.scopedIndices.set(scope, indices);
-            }
-            indices.push(globalIndex);
+            this.processAddedItem(items[i], startIndex + i);
         }
+    }
+
+    private processAddedItem(item: SearchableItem, globalIndex: number): void {
+        this.itemsMap.set(item.id, item);
+
+        // Update file paths cache
+        if (item.type === SearchItemType.FILE) {
+            this.filePaths.push(item.filePath);
+        }
+
+        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+        const shouldPrepareFullName =
+            item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
+
+        // Push to parallel arrays
+        this.preparedNames.push(this.getPrepared(item.name));
+        this.preparedNamesLow.push(this.getPreparedLow(item.name));
+        this.preparedFullNames.push(
+            shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
+        );
+        this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
+        this.preparedCapitals.push(this.extractCapitals(item.name));
+
+        // Update scopes
+        const scope = this.getScopeForItemType(item.type);
+
+        let indices = this.scopedIndices.get(scope);
+        if (!indices) {
+            indices = [];
+            this.scopedIndices.set(scope, indices);
+        }
+        indices.push(globalIndex);
     }
 
     /**
@@ -142,25 +143,36 @@ export class SearchEngine implements ISearchProvider {
      */
     removeItemsByFile(filePath: string): void {
         const count = this.items.length;
-        let write = 0;
+        const write = this.compactItems(filePath, count);
+        this.truncateArrays(write, count, filePath);
+    }
 
+    private compactItems(filePath: string, count: number): number {
+        let write = 0;
         for (let read = 0; read < count; read++) {
             const item = this.items[read];
             if (item.filePath !== filePath) {
                 if (read !== write) {
-                    this.items[write] = item;
-                    this.preparedNames[write] = this.preparedNames[read];
-                    this.preparedNamesLow[write] = this.preparedNamesLow[read];
-                    this.preparedFullNames[write] = this.preparedFullNames[read];
-                    this.preparedPaths[write] = this.preparedPaths[read];
-                    this.preparedCapitals[write] = this.preparedCapitals[read];
+                    this.moveItem(read, write);
                 }
                 write++;
             } else {
                 this.itemsMap.delete(item.id);
             }
         }
+        return write;
+    }
 
+    private moveItem(read: number, write: number): void {
+        this.items[write] = this.items[read];
+        this.preparedNames[write] = this.preparedNames[read];
+        this.preparedNamesLow[write] = this.preparedNamesLow[read];
+        this.preparedFullNames[write] = this.preparedFullNames[read];
+        this.preparedPaths[write] = this.preparedPaths[read];
+        this.preparedCapitals[write] = this.preparedCapitals[read];
+    }
+
+    private truncateArrays(write: number, count: number, filePath: string): void {
         // Truncate arrays if items were removed
         if (write < count) {
             this.items.length = write;
@@ -189,6 +201,11 @@ export class SearchEngine implements ISearchProvider {
      * Remove unused entries from the prepared cache to prevent memory leaks
      */
     private pruneCache(): void {
+        this.prunePreparedCache();
+        this.pruneLowCache();
+    }
+
+    private prunePreparedCache(): void {
         const usedPrepared = new Set<Fuzzysort.Prepared>();
 
         // Collect used prepared objects
@@ -202,7 +219,9 @@ export class SearchEngine implements ISearchProvider {
                 this.preparedCache.delete(key);
             }
         }
+    }
 
+    private pruneLowCache(): void {
         // Prune low string cache if it grows too large (prevent leaks)
         if (this.preparedLowCache.size > 20000) {
             const usedNames = new Set<string>();
@@ -422,52 +441,70 @@ export class SearchEngine implements ISearchProvider {
         maxResults: number,
         onResult?: (result: SearchResult) => void,
     ): Promise<SearchResult[]> {
-        const startTime = Date.now();
-
         // Try Ripgrep first
         if (this.ripgrep && this.ripgrep.isAvailable()) {
-            this.logger?.log(`--- Starting LSP Text Search (Ripgrep): "${query}" ---`);
-            try {
-                // Pass cached file paths to ripgrep (No mapping/filtering needed)
-                const matches = await this.ripgrep.search(query, this.filePaths, maxResults);
-
-                const results: SearchResult[] = [];
-                for (const match of matches) {
-                    // Find original item
-                    const fileItem = this.itemsMap.get(`file:${match.path}`);
-                    if (!fileItem) continue;
-
-                    const result: SearchResult = {
-                        item: {
-                            id: `text:${match.path}:${match.line}:${match.column}`,
-                            name: match.text,
-                            type: SearchItemType.TEXT,
-                            filePath: match.path,
-                            relativeFilePath: fileItem.relativeFilePath,
-                            line: match.line,
-                            column: match.column,
-                            containerName: fileItem.name,
-                            detail: fileItem.relativeFilePath,
-                        },
-                        score: 1.0,
-                        scope: SearchScope.TEXT,
-                        highlights: match.submatches.map((sm) => [sm.start, sm.end]),
-                    };
-                    results.push(result);
-                    if (onResult) onResult(result);
-                }
-
-                const durationMs = Date.now() - startTime;
-                this.logger?.log(
-                    `Ripgrep search completed in ${(durationMs / 1000).toFixed(3)}s. Found ${results.length} results.`,
-                );
-                return results;
-            } catch (error) {
-                this.logger?.error(`Ripgrep failed: ${error}. Falling back to Node.js stream.`);
-            }
+           const results = await this.performRipgrepSearch(query, maxResults, onResult);
+           if (results) return results;
         }
 
+        return this.performStreamSearch(query, maxResults, onResult);
+    }
+
+    private async performRipgrepSearch(
+        query: string,
+        maxResults: number,
+        onResult?: (result: SearchResult) => void
+    ): Promise<SearchResult[] | null> {
+        this.logger?.log(`--- Starting LSP Text Search (Ripgrep): "${query}" ---`);
+        const startTime = Date.now();
+        try {
+            // Pass cached file paths to ripgrep (No mapping/filtering needed)
+            const matches = await this.ripgrep!.search(query, this.filePaths, maxResults);
+
+            const results: SearchResult[] = [];
+            for (const match of matches) {
+                // Find original item
+                const fileItem = this.itemsMap.get(`file:${match.path}`);
+                if (!fileItem) continue;
+
+                const result: SearchResult = {
+                    item: {
+                        id: `text:${match.path}:${match.line}:${match.column}`,
+                        name: match.text,
+                        type: SearchItemType.TEXT,
+                        filePath: match.path,
+                        relativeFilePath: fileItem.relativeFilePath,
+                        line: match.line,
+                        column: match.column,
+                        containerName: fileItem.name,
+                        detail: fileItem.relativeFilePath,
+                    },
+                    score: 1.0,
+                    scope: SearchScope.TEXT,
+                    highlights: match.submatches.map((sm) => [sm.start, sm.end]),
+                };
+                results.push(result);
+                if (onResult) onResult(result);
+            }
+
+            const durationMs = Date.now() - startTime;
+            this.logger?.log(
+                `Ripgrep search completed in ${(durationMs / 1000).toFixed(3)}s. Found ${results.length} results.`,
+            );
+            return results;
+        } catch (error) {
+            this.logger?.error(`Ripgrep failed: ${error}. Falling back to Node.js stream.`);
+            return null;
+        }
+    }
+
+    private async performStreamSearch(
+        query: string,
+        maxResults: number,
+        onResult?: (result: SearchResult) => void
+    ): Promise<SearchResult[]> {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
+        const startTime = Date.now();
         const results: SearchResult[] = [];
         const queryLower = query.toLowerCase();
 
@@ -526,7 +563,7 @@ export class SearchEngine implements ISearchProvider {
                             results,
                             pendingResults,
                         );
-                    } catch (error) {
+                    } catch {
                         // Ignore read/stat errors
                     }
                 }),
@@ -561,7 +598,7 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         pendingResults: SearchResult[],
     ): Promise<void> {
-        return new Promise<void>((resolve, reject) => {
+        return new Promise<void>((resolve) => {
             const stream = fs.createReadStream(fileItem.filePath, {
                 encoding: 'utf8',
                 highWaterMark: 64 * 1024, // 64KB chunks
@@ -569,7 +606,6 @@ export class SearchEngine implements ISearchProvider {
 
             let buffer = '';
             let lineIndex = 0;
-            let fileOffset = 0;
 
             stream.on('data', (chunk: string) => {
                 if (results.length >= maxResults) {
@@ -579,61 +615,26 @@ export class SearchEngine implements ISearchProvider {
                 }
 
                 buffer += chunk;
-                let lastIndex = 0;
-                let newlineIndex;
-
+                
                 // Process full lines
-                while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-                    // Optimized: Avoid slicing buffer repeatedly. Only slice the line we need.
-                    const line = buffer.slice(lastIndex, newlineIndex);
-                    lastIndex = newlineIndex + 1;
+                const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
+                    buffer,
+                    queryLower,
+                    queryLength,
+                    maxResults,
+                    results,
+                    pendingResults,
+                    fileItem,
+                    lineIndex
+                );
 
-                    // Skip extremely long lines (minified code)
-                    if (line.length > 10000) {
-                        lineIndex++;
-                        continue;
-                    }
+                buffer = newBuffer;
+                lineIndex = newLineIndex;
 
-                    // Simple case insensitive check
-                    const matchIndex = line.toLowerCase().indexOf(queryLower);
-
-                    if (matchIndex >= 0) {
-                        const trimmedLine = line.trim();
-                        if (trimmedLine.length > 0) {
-                            const result: SearchResult = {
-                                item: {
-                                    id: `text:${fileItem.filePath}:${lineIndex}:${matchIndex}`,
-                                    name: trimmedLine,
-                                    type: SearchItemType.TEXT,
-                                    filePath: fileItem.filePath,
-                                    relativeFilePath: fileItem.relativeFilePath,
-                                    line: lineIndex,
-                                    column: matchIndex,
-                                    containerName: fileItem.name,
-                                    detail: fileItem.relativeFilePath,
-                                },
-                                score: 1.0,
-                                scope: SearchScope.TEXT,
-                                highlights: [[matchIndex, matchIndex + queryLength]],
-                            };
-
-                            results.push(result);
-                            pendingResults.push(result);
-                        }
-                    }
-
-                    lineIndex++;
-
-                    if (results.length >= maxResults) {
-                        stream.destroy();
-                        resolve();
-                        return;
-                    }
-                }
-
-                // Keep remainder
-                if (lastIndex > 0) {
-                    buffer = buffer.slice(lastIndex);
+                if (hitLimit) {
+                     stream.destroy();
+                     resolve();
+                     return;
                 }
 
                 // Safety: Discard buffer if it grows too large without finding a newline (minified file)
@@ -649,18 +650,107 @@ export class SearchEngine implements ISearchProvider {
                     if (matchIndex >= 0) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
-                            // ... add result ...
+                             const result = this.createSearchResult(
+                                fileItem,
+                                trimmedLine,
+                                lineIndex,
+                                matchIndex,
+                                queryLength
+                            );
+                            results.push(result);
+                            pendingResults.push(result);
                         }
                     }
                 }
                 resolve();
             });
 
-            stream.on('error', (err) => {
+            stream.on('error', () => {
                 // Ignore error, just resolve
                 resolve();
             });
         });
+    }
+
+    private processBufferLines(
+        buffer: string,
+        queryLower: string,
+        queryLength: number,
+        maxResults: number,
+        results: SearchResult[],
+        pendingResults: SearchResult[],
+        fileItem: SearchableItem,
+        startLineIndex: number
+    ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
+        let lastIndex = 0;
+        let newlineIndex;
+        let lineIndex = startLineIndex;
+
+        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
+            // Optimized: Avoid slicing buffer repeatedly. Only slice the line we need.
+            const line = buffer.slice(lastIndex, newlineIndex);
+            lastIndex = newlineIndex + 1;
+
+            // Skip extremely long lines (minified code)
+            if (line.length > 10000) {
+                lineIndex++;
+                continue;
+            }
+
+            // Simple case insensitive check
+            const matchIndex = line.toLowerCase().indexOf(queryLower);
+
+            if (matchIndex >= 0) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.length > 0) {
+                    const result = this.createSearchResult(
+                        fileItem,
+                        trimmedLine,
+                        lineIndex,
+                        matchIndex,
+                        queryLength
+                    );
+
+                    results.push(result);
+                    pendingResults.push(result);
+                }
+            }
+
+            lineIndex++;
+
+            if (results.length >= maxResults) {
+                return { newBuffer: '', newLineIndex: lineIndex, hitLimit: true };
+            }
+        }
+
+        // Keep remainder
+        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
+        return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+    }
+
+    private createSearchResult(
+        fileItem: SearchableItem,
+        trimmedLine: string,
+        lineIndex: number,
+        matchIndex: number,
+        queryLength: number
+    ): SearchResult {
+        return {
+            item: {
+                id: `text:${fileItem.filePath}:${lineIndex}:${matchIndex}`,
+                name: trimmedLine,
+                type: SearchItemType.TEXT,
+                filePath: fileItem.filePath,
+                relativeFilePath: fileItem.relativeFilePath,
+                line: lineIndex,
+                column: matchIndex,
+                containerName: fileItem.name,
+                detail: fileItem.relativeFilePath,
+            },
+            score: 1.0,
+            scope: SearchScope.TEXT,
+            highlights: [[matchIndex, matchIndex + queryLength]],
+        };
     }
 
     private performUnifiedSearch(
@@ -677,75 +767,15 @@ export class SearchEngine implements ISearchProvider {
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
 
         const processIndex = (i: number) => {
-            const item = this.items[i];
-            let score = -1;
-            let resultScope = this.getScopeForItemType(item.type);
-
-            // 1. Fuzzy Search
-            const fuzzyScore = this.calculateItemScore(
+             this.processUnifiedSearchItem(
+                i,
                 query,
-                this.preparedNames[i],
-                this.preparedFullNames[i],
-                this.preparedPaths[i],
+                queryUpper,
+                enableCamelHumps,
+                isPotentialUrl,
                 MIN_SCORE,
+                heap
             );
-
-            if (fuzzyScore > MIN_SCORE) {
-                score = this.applyItemTypeBoost(fuzzyScore, item.type);
-            } else if (enableCamelHumps) {
-                // 2. CamelHumps Search (only if fuzzy didn't match)
-                const capitals = this.preparedCapitals[i];
-                if (capitals) {
-                    const camelScore = this.camelHumpsMatch(capitals, queryUpper);
-                    if (camelScore > 0) {
-                        score = this.applyItemTypeBoost(camelScore, item.type);
-                    }
-                }
-            }
-
-            // 3. URL/Endpoint Match (Inline logic)
-            // If item is endpoint and score is low (or not matched yet), check if it matches URL pattern
-            // Note: In original logic, it added a DUPLICATE entry. Here we upgrade the score/scope if better.
-            // Or should we support duplicates?
-            // In typical usage, seeing the same item twice (once as symbol, once as endpoint) is rare or confusing.
-            // Better to show it once with the best match relevance.
-            // RouteMatcher.isMatch returns boolean.
-            if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
-                if (RouteMatcher.isMatch(item.name, query)) {
-                    // URL match is strong (1.5 in original code)
-                    // If we already have a score, take the max.
-                    // URL match usually implies ENDPOINTS scope.
-                    const urlScore = 1.5;
-                    if (urlScore > score) {
-                        score = urlScore;
-                        resultScope = SearchScope.ENDPOINTS;
-                    }
-                }
-            }
-
-            if (score > MIN_SCORE) {
-                // 4. Activity Boosting (Inline)
-                if (this.getActivityScore) {
-                    const activityScore = this.getActivityScore(item.id);
-                    if (activityScore > 0 && score > 0.05) {
-                        score = score * (1 - this.activityWeight) + activityScore * this.activityWeight;
-                    }
-                }
-
-                // Optimization: Skip allocation if heap is full and score is too low
-                if (heap.isFull()) {
-                    const minItem = heap.peek();
-                    if (minItem && score <= minItem.score) {
-                        return;
-                    }
-                }
-
-                heap.push({
-                    item,
-                    score,
-                    scope: resultScope,
-                });
-            }
         };
 
         if (indices) {
@@ -762,6 +792,131 @@ export class SearchEngine implements ISearchProvider {
         return heap.getSorted();
     }
 
+    private processUnifiedSearchItem(
+        i: number,
+        query: string,
+        queryUpper: string,
+        enableCamelHumps: boolean,
+        isPotentialUrl: boolean,
+        minScore: number,
+        heap: MinHeap<SearchResult>
+    ): void {
+        const item = this.items[i];
+        
+        const { score, resultScope } = this.calculateUnifiedScore(
+            i,
+            item,
+            query,
+            queryUpper,
+            enableCamelHumps,
+            isPotentialUrl,
+            minScore
+        );
+
+        if (score > minScore) {
+            // Optimization: Skip allocation if heap is full and score is too low
+            if (heap.isFull()) {
+                const minItem = heap.peek();
+                if (minItem && score <= minItem.score) {
+                    return;
+                }
+            }
+
+            heap.push({
+                item,
+                score,
+                scope: resultScope,
+            });
+        }
+    }
+
+    private calculateUnifiedScore(
+        i: number,
+        item: SearchableItem,
+        query: string,
+        queryUpper: string,
+        enableCamelHumps: boolean,
+        isPotentialUrl: boolean,
+        minScore: number
+    ): { score: number; resultScope: SearchScope } {
+        let score = -1;
+        let resultScope = this.getScopeForItemType(item.type);
+
+        // 1. Fuzzy or CamelHumps
+        score = this.calculateBasicScore(i, item, query, queryUpper, enableCamelHumps, minScore);
+
+        // 2. URL/Endpoint Match
+        if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
+             const { newScore, newScope } = this.checkUrlMatch(item, query, score, resultScope);
+             score = newScore;
+             resultScope = newScope;
+        }
+
+        // 3. Activity Boosting
+        if (score > minScore) {
+            score = this.applyActivityBoost(item, score);
+        }
+        
+        return { score, resultScope };
+    }
+
+    private calculateBasicScore(
+        i: number,
+        item: SearchableItem,
+        query: string,
+        queryUpper: string,
+        enableCamelHumps: boolean,
+        minScore: number
+    ): number {
+        const fuzzyScore = this.calculateItemScore(
+            query,
+            this.preparedNames[i],
+            this.preparedFullNames[i],
+            this.preparedPaths[i],
+            minScore,
+        );
+
+        if (fuzzyScore > minScore) {
+            return this.applyItemTypeBoost(fuzzyScore, item.type);
+        } 
+        
+        if (enableCamelHumps) {
+            const capitals = this.preparedCapitals[i];
+            if (capitals) {
+                const camelScore = this.camelHumpsMatch(capitals, queryUpper);
+                if (camelScore > 0) {
+                    return this.applyItemTypeBoost(camelScore, item.type);
+                }
+            }
+        }
+        return -1;
+    }
+
+    private checkUrlMatch(
+        item: SearchableItem, 
+        query: string, 
+        currentScore: number, 
+        currentScope: SearchScope
+    ): { newScore: number; newScope: SearchScope } {
+        if (RouteMatcher.isMatch(item.name, query)) {
+            const urlScore = 1.5;
+            if (urlScore > currentScore) {
+                return { newScore: urlScore, newScope: SearchScope.ENDPOINTS };
+            }
+        }
+        return { newScore: currentScore, newScope: currentScope };
+    }
+
+    private applyActivityBoost(item: SearchableItem, currentScore: number): number {
+        if (this.getActivityScore) {
+            const activityScore = this.getActivityScore(item.id);
+            if (activityScore > 0 && currentScore > 0.05) {
+                return currentScore * (1 - this.activityWeight) + activityScore * this.activityWeight;
+            }
+        }
+        return currentScore;
+    }
+
     private calculateItemScore(
         query: string,
         preparedName: Fuzzysort.Prepared | null,
@@ -773,45 +928,39 @@ export class SearchEngine implements ISearchProvider {
         const queryLen = query.length;
 
         // Name (Weight 1.0)
-        if (preparedName) {
-            if (queryLen <= preparedName.target.length) {
-                const result = Fuzzysort.single(query, preparedName);
-                if (result && result.score > minScore) {
-                    const score = result.score;
-                    if (score > bestScore) bestScore = score;
-                }
-            }
-        }
+        const nameScore = this.scoreField(query, preparedName, queryLen, minScore);
+        if (nameScore > bestScore) bestScore = nameScore;
 
         // Optimization: Name has weight 1.0. Next best is FullName with 0.9.
         if (bestScore >= 0.9) return bestScore;
 
         // Full Name (Weight 0.9)
-        if (preparedFullName) {
-            if (queryLen <= preparedFullName.target.length) {
-                const result = Fuzzysort.single(query, preparedFullName);
-                if (result && result.score > minScore) {
-                    const score = result.score * 0.9;
-                    if (score > bestScore) bestScore = score;
-                }
-            }
-        }
+        const fullNameScore = this.scoreField(query, preparedFullName, queryLen, minScore);
+        if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
 
         // Optimization: Next best is Path with 0.8.
         if (bestScore >= 0.8) return bestScore;
 
         // Path (Weight 0.8)
-        if (preparedPath) {
-            if (queryLen <= preparedPath.target.length) {
-                const result = Fuzzysort.single(query, preparedPath);
-                if (result && result.score > minScore) {
-                    const score = result.score * 0.8;
-                    if (score > bestScore) bestScore = score;
-                }
-            }
-        }
+        const pathScore = this.scoreField(query, preparedPath, queryLen, minScore);
+        if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
 
         return bestScore;
+    }
+
+    private scoreField(
+        query: string,
+        prepared: Fuzzysort.Prepared | null,
+        queryLen: number,
+        minScore: number
+    ): number {
+        if (prepared && queryLen <= prepared.target.length) {
+            const result = Fuzzysort.single(query, prepared);
+            if (result && result.score > minScore) {
+                return result.score;
+            }
+        }
+        return -Infinity;
     }
 
     private extractCapitals(text: string): string {
@@ -1037,11 +1186,11 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
-    getRecentItems(count: number): SearchResult[] {
+    getRecentItems(): SearchResult[] {
         return [];
     }
 
-    recordActivity(itemId: string): void {
+    recordActivity(): void {
         // No-op
     }
 }

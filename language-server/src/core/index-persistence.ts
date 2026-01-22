@@ -35,9 +35,10 @@ export class IndexPersistence {
             const data = await fs.promises.readFile(file, 'utf8');
             const parsed = JSON.parse(data);
             this.cache = new Map(Object.entries(parsed));
-        } catch (error: any) {
+        } catch (error: unknown) {
             // Ignore if file doesn't exist, log other errors
-            if (error.code !== 'ENOENT') {
+            const err = error as NodeJS.ErrnoException;
+            if (err.code !== 'ENOENT') {
                 console.error('Failed to load index cache:', error);
             }
         }
@@ -76,8 +77,9 @@ export class IndexPersistence {
         const file = this.getCacheFile();
         try {
             await fs.promises.unlink(file);
-        } catch (error: any) {
-            if (error.code !== 'ENOENT') {
+        } catch (error: unknown) {
+            const err = error as NodeJS.ErrnoException;
+            if (err.code !== 'ENOENT') {
                 console.error('Failed to delete cache file:', error);
             }
         }
@@ -91,8 +93,9 @@ export class IndexPersistence {
         try {
             const stats = await fs.promises.stat(file);
             return stats.size;
-        } catch (error: any) {
-            if (error.code !== 'ENOENT') {
+        } catch (error: unknown) {
+            const err = error as NodeJS.ErrnoException;
+            if (err.code !== 'ENOENT') {
                 console.error('Failed to get cache size:', error);
             }
             return 0;

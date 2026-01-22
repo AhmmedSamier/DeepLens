@@ -38,16 +38,22 @@ export class Config {
     /**
      * Update settings from a plain object (used in LSP)
      */
-    update(settings: Record<string, any>): void {
-        const flattened: Record<string, any> = {};
+    update(settings: Record<string, unknown>): void {
+        const flattened: Record<string, unknown> = {};
 
-        const flatten = (obj: any, prefix = '') => {
-            for (const key in obj) {
+        const flatten = (obj: unknown, prefix = '') => {
+            if (typeof obj !== 'object' || obj === null) {
+                if (prefix) flattened[prefix] = obj;
+                return;
+            }
+            
+            for (const key in obj as Record<string, unknown>) {
+                const value = (obj as Record<string, unknown>)[key];
                 const fullKey = prefix ? `${prefix}.${key}` : key;
-                if (obj[key] && typeof obj[key] === 'object' && !Array.isArray(obj[key])) {
-                    flatten(obj[key], fullKey);
+                if (value && typeof value === 'object' && !Array.isArray(value)) {
+                    flatten(value, fullKey);
                 } else {
-                    flattened[fullKey] = obj[key];
+                    flattened[fullKey] = value;
                 }
             }
         };

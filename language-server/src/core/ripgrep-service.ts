@@ -113,7 +113,9 @@ export class RipgrepService {
                         if (fs.existsSync(fileListPath)) {
                             fs.unlinkSync(fileListPath);
                         }
-                    } catch {}
+                    } catch {
+                        // ignore cleanup errors
+                    }
 
                     if (hitLimit || code === 0 || code === 1) {
                         // 1 means no matches found
@@ -128,7 +130,9 @@ export class RipgrepService {
                         if (fs.existsSync(fileListPath)) {
                             fs.unlinkSync(fileListPath);
                         }
-                    } catch {}
+                    } catch {
+                        // ignore cleanup errors
+                    }
                     reject(err);
                 });
             });

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'bun:test';
 import { SearchEngine } from './search-engine';
 import { SearchItemType, SearchScope, SearchableItem } from './types';

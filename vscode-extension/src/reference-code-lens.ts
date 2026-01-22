@@ -210,10 +210,10 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             let finalLocations = locations || [];
 
             // Filter out the location that matches the symbol's own position (declaration/definition)
-            finalLocations = (locations || []).filter((loc: any) => {
+            finalLocations = (locations || []).filter((loc: vscode.Location | vscode.LocationLink) => {
                 // Handle both Location and LocationLink (which uses targetUri/targetRange)
-                const uri = loc.uri || loc.targetUri;
-                const range = loc.range || loc.targetSelectionRange;
+                const uri = (loc as vscode.Location).uri || (loc as vscode.LocationLink).targetUri;
+                const range = (loc as vscode.Location).range || (loc as vscode.LocationLink).targetSelectionRange;
 
                 if (!uri || !range) {
                     return true;
@@ -245,12 +245,13 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
 
             // Convert any LocationLinks to standard Locations for the command arguments
             // The built-in commands (peekImplementation, showReferences) expect Location objects
-            const commandLocations = finalLocations.map((loc: any) => {
+            const commandLocations = finalLocations.map((loc: vscode.Location | vscode.LocationLink) => {
                 // If it's a LocationLink (has targetUri), convert it
-                if (loc.targetUri) {
-                    return new vscode.Location(loc.targetUri, loc.targetSelectionRange || loc.targetRange);
+                if ((loc as vscode.LocationLink).targetUri) {
+                    const link = loc as vscode.LocationLink;
+                    return new vscode.Location(link.targetUri, link.targetSelectionRange || link.targetRange);
                 }
-                return loc;
+                return loc as vscode.Location;
             });
 
             codeLens.command = {

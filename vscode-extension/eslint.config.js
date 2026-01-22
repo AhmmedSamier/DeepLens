@@ -17,6 +17,7 @@ module.exports = [
             globals: {
                 ...globals.node,
                 ...globals.es2020,
+                ...globals.mocha,
                 NodeJS: 'readonly',
             },
         },

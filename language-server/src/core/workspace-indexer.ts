@@ -174,10 +174,8 @@ export class WorkspaceIndexer {
      * Index all files in workspace
      */
     private async indexFiles(collector: (items: SearchableItem[]) => void): Promise<void> {
-        const fileExtensions = this.config.getFileExtensions();
-
         // TURBO PATH: Try to use git ls-files for instant listing if it's a git repo
-        const gitFiles = await this.listGitFiles(fileExtensions);
+        const gitFiles = await this.listGitFiles();
         if (gitFiles.length > 0) {
             await this.processFileList(gitFiles, collector);
             return;
@@ -197,7 +195,7 @@ export class WorkspaceIndexer {
     /**
      * List files using git (much faster than walking disk)
      */
-    private async listGitFiles(extensions: string[]): Promise<string[]> {
+    private async listGitFiles(): Promise<string[]> {
         const workspaceFolders = this.env.getWorkspaceFolders();
         if (workspaceFolders.length === 0) {
             return [];
@@ -385,11 +383,9 @@ export class WorkspaceIndexer {
             const pendingItems = [...fileItems];
             let activeTasks = 0;
             let resolveAll: () => void;
-            let rejectAll: (err: any) => void;
 
-            const promise = new Promise<void>((resolve, reject) => {
+            const promise = new Promise<void>((resolve) => {
                 resolveAll = resolve;
-                rejectAll = reject;
             });
 
             // Initialize workers
@@ -398,64 +394,21 @@ export class WorkspaceIndexer {
                     workerData: { extensionPath: this.extensionPath },
                 });
 
-                worker.on('message', (message) => {
-                    if (message.type === 'log') {
-                        // this.log(`[Worker ${i}] ${message.message}`);
-                    } else if (message.type === 'result') {
-                        const { items, count } = message;
-                        if (items && items.length > 0) {
-                            // Re-intern strings from worker to share memory in main thread
-                            const internedItems = items.map((item: SearchableItem) => ({
-                                ...item,
-                                name: this.intern(item.name),
-                                fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                                containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                                relativeFilePath: item.relativeFilePath
-                                    ? this.intern(item.relativeFilePath)
-                                    : undefined,
-                                filePath: this.intern(item.filePath),
-                            }));
-
-                            this.fireItemsAdded(internedItems);
-                        }
-
-                        // Mark task complete
-                        const itemsProcessed = count || 1;
-                        processed += itemsProcessed;
-                        activeTasks--;
-
-                        // Update progress
-                        if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
-                            if (processed >= totalFiles) logged100 = true;
-                            this.log(
-                                `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
-                            );
-                        }
-                        if (progressCallback) {
-                            const percentage = (processed / totalFiles) * 100;
-                            if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                                progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
-                                nextReportingPercentage = percentage + 5;
-                            }
-                        }
-
-                        // Pick next task
-                        assignTask(worker);
-                    } else if (message.type === 'error') {
-                        // Log error but continue
-                        // console.debug(`Worker error on ${message.filePath}: ${message.error}`);
-                        // The worker handles batches, so an error might be generic or per file.
-                        // Ideally we count the processed items even on error, or just continue.
-                        // Assuming batch error means we lost that batch's progress, but for robustness:
-                        activeTasks--;
-                        assignTask(worker);
-                    }
-                });
-
-                worker.on('error', (err) => {
-                    this.log(`Worker ${i} error: ${err}`);
-                    // If a worker dies, we lose its capacity. Ideally restart it, but for now just ignore.
-                });
+                this.setupWorkerListeners(
+                    worker,
+                    i,
+                    totalFiles,
+                    () => processed,
+                    (p) => (processed = p),
+                    () => activeTasks,
+                    (a) => (activeTasks = a),
+                    () => logged100,
+                    (l) => (logged100 = l),
+                    () => nextReportingPercentage,
+                    (n) => (nextReportingPercentage = n),
+                    progressCallback,
+                    assignTask
+                );
 
                 workers.push(worker);
                 freeWorkers.push(worker);
@@ -515,6 +468,105 @@ export class WorkspaceIndexer {
         } catch (error) {
             this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
             return this.runFileIndexingFallback(fileItems, progressCallback);
+        }
+    }
+
+    private setupWorkerListeners(
+        worker: Worker,
+        workerIndex: number,
+        totalFiles: number,
+        getProcessed: () => number,
+        setProcessed: (v: number) => void,
+        getActiveTasks: () => number,
+        setActiveTasks: (v: number) => void,
+        getLogged100: () => boolean,
+        setLogged100: (v: boolean) => void,
+        getNextReportingPercentage: () => number,
+        setNextReportingPercentage: (v: number) => void,
+        progressCallback: ((message: string, increment?: number) => void) | undefined,
+        assignTask: (worker: Worker) => void
+    ) {
+        worker.on('message', (message) => {
+            if (message.type === 'log') {
+                // Log message handling
+            } else if (message.type === 'result') {
+                const { items, count } = message;
+                if (items && items.length > 0) {
+                    // Re-intern strings from worker to share memory in main thread
+                    const internedItems = items.map((item: SearchableItem) => ({
+                        ...item,
+                        name: this.intern(item.name),
+                        fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                        containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                        relativeFilePath: item.relativeFilePath
+                            ? this.intern(item.relativeFilePath)
+                            : undefined,
+                        filePath: this.intern(item.filePath),
+                    }));
+
+                    this.fireItemsAdded(internedItems);
+                }
+
+                // Mark task complete
+                const itemsProcessed = count || 1;
+                setProcessed(getProcessed() + itemsProcessed);
+                setActiveTasks(getActiveTasks() - 1);
+
+                this.updateWorkerProgress(
+                    totalFiles,
+                    itemsProcessed,
+                    getProcessed,
+                    getLogged100,
+                    setLogged100,
+                    getNextReportingPercentage,
+                    setNextReportingPercentage,
+                    progressCallback
+                );
+
+                // Pick next task
+                assignTask(worker);
+            } else if (message.type === 'error') {
+                // Log error but continue
+                setActiveTasks(getActiveTasks() - 1);
+                assignTask(worker);
+            }
+        });
+
+        worker.on('error', (err) => {
+            this.log(`Worker ${workerIndex} error: ${err}`);
+            // If a worker dies, we lose its capacity. Ideally restart it, but for now just ignore.
+        });
+    }
+
+    private updateWorkerProgress(
+        totalFiles: number,
+        itemsProcessed: number,
+        getProcessed: () => number,
+        getLogged100: () => boolean,
+        setLogged100: (v: boolean) => void,
+        getNextReportingPercentage: () => number,
+        setNextReportingPercentage: (v: number) => void,
+        progressCallback: ((message: string, increment?: number) => void) | undefined
+    ) {
+        const processed = getProcessed();
+        const logged100 = getLogged100();
+
+        if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
+            if (processed >= totalFiles) {
+                setLogged100(true);
+            }
+            this.log(
+                `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
+            );
+        }
+
+        if (progressCallback) {
+            const percentage = (processed / totalFiles) * 100;
+            const nextReportingPercentage = getNextReportingPercentage();
+            if (percentage >= nextReportingPercentage || processed === totalFiles) {
+                progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
+                setNextReportingPercentage(percentage + 5);
+            }
         }
     }
 
@@ -921,7 +973,7 @@ export class WorkspaceIndexer {
             await this.execGit(['check-ignore', '-q', filePath], folder);
             // If exec succeeds (exit code 0), it is ignored
             return true;
-        } catch (error: any) {
+        } catch {
             // If exit code is 1, it is NOT ignored.
             // If code is anything else (e.g. 128), git failed (not a repo?), so assume NOT ignored.
             return false;
