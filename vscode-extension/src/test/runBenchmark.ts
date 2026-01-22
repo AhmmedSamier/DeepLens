@@ -1,5 +1,5 @@
-import * as path from 'path';
 import { runTests } from '@vscode/test-electron';
+import * as path from 'path';
 
 async function main() {
     try {
@@ -22,7 +22,7 @@ async function main() {
             extensionDevelopmentPath,
             extensionTestsPath,
             launchArgs: ['--no-sandbox', '--disable-gpu', '--headless', '--js-flags=--expose-gc'],
-            extensionTestsEnv: process.env as Record<string, string>
+            extensionTestsEnv: process.env as Record<string, string>,
         });
     } catch (err) {
         console.error('Failed to run benchmarks', err);

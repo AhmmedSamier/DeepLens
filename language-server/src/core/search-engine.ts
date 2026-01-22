@@ -1,12 +1,12 @@
-import * as Fuzzysort from 'fuzzysort';
 import * as fs from 'fs';
+import * as Fuzzysort from 'fuzzysort';
 import * as path from 'path';
 import { Config } from './config';
-import { RouteMatcher } from './route-matcher';
-import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
-import { ISearchProvider } from './search-interface';
-import { RipgrepService } from './ripgrep-service';
 import { MinHeap } from './min-heap';
+import { RipgrepService } from './ripgrep-service';
+import { RouteMatcher } from './route-matcher';
+import { ISearchProvider } from './search-interface';
+import { SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
 
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
@@ -119,11 +119,9 @@ export class SearchEngine implements ISearchProvider {
             this.preparedNames.push(this.getPrepared(item.name));
             this.preparedNamesLow.push(this.getPreparedLow(item.name));
             this.preparedFullNames.push(
-                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null
+                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
             );
-            this.preparedPaths.push(
-                normalizedPath ? this.getPrepared(normalizedPath) : null
-            );
+            this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
             this.preparedCapitals.push(this.extractCapitals(item.name));
 
             // Update scopes
@@ -173,7 +171,7 @@ export class SearchEngine implements ISearchProvider {
             this.preparedCapitals.length = write;
 
             // Update file paths cache (filter out the removed file)
-            this.filePaths = this.filePaths.filter(p => p !== filePath);
+            this.filePaths = this.filePaths.filter((p) => p !== filePath);
 
             // Rebuild scope indices
             this.rebuildScopeIndices();
@@ -247,11 +245,9 @@ export class SearchEngine implements ISearchProvider {
             this.preparedNames.push(this.getPrepared(item.name));
             this.preparedNamesLow.push(this.getPreparedLow(item.name));
             this.preparedFullNames.push(
-                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null
+                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
             );
-            this.preparedPaths.push(
-                normalizedPath ? this.getPrepared(normalizedPath) : null
-            );
+            this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
             this.preparedCapitals.push(this.extractCapitals(item.name));
         }
 
@@ -307,7 +303,7 @@ export class SearchEngine implements ISearchProvider {
      * Set the list of currently active or open files to prioritize them
      */
     setActiveFiles(files: string[]): void {
-        this.activeFiles = new Set(files.map(f => path.normalize(f)));
+        this.activeFiles = new Set(files.map((f) => path.normalize(f)));
     }
 
     /**
@@ -395,13 +391,7 @@ export class SearchEngine implements ISearchProvider {
         const indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
 
         // Unified search (Fuzzy + CamelHumps in single pass)
-        let results = this.performUnifiedSearch(
-            indices,
-            normalizedQuery,
-            enableCamelHumps,
-            maxResults,
-            scope
-        );
+        let results = this.performUnifiedSearch(indices, normalizedQuery, enableCamelHumps, maxResults, scope);
 
         // 3. Sort by score (Actually results are already sorted descending by performUnifiedSearch)
         // But in case we want to be safe or if we changed logic later.
@@ -430,7 +420,7 @@ export class SearchEngine implements ISearchProvider {
     private async performTextSearch(
         query: string,
         maxResults: number,
-        onResult?: (result: SearchResult) => void
+        onResult?: (result: SearchResult) => void,
     ): Promise<SearchResult[]> {
         const startTime = Date.now();
 
@@ -461,16 +451,17 @@ export class SearchEngine implements ISearchProvider {
                         },
                         score: 1.0,
                         scope: SearchScope.TEXT,
-                        highlights: match.submatches.map(sm => [sm.start, sm.end])
+                        highlights: match.submatches.map((sm) => [sm.start, sm.end]),
                     };
                     results.push(result);
                     if (onResult) onResult(result);
                 }
 
                 const durationMs = Date.now() - startTime;
-                this.logger?.log(`Ripgrep search completed in ${(durationMs/1000).toFixed(3)}s. Found ${results.length} results.`);
+                this.logger?.log(
+                    `Ripgrep search completed in ${(durationMs / 1000).toFixed(3)}s. Found ${results.length} results.`,
+                );
                 return results;
-
             } catch (error) {
                 this.logger?.error(`Ripgrep failed: ${error}. Falling back to Node.js stream.`);
             }
@@ -527,12 +518,18 @@ export class SearchEngine implements ISearchProvider {
 
                         processedFiles++;
 
-                        await this.scanFileStream(fileItem, queryLower, query.length, maxResults, results, pendingResults);
-
+                        await this.scanFileStream(
+                            fileItem,
+                            queryLower,
+                            query.length,
+                            maxResults,
+                            results,
+                            pendingResults,
+                        );
                     } catch (error) {
                         // Ignore read/stat errors
                     }
-                })
+                }),
             );
 
             if (pendingResults.length >= 5) {
@@ -540,7 +537,9 @@ export class SearchEngine implements ISearchProvider {
             }
 
             if (processedFiles % 100 === 0 || results.length > 0) {
-                this.logger?.log(`Searched ${processedFiles}/${fileItems.length} files... found ${results.length} matches`);
+                this.logger?.log(
+                    `Searched ${processedFiles}/${fileItems.length} files... found ${results.length} matches`,
+                );
             }
             flushBatch();
         }
@@ -560,12 +559,12 @@ export class SearchEngine implements ISearchProvider {
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
-        pendingResults: SearchResult[]
+        pendingResults: SearchResult[],
     ): Promise<void> {
         return new Promise<void>((resolve, reject) => {
             const stream = fs.createReadStream(fileItem.filePath, {
                 encoding: 'utf8',
-                highWaterMark: 64 * 1024 // 64KB chunks
+                highWaterMark: 64 * 1024, // 64KB chunks
             });
 
             let buffer = '';
@@ -648,18 +647,18 @@ export class SearchEngine implements ISearchProvider {
                 if (buffer.length > 0) {
                     const matchIndex = buffer.toLowerCase().indexOf(queryLower);
                     if (matchIndex >= 0) {
-                         const trimmedLine = buffer.trim();
-                         if (trimmedLine.length > 0) {
+                        const trimmedLine = buffer.trim();
+                        if (trimmedLine.length > 0) {
                             // ... add result ...
-                         }
+                        }
                     }
                 }
                 resolve();
             });
 
             stream.on('error', (err) => {
-                 // Ignore error, just resolve
-                 resolve();
+                // Ignore error, just resolve
+                resolve();
             });
         });
     }
@@ -669,13 +668,13 @@ export class SearchEngine implements ISearchProvider {
         query: string,
         enableCamelHumps: boolean,
         maxResults: number,
-        scope: SearchScope
+        scope: SearchScope,
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const MIN_SCORE = 0.01;
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
-        const isPotentialUrl = (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
-                               RouteMatcher.isPotentialUrl(query);
+        const isPotentialUrl =
+            (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
 
         const processIndex = (i: number) => {
             const item = this.items[i];
@@ -694,7 +693,7 @@ export class SearchEngine implements ISearchProvider {
             if (fuzzyScore > MIN_SCORE) {
                 score = this.applyItemTypeBoost(fuzzyScore, item.type);
             } else if (enableCamelHumps) {
-                 // 2. CamelHumps Search (only if fuzzy didn't match)
+                // 2. CamelHumps Search (only if fuzzy didn't match)
                 const capitals = this.preparedCapitals[i];
                 if (capitals) {
                     const camelScore = this.camelHumpsMatch(capitals, queryUpper);
@@ -712,25 +711,25 @@ export class SearchEngine implements ISearchProvider {
             // Better to show it once with the best match relevance.
             // RouteMatcher.isMatch returns boolean.
             if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
-                 if (RouteMatcher.isMatch(item.name, query)) {
-                     // URL match is strong (1.5 in original code)
-                     // If we already have a score, take the max.
-                     // URL match usually implies ENDPOINTS scope.
-                     const urlScore = 1.5;
-                     if (urlScore > score) {
-                         score = urlScore;
-                         resultScope = SearchScope.ENDPOINTS;
-                     }
-                 }
+                if (RouteMatcher.isMatch(item.name, query)) {
+                    // URL match is strong (1.5 in original code)
+                    // If we already have a score, take the max.
+                    // URL match usually implies ENDPOINTS scope.
+                    const urlScore = 1.5;
+                    if (urlScore > score) {
+                        score = urlScore;
+                        resultScope = SearchScope.ENDPOINTS;
+                    }
+                }
             }
 
             if (score > MIN_SCORE) {
                 // 4. Activity Boosting (Inline)
                 if (this.getActivityScore) {
-                     const activityScore = this.getActivityScore(item.id);
-                     if (activityScore > 0 && score > 0.05) {
-                         score = score * (1 - this.activityWeight) + activityScore * this.activityWeight;
-                     }
+                    const activityScore = this.getActivityScore(item.id);
+                    if (activityScore > 0 && score > 0.05) {
+                        score = score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                    }
                 }
 
                 // Optimization: Skip allocation if heap is full and score is too low
@@ -744,7 +743,7 @@ export class SearchEngine implements ISearchProvider {
                 heap.push({
                     item,
                     score,
-                    scope: resultScope
+                    scope: resultScope,
                 });
             }
         };
@@ -814,7 +813,6 @@ export class SearchEngine implements ISearchProvider {
 
         return bestScore;
     }
-
 
     private extractCapitals(text: string): string {
         return (text.charAt(0) + text.slice(1).replace(/[^A-Z]/g, '')).toUpperCase();
@@ -931,13 +929,13 @@ export class SearchEngine implements ISearchProvider {
         indices: number[] | undefined,
         queryLower: string,
         maxResults: number,
-        onResult?: (result: SearchResult) => void
+        onResult?: (result: SearchResult) => void,
     ): SearchResult[] {
         const results: SearchResult[] = [];
 
         const processItem = (i: number) => {
-             // Check max results break
-             if (results.length >= maxResults) return;
+            // Check max results break
+            if (results.length >= maxResults) return;
 
             const item = this.items[i];
             const nameLower = this.preparedNamesLow[i] || item.name.toLowerCase();
@@ -956,10 +954,10 @@ export class SearchEngine implements ISearchProvider {
         };
 
         if (indices) {
-             for (let k = 0; k < indices.length; k++) {
+            for (let k = 0; k < indices.length; k++) {
                 if (results.length >= maxResults) break;
                 processItem(indices[k]);
-             }
+            }
         } else {
             const count = this.items.length;
             for (let i = 0; i < count; i++) {
@@ -994,10 +992,10 @@ export class SearchEngine implements ISearchProvider {
         const existingIds = new Set(results.map((r) => r.item.id));
 
         const checkItem = (i: number) => {
-             if (maxResults && results.length >= maxResults) return;
+            if (maxResults && results.length >= maxResults) return;
 
             const item = this.items[i];
-             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
+            if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
                 if (RouteMatcher.isMatch(item.name, queryLower)) {
                     results.push({
                         item,

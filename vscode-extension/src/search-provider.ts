@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
-import { CommandIndexer } from './command-indexer';
 import { Config } from '../../language-server/src/core/config';
 import { ISearchProvider } from '../../language-server/src/core/search-interface';
 import { SearchItemType, SearchOptions, SearchResult, SearchScope } from '../../language-server/src/core/types';
+import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 
 /**
@@ -68,7 +68,9 @@ export class SearchProvider {
 
         // Set up activity tracking in search engine if enabled (only for local engines)
         if (activityTracker && config.isActivityTrackingEnabled() && 'setActivityCallback' in searchEngine) {
-            (searchEngine as unknown as { setActivityCallback: (cb: (id: string) => number, weight: number) => void }).setActivityCallback(
+            (
+                searchEngine as unknown as { setActivityCallback: (cb: (id: string) => number, weight: number) => void }
+            ).setActivityCallback(
                 (itemId: string) => activityTracker.getActivityScore(itemId),
                 config.getActivityWeight(),
             );
@@ -82,13 +84,13 @@ export class SearchProvider {
                     let results = this.streamingResults.get(requestId) || [];
 
                     // Avoid duplicates (though the server should handle this)
-                    if (!results.some(r => r.item.id === result.item.id)) {
+                    if (!results.some((r) => r.item.id === result.item.id)) {
                         results.push(result);
                         this.streamingResults.set(requestId, results);
 
                         // Update UI incrementally if this is still the active search
                         if (requestId === this.lastQueryId) {
-                            this.currentQuickPick.items = results.map(r => this.resultToQuickPickItem(r));
+                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r));
                             this.updateTitle(this.currentQuickPick, results.length);
                         }
                     }
@@ -453,12 +455,12 @@ export class SearchProvider {
             if (!accepted && originalEditor) {
                 vscode.window.showTextDocument(originalEditor.document, {
                     viewColumn: originalEditor.viewColumn,
-                    selection: originalEditor.selection
+                    selection: originalEditor.selection,
                 });
             }
 
             // Clear decorations
-            vscode.window.visibleTextEditors.forEach(editor => {
+            vscode.window.visibleTextEditors.forEach((editor) => {
                 editor.setDecorations(this.matchDecorationType, []);
             });
 
@@ -520,27 +522,59 @@ export class SearchProvider {
                 // Determine a friendly label for the command
                 let label = '';
                 switch (s) {
-                    case SearchScope.TYPES: label = '/classes'; break;
-                    case SearchScope.SYMBOLS: label = '/symbols'; break;
-                    case SearchScope.FILES: label = '/files'; break;
-                    case SearchScope.TEXT: label = '/text'; break;
-                    case SearchScope.COMMANDS: label = '/commands'; break;
-                    case SearchScope.PROPERTIES: label = '/properties'; break;
-                    case SearchScope.ENDPOINTS: label = '/endpoints'; break;
-                    case SearchScope.EVERYTHING: label = '/all'; break;
+                    case SearchScope.TYPES:
+                        label = '/classes';
+                        break;
+                    case SearchScope.SYMBOLS:
+                        label = '/symbols';
+                        break;
+                    case SearchScope.FILES:
+                        label = '/files';
+                        break;
+                    case SearchScope.TEXT:
+                        label = '/text';
+                        break;
+                    case SearchScope.COMMANDS:
+                        label = '/commands';
+                        break;
+                    case SearchScope.PROPERTIES:
+                        label = '/properties';
+                        break;
+                    case SearchScope.ENDPOINTS:
+                        label = '/endpoints';
+                        break;
+                    case SearchScope.EVERYTHING:
+                        label = '/all';
+                        break;
                 }
 
                 if (label.startsWith(query.toLowerCase()) || prefix.trim().startsWith(query.toLowerCase().trim())) {
                     let description = '';
                     switch (s) {
-                        case SearchScope.TYPES: description = 'Search Classes'; break;
-                        case SearchScope.SYMBOLS: description = 'Search Symbols'; break;
-                        case SearchScope.FILES: description = 'Search Files'; break;
-                        case SearchScope.TEXT: description = 'Search Text'; break;
-                        case SearchScope.COMMANDS: description = 'Search Commands'; break;
-                        case SearchScope.PROPERTIES: description = 'Search Properties'; break;
-                        case SearchScope.ENDPOINTS: description = 'Search Endpoints'; break;
-                        case SearchScope.EVERYTHING: description = 'Search Everything'; break;
+                        case SearchScope.TYPES:
+                            description = 'Search Classes';
+                            break;
+                        case SearchScope.SYMBOLS:
+                            description = 'Search Symbols';
+                            break;
+                        case SearchScope.FILES:
+                            description = 'Search Files';
+                            break;
+                        case SearchScope.TEXT:
+                            description = 'Search Text';
+                            break;
+                        case SearchScope.COMMANDS:
+                            description = 'Search Commands';
+                            break;
+                        case SearchScope.PROPERTIES:
+                            description = 'Search Properties';
+                            break;
+                        case SearchScope.ENDPOINTS:
+                            description = 'Search Endpoints';
+                            break;
+                        case SearchScope.EVERYTHING:
+                            description = 'Search Everything';
+                            break;
                     }
 
                     commandSuggestions.push({
@@ -549,17 +583,17 @@ export class SearchProvider {
                             name: label,
                             type: SearchItemType.COMMAND,
                             filePath: '',
-                            detail: description
+                            detail: description,
                         },
                         score: 1,
-                        scope: SearchScope.COMMANDS
+                        scope: SearchScope.COMMANDS,
                     });
                     processedScopes.add(s);
                 }
             }
 
             if (commandSuggestions.length > 0) {
-                quickPick.items = commandSuggestions.map(r => this.resultToQuickPickItem(r));
+                quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r));
                 this.updateTitle(quickPick, commandSuggestions.length);
                 quickPick.busy = false;
                 return;
@@ -653,7 +687,10 @@ export class SearchProvider {
     /**
      * Handle button clicks for filter toggling
      */
-    private async handleButtonPress(quickPick: vscode.QuickPick<SearchResultItem>, button: vscode.QuickInputButton): Promise<void> {
+    private async handleButtonPress(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        button: vscode.QuickInputButton,
+    ): Promise<void> {
         const tooltip = button.tooltip || '';
         const baseName = tooltip.replace(this.ACTIVE_PREFIX, '').replace(this.INACTIVE_PREFIX, '');
 
@@ -738,7 +775,6 @@ export class SearchProvider {
 
         const trimmedQuery = query.trim();
 
-
         const options: SearchOptions = {
             query: trimmedQuery,
             scope: this.currentScope,
@@ -793,9 +829,10 @@ export class SearchProvider {
      * Get empty state item when no results are found
      */
     private getEmptyStateItem(query: string): SearchResultItem {
-        const detail = this.currentScope !== SearchScope.EVERYTHING
-            ? 'Try switching to Global search (/all) or check for typos'
-            : 'Check for typos or try a different query';
+        const detail =
+            this.currentScope !== SearchScope.EVERYTHING
+                ? 'Try switching to Global search (/all) or check for typos'
+                : 'Check for typos or try a different query';
 
         return {
             label: 'No results found',
@@ -806,8 +843,8 @@ export class SearchProvider {
             buttons: [
                 {
                     iconPath: new vscode.ThemeIcon('refresh'),
-                    tooltip: 'Rebuild Index (Fix missing files)'
-                }
+                    tooltip: 'Rebuild Index (Fix missing files)',
+                },
             ],
             result: {
                 item: {
@@ -815,11 +852,11 @@ export class SearchProvider {
                     name: 'No results found',
                     type: SearchItemType.TEXT, // Dummy type
                     filePath: '',
-                    detail: ''
+                    detail: '',
                 },
                 score: 0,
-                scope: this.currentScope
-            }
+                scope: this.currentScope,
+            },
         };
     }
 
@@ -977,8 +1014,8 @@ export class SearchProvider {
             this.handleQueryChange(
                 this.currentQuickPick,
                 '',
-                () => { }, // No-op timeouts
-                () => { }
+                () => {}, // No-op timeouts
+                () => {},
             );
             return;
         }
@@ -1013,13 +1050,10 @@ export class SearchProvider {
                 const firstHighlight = result.highlights[0];
                 range = new vscode.Range(
                     new vscode.Position(item.line || 0, firstHighlight[0]),
-                    new vscode.Position(item.line || 0, firstHighlight[1])
+                    new vscode.Position(item.line || 0, firstHighlight[1]),
                 );
             } else {
-                range = new vscode.Range(
-                    position,
-                    position.translate(0, item.name.length)
-                );
+                range = new vscode.Range(position, position.translate(0, item.name.length));
             }
 
             const editor = await vscode.window.showTextDocument(document, {

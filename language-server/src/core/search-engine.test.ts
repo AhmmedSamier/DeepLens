@@ -22,7 +22,7 @@ describe('SearchEngine', () => {
 
         const results = await engine.search({
             query: 'Employee',
-            scope: SearchScope.EVERYTHING
+            scope: SearchScope.EVERYTHING,
         });
 
         expect(results.length).toBeGreaterThan(0);
@@ -39,14 +39,14 @@ describe('SearchEngine', () => {
 
         const results = await engine.search({
             query: 'EmployeeService:200',
-            scope: SearchScope.EVERYTHING
+            scope: SearchScope.EVERYTHING,
         });
 
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].item.line).toBe(199); // 0-indexed
 
         // Should also work for the class match
-        const classMatch = results.find(r => r.item.type === SearchItemType.CLASS);
+        const classMatch = results.find((r) => r.item.type === SearchItemType.CLASS);
         if (classMatch) {
             expect(classMatch.item.line).toBe(199);
         }
@@ -61,7 +61,7 @@ describe('SearchEngine', () => {
 
         const results = engine.burstSearch({
             query: 'EmployeeService:50',
-            scope: SearchScope.EVERYTHING
+            scope: SearchScope.EVERYTHING,
         });
 
         expect(results.length).toBeGreaterThan(0);
@@ -78,7 +78,7 @@ describe('SearchEngine', () => {
 
         const results = await engine.search({
             query: 'EmployeeService',
-            scope: SearchScope.EVERYTHING
+            scope: SearchScope.EVERYTHING,
         });
 
         expect(results.length).toBeGreaterThan(0);

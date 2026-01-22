@@ -52,7 +52,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
      */
     async provideCodeLenses(
         document: vscode.TextDocument,
-        token: vscode.CancellationToken
+        token: vscode.CancellationToken,
     ): Promise<vscode.CodeLens[]> {
         if (!this.enabled) {
             return [];
@@ -64,7 +64,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             // Get document symbols using VSCode's built-in provider
             const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
                 'vscode.executeDocumentSymbolProvider',
-                document.uri
+                document.uri,
             );
 
             if (!symbols || token.isCancellationRequested) {
@@ -92,7 +92,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         symbols: vscode.DocumentSymbol[],
         codeLenses: vscode.CodeLens[],
         document: vscode.TextDocument,
-        parentKind?: vscode.SymbolKind
+        parentKind?: vscode.SymbolKind,
     ): void {
         for (const symbol of symbols) {
             this.createLensForSymbol(symbol, symbol.selectionRange.start, parentKind, document, codeLenses);
@@ -109,7 +109,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
     private collectFlatSymbols(
         symbols: vscode.SymbolInformation[],
         codeLenses: vscode.CodeLens[],
-        document: vscode.TextDocument
+        document: vscode.TextDocument,
     ): void {
         // Create a map for name -> kind lookups
         const kindMap = new Map<string, vscode.SymbolKind>();
@@ -134,7 +134,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         position: vscode.Position,
         parentKind: vscode.SymbolKind | undefined,
         document: vscode.TextDocument,
-        codeLenses: vscode.CodeLens[]
+        codeLenses: vscode.CodeLens[],
     ) {
         if (!SUPPORTED_SYMBOL_KINDS.includes(symbol.kind)) {
             return;
@@ -185,10 +185,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
     /**
      * Resolve a code lens by fetching count
      */
-    async resolveCodeLens(
-        codeLens: vscode.CodeLens,
-        token: vscode.CancellationToken
-    ): Promise<vscode.CodeLens | null> {
+    async resolveCodeLens(codeLens: vscode.CodeLens, token: vscode.CancellationToken): Promise<vscode.CodeLens | null> {
         const lens = codeLens as CodeLensWithSymbol;
 
         if (!lens.documentUri || !lens.symbolPosition || !lens.type) {
@@ -203,7 +200,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             const locations = await vscode.commands.executeCommand<vscode.Location[]>(
                 command,
                 lens.documentUri,
-                lens.symbolPosition
+                lens.symbolPosition,
             );
 
             if (token.isCancellationRequested) {
@@ -251,10 +248,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             const commandLocations = finalLocations.map((loc: any) => {
                 // If it's a LocationLink (has targetUri), convert it
                 if (loc.targetUri) {
-                    return new vscode.Location(
-                        loc.targetUri,
-                        loc.targetSelectionRange || loc.targetRange
-                    );
+                    return new vscode.Location(loc.targetUri, loc.targetSelectionRange || loc.targetRange);
                 }
                 return loc;
             });
@@ -262,11 +256,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             codeLens.command = {
                 title,
                 command: isReference ? 'editor.action.showReferences' : 'editor.action.peekImplementation',
-                arguments: [
-                    lens.documentUri,
-                    lens.symbolPosition,
-                    commandLocations,
-                ],
+                arguments: [lens.documentUri, lens.symbolPosition, commandLocations],
                 tooltip: `Show all ${isReference ? 'references' : 'implementations'} to ${lens.symbolName}`,
             };
         } catch (error) {

@@ -1,7 +1,7 @@
 import * as cp from 'child_process';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 
 export interface RgMatch {
     path: string;
@@ -26,7 +26,7 @@ export class RipgrepService {
             path.join(__dirname, '..', '..', 'dist', 'bin', binName), // from src/core
         ];
 
-        this.rgPath = locations.find(p => fs.existsSync(p)) || '';
+        this.rgPath = locations.find((p) => fs.existsSync(p)) || '';
     }
 
     isAvailable(): boolean {
@@ -53,14 +53,16 @@ export class RipgrepService {
                 const args = [
                     '--json',
                     '--case-insensitive',
-                    '--files-from', fileListPath,
-                    '--max-count', maxResults.toString(),
+                    '--files-from',
+                    fileListPath,
+                    '--max-count',
+                    maxResults.toString(),
                     '--',
-                    query
+                    query,
                 ];
 
                 const child = cp.spawn(this.rgPath, args, {
-                    stdio: ['ignore', 'pipe', 'pipe']
+                    stdio: ['ignore', 'pipe', 'pipe'],
                 });
 
                 const results: RgMatch[] = [];
@@ -87,7 +89,7 @@ export class RipgrepService {
                                     column: data.submatches[0]?.start || 0,
                                     text: data.lines.text.trim(),
                                     match: data.submatches[0]?.match?.text || '',
-                                    submatches: data.submatches
+                                    submatches: data.submatches,
                                 });
 
                                 if (results.length >= maxResults) {
@@ -113,7 +115,8 @@ export class RipgrepService {
                         }
                     } catch {}
 
-                    if (hitLimit || code === 0 || code === 1) { // 1 means no matches found
+                    if (hitLimit || code === 0 || code === 1) {
+                        // 1 means no matches found
                         resolve(results);
                     } else {
                         reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
@@ -131,7 +134,7 @@ export class RipgrepService {
             });
 
             // Write files to stream
-            files.forEach(f => writeStream.write(f + '\n'));
+            files.forEach((f) => writeStream.write(f + '\n'));
             writeStream.end();
         });
     }

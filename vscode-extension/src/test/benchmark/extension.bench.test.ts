@@ -1,9 +1,9 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
-const results: { name: string, avgMs: number, totalMs: number }[] = [];
+const results: { name: string; avgMs: number; totalMs: number }[] = [];
 
 // Simple benchmark wrapper
 async function benchmark(name: string, fn: () => Promise<void> | void, iterations: number = 1) {
@@ -59,16 +59,20 @@ suite('Extension Performance Test Suite', () => {
         await extension?.activate();
 
         // Allow some time for language server to start
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise((r) => setTimeout(r, 2000));
 
-        await benchmark('Execute Search Command', async () => {
-            // We just trigger the command, we can't easily measure until results appear without more complex hooks
-            // But checking that the command triggers without error is a start.
-            // In a real scenario, we might want to expose an API to wait for search completion.
-            await vscode.commands.executeCommand('deeplens.search');
+        await benchmark(
+            'Execute Search Command',
+            async () => {
+                // We just trigger the command, we can't easily measure until results appear without more complex hooks
+                // But checking that the command triggers without error is a start.
+                // In a real scenario, we might want to expose an API to wait for search completion.
+                await vscode.commands.executeCommand('deeplens.search');
 
-            // Close the quick pick if possible (Escape)
-            await vscode.commands.executeCommand('workbench.action.closeQuickOpen');
-        }, 5);
+                // Close the quick pick if possible (Escape)
+                await vscode.commands.executeCommand('workbench.action.closeQuickOpen');
+            },
+            5,
+        );
     });
 });

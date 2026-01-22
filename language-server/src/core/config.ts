@@ -31,21 +31,7 @@ export class Config {
             respectGitignore: true,
             'activity.enabled': true,
             'activity.weight': 0.3,
-            fileExtensions: [
-                'ts',
-                'tsx',
-                'js',
-                'jsx',
-                'py',
-                'java',
-                'cs',
-                'cpp',
-                'c',
-                'h',
-                'go',
-                'rb',
-                'php',
-            ],
+            fileExtensions: ['ts', 'tsx', 'js', 'jsx', 'py', 'java', 'cs', 'cpp', 'c', 'h', 'go', 'rb', 'php'],
         };
     }
 

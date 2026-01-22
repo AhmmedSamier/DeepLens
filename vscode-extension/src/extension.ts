@@ -1,12 +1,12 @@
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
-import { CommandIndexer } from './command-indexer';
 import { Config } from '../../language-server/src/core/config';
-import { SearchProvider } from './search-provider';
+import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
-import { logger } from './services/logging-service';
+import { SearchProvider } from './search-provider';
 import { GitService } from './services/git-service';
+import { logger } from './services/logging-service';
 
 let lspClient: DeepLensLspClient;
 let searchProvider: SearchProvider;
@@ -78,27 +78,27 @@ export async function activate(context: vscode.ExtensionContext) {
             {
                 label: `$(database) Index Status`,
                 detail: `${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
-                alwaysShow: true
+                alwaysShow: true,
             },
             {
                 label: '$(refresh) Rebuild Index',
                 description: 'Force a full re-index of the workspace',
-                picked: false
+                picked: false,
             },
             {
                 label: '$(trash) Clear Cache',
                 description: 'Clear the persistent index cache',
-                picked: false
+                picked: false,
             },
             {
                 label: '$(settings-gear) Configure Settings',
                 description: 'Open DeepLens extension settings',
-                picked: false
-            }
+                picked: false,
+            },
         ];
 
         const selection = await vscode.window.showQuickPick(items, {
-            placeHolder: 'DeepLens Index Statistics & Actions'
+            placeHolder: 'DeepLens Index Statistics & Actions',
         });
 
         if (selection) {
@@ -114,7 +114,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(showStatsCommand);
 
     // Listen to progress to update status bar
-    lspClient.onProgress.event(e => {
+    lspClient.onProgress.event((e) => {
         if (e.state === 'start') {
             statusItem.text = '$(sync~spin) Indexing...';
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
@@ -141,9 +141,7 @@ export async function activate(context: vscode.ExtensionContext) {
         { scheme: 'file', language: 'php' },
     ];
 
-    context.subscriptions.push(
-        vscode.languages.registerCodeLensProvider(supportedLanguages, codeLensProvider)
-    );
+    context.subscriptions.push(vscode.languages.registerCodeLensProvider(supportedLanguages, codeLensProvider));
     context.subscriptions.push(codeLensProvider);
 
     // Track document opens for activity
@@ -200,7 +198,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     return {
         searchProvider,
-        lspClient
+        lspClient,
     };
 }
 

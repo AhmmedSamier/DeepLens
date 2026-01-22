@@ -74,7 +74,9 @@ export class GitService {
                 }
 
                 this.gitChangeDebounce = setTimeout(async () => {
-                    logger.log(`[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`);
+                    logger.log(
+                        `[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`,
+                    );
                     await this.onRepoChange();
                     logger.log('[Git Event] Workspace refresh finished.');
                 }, 3000);

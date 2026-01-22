@@ -2,21 +2,21 @@ import * as assert from 'assert';
 import * as vscode from 'vscode';
 
 suite('Extension Test Suite', () => {
-	vscode.window.showInformationMessage('Start all tests.');
+    vscode.window.showInformationMessage('Start all tests.');
 
-	test('Extension should be present and active', async () => {
-		const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
-		assert.ok(extension, 'Extension should be present');
-		if (!extension.isActive) {
-			await extension.activate();
-		}
-		assert.ok(extension.isActive, 'Extension should be active');
-	});
+    test('Extension should be present and active', async () => {
+        const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
+        assert.ok(extension, 'Extension should be present');
+        if (!extension.isActive) {
+            await extension.activate();
+        }
+        assert.ok(extension.isActive, 'Extension should be active');
+    });
 
-	test('Commands should be registered', async () => {
+    test('Commands should be registered', async () => {
         // We can check if the command exists in the list of commands
         const commands = await vscode.commands.getCommands(true);
         assert.ok(commands.includes('deeplens.search'), 'deeplens.search command should be registered');
         assert.ok(commands.includes('deeplens.rebuildIndex'), 'deeplens.rebuildIndex command should be registered');
-	});
+    });
 });

@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'worker_threads';
-import { TreeSitterParser, Logger } from './tree-sitter-parser';
+import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { SearchableItem } from './types';
 
 if (!parentPort) {
@@ -12,7 +12,7 @@ const { extensionPath } = workerData;
 const logger: Logger = {
     appendLine: (message: string) => {
         parentPort?.postMessage({ type: 'log', message });
-    }
+    },
 };
 
 const parser = new TreeSitterParser(extensionPath, logger);
@@ -38,13 +38,12 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
         parentPort?.postMessage({
             type: 'result',
             items: allItems,
-            count: filePaths.length
+            count: filePaths.length,
         });
-
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
-            error: error instanceof Error ? error.message : String(error)
+            error: error instanceof Error ? error.message : String(error),
         });
     }
 });

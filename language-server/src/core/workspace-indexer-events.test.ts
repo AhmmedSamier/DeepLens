@@ -1,11 +1,11 @@
-import { describe, it, expect, mock, beforeEach, spyOn } from 'bun:test';
+import { beforeEach, describe, expect, it, spyOn } from 'bun:test';
 import * as fs from 'fs';
-import { WorkspaceIndexer } from './workspace-indexer';
 import { Config } from './config';
-import { IndexerEnvironment } from './indexer-interfaces';
 import { IndexPersistence } from './index-persistence';
+import { IndexerEnvironment } from './indexer-interfaces';
 import { TreeSitterParser } from './tree-sitter-parser';
 import { SearchItemType, SearchableItem } from './types';
+import { WorkspaceIndexer } from './workspace-indexer';
 
 // Mock dependencies
 const mockConfig = new Config();
@@ -14,7 +14,9 @@ const mockEnv: IndexerEnvironment = {
     findFiles: async () => [],
     asRelativePath: (p) => p.replace('/root/', ''),
     log: () => {},
-    createFileSystemWatcher: (p, cb) => { return { dispose: () => {} } } // Mock watcher
+    createFileSystemWatcher: (p, cb) => {
+        return { dispose: () => {} };
+    }, // Mock watcher
 };
 
 // Mock TreeSitter to return specific symbols
@@ -40,9 +42,12 @@ describe('WorkspaceIndexer Events', () => {
         indexer = new WorkspaceIndexer(mockConfig, treeSitter, persistence, mockEnv, '/tmp');
 
         // Mock fs.promises.stat to avoid ENOENT
-        spyOn(fs.promises, 'stat').mockImplementation(async () => ({
-            mtime: 200 // newer mtime
-        } as any));
+        spyOn(fs.promises, 'stat').mockImplementation(
+            async () =>
+                ({
+                    mtime: 200, // newer mtime
+                }) as any,
+        );
     });
 
     it('should re-index a changed file even if a cached hash exists', async () => {
@@ -58,7 +63,7 @@ describe('WorkspaceIndexer Events', () => {
             relativeFilePath: 'file.ts',
             line: 0,
             column: 0,
-            fullName: 'OldSymbol'
+            fullName: 'OldSymbol',
         };
 
         const newSymbol = {
@@ -69,7 +74,7 @@ describe('WorkspaceIndexer Events', () => {
             relativeFilePath: 'file.ts',
             line: 1,
             column: 0,
-            fullName: 'NewSymbol'
+            fullName: 'NewSymbol',
         };
 
         // 1. Setup initial state (Simulate file already indexed)
@@ -94,8 +99,8 @@ describe('WorkspaceIndexer Events', () => {
         // 2. Trigger handleFileChanged
         const addedItems: SearchableItem[] = [];
         const removedFiles: string[] = [];
-        indexer.onItemsAdded(items => addedItems.push(...items));
-        indexer.onItemsRemoved(path => removedFiles.push(path));
+        indexer.onItemsAdded((items) => addedItems.push(...items));
+        indexer.onItemsRemoved((path) => removedFiles.push(path));
 
         // Access private method
         await (indexer as any).handleFileChanged(filePath);
@@ -106,8 +111,8 @@ describe('WorkspaceIndexer Events', () => {
         expect(removedFiles).toContain(filePath);
 
         // Should have emitted add event with new symbols
-        const hasOldSymbol = addedItems.some(i => i.name === 'OldSymbol');
-        const hasNewSymbol = addedItems.some(i => i.name === 'NewSymbol');
+        const hasOldSymbol = addedItems.some((i) => i.name === 'OldSymbol');
+        const hasNewSymbol = addedItems.some((i) => i.name === 'NewSymbol');
 
         // We expect OldSymbol to be GONE (never emitted in this batch) and NewSymbol to be PRESENT
         expect(hasOldSymbol).toBe(false);

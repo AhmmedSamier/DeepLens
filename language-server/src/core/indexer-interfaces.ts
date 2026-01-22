@@ -43,5 +43,8 @@ export interface IndexerEnvironment {
     executeWorkspaceSymbolProvider?(): Promise<LeanSymbolInformation[]>;
 
     // For file watching
-    createFileSystemWatcher?(pattern: string, onEvent: (path: string, type: 'create' | 'change' | 'delete') => void): { dispose(): void };
+    createFileSystemWatcher?(
+        pattern: string,
+        onEvent: (path: string, type: 'create' | 'change' | 'delete') => void,
+    ): { dispose(): void };
 }

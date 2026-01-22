@@ -1,15 +1,27 @@
-import * as vscode from 'vscode';
-import { LanguageClient, LanguageClientOptions, ServerOptions, TransportKind, ErrorAction, CloseAction, State } from 'vscode-languageclient/node';
 import * as path from 'path';
-import { SearchOptions, SearchResult, IndexStats } from '../../language-server/src/core/types';
+import * as vscode from 'vscode';
+import {
+    CloseAction,
+    ErrorAction,
+    LanguageClient,
+    LanguageClientOptions,
+    ServerOptions,
+    State,
+    TransportKind,
+} from 'vscode-languageclient/node';
 import { ISearchProvider } from '../../language-server/src/core/search-interface';
+import { IndexStats, SearchOptions, SearchResult } from '../../language-server/src/core/types';
 
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;
     private context: vscode.ExtensionContext;
     private isStopping = false;
     private startPromise: Promise<void> | undefined;
-    public onProgress = new vscode.EventEmitter<{ state: 'start' | 'report' | 'end'; message?: string; percentage?: number }>();
+    public onProgress = new vscode.EventEmitter<{
+        state: 'start' | 'report' | 'end';
+        message?: string;
+        percentage?: number;
+    }>();
     public onStreamResult = new vscode.EventEmitter<{ requestId?: number; result: SearchResult }>();
 
     constructor(context: vscode.ExtensionContext) {
@@ -38,17 +50,17 @@ export class DeepLensLspClient implements ISearchProvider {
 
         const serverOptions: ServerOptions = {
             run: { module: serverPath, transport: TransportKind.ipc },
-            debug: { module: serverPath, transport: TransportKind.ipc }
+            debug: { module: serverPath, transport: TransportKind.ipc },
         };
 
         const clientOptions: LanguageClientOptions = {
             documentSelector: [{ scheme: 'file', language: '*' }],
             synchronize: {
-                fileEvents: vscode.workspace.createFileSystemWatcher('**/*')
+                fileEvents: vscode.workspace.createFileSystemWatcher('**/*'),
             },
             initializationOptions: {
                 storagePath: this.context.storageUri?.fsPath || this.context.globalStorageUri.fsPath,
-                extensionPath: this.context.extensionPath
+                extensionPath: this.context.extensionPath,
             },
             errorHandler: {
                 error: () => {
@@ -66,16 +78,11 @@ export class DeepLensLspClient implements ISearchProvider {
                     }
                     // Default: don't restart
                     return { action: CloseAction.DoNotRestart };
-                }
-            }
+                },
+            },
         };
 
-        this.client = new LanguageClient(
-            'deeplensLS',
-            'DeepLens Language Server',
-            serverOptions,
-            clientOptions
-        );
+        this.client = new LanguageClient('deeplensLS', 'DeepLens Language Server', serverOptions, clientOptions);
 
         // Listen for state changes to detect unexpected disconnects
         this.client.onDidChangeState((event) => {
@@ -118,7 +125,7 @@ export class DeepLensLspClient implements ISearchProvider {
     private createProgressHandler(
         token: string,
         progress: vscode.Progress<{ message?: string; increment?: number }>,
-        resolve: () => void
+        resolve: () => void,
     ) {
         let lastPercentage = 0;
         const disposable = this.client!.onNotification(
@@ -289,4 +296,3 @@ export class DeepLensLspClient implements ISearchProvider {
         this.onStreamResult.dispose();
     }
 }
-

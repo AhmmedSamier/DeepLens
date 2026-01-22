@@ -1,32 +1,36 @@
+import { TextDocument } from 'vscode-languageserver-textdocument';
 import {
     createConnection,
-    ProposedFeatures,
-    InitializeParams,
     DidChangeConfigurationNotification,
-    SymbolKind,
-    TextDocumentSyncKind,
+    InitializeParams,
     InitializeResult,
+    ProposedFeatures,
     RequestType,
     RequestType0,
+    SymbolKind,
     TextDocuments,
+    TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
-import { TextDocument } from 'vscode-languageserver-textdocument';
 
-import * as path from 'path';
 import * as fs from 'fs';
-import { SearchEngine } from './core/search-engine';
-import { WorkspaceIndexer } from './core/workspace-indexer';
-import { TreeSitterParser } from './core/tree-sitter-parser';
-import { IndexPersistence } from './core/index-persistence';
-import { Config } from './core/config';
-import { SearchItemType, SearchScope, SearchOptions, SearchResult, IndexStats } from './core/types';
+import * as path from 'path';
 import { ActivityTracker } from './core/activity-tracker';
+import { Config } from './core/config';
+import { IndexPersistence } from './core/index-persistence';
+import { SearchEngine } from './core/search-engine';
+import { TreeSitterParser } from './core/tree-sitter-parser';
+import { IndexStats, SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
+import { WorkspaceIndexer } from './core/workspace-indexer';
 import { LspIndexerEnvironment } from './indexer-client';
 
 // Custom requests
 export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/burstSearch');
-export const ResolveItemsRequest = new RequestType<{ itemIds: string[] }, SearchResult[], void>('deeplens/resolveItems');
-export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchResult[], void>('deeplens/getRecentItems');
+export const ResolveItemsRequest = new RequestType<{ itemIds: string[] }, SearchResult[], void>(
+    'deeplens/resolveItems',
+);
+export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchResult[], void>(
+    'deeplens/getRecentItems',
+);
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
@@ -64,7 +68,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     // Resolve workspace folders
     let folders: string[] = [];
     if (params.workspaceFolders) {
-        folders = params.workspaceFolders.map(f => {
+        folders = params.workspaceFolders.map((f) => {
             const uri = f.uri;
             if (uri.startsWith('file:///')) {
                 return path.normalize(decodeURIComponent(uri.slice(8)));
@@ -92,7 +96,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     // extensionPath is needed for TreeSitter parsers to find WASM files
     const extensionPath = params.initializationOptions?.extensionPath || process.cwd();
     treeSitterParser = new TreeSitterParser(extensionPath, {
-        appendLine: (msg) => connection.console.log(msg)
+        appendLine: (msg) => connection.console.log(msg),
     });
     await treeSitterParser.init();
 
@@ -107,12 +111,12 @@ connection.onInitialize(async (params: InitializeParams) => {
     searchEngine.setExtensionPath(extensionPath);
     searchEngine.setLogger({
         log: (msg) => connection.console.log(msg),
-        error: (msg) => connection.console.error(msg)
+        error: (msg) => connection.console.error(msg),
     });
 
     // Sync active files for prioritization
     const updateActiveFiles = () => {
-        const openFiles = documents.all().map(doc => {
+        const openFiles = documents.all().map((doc) => {
             const uri = doc.uri;
             if (uri.startsWith('file:///')) return path.normalize(decodeURIComponent(uri.slice(8)));
             if (uri.startsWith('file://')) return path.normalize(decodeURIComponent(uri.slice(7)));
@@ -132,15 +136,20 @@ connection.onInitialize(async (params: InitializeParams) => {
     if (config.isActivityTrackingEnabled()) {
         searchEngine.setActivityCallback(
             (itemId) => activityTracker.getActivityScore(itemId),
-            config.getActivityWeight()
+            config.getActivityWeight(),
         );
     }
 
     // Load initial configuration if possible
     if (hasConfigurationCapability) {
-        connection.workspace.getConfiguration('deeplens').then(settings => {
-            config.update(settings);
-        });
+        connection.workspace
+            .getConfiguration('deeplens')
+            .then((settings) => {
+                config.update(settings);
+            })
+            .catch((err) => {
+                connection.console.error(`Failed to load configuration: ${err}`);
+            });
     }
 
     const result: InitializeResult = {
@@ -148,7 +157,7 @@ connection.onInitialize(async (params: InitializeParams) => {
             textDocumentSync: TextDocumentSyncKind.Incremental,
             // Tell the client that this server supports workspace symbols.
             workspaceSymbolProvider: true,
-        }
+        },
     };
     return result;
 });
@@ -202,7 +211,11 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
         if (!isShuttingDown) {
-            connection.sendNotification('deeplens/progress', { token, message: `Done (${duration}s)`, percentage: 100 });
+            connection.sendNotification('deeplens/progress', {
+                token,
+                message: `Done (${duration}s)`,
+                percentage: 100,
+            });
         }
     } catch (error) {
         connection.console.error(`Error reporting progress: ${error}`);
@@ -216,15 +229,24 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
 // Map SearchItemType to SymbolKind
 function mapItemTypeToSymbolKind(type: SearchItemType): SymbolKind {
     switch (type) {
-        case SearchItemType.FILE: return SymbolKind.File;
-        case SearchItemType.CLASS: return SymbolKind.Class;
-        case SearchItemType.INTERFACE: return SymbolKind.Interface;
-        case SearchItemType.ENUM: return SymbolKind.Enum;
-        case SearchItemType.FUNCTION: return SymbolKind.Function;
-        case SearchItemType.METHOD: return SymbolKind.Method;
-        case SearchItemType.PROPERTY: return SymbolKind.Property;
-        case SearchItemType.VARIABLE: return SymbolKind.Variable;
-        default: return SymbolKind.Object;
+        case SearchItemType.FILE:
+            return SymbolKind.File;
+        case SearchItemType.CLASS:
+            return SymbolKind.Class;
+        case SearchItemType.INTERFACE:
+            return SymbolKind.Interface;
+        case SearchItemType.ENUM:
+            return SymbolKind.Enum;
+        case SearchItemType.FUNCTION:
+            return SymbolKind.Function;
+        case SearchItemType.METHOD:
+            return SymbolKind.Method;
+        case SearchItemType.PROPERTY:
+            return SymbolKind.Property;
+        case SearchItemType.VARIABLE:
+            return SymbolKind.Variable;
+        default:
+            return SymbolKind.Object;
     }
 }
 
@@ -235,20 +257,20 @@ connection.onWorkspaceSymbol(async (params) => {
     const results = await searchEngine.search({
         query: params.query,
         scope: SearchScope.EVERYTHING, // Default for standard LSP request
-        maxResults: 50
+        maxResults: 50,
     });
 
-    return results.map(r => ({
+    return results.map((r) => ({
         name: r.item.name,
         kind: mapItemTypeToSymbolKind(r.item.type),
         location: {
             uri: `file://${r.item.filePath.replace(/\\/g, '/')}`,
             range: {
                 start: { line: r.item.line || 0, character: r.item.column || 0 },
-                end: { line: r.item.line || 0, character: (r.item.column || 0) + r.item.name.length }
-            }
+                end: { line: r.item.line || 0, character: (r.item.column || 0) + r.item.name.length },
+            },
         },
-        containerName: r.item.containerName
+        containerName: r.item.containerName,
     }));
 });
 
@@ -311,7 +333,7 @@ connection.onRequest(IndexStatsRequest, async () => {
         totalSymbols: stats.symbolCount,
         lastUpdate: Date.now(),
         indexing: workspaceIndexer.isIndexing(),
-        cacheSize: await indexPersistence.getCacheSize()
+        cacheSize: await indexPersistence.getCacheSize(),
     };
 });
 
@@ -349,4 +371,3 @@ process.on('unhandledRejection', (reason) => {
 
 // Listen on the connection
 connection.listen();
-

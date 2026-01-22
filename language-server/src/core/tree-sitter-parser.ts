@@ -162,7 +162,7 @@ export class TreeSitterParser {
         if (!lang) {
             // Only warn if it is a supported language but failed to load
             if (TreeSitterParser.LANGUAGE_MAP[langId]) {
-                 // Suppress spamming warnings for missing languages if file extension is common but no parser
+                // Suppress spamming warnings for missing languages if file extension is common but no parser
             }
             return [];
         }

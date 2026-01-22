@@ -1,14 +1,14 @@
 import * as cp from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { Worker } from 'worker_threads';
 import { Minimatch } from 'minimatch';
+import * as os from 'os';
+import * as path from 'path';
+import { Worker } from 'worker_threads';
 import { Config } from './config';
 import { IndexPersistence } from './index-persistence';
-import { SearchableItem, SearchItemType } from './types';
 import { IndexerEnvironment } from './indexer-interfaces';
+import { SearchableItem, SearchItemType } from './types';
 
 /**
  * Workspace indexer that scans files and extracts symbols
@@ -35,7 +35,7 @@ export class WorkspaceIndexer {
         treeSitter: import('./tree-sitter-parser').TreeSitterParser,
         persistence: IndexPersistence,
         env: IndexerEnvironment,
-        extensionPath: string
+        extensionPath: string,
     ) {
         this.config = config;
         this.treeSitter = treeSitter;
@@ -47,15 +47,15 @@ export class WorkspaceIndexer {
 
     private updateExcludeMatchers(): void {
         const patterns = this.config.getExcludePatterns();
-        this.excludeMatchers = patterns.map(p => new Minimatch(p, { dot: true }));
+        this.excludeMatchers = patterns.map((p) => new Minimatch(p, { dot: true }));
     }
 
     public onItemsAdded(listener: (items: SearchableItem[]) => void) {
         this.onItemsAddedListeners.push(listener);
         return {
             dispose: () => {
-                this.onItemsAddedListeners = this.onItemsAddedListeners.filter(l => l !== listener);
-            }
+                this.onItemsAddedListeners = this.onItemsAddedListeners.filter((l) => l !== listener);
+            },
         };
     }
 
@@ -63,8 +63,8 @@ export class WorkspaceIndexer {
         this.onItemsRemovedListeners.push(listener);
         return {
             dispose: () => {
-                this.onItemsRemovedListeners = this.onItemsRemovedListeners.filter(l => l !== listener);
-            }
+                this.onItemsRemovedListeners = this.onItemsRemovedListeners.filter((l) => l !== listener);
+            },
         };
     }
 
@@ -158,7 +158,6 @@ export class WorkspaceIndexer {
 
             // We can't log final summary count here easily without keeping track, but that's fine.
             this.log(`Final Index Summary: Completed.`);
-
         } finally {
             this.indexing = false;
         }
@@ -210,7 +209,7 @@ export class WorkspaceIndexer {
                 // Get both tracked and untracked (but not ignored) files
                 const output = await this.execGit(
                     ['ls-files', '--cached', '--others', '--exclude-standard'],
-                    folderPath
+                    folderPath,
                 );
 
                 const lines = output.split('\n');
@@ -313,7 +312,7 @@ export class WorkspaceIndexer {
      */
     private async indexSymbols(
         fileItems: SearchableItem[],
-        progressCallback?: (message: string, increment?: number) => void
+        progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
         const totalFiles = fileItems.length;
 
@@ -396,7 +395,7 @@ export class WorkspaceIndexer {
             // Initialize workers
             for (let i = 0; i < workerCount; i++) {
                 const worker = new Worker(workerScript, {
-                    workerData: { extensionPath: this.extensionPath }
+                    workerData: { extensionPath: this.extensionPath },
                 });
 
                 worker.on('message', (message) => {
@@ -405,17 +404,19 @@ export class WorkspaceIndexer {
                     } else if (message.type === 'result') {
                         const { items, count } = message;
                         if (items && items.length > 0) {
-                             // Re-intern strings from worker to share memory in main thread
-                             const internedItems = items.map((item: SearchableItem) => ({
-                                 ...item,
-                                 name: this.intern(item.name),
-                                 fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                                 containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                                 relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
-                                 filePath: this.intern(item.filePath)
-                             }));
+                            // Re-intern strings from worker to share memory in main thread
+                            const internedItems = items.map((item: SearchableItem) => ({
+                                ...item,
+                                name: this.intern(item.name),
+                                fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                                containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                                relativeFilePath: item.relativeFilePath
+                                    ? this.intern(item.relativeFilePath)
+                                    : undefined,
+                                filePath: this.intern(item.filePath),
+                            }));
 
-                             this.fireItemsAdded(internedItems);
+                            this.fireItemsAdded(internedItems);
                         }
 
                         // Mark task complete
@@ -425,15 +426,17 @@ export class WorkspaceIndexer {
 
                         // Update progress
                         if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
-                             if (processed >= totalFiles) logged100 = true;
-                             this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
+                            if (processed >= totalFiles) logged100 = true;
+                            this.log(
+                                `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
+                            );
                         }
                         if (progressCallback) {
-                             const percentage = (processed / totalFiles) * 100;
-                             if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                                 progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
-                                 nextReportingPercentage = percentage + 5;
-                             }
+                            const percentage = (processed / totalFiles) * 100;
+                            if (percentage >= nextReportingPercentage || processed === totalFiles) {
+                                progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
+                                nextReportingPercentage = percentage + 5;
+                            }
                         }
 
                         // Pick next task
@@ -469,7 +472,9 @@ export class WorkspaceIndexer {
                     if (this.shouldSkipIndexing(fileItem.filePath)) {
                         processed++;
                         if (processed % 100 === 0) {
-                             this.log(`Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`);
+                            this.log(
+                                `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
+                            );
                         }
                         continue;
                     }
@@ -496,8 +501,8 @@ export class WorkspaceIndexer {
 
             // Start initial tasks
             while (freeWorkers.length > 0 && pendingItems.length > 0) {
-                 const w = freeWorkers.pop()!;
-                 assignTask(w);
+                const w = freeWorkers.pop()!;
+                assignTask(w);
             }
 
             // If we ran out of items before using all workers
@@ -507,7 +512,6 @@ export class WorkspaceIndexer {
             }
 
             await promise;
-
         } catch (error) {
             this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
             return this.runFileIndexingFallback(fileItems, progressCallback);
@@ -524,13 +528,13 @@ export class WorkspaceIndexer {
         // Calculate hash if missing (blocking in main thread here is risky for large files,
         // but we assume hashing is fast or was pre-calculated in populateFileHashes)
         if (!currentHash && !this.indexing) {
-             try {
-                 const content = fs.readFileSync(filePath);
-                 currentHash = crypto.createHash('sha256').update(content).digest('hex');
-                 this.fileHashes.set(filePath, currentHash);
-             } catch {
-                 return false;
-             }
+            try {
+                const content = fs.readFileSync(filePath);
+                currentHash = crypto.createHash('sha256').update(content).digest('hex');
+                this.fileHashes.set(filePath, currentHash);
+            } catch {
+                return false;
+            }
         }
 
         const cached = this.persistence.get(filePath);
@@ -541,13 +545,15 @@ export class WorkspaceIndexer {
 
         // If mtime matches and we have a cache (fallback if hash missing)
         if (cached && !currentHash) {
-             try {
+            try {
                 const stats = fs.statSync(filePath);
                 if (Number(cached.mtime) === Number(stats.mtime)) {
                     this.fireItemsAdded(cached.symbols);
                     return true;
                 }
-             } catch { return false; }
+            } catch {
+                return false;
+            }
         }
 
         return false;
@@ -597,7 +603,7 @@ export class WorkspaceIndexer {
                 if (progressCallback) {
                     const percentage = (processed / totalFiles) * 100;
                     if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                         const fileName = path.basename(fileItem.filePath);
+                        const fileName = path.basename(fileItem.filePath);
                         progressCallback(`Indexing ${fileName} (${processed}/${totalFiles})`, percentage);
                         nextReportingPercentage = percentage + 5;
                     }
@@ -728,7 +734,7 @@ export class WorkspaceIndexer {
                     relativeFilePath: relPath,
                     name: this.intern(item.name),
                     fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                    containerName: item.containerName ? this.intern(item.containerName) : undefined
+                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
                 }));
             }
         } catch (e) {
@@ -775,10 +781,7 @@ export class WorkspaceIndexer {
 
         for (const folderPath of workspaceFolders) {
             try {
-                const output = await this.execGit(
-                    ['ls-files', '--stage'],
-                    folderPath
-                );
+                const output = await this.execGit(['ls-files', '--stage'], folderPath);
 
                 const lines = output.split('\n');
                 for (const line of lines) {
@@ -1021,7 +1024,6 @@ export class WorkspaceIndexer {
 
     public log(message: string): void {
         this.env.log(message);
-        console.log(`[Indexer] ${message}`);
     }
 
     /**

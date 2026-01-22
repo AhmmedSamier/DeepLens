@@ -30,7 +30,16 @@ export class ActivityTracker {
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
 
-    constructor(storageOrContext: string | { workspaceState: { get<T>(key: string): T | undefined; update(key: string, value: unknown): PromiseLike<void> } }) {
+    constructor(
+        storageOrContext:
+            | string
+            | {
+                  workspaceState: {
+                      get<T>(key: string): T | undefined;
+                      update(key: string, value: unknown): PromiseLike<void>;
+                  };
+              },
+    ) {
         if (typeof storageOrContext === 'string') {
             const storagePath = storageOrContext;
             this.storage = {
@@ -55,13 +64,15 @@ export class ActivityTracker {
                     } catch (e) {
                         console.error('Failed to save activity file:', e);
                     }
-                }
+                },
             };
         } else {
             const context = storageOrContext;
             this.storage = {
                 load: () => context.workspaceState.get(this.STORAGE_KEY),
-                save: async (data) => { await context.workspaceState.update(this.STORAGE_KEY, data); }
+                save: async (data) => {
+                    await context.workspaceState.update(this.STORAGE_KEY, data);
+                },
             };
         }
 
@@ -207,7 +218,7 @@ export class ActivityTracker {
             .sort((a, b) => b.score - a.score)
             .slice(0, count);
 
-        return sorted.map(r => r.itemId);
+        return sorted.map((r) => r.itemId);
     }
 
     /**

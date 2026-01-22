@@ -1,12 +1,12 @@
 import * as assert from 'assert';
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
 // Define gc
 declare const global: any;
 
-const results: { name: string, memory: any, extra?: any }[] = [];
+const results: { name: string; memory: any; extra?: any }[] = [];
 
 function getMemoryUsage() {
     const used = process.memoryUsage();
@@ -65,12 +65,12 @@ suite('Extension Memory Benchmark', () => {
                     return async (...args: any[]) => {
                         // Delay 200ms to ensure we can change the queryId while this is pending
                         // Must be longer than the loop iteration wait but shorter than overall timeout
-                        await new Promise(r => setTimeout(r, 200));
+                        await new Promise((r) => setTimeout(r, 200));
                         return target[prop](...args);
                     };
                 }
                 return Reflect.get(target, prop, receiver);
-            }
+            },
         });
         (searchProvider as any).searchEngine = delayedSearchEngine;
 
@@ -86,7 +86,7 @@ suite('Extension Memory Benchmark', () => {
                 quickPick,
                 query,
                 (t: any) => {},
-                (t: any) => {}
+                (t: any) => {},
             );
 
             // Wait 120ms.
@@ -97,12 +97,12 @@ suite('Extension Memory Benchmark', () => {
             // Next handleQueryChange increments queryId.
             // When search finishes, it sees mismatch and returns early.
             // streamingResults should leak.
-            await new Promise(r => setTimeout(r, 120));
+            await new Promise((r) => setTimeout(r, 120));
         }
 
         // Wait for all delayed searches to complete
         console.log('Waiting for searches to settle...');
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise((r) => setTimeout(r, 3000));
 
         const afterMemory = getMemoryUsage();
         console.log('Memory After Typing:', afterMemory);
@@ -114,7 +114,7 @@ suite('Extension Memory Benchmark', () => {
         results.push({
             name: 'After Typing',
             memory: afterMemory,
-            extra: { streamingResultsSize }
+            extra: { streamingResultsSize },
         });
 
         if (global.gc) {

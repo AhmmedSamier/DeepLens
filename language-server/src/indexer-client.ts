@@ -1,7 +1,7 @@
-import * as path from 'path';
 import { glob } from 'glob';
-import { IndexerEnvironment } from './core/indexer-interfaces';
+import * as path from 'path';
 import { Connection, FileChangeType } from 'vscode-languageserver/node';
+import { IndexerEnvironment } from './core/indexer-interfaces';
 
 export class LspIndexerEnvironment implements IndexerEnvironment {
     private connection: Connection;
@@ -49,12 +49,15 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         this.connection.console.log(`[Indexer] ${message}`);
     }
 
-    // Standard LSP server doesn't have easy access to other LSP servers' symbols 
+    // Standard LSP server doesn't have easy access to other LSP servers' symbols
     // without significant extra work. For now, we rely 100% on Tree-sitter.
     executeDocumentSymbolProvider = undefined;
     executeWorkspaceSymbolProvider = undefined;
 
-    createFileSystemWatcher = (pattern: string, onEvent: (path: string, type: 'create' | 'change' | 'delete') => void) => {
+    createFileSystemWatcher = (
+        pattern: string,
+        onEvent: (path: string, type: 'create' | 'change' | 'delete') => void,
+    ) => {
         return this.connection.onDidChangeWatchedFiles((params) => {
             for (const change of params.changes) {
                 let type: 'create' | 'change' | 'delete';
@@ -84,5 +87,5 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
                 onEvent(filePath, type);
             }
         });
-    }
+    };
 }
