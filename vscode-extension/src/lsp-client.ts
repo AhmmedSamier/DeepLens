@@ -47,7 +47,7 @@ export class DeepLensLspClient implements ISearchProvider {
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*')
             },
             initializationOptions: {
-                storagePath: this.context.globalStorageUri.fsPath,
+                storagePath: this.context.storageUri?.fsPath || this.context.globalStorageUri.fsPath,
                 extensionPath: this.context.extensionPath
             },
             errorHandler: {
