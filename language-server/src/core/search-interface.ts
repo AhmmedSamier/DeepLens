@@ -6,8 +6,14 @@ import { SearchOptions, SearchResult } from './types';
  * or a remote LSP client.
  */
 export interface ISearchProvider {
-    search(options: SearchOptions, token?: CancellationToken): Promise<SearchResult[]> | SearchResult[];
-    burstSearch(options: SearchOptions, token?: CancellationToken): Promise<SearchResult[]> | SearchResult[];
+    search(
+        options: SearchOptions,
+        token?: CancellationToken | ((result: SearchResult) => void),
+    ): Promise<SearchResult[]> | SearchResult[];
+    burstSearch(
+        options: SearchOptions,
+        token?: CancellationToken | ((result: SearchResult) => void),
+    ): Promise<SearchResult[]> | SearchResult[];
     resolveItems(itemIds: string[]): Promise<SearchResult[]> | SearchResult[];
     getRecentItems(count: number): Promise<SearchResult[]> | SearchResult[];
     recordActivity(itemId: string): Promise<void> | void;

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as Fuzzysort from 'fuzzysort';
 import * as path from 'path';
+import { CancellationToken } from 'vscode-languageserver';
 import { Config } from './config';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
@@ -385,12 +386,18 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Perform search
      */
-    async search(options: SearchOptions, onResult?: (result: SearchResult) => void): Promise<SearchResult[]> {
+    async search(
+        options: SearchOptions,
+        onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
+    ): Promise<SearchResult[]> {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return [];
         }
+
+        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+        // Note: CancellationToken is not currently used in this implementation but is accepted for interface compatibility
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -1026,11 +1033,16 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    burstSearch(options: SearchOptions, onResult?: (result: SearchResult) => void): SearchResult[] {
+    burstSearch(
+        options: SearchOptions,
+        onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
+    ): SearchResult[] {
         const { query, scope, maxResults = 10 } = options;
         if (!query || query.trim().length === 0) {
             return [];
         }
+
+        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 

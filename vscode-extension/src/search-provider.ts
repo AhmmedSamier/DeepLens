@@ -1051,7 +1051,7 @@ export class SearchProvider {
         item: SearchableItem,
         viewColumn: vscode.ViewColumn,
         preview: boolean,
-        highlights?: [number, number][],
+        highlights?: number[][],
     ): Promise<void> {
         try {
             const uri = vscode.Uri.file(item.filePath);

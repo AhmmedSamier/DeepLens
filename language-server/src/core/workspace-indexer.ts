@@ -388,31 +388,9 @@ export class WorkspaceIndexer {
                 resolveAll = resolve;
             });
 
-            // Initialize workers
-            for (let i = 0; i < workerCount; i++) {
-                const worker = new Worker(workerScript, {
-                    workerData: { extensionPath: this.extensionPath },
-                });
-
-                this.setupWorkerListeners(
-                    worker,
-                    i,
-                    totalFiles,
-                    () => processed,
-                    (p) => (processed = p),
-                    () => activeTasks,
-                    (a) => (activeTasks = a),
-                    () => logged100,
-                    (l) => (logged100 = l),
-                    () => nextReportingPercentage,
-                    (n) => (nextReportingPercentage = n),
-                    progressCallback,
-                    assignTask
-                );
-
-                workers.push(worker);
-                freeWorkers.push(worker);
-            }
+            const terminateWorkers = () => {
+                for (const w of workers) w.terminate();
+            };
 
             const assignTask = (worker: Worker) => {
                 const batchFiles: string[] = [];
@@ -448,9 +426,31 @@ export class WorkspaceIndexer {
                 }
             };
 
-            const terminateWorkers = () => {
-                for (const w of workers) w.terminate();
-            };
+            // Initialize workers
+            for (let i = 0; i < workerCount; i++) {
+                const worker = new Worker(workerScript, {
+                    workerData: { extensionPath: this.extensionPath },
+                });
+
+                this.setupWorkerListeners(
+                    worker,
+                    i,
+                    totalFiles,
+                    () => processed,
+                    (p) => (processed = p),
+                    () => activeTasks,
+                    (a) => (activeTasks = a),
+                    () => logged100,
+                    (l) => (logged100 = l),
+                    () => nextReportingPercentage,
+                    (n) => (nextReportingPercentage = n),
+                    progressCallback,
+                    assignTask
+                );
+
+                workers.push(worker);
+                freeWorkers.push(worker);
+            }
 
             // Start initial tasks
             while (freeWorkers.length > 0 && pendingItems.length > 0) {
