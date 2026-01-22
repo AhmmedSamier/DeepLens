@@ -163,10 +163,10 @@ export class DeepLensLspClient implements ISearchProvider {
         return path.join(this.context.extensionPath, 'dist', 'server.js');
     }
 
-    async search(options: SearchOptions): Promise<SearchResult[]> {
+    async search(options: SearchOptions, token?: vscode.CancellationToken): Promise<SearchResult[]> {
         if (!this.isReady()) return [];
         try {
-            return await this.client!.sendRequest<SearchResult[]>('deeplens/search', options);
+            return await this.client!.sendRequest<SearchResult[]>('deeplens/search', options, token);
         } catch (error) {
             // Silently handle errors during shutdown
             if (!this.isStopping) {
@@ -176,10 +176,10 @@ export class DeepLensLspClient implements ISearchProvider {
         }
     }
 
-    async burstSearch(options: SearchOptions): Promise<SearchResult[]> {
+    async burstSearch(options: SearchOptions, token?: vscode.CancellationToken): Promise<SearchResult[]> {
         if (!this.isReady()) return [];
         try {
-            return await this.client!.sendRequest<SearchResult[]>('deeplens/burstSearch', options);
+            return await this.client!.sendRequest<SearchResult[]>('deeplens/burstSearch', options, token);
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens burstSearch error:', error);
@@ -216,7 +216,7 @@ export class DeepLensLspClient implements ISearchProvider {
         if (!this.isReady()) return;
         try {
             await this.client!.sendRequest('deeplens/recordActivity', { itemId });
-        } catch (error) {
+        } catch {
             // Silently ignore activity recording errors - they're not critical
         }
     }

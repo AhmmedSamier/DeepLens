@@ -20,6 +20,7 @@ export class SearchProvider {
     private lastQueryId = 0;
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
     private streamingResults: Map<number, SearchResult[]> = new Map();
+    private searchCts: vscode.CancellationTokenSource | undefined;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -240,8 +241,8 @@ export class SearchProvider {
     /**
      * Update title to show filter and result count
      */
-    private updateTitle(quickPick: vscode.QuickPick<SearchResultItem>, resultCount: number): void {
-        let filterName = 'All';
+    private updateTitle(quickPick: vscode.QuickPick<SearchResultItem>, resultCount: number, durationMs?: number): void {
+        let filterName: string;
 
         switch (this.currentScope) {
             case SearchScope.TYPES:
@@ -270,7 +271,25 @@ export class SearchProvider {
         }
 
         const countSuffix = resultCount > 0 ? ` (${resultCount})` : '';
-        quickPick.title = `DeepLens - ${filterName}${countSuffix}`;
+        
+        let durationSuffix = '';
+        if (durationMs !== undefined) {
+             const durationText = durationMs >= 1000 ? `${(durationMs / 1000).toFixed(2)}s` : `${durationMs}ms`;
+             durationSuffix = ` — Search took ${durationText}`;
+        }
+
+        quickPick.title = `DeepLens - ${filterName}${countSuffix}${durationSuffix}`;
+    }
+
+    /**
+     * Cancel any ongoing search
+     */
+    private cancelSearch(): void {
+        if (this.searchCts) {
+            this.searchCts.cancel();
+            this.searchCts.dispose();
+            this.searchCts = undefined;
+        }
     }
 
     /**
@@ -317,10 +336,7 @@ export class SearchProvider {
                 this.updateFilterButtons(quickPick);
             }
             const queryId = ++this.lastQueryId;
-            const results = await this.performSearch(quickPick, text, queryId);
-            if (queryId === this.lastQueryId) {
-                this.updateTitle(quickPick, results.length);
-            }
+            await this.performSearch(quickPick, text, queryId);
         } else {
             // Show recent history if no initial query
             await this.showRecentHistory(quickPick);
@@ -442,6 +458,9 @@ export class SearchProvider {
 
                 this.navigateToItem(selected.result);
 
+                // Cancel search immediately after selection
+                this.cancelSearch();
+
                 if (!isSlashCommand) {
                     quickPick.hide();
                 }
@@ -450,6 +469,7 @@ export class SearchProvider {
 
         quickPick.onDidHide(() => {
             cleanupTimeouts();
+            this.cancelSearch();
 
             // Restore original editor if cancelled
             if (!accepted && originalEditor) {
@@ -620,7 +640,7 @@ export class SearchProvider {
                 query: trimmedQuery,
                 scope: this.currentScope,
                 maxResults: 5,
-            });
+            }, undefined); // No token for burst search as it should be instant
 
             if (queryId !== this.lastQueryId) {
                 return;
@@ -647,7 +667,7 @@ export class SearchProvider {
                         query: trimmedQuery,
                         scope: this.currentScope,
                         maxResults: 15,
-                    });
+                    }, undefined);
 
                     if (queryId !== this.lastQueryId) {
                         return;
@@ -671,10 +691,7 @@ export class SearchProvider {
                     return;
                 }
                 try {
-                    const results = await this.performSearch(quickPick, text, queryId); // Use text (parsed) instead of raw query
-                    if (queryId === this.lastQueryId) {
-                        this.updateTitle(quickPick, results.length);
-                    }
+                    await this.performSearch(quickPick, text, queryId); // Use text (parsed) instead of raw query
                 } finally {
                     if (queryId === this.lastQueryId) {
                         quickPick.busy = false;
@@ -749,10 +766,7 @@ export class SearchProvider {
                 }
 
                 const queryId = ++this.lastQueryId;
-                const results = await this.performSearch(quickPick, text, queryId);
-                if (queryId === this.lastQueryId) {
-                    this.updateTitle(quickPick, results.length);
-                }
+                await this.performSearch(quickPick, text, queryId);
                 break;
             }
         }
@@ -773,6 +787,10 @@ export class SearchProvider {
             return [];
         }
 
+        // Cancel previous search
+        this.cancelSearch();
+        this.searchCts = new vscode.CancellationTokenSource();
+
         const trimmedQuery = query.trim();
 
         const options: SearchOptions = {
@@ -785,13 +803,27 @@ export class SearchProvider {
 
         this.streamingResults.set(queryId, []);
 
-        const results = await this.searchEngine.search(options);
+        const startTime = Date.now();
+        let results: SearchResult[] = [];
+        
+        try {
+            results = await this.searchEngine.search(options, this.searchCts.token);
+        } catch (error) {
+            if (error instanceof vscode.CancellationError) {
+                return [];
+            }
+            console.error(error);
+            return [];
+        }
+
+        const duration = Date.now() - startTime;
 
         if (queryId !== this.lastQueryId) {
             this.streamingResults.delete(queryId);
             return [];
         }
-
+        
+        
         // Merge command results if command search is enabled/relevant
         if (this.currentScope === SearchScope.EVERYTHING || this.currentScope === SearchScope.COMMANDS) {
             if (this.commandIndexer) {
@@ -815,9 +847,10 @@ export class SearchProvider {
             // If we still have NO results at the end of Phase 2, then we clear the stale items (history)
             if (results.length === 0) {
                 quickPick.items = [this.getEmptyStateItem(trimmedQuery)];
-                this.updateTitle(quickPick, 0);
+                this.updateTitle(quickPick, 0, duration);
             } else {
                 quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+                this.updateTitle(quickPick, results.length, duration);
             }
             this.streamingResults.delete(queryId); // Done with streaming for this query
         }
@@ -1014,8 +1047,8 @@ export class SearchProvider {
             this.handleQueryChange(
                 this.currentQuickPick,
                 '',
-                () => {}, // No-op timeouts
-                () => {},
+                () => { }, // No-op timeouts
+                () => { },
             );
             return;
         }
