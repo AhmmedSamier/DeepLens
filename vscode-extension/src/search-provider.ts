@@ -793,16 +793,20 @@ export class SearchProvider {
      * Get empty state item when no results are found
      */
     private getEmptyStateItem(query: string): SearchResultItem {
+        const detail = this.currentScope !== SearchScope.EVERYTHING
+            ? 'Try switching to Global search (/all) or check for typos'
+            : 'Check for typos or try a different query';
+
         return {
             label: 'No results found',
             description: `No matching items found for '${query}'`,
-            detail: 'Try changing your search terms or filter scope',
+            detail: detail,
             alwaysShow: true,
             iconPath: new vscode.ThemeIcon('search', new vscode.ThemeColor('descriptionForeground')),
             buttons: [
                 {
                     iconPath: new vscode.ThemeIcon('refresh'),
-                    tooltip: 'Rebuild Index'
+                    tooltip: 'Rebuild Index (Fix missing files)'
                 }
             ],
             result: {
