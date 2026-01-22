@@ -90,6 +90,21 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
+     * Set activity tracker callback
+     */
+    setActivityCallback(callback: (itemId: string) => number, weight: number): void {
+        this.getActivityScore = callback;
+        this.activityWeight = weight;
+    }
+
+    /**
+     * Set the list of currently active or open files to prioritize them
+     */
+    setActiveFiles(files: string[]): void {
+        this.activeFiles = new Set(files.map(f => path.normalize(f)));
+    }
+
+    /**
      * Set the searchable items and update hot-arrays.
      * Replaces all existing items.
      */
