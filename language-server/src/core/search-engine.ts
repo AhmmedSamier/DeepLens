@@ -191,7 +191,8 @@ export class SearchEngine implements ISearchProvider {
 
             // Periodic cache pruning
             this.removedSinceLastPrune++;
-            if (this.removedSinceLastPrune > 2000 && this.preparedCache.size > 10000) {
+            // Optimization: Increased threshold to 50000 to avoid frequent O(N) scans
+            if (this.removedSinceLastPrune > 50000 && this.preparedCache.size > 10000) {
                 this.pruneCache();
                 this.removedSinceLastPrune = 0;
             }
