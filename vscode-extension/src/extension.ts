@@ -1,7 +1,8 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';
-import { SearchScope } from '../../language-server/src/core/types';
+import { SearchItemType, SearchScope, SearchableItem } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
@@ -158,7 +159,14 @@ export async function activate(context: vscode.ExtensionContext) {
             vscode.window.onDidChangeActiveTextEditor((editor) => {
                 if (editor) {
                     const itemId = `file:${editor.document.uri.fsPath}`;
-                    activityTracker.recordAccess(itemId);
+                    const item: SearchableItem = {
+                        id: itemId,
+                        name: path.basename(editor.document.uri.fsPath),
+                        type: SearchItemType.FILE,
+                        filePath: editor.document.uri.fsPath,
+                        detail: 'Recently opened',
+                    };
+                    activityTracker.recordAccess(item);
                     lspClient.recordActivity(itemId);
                 }
             }),

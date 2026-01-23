@@ -66,7 +66,7 @@ export class WorkspaceIndexer {
         ];
 
         // Only add .ts if we are running in Bun
-        if (typeof Bun !== 'undefined') {
+        if (typeof (globalThis as any).Bun !== 'undefined') {
             possibleScripts.push(path.join(__dirname, 'indexer-worker.ts'));
         }
 
