@@ -33,6 +33,11 @@ export class SearchProvider {
     private readonly INACTIVE_PREFIX = '○ ';
     private readonly ICON_CLASS = 'symbol-class';
 
+    // Tooltips for empty state buttons
+    private readonly TOOLTIP_REBUILD_INDEX = 'Rebuild Index (Fix missing files)';
+    private readonly TOOLTIP_CLEAR_CACHE = 'Clear Index Cache (Fix corruption)';
+    private readonly TOOLTIP_SETTINGS = 'Configure Settings';
+
     private matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
@@ -435,9 +440,14 @@ export class SearchProvider {
             } else if (e.button.tooltip === 'Reveal in File Explorer') {
                 const uri = vscode.Uri.file(result.item.filePath);
                 vscode.commands.executeCommand('revealInExplorer', uri);
-            } else if (e.button.tooltip === 'Rebuild Index') {
+            } else if (e.button.tooltip === this.TOOLTIP_REBUILD_INDEX) {
                 vscode.commands.executeCommand('deeplens.rebuildIndex');
                 quickPick.hide();
+            } else if (e.button.tooltip === this.TOOLTIP_CLEAR_CACHE) {
+                vscode.commands.executeCommand('deeplens.clearIndexCache');
+                quickPick.hide();
+            } else if (e.button.tooltip === this.TOOLTIP_SETTINGS) {
+                vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
             }
         });
 
@@ -854,7 +864,7 @@ export class SearchProvider {
         const detail =
             this.currentScope !== SearchScope.EVERYTHING
                 ? 'Try switching to Global search (/all) or check for typos'
-                : 'Check for typos or try a different query';
+                : `We couldn't find '${query}'. Try /all scope, checking for typos, or adjusting your settings.`;
 
         return {
             label: 'No results found',
@@ -865,7 +875,15 @@ export class SearchProvider {
             buttons: [
                 {
                     iconPath: new vscode.ThemeIcon('refresh'),
-                    tooltip: 'Rebuild Index (Fix missing files)',
+                    tooltip: this.TOOLTIP_REBUILD_INDEX,
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('trash'),
+                    tooltip: this.TOOLTIP_CLEAR_CACHE,
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('settings-gear'),
+                    tooltip: this.TOOLTIP_SETTINGS,
                 },
             ],
             result: {
