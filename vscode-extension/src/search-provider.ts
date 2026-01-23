@@ -274,16 +274,19 @@ export class SearchProvider {
     /**
      * Show search UI with specific scope
      */
-    async show(scope: SearchScope = SearchScope.EVERYTHING): Promise<void> {
+    /**
+     * Show search UI with specific scope and optional initial query
+     */
+    async show(scope: SearchScope = SearchScope.EVERYTHING, initialQuery?: string): Promise<void> {
         this.currentScope = scope;
         this.userSelectedScope = scope; // Reset user selection when opening
-        await this.showInternal();
+        await this.showInternal(initialQuery);
     }
 
     /**
      * Internal show logic
      */
-    private async showInternal(): Promise<void> {
+    private async showInternal(initialQuery?: string): Promise<void> {
         const originalEditor = vscode.window.activeTextEditor;
         const quickPick = vscode.window.createQuickPick<SearchResultItem>();
         this.currentQuickPick = quickPick;
@@ -293,6 +296,10 @@ export class SearchProvider {
         quickPick.matchOnDescription = false;
         quickPick.matchOnDetail = false;
         quickPick.ignoreFocusOut = false;
+
+        if (initialQuery) {
+            quickPick.value = initialQuery;
+        }
 
         // Set up filter buttons
         this.updateFilterButtons(quickPick);
@@ -558,9 +565,23 @@ export class SearchProvider {
         // Parse scope from query
         const { scope, text } = this.parseQuery(query);
 
+        // Auto-switch scope and remove prefix if a command is typed
+        if (scope) {
+            this.userSelectedScope = scope;
+            this.currentScope = scope;
+            this.updateFilterButtons(quickPick);
+            quickPick.placeholder = this.getPlaceholder();
+            
+            // Remove the command prefix from the input box
+            // This will trigger onDidChangeValue again with the clean text
+            quickPick.value = text;
+            return;
+        }
+
         // Update current scope: use parsed scope if available, otherwise user selection
+        // In this path (scope undefined), we rely on userSelectedScope
         const previousScope = this.currentScope;
-        this.currentScope = scope || this.userSelectedScope;
+        this.currentScope = this.userSelectedScope;
 
         // Update UI if scope changed
         if (previousScope !== this.currentScope) {
@@ -570,7 +591,7 @@ export class SearchProvider {
 
         // Check if user is typing a slash command
         // We show the list if the query starts with / and we haven't matched a full scope yet
-        if (query.startsWith('/') && !scope) {
+        if (query.startsWith('/')) {
             this.suggestSlashCommands(quickPick, query);
             if (quickPick.items.length > 0) {
                 return;
@@ -1007,17 +1028,18 @@ export class SearchProvider {
             // Find scope for this prefix
             const scope = this.PREFIX_MAP.get(functionalPrefix);
             if (scope) {
+                this.userSelectedScope = scope; // <--- FIX: Persist user selection
                 this.currentScope = scope;
                 this.updateFilterButtons(this.currentQuickPick);
                 this.currentQuickPick.value = ''; // Clear the command text
                 this.currentQuickPick.placeholder = this.getPlaceholder();
             }
 
-            // Manually trigger handleQueryChange to force scope update
+            // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
             this.handleQueryChange(
                 this.currentQuickPick,
                 '',
-                () => { }, // No-op timeouts
+                () => { }, 
                 () => { },
             );
             return true;
@@ -1061,7 +1083,19 @@ export class SearchProvider {
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;
-            if (highlights && highlights.length > 0) {
+            
+            // Fix: Use absolute column for Text search if available
+            // Highlights are now relative to the display label (trimmed), so we use them for length only
+            if (item.type === SearchItemType.TEXT && item.column !== undefined) {
+                 const length = (highlights && highlights.length > 0) 
+                    ? (highlights[0][1] - highlights[0][0]) 
+                    : item.name.length;
+                    
+                 range = new vscode.Range(
+                    new vscode.Position(item.line || 0, item.column),
+                    new vscode.Position(item.line || 0, item.column + length)
+                 );
+            } else if (highlights && highlights.length > 0) {
                 const firstHighlight = highlights[0];
                 range = new vscode.Range(
                     new vscode.Position(item.line || 0, firstHighlight[0]),

@@ -94,6 +94,11 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get
             {
+                if (string.Equals(Kind, "Command", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ContainerName;
+                }
+
                 var path = !string.IsNullOrEmpty(RelativePath) ? RelativePath : FilePath;
                 try
                 {
@@ -602,6 +607,25 @@ namespace DeepLensVisualStudio.ToolWindows
             _searchCts = new CancellationTokenSource();
             var token = _searchCts.Token;
 
+            // Auto-execute slash command if followed by space
+            if (!string.IsNullOrEmpty(SearchQuery) && SearchQuery.EndsWith(" "))
+            {
+                var trimmed = SearchQuery.Trim();
+                if (trimmed.StartsWith("/"))
+                {
+                    var commands = _slashCommandService.GetCommands(trimmed);
+                    var exactMatch = commands.FirstOrDefault(c =>
+                        c.Name.Equals(trimmed, StringComparison.OrdinalIgnoreCase) ||
+                        (c.Aliases != null && c.Aliases.Contains(trimmed, StringComparer.OrdinalIgnoreCase)));
+
+                    if (exactMatch != null)
+                    {
+                        ExecuteSlashCommand(exactMatch.Name);
+                        return;
+                    }
+                }
+            }
+
             var query = SearchQuery?.Trim() ?? "";
 
             // Check for slash commands first
@@ -860,7 +884,7 @@ namespace DeepLensVisualStudio.ToolWindows
                     string itemId = result.Kind == "File" ? $"file:{result.FilePath}" : $"symbol:{result.FilePath}:{result.Name}:{result.Line - 1}";
                     _ = Task.Run(async () => {
                         try {
-                            await _sharedSearchService.InvokeNotifyAsync("deeplens/recordActivity", new { itemId });
+                            await lspService.RecordActivityAsync(itemId);
                         } catch { }
                     });
                 }
@@ -886,7 +910,7 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             try
             {
-                if (File.Exists(filePath))
+                if (System.IO.File.Exists(filePath))
                 {
                     System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{filePath}\"");
                 }

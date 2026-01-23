@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';
+import { ISearchProvider, SearchScope } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
@@ -37,7 +38,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register search command
     const searchCommand = vscode.commands.registerCommand('deeplens.search', async () => {
-        await searchProvider.show();
+        const editor = vscode.window.activeTextEditor;
+        let initialQuery: string | undefined;
+        
+        if (editor && !editor.selection.isEmpty) {
+            initialQuery = editor.document.getText(editor.selection);
+        }
+        
+        await searchProvider.show(SearchScope.EVERYTHING, initialQuery);
     });
 
     // Register rebuild index command

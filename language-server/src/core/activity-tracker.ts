@@ -51,7 +51,7 @@ export class ActivityTracker {
                         try {
                             return JSON.parse(fs.readFileSync(file, 'utf8'));
                         } catch (e) {
-                            console.error('Failed to load activity file:', e);
+                            // Fallback to no logger if not available yet, but avoid console.error
                         }
                     }
                     return undefined;
@@ -64,7 +64,7 @@ export class ActivityTracker {
                         }
                         fs.writeFileSync(file, JSON.stringify(data));
                     } catch (e) {
-                        console.error('Failed to save activity file:', e);
+                        // Safe to ignore or log to file if we had a reference
                     }
                 },
             };
@@ -208,13 +208,13 @@ export class ActivityTracker {
         try {
             const stored = this.storage.load();
 
-            if (stored) {
+            if (stored && typeof stored === 'object') {
                 this.activities = new Map(Object.entries(stored));
                 this.cleanupOldActivity();
                 this.recalculateAllScores();
             }
         } catch (error) {
-            console.error('Failed to load activity data:', error);
+            // Safe ignore
         }
     }
 
@@ -230,7 +230,7 @@ export class ActivityTracker {
 
             await this.storage.save(data);
         } catch (error) {
-            console.error('Failed to save activity data:', error);
+            // Safe ignore
         }
     }
 

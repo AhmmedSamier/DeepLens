@@ -372,6 +372,29 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
+     * Get approximate memory/cache size in bytes
+     */
+    getCacheSize(): number {
+        let size = 0;
+
+        // items array (rough estimate: 200 bytes per SearchableItem)
+        size += this.items.length * 200;
+
+        // Parallel arrays
+        size += this.preparedNames.length * 8;
+        size += this.preparedNamesLow.length * 8;
+        size += this.preparedFullNames.length * 8;
+        size += this.preparedPaths.length * 8;
+        size += this.preparedCapitals.length * 8;
+
+        // Cache maps (rough estimate: 100 bytes per entry)
+        size += this.preparedCache.size * 100;
+        size += this.preparedLowCache.size * 50;
+
+        return size;
+    }
+
+    /**
      * Get detailed index statistics
      */
     getStats(): { totalItems: number; fileCount: number; typeCount: number; symbolCount: number } {
@@ -719,12 +742,14 @@ export class SearchEngine implements ISearchProvider {
                     if (matchIndex >= 0) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
+                             const indentation = buffer.search(/\S|$/);
                              const result = this.createSearchResult(
                                 fileItem,
                                 trimmedLine,
                                 lineIndex,
                                 matchIndex,
-                                queryLength
+                                queryLength,
+                                indentation
                             );
                             results.push(result);
                             pendingResults.push(result);
@@ -772,12 +797,14 @@ export class SearchEngine implements ISearchProvider {
             if (matchIndex >= 0) {
                 const trimmedLine = line.trim();
                 if (trimmedLine.length > 0) {
+                    const indentation = line.search(/\S|$/);
                     const result = this.createSearchResult(
                         fileItem,
                         trimmedLine,
                         lineIndex,
                         matchIndex,
-                        queryLength
+                        queryLength,
+                        indentation
                     );
 
                     results.push(result);
@@ -802,8 +829,12 @@ export class SearchEngine implements ISearchProvider {
         trimmedLine: string,
         lineIndex: number,
         matchIndex: number,
-        queryLength: number
+        queryLength: number,
+        indentation: number
     ): SearchResult {
+        // Calculate relative match index for highlighting (since name is trimmed)
+        const relativeMatchIndex = Math.max(0, matchIndex - indentation);
+        
         return {
             item: {
                 id: `text:${fileItem.filePath}:${lineIndex}:${matchIndex}`,
@@ -818,7 +849,7 @@ export class SearchEngine implements ISearchProvider {
             },
             score: 1.0,
             scope: SearchScope.TEXT,
-            highlights: [[matchIndex, matchIndex + queryLength]],
+            highlights: [[relativeMatchIndex, relativeMatchIndex + queryLength]],
         };
     }
 
@@ -899,6 +930,8 @@ export class SearchEngine implements ISearchProvider {
         heap: MinHeap<SearchResult>
     ): void {
         const item = this.items[i];
+        if (!item) return;
+
         const queryLen = query.length;
         
         // --- INLINED calculateUnifiedScore ---
@@ -1254,6 +1287,8 @@ export class SearchEngine implements ISearchProvider {
             if (results.length >= maxResults) return;
 
             const item = this.items[i];
+            if (!item) return;
+
             const nameLower = this.preparedNamesLow[i] || item.name.toLowerCase();
 
             if (nameLower === queryLower || nameLower.startsWith(queryLower)) {

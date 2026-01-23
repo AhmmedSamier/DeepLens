@@ -54,17 +54,46 @@ let activityTracker: ActivityTracker;
 
 let isInitialized = false;
 let isShuttingDown = false;
+let fileLogger: (msg: string) => void = () => {};
 
 connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
 
     hasConfigurationCapability = !!(capabilities.workspace && !!capabilities.workspace.configuration);
 
+    // Monitor parent process
+    if (params.processId) {
+        setInterval(() => {
+            try {
+                // kill(pid, 0) checks if process exists without killing it
+                process.kill(params.processId, 0);
+            } catch {
+                // Parent process is gone
+                process.exit(1);
+            }
+        }, 5000);
+    }
+
     // Get storage path from initialization options or fall back to a temp dir
     const storagePath = params.initializationOptions?.storagePath || path.join(process.cwd(), '.deeplens');
     if (!fs.existsSync(storagePath)) {
         fs.mkdirSync(storagePath, { recursive: true });
     }
+
+    const logFile = path.join(storagePath, 'debug.log');
+    fileLogger = (msg: string) => {
+        const timestamp = new Date().toISOString();
+        try {
+            fs.appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
+        } catch {
+            // Ignore logging errors
+        }
+    };
+
+    fileLogger('--- DeepLens Server Starting ---');
+    fileLogger(`Storage Path: ${storagePath}`);
+    fileLogger(`Node Version: ${process.version}`);
+    fileLogger(`Platform: ${process.platform}`);
 
     // Resolve workspace folders
     let folders: string[] = [];
@@ -283,11 +312,16 @@ connection.onWorkspaceSymbol(async (params) => {
 // Custom handlers
 connection.onRequest(BurstSearchRequest, (options) => {
     if (!isInitialized || isShuttingDown) return [];
-    return searchEngine.burstSearch(options, (result) => {
-        if (!isShuttingDown) {
-            connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
-        }
-    });
+    try {
+        return searchEngine.burstSearch(options, (result) => {
+            if (!isShuttingDown) {
+                connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+            }
+        });
+    } catch (err: any) {
+        fileLogger(`BurstSearch Error: ${err.message}\n${err.stack}`);
+        throw err;
+    }
 });
 
 connection.onRequest(ResolveItemsRequest, (params) => {
@@ -304,11 +338,19 @@ connection.onRequest(GetRecentItemsRequest, (params) => {
 export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
 connection.onRequest(DeepLensSearchRequest, async (options) => {
     if (!isInitialized || isShuttingDown) return [];
-    return await searchEngine.search(options, (result) => {
-        if (!isShuttingDown) {
-            connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
-        }
-    });
+    fileLogger(`Search Request: "${options.query}" in scope ${options.scope}`);
+    try {
+        const results = await searchEngine.search(options, (result) => {
+            if (!isShuttingDown) {
+                connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+            }
+        });
+        fileLogger(`Search completed with ${results.length} results`);
+        return results;
+    } catch (err: any) {
+        fileLogger(`Search Error: ${err.message}\n${err.stack}`);
+        throw err;
+    }
 });
 
 connection.onRequest(RecordActivityRequest, (params) => {
@@ -341,7 +383,7 @@ connection.onRequest(IndexStatsRequest, async () => {
         totalSymbols: stats.symbolCount,
         lastUpdate: Date.now(),
         indexing: workspaceIndexer.isIndexing(),
-        cacheSize: 0,
+        cacheSize: searchEngine.getCacheSize(),
     };
 });
 
@@ -361,9 +403,11 @@ connection.onExit(() => {
 
 // Global error handlers to prevent crashes
 process.on('uncaughtException', (error) => {
+    const errorMsg = `Uncaught exception: ${error.message}\n${error.stack}`;
+    fileLogger(errorMsg);
     if (!isShuttingDown) {
         try {
-            connection.console.error(`Uncaught exception: ${error.message}\n${error.stack}`);
+            connection.console.error(errorMsg);
         } catch {
             // Ignore if we can't log
         }
@@ -371,9 +415,11 @@ process.on('uncaughtException', (error) => {
 });
 
 process.on('unhandledRejection', (reason) => {
+    const errorMsg = `Unhandled rejection: ${reason}`;
+    fileLogger(errorMsg);
     if (!isShuttingDown) {
         try {
-            connection.console.error(`Unhandled rejection: ${reason}`);
+            connection.console.error(errorMsg);
         } catch {
             // Ignore if we can't log
         }

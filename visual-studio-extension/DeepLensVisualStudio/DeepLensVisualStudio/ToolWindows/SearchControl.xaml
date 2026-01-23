@@ -351,7 +351,8 @@
                                 FontSize="12"
                                 Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                                 Text="{Binding RelativePath}"
-                                TextTrimming="CharacterEllipsis" />
+                                TextTrimming="CharacterEllipsis"
+                                Visibility="{Binding RelativePath, Converter={StaticResource StringToVisibilityConverter}}" />
 
                             <!--  Actions (Hover)  -->
                             <StackPanel

@@ -44,8 +44,7 @@ export class TreeSitterParser {
     }
 
     private log(message: string): void {
-        this.logger?.appendLine(`[${new Date().toLocaleTimeString()}] ${message}`);
-        console.log(`[TreeSitter] ${message}`);
+        this.logger?.appendLine(`[TreeSitter] ${message}`);
     }
 
     /**
@@ -168,7 +167,7 @@ export class TreeSitterParser {
             tree.delete();
             return items;
         } catch (error) {
-            console.error(`Error tree-sitter parsing ${filePath}:`, error);
+            this.log(`Error tree-sitter parsing ${filePath}: ${error}`);
             return [];
         }
     }
@@ -190,21 +189,21 @@ export class TreeSitterParser {
 
     private logDebugStart(langId: string, filePath: string) {
         if (langId === 'csharp') {
-            console.log(`[TreeSitter] Starting C# parse: ${filePath}`);
+            this.log(`Starting C# parse: ${filePath}`);
         }
     }
 
     private logDebugEnd(langId: string, filePath: string, items: SearchableItem[], tree: { rootNode: unknown }) {
         if (langId === 'csharp') {
             const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
-            console.log(
-                `[TreeSitter] Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
+            this.log(
+                `Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
             );
             if (endpoints.length > 0) {
-                endpoints.forEach((e) => console.log(`  - Found Endpoint: ${e.name}`));
+                endpoints.forEach((e) => this.log(`  - Found Endpoint: ${e.name}`));
             } else if (items.length === 0) {
-                 console.log(
-                    `[TreeSitter] Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
+                 this.log(
+                    `Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
                 );
             }
         }

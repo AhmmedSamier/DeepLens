@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "0.0.7",
+    "version": "1.1.0",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
@@ -154,7 +154,7 @@
         "esbuild": "bun run esbuild-base -- --sourcemap",
         "esbuild-watch": "bun run esbuild-base -- --sourcemap --watch",
         "clean": "bun run scripts/clean.ts",
-        "compile": "bun run clean && bun run esbuild && cd ../language-server && bun run build && copy dist\\server.js ..\\vscode-extension\\dist\\server.js && copy dist\\indexer-worker.js ..\\vscode-extension\\dist\\indexer-worker.js",
+        "compile": "bun run clean && bun run esbuild && cd ../language-server && bun run build && cd ../vscode-extension && bun run scripts/copy-artifacts.ts",
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
         "format": "prettier --write \"src/**/*.ts\" --cache",

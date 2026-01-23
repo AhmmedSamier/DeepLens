@@ -7,14 +7,16 @@ const exeName = 'deeplens-lsp.exe';
 
 console.log('Cleaning build artifacts...');
 
-// 1. Kill the process if running (Windows only for now as requested)
-try {
-    console.log(`Attempting to kill ${exeName}...`);
-    execSync(`taskkill /F /IM ${exeName}`, { stdio: 'ignore' });
-    console.log(`${exeName} killed.`);
-} catch (e) {
-    // Ignore error if process not running
-    console.log(`${exeName} was not running.`);
+// 1. Kill the process if running (Windows only)
+if (process.platform === 'win32') {
+    try {
+        console.log(`Attempting to kill ${exeName}...`);
+        execSync(`taskkill /F /IM ${exeName}`, { stdio: 'ignore' });
+        console.log(`${exeName} killed.`);
+    } catch (e) {
+        // Ignore error if process not running
+        console.log(`${exeName} was not running.`);
+    }
 }
 
 // 2. Clean dist folder

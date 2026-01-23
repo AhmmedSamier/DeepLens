@@ -371,7 +371,16 @@ namespace DeepLensVisualStudio.Services
 
         public async Task<IEnumerable<SearchResult>> SearchAsync(string query, string scope, CancellationToken ct)
         {
-            if (!_isInitialized || _rpc == null) return Enumerable.Empty<SearchResult>();
+            if (!_isInitialized || _rpc == null)
+            {
+                // Try one-time auto-init if we have a workspace path
+                if (!string.IsNullOrEmpty(CurrentWorkspacePath))
+                {
+                    await InitializeAsync(CurrentWorkspacePath!, ct);
+                }
+                
+                if (!_isInitialized || _rpc == null) return Enumerable.Empty<SearchResult>();
+            }
 
             _lastTimings = new SearchTimings();
             _firstRecorded = false;
@@ -379,38 +388,72 @@ namespace DeepLensVisualStudio.Services
 
             try
             {
-                var searchParams = new JObject
+                return await ExecuteSearchInternalAsync(query, scope, ct);
+            }
+            catch (Exception ex) when (ex is System.IO.IOException || 
+                                     ex is ObjectDisposedException || 
+                                     ex.GetType().Name.Contains("JsonRpc") ||
+                                     ex.GetType().Name.Contains("Rpc"))
+            {
+                Debug.WriteLine($"DeepLens: LSP Search failed (Connection Lost): {ex.Message}. Attempting re-init...");
+                
+                // Connection likely lost. Try re-initializing once.
+                _isInitialized = false;
+                if (!string.IsNullOrEmpty(CurrentWorkspacePath) && await InitializeAsync(CurrentWorkspacePath!, ct))
                 {
-                    ["query"] = query,
-                    ["scope"] = scope,
-                    ["maxResults"] = 50,
-                    ["requestId"] = Environment.TickCount
-                };
-
-                var lspResults =
-                    await _rpc.InvokeWithParameterObjectAsync<List<LspSearchResult>>("deeplens/search", searchParams);
-
-                _lastTimings.TotalMs = _searchSw.ElapsedMilliseconds;
-                if (!_firstRecorded && lspResults.Any())
-                {
-                    _lastTimings.FirstResultMs = _searchSw.ElapsedMilliseconds;
+                    try
+                    {
+                        return await ExecuteSearchInternalAsync(query, scope, ct);
+                    }
+                    catch (Exception reinitEx)
+                    {
+                        _lastError = $"LSP Search Error (after re-init): {reinitEx.Message}";
+                    }
                 }
-
-                return lspResults.Select(r => new SearchResult
+                else
                 {
-                    Name = r.Item.Name,
-                    Kind = MapLspKind(r.Item.Type),
-                    FilePath = r.Item.FilePath,
-                    Line = (r.Item.Line ?? 0) + 1,
-                    ContainerName = r.Item.ContainerName,
-                    Score = (int)(r.Score * 10000)
-                });
+                    _lastError = $"LSP Search Error: Connection lost and re-init failed.";
+                }
+                
+                return Enumerable.Empty<SearchResult>();
             }
             catch (Exception ex)
             {
                 _lastError = $"LSP Search Error: {ex.Message}";
                 return Enumerable.Empty<SearchResult>();
             }
+        }
+
+        private async Task<IEnumerable<SearchResult>> ExecuteSearchInternalAsync(string query, string scope, CancellationToken ct)
+        {
+            if (_rpc == null) return Enumerable.Empty<SearchResult>();
+
+            var searchParams = new JObject
+            {
+                ["query"] = query,
+                ["scope"] = scope,
+                ["maxResults"] = 50,
+                ["requestId"] = Environment.TickCount
+            };
+
+            var lspResults =
+                await _rpc.InvokeWithParameterObjectAsync<List<LspSearchResult>>("deeplens/search", searchParams, ct);
+
+            _lastTimings.TotalMs = _searchSw.ElapsedMilliseconds;
+            if (!_firstRecorded && lspResults.Any())
+            {
+                _lastTimings.FirstResultMs = _searchSw.ElapsedMilliseconds;
+            }
+
+            return lspResults.Select(r => new SearchResult
+            {
+                Name = r.Item.Name,
+                Kind = MapLspKind(r.Item.Type),
+                FilePath = r.Item.FilePath,
+                Line = (r.Item.Line ?? 0) + 1,
+                ContainerName = r.Item.ContainerName,
+                Score = (int)(r.Score * 10000)
+            });
         }
 
         /// <summary>
@@ -490,6 +533,20 @@ namespace DeepLensVisualStudio.Services
                 case "delegate": return "Delegate";
                 case "constructor": return "Constructor";
                 default: return "Symbol";
+            }
+        }
+
+        public async Task RecordActivityAsync(string itemId)
+        {
+            if (!_isInitialized || _rpc == null) return;
+
+            try
+            {
+                await _rpc.NotifyWithParameterObjectAsync("deeplens/recordActivity", new { itemId });
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: RecordActivity error: {ex.Message}");
             }
         }
 

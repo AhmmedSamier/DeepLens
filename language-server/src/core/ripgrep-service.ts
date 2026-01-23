@@ -16,17 +16,39 @@ export class RipgrepService {
     private rgPath: string;
 
     constructor(extensionPath: string) {
-        const binName = process.platform === 'win32' ? 'rg.exe' : 'rg';
-        // In dev/test, we might be running from src, but the binary is in dist/bin
-        // When bundled (server.js in dist), ../dist/bin is just ./bin
-        // We try a few locations
-        const locations = [
-            path.join(extensionPath, 'dist', 'bin', binName),
-            path.join(extensionPath, 'bin', binName), // fallback
-            path.join(__dirname, '..', '..', 'dist', 'bin', binName), // from src/core
+        let binPatterns: string[] = [];
+
+        // Determine target binary names based on platform/arch
+        if (process.platform === 'win32') {
+            binPatterns = ['rg.exe'];
+        } else if (process.platform === 'linux') {
+            binPatterns = ['rg-linux-x64', 'rg-linux', 'rg'];
+        } else if (process.platform === 'darwin') {
+            binPatterns = ['rg-darwin-x64', 'rg-darwin', 'rg'];
+        } else {
+            binPatterns = ['rg'];
+        }
+
+        // Potential search locations
+        const searchDirs = [
+            path.join(extensionPath, 'dist', 'bin'),
+            path.join(extensionPath, 'bin'),
+            path.join(__dirname, '..', '..', 'dist', 'bin'),
         ];
 
-        this.rgPath = locations.find((p) => fs.existsSync(p)) || '';
+        // Find the first matching binary
+        this.rgPath = '';
+        
+        outer:
+        for (const dir of searchDirs) {
+            for (const name of binPatterns) {
+                const candidate = path.join(dir, name);
+                if (fs.existsSync(candidate)) {
+                    this.rgPath = candidate;
+                    break outer;
+                }
+            }
+        }
     }
 
     isAvailable(): boolean {
@@ -38,20 +60,73 @@ export class RipgrepService {
             throw new Error('Ripgrep binary not found');
         }
 
-        return new Promise((resolve, reject) => {
-            const args = [
-                '--json',
-                '--case-insensitive',
-                '--files-from',
-                '-', // Read files from stdin
-                '--max-count',
-                maxResults.toString(),
-                '--',
-                query,
-            ];
+        const baseArgs = [
+            '--json',
+            '-i',
+            '-F', // Fixed strings (no regex)
+            '--max-count', // Note: this is per-file, but helps performance
+            maxResults.toString(),
+            '--',
+            query,
+        ];
+        
+        // Calculate rough base length (ignoring escaping overhead for now, safe margin handles it)
+        const baseArgsLen = baseArgs.reduce((acc, arg) => acc + arg.length + 1, 0);
+        
+        // Windows command line limit is ~32k. We'll use 20k to be safe.
+        const MAX_CMD_LENGTH = 20000;
+        
+        const batches: string[][] = [];
+        let currentBatch: string[] = [];
+        let currentBatchLen = baseArgsLen;
+
+        for (const file of files) {
+            // +1 for space/quote overhead
+            if (currentBatchLen + file.length + 1 > MAX_CMD_LENGTH) {
+                batches.push(currentBatch);
+                currentBatch = [];
+                currentBatchLen = baseArgsLen;
+            }
+            currentBatch.push(file);
+            currentBatchLen += file.length + 1;
+        }
+        if (currentBatch.length > 0) {
+            batches.push(currentBatch);
+        }
+
+        const allResults: RgMatch[] = [];
+
+        // Process batches sequentially to respect maxResults
+        for (const batch of batches) {
+            if (allResults.length >= maxResults) break;
+
+            try {
+                const batchResults = await this.runRgBatch(baseArgs, batch, maxResults - allResults.length);
+                allResults.push(...batchResults);
+            } catch (e) {
+                // Ignore batch failure
+            }
+        }
+        
+        return allResults;
+    }
+
+    private runRgBatch(baseArgs: string[], files: string[], limit: number): Promise<RgMatch[]> {
+         return new Promise((resolve, reject) => {
+            // Append files to args
+            const args = [...baseArgs, ...files];
+
+            // Ensure executable permissions (hack for VSIXs built on Windows)
+            if (process.platform !== 'win32') {
+                try {
+                    fs.chmodSync(this.rgPath, 0o755);
+                } catch (e) {
+                    // Ignore
+                }
+            }
 
             const child = cp.spawn(this.rgPath, args, {
-                stdio: ['pipe', 'pipe', 'pipe'],
+                stdio: ['ignore', 'pipe', 'pipe'], // No stdin needed
             });
 
             const results: RgMatch[] = [];
@@ -72,23 +147,42 @@ export class RipgrepService {
                         const msg = JSON.parse(line);
                         if (msg.type === 'match') {
                             const data = msg.data;
+                            // Ripgrep returns byte offsets into the original UTF-8 string.
+                            const rawText = data.lines.text;
+                            
+                            // Calculate leading whitespace (bytes)
+                            // We need to match leading whitespace and count its *bytes* because rg offsets are bytes.
+                            const leadingMatch = rawText.match(/^\s*/);
+                            const leadingStr = leadingMatch ? leadingMatch[0] : '';
+                            const leadingBytes = Buffer.byteLength(leadingStr);
+                            
+                            // Trim text for display
+                            const trimmedText = rawText.trimStart().trimEnd(); // Matches behaviors of .trim()
+                            
+                            // Adjust submatches
+                            const adjustedSubmatches = data.submatches.map((sm: any) => ({
+                                ...sm,
+                                start: Math.max(0, sm.start - leadingBytes),
+                                end: Math.max(0, sm.end - leadingBytes)
+                            }));
+
                             results.push({
                                 path: data.path.text,
-                                line: data.line_number - 1, // rg is 1-based
-                                column: data.submatches[0]?.start || 0,
-                                text: data.lines.text.trim(),
+                                line: data.line_number - 1,
+                                column: data.submatches[0]?.start || 0, // Original Column
+                                text: trimmedText,
                                 match: data.submatches[0]?.match?.text || '',
-                                submatches: data.submatches,
+                                submatches: adjustedSubmatches,
                             });
 
-                            if (results.length >= maxResults) {
+                            if (results.length >= limit) {
                                 hitLimit = true;
                                 child.kill();
                                 break;
                             }
                         }
                     } catch {
-                        // ignore parse errors
+                        // ignore
                     }
                 }
             });
@@ -99,7 +193,6 @@ export class RipgrepService {
 
             child.on('close', (code) => {
                 if (hitLimit || code === 0 || code === 1) {
-                    // 1 means no matches found
                     resolve(results);
                 } else {
                     reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
@@ -109,12 +202,6 @@ export class RipgrepService {
             child.on('error', (err) => {
                 reject(err);
             });
-
-            // Write files to stdin line by line to avoid large string allocation
-            for (const file of files) {
-                child.stdin.write(file + '\n');
-            }
-            child.stdin.end();
         });
     }
 }
