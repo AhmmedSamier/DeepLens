@@ -11,6 +11,7 @@ using System.Windows.Input;
 using DeepLensVisualStudio.Services;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio;
 
 namespace DeepLensVisualStudio.ToolWindows
 {
@@ -369,8 +370,16 @@ namespace DeepLensVisualStudio.ToolWindows
             get => _selectedResult;
             set
             {
-                _selectedResult = value;
-                OnPropertyChanged();
+                if (_selectedResult != value)
+                {
+                    _selectedResult = value;
+                    OnPropertyChanged();
+
+                    if (value != null && (ResultsList.IsFocused || ResultsList.IsKeyboardFocusWithin))
+                    {
+                        PreviewResult(value);
+                    }
+                }
             }
         }
 
@@ -406,6 +415,7 @@ namespace DeepLensVisualStudio.ToolWindows
             SearchTextBox.PreviewKeyDown += OnSearchBoxKeyDown;
             ResultsList.PreviewMouseLeftButtonUp += OnResultSingleClick;
             ResultsList.KeyDown += OnResultsKeyDown;
+            ResultsList.MouseDoubleClick += OnResultsDoubleClick;
         }
 
         private void OnLspProgress(ProgressInfo info)
@@ -823,13 +833,69 @@ namespace DeepLensVisualStudio.ToolWindows
 
         private void OnResultSingleClick(object sender, MouseButtonEventArgs e)
         {
+            // Only handle single clicks to avoid interfering with double-click promotion
+            if (e.ClickCount != 1)
+                return;
+
             // Don't navigate if clicking on action buttons
             if (e.OriginalSource is System.Windows.Controls.Button)
                 return;
 
+            // Single click ensures selection, which triggers PreviewResult via the property setter.
+            // If already selected, we call it explicitly to ensure the preview is shown.
+            if (SelectedResult != null)
+            {
+                PreviewResult(SelectedResult);
+            }
+        }
+
+        private void OnResultsDoubleClick(object sender, MouseButtonEventArgs e)
+        {
             if (SelectedResult != null)
             {
                 NavigateToResult(SelectedResult);
+            }
+        }
+
+        private void PreviewResult(SearchResultViewModel result)
+        {
+            ThreadHelper.ThrowIfNotOnUIThread();
+
+            if (string.IsNullOrEmpty(result.FilePath) || result.Kind == "Command")
+                return;
+
+            try
+            {
+                // Use Provisional (Preview) tab and do not take focus
+                using (new NewDocumentStateScope(__VSNEWDOCUMENTSTATE.NDS_Provisional | __VSNEWDOCUMENTSTATE.NDS_NoActivate, VSConstants.NewDocumentStateReason.SolutionExplorer))
+                {
+                    IVsWindowFrame? frame;
+                    VsShellUtilities.OpenDocument(
+                        ServiceProvider.GlobalProvider,
+                        result.FilePath,
+                        Guid.Empty,
+                        out _,
+                        out _,
+                        out frame);
+
+                    if (frame != null)
+                    {
+                        // Ensure it's shown but not activated to keep focus in search tool window
+                        frame.ShowNoActivate();
+
+                        var textView = VsShellUtilities.GetTextView(frame);
+                        if (textView != null)
+                        {
+                            textView.SetCaretPos(result.Line - 1, 0);
+                            textView.SetSelection(result.Line - 1, 0, result.Line - 1, 0);
+                            textView.CenterLines(result.Line - 1, 1);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"DeepLens: Preview error: {ex.Message}");
             }
         }
 
@@ -861,6 +927,10 @@ namespace DeepLensVisualStudio.ToolWindows
 
 
                 frame?.Show();
+
+                // Promote to permanent tab (non-provisional)
+                // VSFPROPID_IsProvisional is -5010, available via __VSFPROPID5
+                frame?.SetProperty((int)__VSFPROPID5.VSFPROPID_IsProvisional, false);
 
                 // Navigate to line
                 if (frame != null)
