@@ -16,10 +16,10 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
-import { SearchEngine } from './core/search-engine';
-import { RecentProvider } from './core/providers/recent-provider';
 import { FileProvider } from './core/providers/file-provider';
+import { RecentProvider } from './core/providers/recent-provider';
 import { SymbolProvider } from './core/providers/symbol-provider';
+import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
 import { IndexStats, SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
 import { WorkspaceIndexer } from './core/workspace-indexer';
@@ -204,7 +204,7 @@ connection.onInitialized(() => {
     }
 
     // Initial indexing with progress
-    runIndexingWithProgress(false).then(() => {
+    runIndexingWithProgress().then(() => {
         isInitialized = true;
         connection.console.log('DeepLens index built successfully');
     });
@@ -220,7 +220,7 @@ connection.onDidChangeConfiguration(async () => {
 /**
  * Run indexing with progress reporting
  */
-async function runIndexingWithProgress(force: boolean): Promise<void> {
+async function runIndexingWithProgress(): Promise<void> {
     const token = 'indexing-' + Date.now();
 
     // Clear existing items to prevent duplicates on rebuild
@@ -242,7 +242,7 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
             if (!isShuttingDown) {
                 connection.sendNotification('deeplens/progress', { token, message, percentage });
             }
-        }, force);
+        });
 
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
         if (!isShuttingDown) {
@@ -257,7 +257,7 @@ async function runIndexingWithProgress(force: boolean): Promise<void> {
         // Fallback without progress
         // Clear again in case partial indexing occurred before error
         searchEngine.clear();
-        await workspaceIndexer.indexWorkspace(undefined, force);
+        await workspaceIndexer.indexWorkspace();
     }
 }
 
@@ -318,8 +318,9 @@ connection.onRequest(BurstSearchRequest, (options) => {
                 connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
             }
         });
-    } catch (err: any) {
-        fileLogger(`BurstSearch Error: ${err.message}\n${err.stack}`);
+    } catch (err: unknown) {
+        const error = err as Error;
+        fileLogger(`BurstSearch Error: ${error.message}\n${error.stack}`);
         throw err;
     }
 });
@@ -347,30 +348,31 @@ connection.onRequest(DeepLensSearchRequest, async (options) => {
         });
         fileLogger(`Search completed with ${results.length} results`);
         return results;
-    } catch (err: any) {
-        fileLogger(`Search Error: ${err.message}\n${err.stack}`);
+    } catch (err: unknown) {
+        const error = err as Error;
+        fileLogger(`Search Error: ${error.message}\n${error.stack}`);
         throw err;
     }
 });
 
 connection.onRequest(RecordActivityRequest, (params) => {
     if (activityTracker && searchEngine) {
-        const item = (searchEngine as any).itemsMap.get(params.itemId);
+        const item = searchEngine.itemsMap.get(params.itemId);
         if (item) {
             activityTracker.recordAccess(item);
         }
     }
 });
 
-connection.onRequest(RebuildIndexRequest, async (params) => {
+connection.onRequest(RebuildIndexRequest, async () => {
     if (isShuttingDown) return;
-    await runIndexingWithProgress(params.force);
+    await runIndexingWithProgress();
 });
 
 connection.onRequest(ClearCacheRequest, async () => {
     if (isShuttingDown) return;
     if (activityTracker) await activityTracker.clearAll();
-    await runIndexingWithProgress(true);
+    await runIndexingWithProgress();
 });
 
 connection.onRequest(IndexStatsRequest, async () => {

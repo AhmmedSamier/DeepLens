@@ -6,7 +6,15 @@ import { Config } from './config';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
 import { RouteMatcher } from './route-matcher';
-import { ISearchProvider, SearchContext, SearchableItem, SearchItemType, SearchOptions, SearchResult, SearchScope } from './types';
+import {
+    ISearchProvider,
+    SearchableItem,
+    SearchContext,
+    SearchItemType,
+    SearchOptions,
+    SearchResult,
+    SearchScope,
+} from './types';
 
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
@@ -129,9 +137,7 @@ export class SearchEngine implements ISearchProvider {
         // Push to parallel arrays
         this.preparedNames.push(this.getPrepared(item.name));
         this.preparedNamesLow.push(this.getPreparedLow(item.name));
-        this.preparedFullNames.push(
-            shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
-        );
+        this.preparedFullNames.push(shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null);
         this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
         this.preparedCapitals.push(this.extractCapitals(item.name));
 
@@ -367,7 +373,7 @@ export class SearchEngine implements ISearchProvider {
             scope: options.scope || SearchScope.EVERYTHING,
             maxResults: options.maxResults || 50,
             enableCamelHumps: options.enableCamelHumps !== false,
-            isPotentialUrl: RouteMatcher.isPotentialUrl(query)
+            isPotentialUrl: RouteMatcher.isPotentialUrl(query),
         };
     }
 
@@ -438,15 +444,7 @@ export class SearchEngine implements ISearchProvider {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
-            // New: Handle Phase 0 (Recent/Instant) via providers
-            const context = this.createSearchContext(options);
-            const results: SearchResult[] = [];
-            for (const provider of this.providers) {
-                const providerResults = await provider.search(context);
-                results.push(...providerResults);
-                if (results.length >= maxResults) break;
-            }
-            return results;
+            return this.handleEmptyQuerySearch(options, maxResults);
         }
 
         const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
@@ -466,35 +464,63 @@ export class SearchEngine implements ISearchProvider {
         const context = this.createSearchContext({
             ...options,
             query: effectiveQuery,
-            maxResults
+            maxResults,
         });
 
         // Use providers if any are registered, otherwise fallback to internal logic
         if (this.providers.length > 0) {
-            let allResults: SearchResult[] = [];
-            for (const provider of this.providers) {
-                const providerResults = await provider.search(context);
-                allResults.push(...providerResults);
-                if (onResult) {
-                    providerResults.forEach(r => onResult(r));
-                }
-            }
-
-            // Post-process: sort and limit
-            allResults.sort((a, b) => b.score - a.score);
-            if (allResults.length > maxResults) {
-                allResults = allResults.slice(0, maxResults);
-            }
-
-            if (targetLine !== undefined) {
-                allResults = allResults.map((r) => ({
-                    ...r,
-                    item: { ...r.item, line: targetLine },
-                }));
-            }
-            return allResults;
+            return this.executeProviderSearch(context, maxResults, targetLine, onResult);
         }
 
+        return this.executeInternalSearch(effectiveQuery, scope, enableCamelHumps, maxResults, targetLine);
+    }
+
+    private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
+        // New: Handle Phase 0 (Recent/Instant) via providers
+        const context = this.createSearchContext(options);
+        const results: SearchResult[] = [];
+        for (const provider of this.providers) {
+            const providerResults = await provider.search(context);
+            results.push(...providerResults);
+            if (results.length >= maxResults) break;
+        }
+        return results;
+    }
+
+    private async executeProviderSearch(
+        context: SearchContext,
+        maxResults: number,
+        targetLine: number | undefined,
+        onResult?: (result: SearchResult) => void,
+    ): Promise<SearchResult[]> {
+        let allResults: SearchResult[] = [];
+        for (const provider of this.providers) {
+            const providerResults = await provider.search(context);
+            allResults.push(...providerResults);
+            if (onResult) {
+                providerResults.forEach((r) => onResult(r));
+            }
+        }
+
+        // Post-process: sort and limit
+        allResults.sort((a, b) => b.score - a.score);
+        if (allResults.length > maxResults) {
+            allResults = allResults.slice(0, maxResults);
+        }
+
+        if (targetLine !== undefined) {
+            allResults = this.applyTargetLine(allResults, targetLine);
+        }
+        return allResults;
+    }
+
+    private executeInternalSearch(
+        effectiveQuery: string,
+        scope: SearchScope,
+        enableCamelHumps: boolean,
+        maxResults: number,
+        targetLine: number | undefined,
+    ): SearchResult[] {
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
 
         // 1. Filter and search
@@ -504,25 +530,22 @@ export class SearchEngine implements ISearchProvider {
         // Unified search (Fuzzy + CamelHumps in single pass)
         let results = this.performUnifiedSearch(indices, normalizedQuery, enableCamelHumps, maxResults, scope);
 
-        // 3. Sort by score (Actually results are already sorted descending by performUnifiedSearch)
-        // But in case we want to be safe or if we changed logic later.
-        // performUnifiedSearch returns sorted array.
-
-        // 4. Boost by activity and re-sort final time
-        // Optimization: Boosting is now done INSIDE performUnifiedSearch.
-
         // Apply target line if found
         if (targetLine !== undefined) {
-            results = results.map((r) => ({
-                ...r,
-                item: {
-                    ...r.item,
-                    line: targetLine,
-                },
-            }));
+            results = this.applyTargetLine(results, targetLine);
         }
 
         return results;
+    }
+
+    private applyTargetLine(results: SearchResult[], targetLine: number): SearchResult[] {
+        return results.map((r) => ({
+            ...r,
+            item: {
+                ...r.item,
+                line: targetLine,
+            },
+        }));
     }
 
     /**
@@ -535,8 +558,8 @@ export class SearchEngine implements ISearchProvider {
     ): Promise<SearchResult[]> {
         // Try Ripgrep first
         if (this.ripgrep && this.ripgrep.isAvailable()) {
-           const results = await this.performRipgrepSearch(query, maxResults, onResult);
-           if (results) return results;
+            const results = await this.performRipgrepSearch(query, maxResults, onResult);
+            if (results) return results;
         }
 
         return this.performStreamSearch(query, maxResults, onResult);
@@ -545,7 +568,7 @@ export class SearchEngine implements ISearchProvider {
     private async performRipgrepSearch(
         query: string,
         maxResults: number,
-        onResult?: (result: SearchResult) => void
+        onResult?: (result: SearchResult) => void,
     ): Promise<SearchResult[] | null> {
         this.logger?.log(`--- Starting LSP Text Search (Ripgrep): "${query}" ---`);
         const startTime = Date.now();
@@ -593,7 +616,7 @@ export class SearchEngine implements ISearchProvider {
     private async performStreamSearch(
         query: string,
         maxResults: number,
-        onResult?: (result: SearchResult) => void
+        onResult?: (result: SearchResult) => void,
     ): Promise<SearchResult[]> {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const startTime = Date.now();
@@ -707,7 +730,7 @@ export class SearchEngine implements ISearchProvider {
                 }
 
                 buffer += chunk;
-                
+
                 // Process full lines
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     buffer,
@@ -717,16 +740,16 @@ export class SearchEngine implements ISearchProvider {
                     results,
                     pendingResults,
                     fileItem,
-                    lineIndex
+                    lineIndex,
                 );
 
                 buffer = newBuffer;
                 lineIndex = newLineIndex;
 
                 if (hitLimit) {
-                     stream.destroy();
-                     resolve();
-                     return;
+                    stream.destroy();
+                    resolve();
+                    return;
                 }
 
                 // Safety: Discard buffer if it grows too large without finding a newline (minified file)
@@ -742,14 +765,14 @@ export class SearchEngine implements ISearchProvider {
                     if (matchIndex >= 0) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
-                             const indentation = buffer.search(/\S|$/);
-                             const result = this.createSearchResult(
+                            const indentation = buffer.search(/\S|$/);
+                            const result = this.createSearchResult(
                                 fileItem,
                                 trimmedLine,
                                 lineIndex,
                                 matchIndex,
                                 queryLength,
-                                indentation
+                                indentation,
                             );
                             results.push(result);
                             pendingResults.push(result);
@@ -774,7 +797,7 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         pendingResults: SearchResult[],
         fileItem: SearchableItem,
-        startLineIndex: number
+        startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
         let lastIndex = 0;
         let newlineIndex;
@@ -804,7 +827,7 @@ export class SearchEngine implements ISearchProvider {
                         lineIndex,
                         matchIndex,
                         queryLength,
-                        indentation
+                        indentation,
                     );
 
                     results.push(result);
@@ -830,11 +853,11 @@ export class SearchEngine implements ISearchProvider {
         lineIndex: number,
         matchIndex: number,
         queryLength: number,
-        indentation: number
+        indentation: number,
     ): SearchResult {
         // Calculate relative match index for highlighting (since name is trimmed)
         const relativeMatchIndex = Math.max(0, matchIndex - indentation);
-        
+
         return {
             item: {
                 id: `text:${fileItem.filePath}:${lineIndex}:${matchIndex}`,
@@ -854,19 +877,23 @@ export class SearchEngine implements ISearchProvider {
     }
 
     public performSymbolSearch(context: SearchContext): SearchResult[] {
-        const indices = context.scope === SearchScope.EVERYTHING ? 
-            this.scopedIndices.get(SearchScope.SYMBOLS)?.concat(
-                this.scopedIndices.get(SearchScope.TYPES) || [],
-                this.scopedIndices.get(SearchScope.PROPERTIES) || [],
-                this.scopedIndices.get(SearchScope.ENDPOINTS) || []
-            ) : this.scopedIndices.get(context.scope);
+        const indices =
+            context.scope === SearchScope.EVERYTHING
+                ? this.scopedIndices
+                      .get(SearchScope.SYMBOLS)
+                      ?.concat(
+                          this.scopedIndices.get(SearchScope.TYPES) || [],
+                          this.scopedIndices.get(SearchScope.PROPERTIES) || [],
+                          this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
+                      )
+                : this.scopedIndices.get(context.scope);
 
         return this.performUnifiedSearch(
             indices,
             context.normalizedQuery,
             context.enableCamelHumps,
             context.maxResults,
-            context.scope
+            context.scope,
         );
     }
 
@@ -877,7 +904,7 @@ export class SearchEngine implements ISearchProvider {
             context.normalizedQuery,
             context.enableCamelHumps,
             context.maxResults,
-            context.scope
+            context.scope,
         );
     }
 
@@ -895,15 +922,7 @@ export class SearchEngine implements ISearchProvider {
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
 
         const processIndex = (i: number) => {
-             this.processUnifiedSearchItem(
-                i,
-                query,
-                queryUpper,
-                enableCamelHumps,
-                isPotentialUrl,
-                MIN_SCORE,
-                heap
-            );
+            this.processUnifiedSearchItem(i, query, queryUpper, enableCamelHumps, isPotentialUrl, MIN_SCORE, heap);
         };
 
         if (indices) {
@@ -927,101 +946,117 @@ export class SearchEngine implements ISearchProvider {
         enableCamelHumps: boolean,
         isPotentialUrl: boolean,
         minScore: number,
-        heap: MinHeap<SearchResult>
+        heap: MinHeap<SearchResult>,
     ): void {
         const item = this.items[i];
         if (!item) return;
 
-        const queryLen = query.length;
-        
         // --- INLINED calculateUnifiedScore ---
-        let score = -1;
+        let score = this.computeFuzzyScore(i, query, minScore);
+
+        if (score < 0.9 && enableCamelHumps) {
+            const camelScore = this.computeCamelHumpsScore(i, query.length, queryUpper, item.type);
+            if (camelScore > score) {
+                score = camelScore; // Use CamelHumps if better
+            }
+        }
+
         let resultScope = this.getScopeForItemType(item.type);
-
-        // 1. Fuzzy Scoring (Inlined calculateBasicScore -> calculateItemScore)
-        let bestFuzzyScore = -Infinity;
-
-        // Name (Weight 1.0)
-        const preparedName = this.preparedNames[i];
-        if (preparedName && queryLen <= preparedName.target.length) {
-            const result = Fuzzysort.single(query, preparedName);
-            if (result && result.score > minScore) {
-                bestFuzzyScore = result.score;
-            }
-        }
-
-        // Optimization: Name has weight 1.0. Next best is FullName with 0.9.
-        if (bestFuzzyScore < 0.9) {
-            // Full Name (Weight 0.9)
-            const preparedFullName = this.preparedFullNames[i];
-            if (preparedFullName && queryLen <= preparedFullName.target.length) {
-                const result = Fuzzysort.single(query, preparedFullName);
-                if (result && result.score * 0.9 > bestFuzzyScore) {
-                    bestFuzzyScore = result.score * 0.9;
-                }
-            }
-
-            if (bestFuzzyScore < 0.8) {
-                // Path (Weight 0.8)
-                const preparedPath = this.preparedPaths[i];
-                if (preparedPath && queryLen <= preparedPath.target.length) {
-                    const result = Fuzzysort.single(query, preparedPath);
-                    if (result && result.score * 0.8 > bestFuzzyScore) {
-                        bestFuzzyScore = result.score * 0.8;
-                    }
-                }
-            }
-        }
-
-        if (bestFuzzyScore > minScore) {
-            score = bestFuzzyScore * (ITEM_TYPE_BOOSTS[item.type] || 1.0);
-        } else if (enableCamelHumps) {
-            // CamelHumps fallback
-            const capitals = this.preparedCapitals[i];
-            if (capitals) {
-                const matchIndex = capitals.indexOf(queryUpper);
-                if (matchIndex !== -1) {
-                    const lengthRatio = queryLen / capitals.length;
-                    const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                    score = (lengthRatio * positionBoost * 0.8) * (ITEM_TYPE_BOOSTS[item.type] || 1.0);
-                }
-            }
-        }
 
         // 2. URL/Endpoint Match
         if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
-             if (RouteMatcher.isMatch(item.name, query)) {
-                const urlScore = 1.5;
-                if (urlScore > score) {
-                    score = urlScore;
-                    resultScope = SearchScope.ENDPOINTS;
-                }
+            const urlScore = this.computeUrlScore(item.name, query);
+            if (urlScore > score) {
+                score = urlScore;
+                resultScope = SearchScope.ENDPOINTS;
             }
         }
 
         // 3. Activity Boosting
-        if (score > minScore && this.getActivityScore) {
-            const activityScore = this.getActivityScore(item.id);
-            if (activityScore > 0 && score > 0.05) {
-                score = score * (1 - this.activityWeight) + activityScore * this.activityWeight;
-            }
-        }
+        score = this.computeActivityScore(item.id, score, minScore);
 
         if (score > minScore) {
-            // Optimization: Skip allocation if heap is full and score is too low
-            if (heap.isFull()) {
-                const minItem = heap.peek();
-                if (minItem && score <= minItem.score) {
-                    return;
-                }
-            }
-
-            heap.push({
-                item,
-                score,
-                scope: resultScope,
-            });
+            this.tryPushToHeap(heap, item, score, resultScope);
         }
+    }
+
+    private computeFuzzyScore(i: number, query: string, minScore: number): number {
+        const item = this.items[i];
+        const boost = ITEM_TYPE_BOOSTS[item.type] || 1.0;
+        let bestScore = -Infinity;
+        const queryLen = query.length;
+
+        // Name (1.0)
+        const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
+        if (nameScore > minScore) bestScore = nameScore;
+
+        if (bestScore >= 0.9) return bestScore * boost;
+
+        // Full Name (0.9)
+        const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
+        if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
+
+        if (bestScore >= 0.8) return bestScore * boost;
+
+        // Path (0.8)
+        const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
+        if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
+
+        if (bestScore > minScore) return bestScore * boost;
+        return -Infinity;
+    }
+
+    private calculateFieldScore(query: string, prepared: Fuzzysort.Prepared | null, queryLen: number): number {
+        if (prepared && queryLen <= prepared.target.length) {
+            const res = Fuzzysort.single(query, prepared);
+            return res ? res.score : -Infinity;
+        }
+        return -Infinity;
+    }
+
+    private computeCamelHumpsScore(i: number, queryLen: number, queryUpper: string, type: SearchItemType): number {
+        const capitals = this.preparedCapitals[i];
+        if (capitals) {
+            const matchIndex = capitals.indexOf(queryUpper);
+            if (matchIndex !== -1) {
+                const lengthRatio = queryLen / capitals.length;
+                const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                return lengthRatio * positionBoost * 0.8 * (ITEM_TYPE_BOOSTS[type] || 1.0);
+            }
+        }
+        return -Infinity;
+    }
+
+    private computeUrlScore(name: string, query: string): number {
+        if (RouteMatcher.isMatch(name, query)) {
+            return 1.5;
+        }
+        return -Infinity;
+    }
+
+    private computeActivityScore(itemId: string, currentScore: number, minScore: number): number {
+        if (currentScore > minScore && this.getActivityScore) {
+            const activityScore = this.getActivityScore(itemId);
+            if (activityScore > 0 && currentScore > 0.05) {
+                return currentScore * (1 - this.activityWeight) + activityScore * this.activityWeight;
+            }
+        }
+        return currentScore;
+    }
+
+    private tryPushToHeap(heap: MinHeap<SearchResult>, item: SearchableItem, score: number, scope: SearchScope): void {
+        // Optimization: Skip allocation if heap is full and score is too low
+        if (heap.isFull()) {
+            const minItem = heap.peek();
+            if (minItem && score <= minItem.score) {
+                return;
+            }
+        }
+        heap.push({
+            item,
+            score,
+            scope,
+        });
     }
 
     private calculateUnifiedScore(
@@ -1031,7 +1066,7 @@ export class SearchEngine implements ISearchProvider {
         queryUpper: string,
         enableCamelHumps: boolean,
         isPotentialUrl: boolean,
-        minScore: number
+        minScore: number,
     ): { score: number; resultScope: SearchScope } {
         // Kept for backward compatibility if needed, but not used in hot path
         let score = -1;
@@ -1042,16 +1077,16 @@ export class SearchEngine implements ISearchProvider {
 
         // 2. URL/Endpoint Match
         if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
-             const { newScore, newScope } = this.checkUrlMatch(item, query, score, resultScope);
-             score = newScore;
-             resultScope = newScope;
+            const { newScore, newScope } = this.checkUrlMatch(item, query, score, resultScope);
+            score = newScore;
+            resultScope = newScope;
         }
 
         // 3. Activity Boosting
         if (score > minScore) {
             score = this.applyActivityBoost(item, score);
         }
-        
+
         return { score, resultScope };
     }
 
@@ -1061,7 +1096,7 @@ export class SearchEngine implements ISearchProvider {
         query: string,
         queryUpper: string,
         enableCamelHumps: boolean,
-        minScore: number
+        minScore: number,
     ): number {
         const fuzzyScore = this.calculateItemScore(
             query,
@@ -1073,8 +1108,8 @@ export class SearchEngine implements ISearchProvider {
 
         if (fuzzyScore > minScore) {
             return this.applyItemTypeBoost(fuzzyScore, item.type);
-        } 
-        
+        }
+
         if (enableCamelHumps) {
             const capitals = this.preparedCapitals[i];
             if (capitals) {
@@ -1088,10 +1123,10 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private checkUrlMatch(
-        item: SearchableItem, 
-        query: string, 
-        currentScore: number, 
-        currentScope: SearchScope
+        item: SearchableItem,
+        query: string,
+        currentScore: number,
+        currentScope: SearchScope,
     ): { newScore: number; newScope: SearchScope } {
         if (RouteMatcher.isMatch(item.name, query)) {
             const urlScore = 1.5;
@@ -1143,12 +1178,7 @@ export class SearchEngine implements ISearchProvider {
         return bestScore;
     }
 
-    private scoreField(
-        query: string,
-        prepared: Fuzzysort.Prepared | null,
-        queryLen: number,
-        minScore: number
-    ): number {
+    private scoreField(query: string, prepared: Fuzzysort.Prepared | null, queryLen: number, minScore: number): number {
         if (prepared && queryLen <= prepared.target.length) {
             const result = Fuzzysort.single(query, prepared);
             if (result && result.score > minScore) {

@@ -25,17 +25,17 @@ class TestWorkspaceIndexer extends WorkspaceIndexer {
 
     // Expose protected method for testing
     public async checkIsGitIgnored(filePath: string): Promise<boolean> {
-        // @ts-ignore
+        // @ts-expect-error - testing protected method
         return this.isGitIgnored(filePath);
     }
 
     public checkShouldExcludeFile(filePath: string): boolean {
-        // @ts-ignore
+        // @ts-expect-error - testing protected method
         return this.shouldExcludeFile(filePath);
     }
 
     public triggerUpdateExcludeMatchers(): void {
-        // @ts-ignore
+        // @ts-expect-error - testing protected method
         this.updateExcludeMatchers();
     }
 }
@@ -49,7 +49,7 @@ describe('WorkspaceIndexer', () => {
         asRelativePath: (p) => p.replace('/root/', ''),
         log: () => {},
     };
-    
+
     // We can cast mock to any because we won't strictly use all methods
     const mockTreeSitter = {} as unknown as TreeSitterParser;
 

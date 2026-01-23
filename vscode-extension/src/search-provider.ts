@@ -1,7 +1,14 @@
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';
-import { ISearchProvider, SearchItemType, SearchOptions, SearchResult, SearchScope, SearchableItem } from '../../language-server/src/core/types';
+import {
+    ISearchProvider,
+    SearchItemType,
+    SearchOptions,
+    SearchResult,
+    SearchScope,
+    SearchableItem,
+} from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 
@@ -250,11 +257,11 @@ export class SearchProvider {
         }
 
         const countSuffix = resultCount > 0 ? ` (${resultCount})` : '';
-        
+
         let durationSuffix = '';
         if (durationMs !== undefined) {
-             const durationText = durationMs >= 1000 ? `${(durationMs / 1000).toFixed(2)}s` : `${durationMs}ms`;
-             durationSuffix = ` — Search took ${durationText}`;
+            const durationText = durationMs >= 1000 ? `${(durationMs / 1000).toFixed(2)}s` : `${durationMs}ms`;
+            durationSuffix = ` — Search took ${durationText}`;
         }
 
         quickPick.title = `DeepLens - ${filterName}${countSuffix}${durationSuffix}`;
@@ -571,7 +578,7 @@ export class SearchProvider {
             this.currentScope = scope;
             this.updateFilterButtons(quickPick);
             quickPick.placeholder = this.getPlaceholder();
-            
+
             // Remove the command prefix from the input box
             // This will trigger onDidChangeValue again with the clean text
             quickPick.value = text;
@@ -614,11 +621,14 @@ export class SearchProvider {
 
         // PHASE 0: Absolute Instant (Immediate exact-name hits)
         try {
-            const instantResults = await this.searchEngine.burstSearch({
-                query: trimmedQuery,
-                scope: this.currentScope,
-                maxResults: 5,
-            }, undefined); // No token for burst search as it should be instant
+            const instantResults = await this.searchEngine.burstSearch(
+                {
+                    query: trimmedQuery,
+                    scope: this.currentScope,
+                    maxResults: 5,
+                },
+                undefined,
+            ); // No token for burst search as it should be instant
 
             if (queryId !== this.lastQueryId) {
                 return;
@@ -641,11 +651,14 @@ export class SearchProvider {
                 }
 
                 try {
-                    const burstResults = await this.searchEngine.burstSearch({
-                        query: trimmedQuery,
-                        scope: this.currentScope,
-                        maxResults: 15,
-                    }, undefined);
+                    const burstResults = await this.searchEngine.burstSearch(
+                        {
+                            query: trimmedQuery,
+                            scope: this.currentScope,
+                            maxResults: 15,
+                        },
+                        undefined,
+                    );
 
                     if (queryId !== this.lastQueryId) {
                         return;
@@ -772,7 +785,7 @@ export class SearchProvider {
 
         const startTime = Date.now();
         let results: SearchResult[] = [];
-        
+
         try {
             results = await this.searchEngine.search(options, this.searchCts.token);
         } catch (error) {
@@ -789,7 +802,7 @@ export class SearchProvider {
             this.streamingResults.delete(queryId);
             return [];
         }
-        
+
         this.processSearchResults(quickPick, results, trimmedQuery, duration, queryId);
 
         return results;
@@ -1039,8 +1052,8 @@ export class SearchProvider {
             this.handleQueryChange(
                 this.currentQuickPick,
                 '',
-                () => { }, 
-                () => { },
+                () => {},
+                () => {},
             );
             return true;
         }
@@ -1083,18 +1096,17 @@ export class SearchProvider {
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;
-            
+
             // Fix: Use absolute column for Text search if available
             // Highlights are now relative to the display label (trimmed), so we use them for length only
             if (item.type === SearchItemType.TEXT && item.column !== undefined) {
-                 const length = (highlights && highlights.length > 0) 
-                    ? (highlights[0][1] - highlights[0][0]) 
-                    : item.name.length;
-                    
-                 range = new vscode.Range(
+                const length =
+                    highlights && highlights.length > 0 ? highlights[0][1] - highlights[0][0] : item.name.length;
+
+                range = new vscode.Range(
                     new vscode.Position(item.line || 0, item.column),
-                    new vscode.Position(item.line || 0, item.column + length)
-                 );
+                    new vscode.Position(item.line || 0, item.column + length),
+                );
             } else if (highlights && highlights.length > 0) {
                 const firstHighlight = highlights[0];
                 range = new vscode.Range(

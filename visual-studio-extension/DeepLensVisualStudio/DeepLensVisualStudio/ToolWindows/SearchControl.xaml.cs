@@ -144,6 +144,7 @@ namespace DeepLensVisualStudio.ToolWindows
         private CancellationTokenSource? _searchCts;
         private string _searchQuery = "";
         private string _statusText = "Ready";
+        private string _indexingStatusText = "";
         private int _indexingProgress;
         private bool _isIndexing;
         private string _solutionRoot = "";
@@ -206,6 +207,19 @@ namespace DeepLensVisualStudio.ToolWindows
             {
                 _statusText = value;
                 OnPropertyChanged();
+            }
+        }
+
+        public string IndexingStatusText
+        {
+            get => _indexingStatusText;
+            set
+            {
+                if (_indexingStatusText != value)
+                {
+                    _indexingStatusText = value;
+                    OnPropertyChanged();
+                }
             }
         }
 
@@ -439,7 +453,7 @@ namespace DeepLensVisualStudio.ToolWindows
                     if (info.Percentage.HasValue) IndexingProgress = info.Percentage.Value;
                 }
 
-                if (!string.IsNullOrEmpty(info.Message)) StatusText = info.Message;
+                if (!string.IsNullOrEmpty(info.Message)) IndexingStatusText = info.Message;
             });
         }
 
@@ -551,7 +565,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 // If it's the first time, we might want to show indexing status
                 if (service.IsIndexing)
                 {
-                    StatusText = "DeepLens Indexing...";
+                    IndexingStatusText = "DeepLens Indexing...";
                     IsIndexing = true;
                 }
 

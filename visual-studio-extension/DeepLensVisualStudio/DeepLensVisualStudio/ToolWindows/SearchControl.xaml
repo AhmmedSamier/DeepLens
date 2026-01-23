@@ -428,15 +428,25 @@
                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                         Text="{Binding StatusText}" />
 
-                    <ProgressBar
+                    <StackPanel
                         Grid.Column="1"
-                        Width="100"
-                        Height="10"
-                        Margin="10,0,0,0"
-                        Maximum="100"
-                        Minimum="0"
-                        Value="{Binding IndexingProgress}"
-                        Visibility="{Binding IsIndexing, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        Orientation="Horizontal"
+                        Visibility="{Binding IsIndexing, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        
+                        <TextBlock
+                            Margin="0,0,10,0"
+                            VerticalAlignment="Center"
+                            FontSize="11"
+                            Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                            Text="{Binding IndexingStatusText}" />
+
+                        <ProgressBar
+                            Width="100"
+                            Height="10"
+                            Maximum="100"
+                            Minimum="0"
+                            Value="{Binding IndexingProgress}" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

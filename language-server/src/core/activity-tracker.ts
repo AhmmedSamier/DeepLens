@@ -50,7 +50,7 @@ export class ActivityTracker {
                     if (fs.existsSync(file)) {
                         try {
                             return JSON.parse(fs.readFileSync(file, 'utf8'));
-                        } catch (e) {
+                        } catch {
                             // Fallback to no logger if not available yet, but avoid console.error
                         }
                     }
@@ -63,7 +63,7 @@ export class ActivityTracker {
                             fs.mkdirSync(storagePath, { recursive: true });
                         }
                         fs.writeFileSync(file, JSON.stringify(data));
-                    } catch (e) {
+                    } catch {
                         // Safe to ignore or log to file if we had a reference
                     }
                 },
@@ -106,7 +106,7 @@ export class ActivityTracker {
 
         // Recalculate all scores to maintain relative rankings
         this.recalculateAllScores();
-        
+
         // Immediate save for history reliability
         this.saveActivities();
     }
@@ -135,14 +135,14 @@ export class ActivityTracker {
      */
     getRecentItems(count: number): SearchResult[] {
         const sorted = Array.from(this.activities.values())
-            .filter(a => a.item)
+            .filter((a) => a.item)
             .sort((a, b) => b.lastAccessed - a.lastAccessed)
             .slice(0, count);
 
         return sorted.map((a) => ({
             item: a.item!,
             score: 2.0,
-            scope: SearchScope.EVERYTHING
+            scope: SearchScope.EVERYTHING,
         }));
     }
 
@@ -213,7 +213,7 @@ export class ActivityTracker {
                 this.cleanupOldActivity();
                 this.recalculateAllScores();
             }
-        } catch (error) {
+        } catch {
             // Safe ignore
         }
     }
@@ -229,7 +229,7 @@ export class ActivityTracker {
             }
 
             await this.storage.save(data);
-        } catch (error) {
+        } catch {
             // Safe ignore
         }
     }

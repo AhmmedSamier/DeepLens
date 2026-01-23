@@ -27,6 +27,7 @@ export class WorkspaceIndexer {
     private excludeMatchers: Minimatch[] = [];
     private workers: Worker[] = [];
     private workersInitialized: boolean = false;
+    private fileHashes: Map<string, string> = new Map();
 
     constructor(
         config: Config,
@@ -56,7 +57,7 @@ export class WorkspaceIndexer {
         }
 
         const workerCount = Math.max(1, os.cpus().length - 1);
-        
+
         // Try to find the worker script in multiple locations
         // We prioritize .js because Node.js (VS Code) cannot run .ts directly in workers
         const possibleScripts = [
@@ -132,10 +133,7 @@ export class WorkspaceIndexer {
         }
     }
 
-    async indexWorkspace(
-        progressCallback?: (message: string, increment?: number) => void,
-        force: boolean = false,
-    ): Promise<void> {
+    async indexWorkspace(progressCallback?: (message: string, increment?: number) => void): Promise<void> {
         if (this.indexing) {
             return;
         }
@@ -207,9 +205,12 @@ export class WorkspaceIndexer {
         // TURBO PATH: Try to use git ls-files for instant listing if it's a git repo
         const gitFiles = await this.listGitFiles();
         if (gitFiles.length > 0) {
+            this.log('Using git for indexing: true');
             await this.processFileList(gitFiles, collector);
             return;
         }
+
+        this.log('Using git for indexing: false');
 
         // STANDARD FALLBACK
         const excludePatterns = this.config.getExcludePatterns();
@@ -450,11 +451,11 @@ export class WorkspaceIndexer {
 
             for (let i = 0; i < workers.length; i++) {
                 const worker = workers[i];
-                
-                const onMessage = (message: any) => {
+
+                const onMessage = (message: { type: string; items?: SearchableItem[]; count?: number }) => {
                     if (message.type === 'result') {
                         const { items, count } = message;
-                        
+
                         if (items && items.length > 0) {
                             const internedItems = items.map((item: SearchableItem) => ({
                                 ...item,
@@ -517,12 +518,11 @@ export class WorkspaceIndexer {
             }
 
             await promise;
-            
+
             // Cleanup listeners so they don't fire on the next run
             for (const cleanup of cleanupListeners) {
                 cleanup();
             }
-
         } catch (error) {
             this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
             return this.runFileIndexingFallback(fileItems, progressCallback);
@@ -537,7 +537,7 @@ export class WorkspaceIndexer {
         setLogged100: (v: boolean) => void,
         getNextReportingPercentage: () => number,
         setNextReportingPercentage: (v: number) => void,
-        progressCallback: ((message: string, increment?: number) => void) | undefined
+        progressCallback: ((message: string, increment?: number) => void) | undefined,
     ) {
         const processed = getProcessed();
         const logged100 = getLogged100();
@@ -564,7 +564,9 @@ export class WorkspaceIndexer {
     /**
      * Process symbols from workspace provider
      */
-    private async processWorkspaceSymbols(symbols: import('./indexer-interfaces').LeanSymbolInformation[]): Promise<void> {
+    private async processWorkspaceSymbols(
+        symbols: import('./indexer-interfaces').LeanSymbolInformation[],
+    ): Promise<void> {
         const batch: SearchableItem[] = [];
 
         for (const symbol of symbols) {
@@ -659,6 +661,40 @@ export class WorkspaceIndexer {
                 return SearchItemType.VARIABLE;
             default:
                 return null; // Skip other symbol kinds
+        }
+    }
+
+    private async runFileIndexingFallback(
+        fileItems: SearchableItem[],
+        progressCallback?: (message: string, increment?: number) => void,
+    ): Promise<void> {
+        const totalFiles = fileItems.length;
+        let processed = 0;
+        let nextReportingPercentage = 0;
+
+        for (const fileItem of fileItems) {
+            await this.indexFileSymbols(fileItem.filePath);
+            processed++;
+
+            if (progressCallback) {
+                const percentage = (processed / totalFiles) * 100;
+                if (percentage >= nextReportingPercentage || processed === totalFiles) {
+                    progressCallback(`Indexing symbols... (${processed}/${totalFiles})`, percentage);
+                    nextReportingPercentage = percentage + 5;
+                }
+            }
+        }
+    }
+
+    private async indexFileSymbols(filePath: string): Promise<void> {
+        try {
+            await this.treeSitter.init();
+            const items = await this.treeSitter.parseFile(filePath);
+            if (items.length > 0) {
+                this.fireItemsAdded(items);
+            }
+        } catch (error) {
+            this.log(`Error indexing symbols for ${filePath}: ${error}`);
         }
     }
 

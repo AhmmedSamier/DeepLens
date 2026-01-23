@@ -153,7 +153,7 @@ export class TreeSitterParser {
 
         try {
             this.logDebugStart(langId, filePath);
-            
+
             const parser = new this.ParserClass();
             parser.setLanguage(lang);
             const content = await fs.promises.readFile(filePath, 'utf8');
@@ -196,13 +196,11 @@ export class TreeSitterParser {
     private logDebugEnd(langId: string, filePath: string, items: SearchableItem[], tree: { rootNode: unknown }) {
         if (langId === 'csharp') {
             const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
-            this.log(
-                `Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
-            );
+            this.log(`Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`);
             if (endpoints.length > 0) {
                 endpoints.forEach((e) => this.log(`  - Found Endpoint: ${e.name}`));
             } else if (items.length === 0) {
-                 this.log(
+                this.log(
                     `Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
                 );
             }

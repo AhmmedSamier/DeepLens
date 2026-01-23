@@ -7,6 +7,8 @@ using System.Threading.Tasks;
 using StreamJsonRpc;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
+using Microsoft.VisualStudio.Shell;
+using Microsoft.VisualStudio.Shell.Interop;
 
 namespace DeepLensVisualStudio.Services
 {
@@ -34,6 +36,7 @@ namespace DeepLensVisualStudio.Services
         private bool _isInitialized;
         private bool _firstRecorded;
         private Stopwatch _searchSw = new Stopwatch();
+        private static Guid DeepLensPaneGuid = new Guid("80a30b7a-c165-450f-9723-936612056686");
 
         public string? LastError => _lastError;
         public SearchTimings LastTimings => _lastTimings;
@@ -49,6 +52,30 @@ namespace DeepLensVisualStudio.Services
         /// Event fired when progress is reported during indexing.
         /// </summary>
         public event Action<ProgressInfo>? OnProgress;
+
+        private void Log(string message)
+        {
+            Debug.WriteLine($"DeepLens: {message}");
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                try
+                {
+                    if (ServiceProvider.GlobalProvider.GetService(typeof(SVsOutputWindow)) is IVsOutputWindow outputWindow)
+                    {
+                        IVsOutputWindowPane pane;
+                        outputWindow.GetPane(ref DeepLensPaneGuid, out pane);
+                        if (pane == null)
+                        {
+                            outputWindow.CreatePane(ref DeepLensPaneGuid, "DeepLens", 1, 1);
+                            outputWindow.GetPane(ref DeepLensPaneGuid, out pane);
+                        }
+                        pane?.OutputStringThreadSafe($"[{DateTime.Now:HH:mm:ss}] {message}\n");
+                    }
+                }
+                catch { }
+            });
+        }
 
         public async Task<bool> InitializeAsync(string solutionPath, CancellationToken ct)
         {
@@ -123,7 +150,7 @@ namespace DeepLensVisualStudio.Services
                         if (!string.IsNullOrEmpty(e.Data))
                         {
                             _lastError = $"LSP Server Error: {e.Data}";
-                            Debug.WriteLine($"[DeepLens LSP Stderr] {e.Data}");
+                            Log($"LSP Stderr: {e.Data}");
                         }
                     };
 
@@ -148,6 +175,10 @@ namespace DeepLensVisualStudio.Services
                     
                     // Handle progress notifications from LSP server
                     _rpc.AddLocalRpcMethod("deeplens/progress", new Action<JToken>(OnProgressNotification));
+                    
+                    // Handle log messages from LSP server
+                    _rpc.AddLocalRpcMethod("window/logMessage", new Action<JToken>(OnLogMessage));
+                    _rpc.AddLocalRpcMethod("window/showMessage", new Action<JToken>(OnShowMessage));
                     
                     // Handle the progress token creation request from LSP server
                     _rpc.AddLocalRpcMethod("window/workDoneProgress/create", new Func<JToken, bool>(OnWorkDoneProgressCreate));
@@ -242,10 +273,42 @@ namespace DeepLensVisualStudio.Services
             }
         }
 
+        private void OnLogMessage(JToken parameters)
+        {
+            try
+            {
+                string? message = parameters["message"]?.ToString();
+                if (!string.IsNullOrEmpty(message))
+                {
+                    Log($"[LSP Log] {message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Error processing log message: {ex.Message}");
+            }
+        }
+
+        private void OnShowMessage(JToken parameters)
+        {
+            try
+            {
+                string? message = parameters["message"]?.ToString();
+                if (!string.IsNullOrEmpty(message))
+                {
+                    Log($"[LSP Message] {message}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log($"Error processing show message: {ex.Message}");
+            }
+        }
+
         private bool OnWorkDoneProgressCreate(JToken parameters)
         {
             // Simply acknowledge the progress token creation - the server expects a response
-            Debug.WriteLine($"DeepLens: Progress token creation requested: {parameters}");
+            Log($"Progress token creation requested: {parameters}");
             return true;
         }
 
@@ -253,7 +316,7 @@ namespace DeepLensVisualStudio.Services
         {
             try
             {
-                Debug.WriteLine($"DeepLens: Received progress notification: {parameters}");
+                // Debug.WriteLine($"DeepLens: Received progress notification: {parameters}");
                 
                 string? message = null;
                 int? percentage = null;
@@ -271,7 +334,7 @@ namespace DeepLensVisualStudio.Services
                     percentage = parameters["percentage"]?.Value<int>();
                 }
                 
-                Debug.WriteLine($"DeepLens: Progress - Message: {message}, Percentage: {percentage}");
+                Log($"Progress - Message: {message}, Percentage: {percentage}");
                 
                 // Determine state based on message content
                 string state;
@@ -299,7 +362,7 @@ namespace DeepLensVisualStudio.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"DeepLens: Error processing progress notification: {ex.Message}");
+                Log($"Error processing progress notification: {ex.Message}");
             }
         }
 

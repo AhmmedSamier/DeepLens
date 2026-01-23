@@ -1,3 +1,5 @@
+import { CancellationToken } from 'vscode-languageserver';
+
 /**
  * Core type definitions for the search engine
  */
@@ -114,8 +116,8 @@ export interface SearchContext {
 export interface ISearchProvider {
     id?: string;
     priority?: number;
-    search(options: SearchOptions | SearchContext, token?: any): Promise<SearchResult[]> | SearchResult[];
-    burstSearch?(options: SearchOptions, token?: any): Promise<SearchResult[]> | SearchResult[];
+    search(options: SearchOptions | SearchContext, token?: CancellationToken): Promise<SearchResult[]> | SearchResult[];
+    burstSearch?(options: SearchOptions, token?: CancellationToken): Promise<SearchResult[]> | SearchResult[];
     resolveItems?(itemIds: string[]): Promise<SearchResult[]> | SearchResult[];
     getRecentItems?(count: number): Promise<SearchResult[]> | SearchResult[];
     recordActivity?(itemId: string): Promise<void> | void;

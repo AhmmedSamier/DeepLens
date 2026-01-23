@@ -53,7 +53,7 @@
     <Exec Command="bun run build" WorkingDirectory="..\..\..\language-server" />
 
     <!-- Copy server.js to project dist folder -->
-    <MakeDir Directories="dist\parsers" />
+    <MakeDir Directories="dist\parsers;dist\bin" />
     <Copy
       SourceFiles="..\..\..\language-server\dist\server.js"
       DestinationFiles="dist\server.js"
@@ -65,12 +65,18 @@
       <WasmFiles Include="..\..\..\language-server\dist\parsers\*.wasm" />
     </ItemGroup>
     <Copy SourceFiles="@(WasmFiles)" DestinationFolder="dist\parsers" SkipUnchangedFiles="true" />
+
+    <!-- Copy bin (ripgrep) to project dist folder -->
+    <ItemGroup>
+      <BinFiles Include="..\..\..\language-server\dist\bin\*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(BinFiles)" DestinationFolder="dist\bin" SkipUnchangedFiles="true" />
   </Target>
 
   <!-- Copy LSP files to output directory after build -->
   <Target Name="CopyLspToOutput" AfterTargets="Build">
     <Message Importance="High" Text="Copying LSP files to output..." />
-    <MakeDir Directories="$(OutputPath)dist\parsers" />
+    <MakeDir Directories="$(OutputPath)dist\parsers;$(OutputPath)dist\bin" />
     <Copy
       SourceFiles="dist\server.js"
       DestinationFiles="$(OutputPath)dist\server.js"
@@ -84,6 +90,14 @@
       DestinationFolder="$(OutputPath)dist\parsers"
       SkipUnchangedFiles="true"
     />
+    <ItemGroup>
+      <LocalBinFiles Include="dist\bin\*" />
+    </ItemGroup>
+    <Copy
+      SourceFiles="@(LocalBinFiles)"
+      DestinationFolder="$(OutputPath)dist\bin"
+      SkipUnchangedFiles="true"
+    />
   </Target>
 
   <Target Name="ForceIncludeDistInVsix" BeforeTargets="GetVsixSourceItems">
@@ -95,6 +109,10 @@
       <!-- Include all WASM files in dist/parsers/ -->
       <VSIXSourceItem Include="dist\parsers\*.wasm">
         <VSIXSubPath>dist\parsers</VSIXSubPath>
+      </VSIXSourceItem>
+      <!-- Include all files in dist/bin/ (ripgrep) -->
+      <VSIXSourceItem Include="dist\bin\*">
+        <VSIXSubPath>dist\bin</VSIXSubPath>
       </VSIXSourceItem>
     </ItemGroup>
   </Target>

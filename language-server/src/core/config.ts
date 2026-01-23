@@ -46,7 +46,7 @@ export class Config {
                 if (prefix) flattened[prefix] = obj;
                 return;
             }
-            
+
             for (const key in obj as Record<string, unknown>) {
                 const value = (obj as Record<string, unknown>)[key];
                 const fullKey = prefix ? `${prefix}.${key}` : key;

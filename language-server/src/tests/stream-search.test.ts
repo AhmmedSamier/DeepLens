@@ -1,7 +1,8 @@
-import { describe, expect, it, afterAll, beforeAll } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import * as fs from 'fs';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
+import { Config } from '../core/config';
 import { SearchEngine } from '../core/search-engine';
 import { SearchItemType, SearchScope, SearchableItem } from '../core/types';
 
@@ -30,10 +31,10 @@ describe('SearchEngine Stream Search', () => {
         // check code: "if (scope === SearchScope.TEXT && this.config?.isTextSearchEnabled())"
         // I need to mock config.
 
-        const mockConfig: any = {
+        const mockConfig = {
             isTextSearchEnabled: () => true,
-            getSearchConcurrency: () => 1
-        };
+            getSearchConcurrency: () => 1,
+        } as Config;
         engine.setConfig(mockConfig);
     });
 
@@ -59,7 +60,7 @@ describe('SearchEngine Stream Search', () => {
         const results = await engine.search({
             query: 'foo',
             scope: SearchScope.TEXT,
-            maxResults: 10
+            maxResults: 10,
         });
 
         expect(results.length).toBe(1);

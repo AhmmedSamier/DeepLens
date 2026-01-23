@@ -1,6 +1,5 @@
 import * as cp from 'child_process';
 import * as fs from 'fs';
-import * as os from 'os';
 import * as path from 'path';
 
 export interface RgMatch {
@@ -38,16 +37,16 @@ export class RipgrepService {
 
         // Find the first matching binary
         this.rgPath = '';
-        
-        outer:
+
         for (const dir of searchDirs) {
             for (const name of binPatterns) {
                 const candidate = path.join(dir, name);
                 if (fs.existsSync(candidate)) {
                     this.rgPath = candidate;
-                    break outer;
+                    break;
                 }
             }
+            if (this.rgPath) break;
         }
     }
 
@@ -69,13 +68,13 @@ export class RipgrepService {
             '--',
             query,
         ];
-        
+
         // Calculate rough base length (ignoring escaping overhead for now, safe margin handles it)
         const baseArgsLen = baseArgs.reduce((acc, arg) => acc + arg.length + 1, 0);
-        
+
         // Windows command line limit is ~32k. We'll use 20k to be safe.
         const MAX_CMD_LENGTH = 20000;
-        
+
         const batches: string[][] = [];
         let currentBatch: string[] = [];
         let currentBatchLen = baseArgsLen;
@@ -103,24 +102,26 @@ export class RipgrepService {
             try {
                 const batchResults = await this.runRgBatch(baseArgs, batch, maxResults - allResults.length);
                 allResults.push(...batchResults);
-            } catch (e) {
+            } catch {
                 // Ignore batch failure
             }
         }
-        
+
         return allResults;
     }
 
     private runRgBatch(baseArgs: string[], files: string[], limit: number): Promise<RgMatch[]> {
-         return new Promise((resolve, reject) => {
+        return new Promise((resolve, reject) => {
             // Append files to args
             const args = [...baseArgs, ...files];
 
             // Ensure executable permissions (hack for VSIXs built on Windows)
             if (process.platform !== 'win32') {
                 try {
+                    // 0o755 is rwxr-xr-x, necessary for the binary to execute
+                    // eslint-disable-next-line sonarjs/file-permissions
                     fs.chmodSync(this.rgPath, 0o755);
-                } catch (e) {
+                } catch {
                     // Ignore
                 }
             }
@@ -149,21 +150,21 @@ export class RipgrepService {
                             const data = msg.data;
                             // Ripgrep returns byte offsets into the original UTF-8 string.
                             const rawText = data.lines.text;
-                            
+
                             // Calculate leading whitespace (bytes)
                             // We need to match leading whitespace and count its *bytes* because rg offsets are bytes.
                             const leadingMatch = rawText.match(/^\s*/);
                             const leadingStr = leadingMatch ? leadingMatch[0] : '';
                             const leadingBytes = Buffer.byteLength(leadingStr);
-                            
+
                             // Trim text for display
                             const trimmedText = rawText.trimStart().trimEnd(); // Matches behaviors of .trim()
-                            
+
                             // Adjust submatches
-                            const adjustedSubmatches = data.submatches.map((sm: any) => ({
+                            const adjustedSubmatches = data.submatches.map((sm: { start: number; end: number }) => ({
                                 ...sm,
                                 start: Math.max(0, sm.start - leadingBytes),
-                                end: Math.max(0, sm.end - leadingBytes)
+                                end: Math.max(0, sm.end - leadingBytes),
                             }));
 
                             results.push({
