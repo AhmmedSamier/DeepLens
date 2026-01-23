@@ -100,3 +100,33 @@ bun run vsix
     -   Format: `bun run format`
 -   **Commits:** Follow standard git commit conventions.
 -   **CI:** Check `.github/workflows/ci.yml` for the continuous integration pipeline details.
+
+# Git & Commit Standards
+
+## Conventional Commits
+When generating or suggesting commit messages, you MUST follow the Conventional Commits 1.0.0 specification.
+
+### Structure
+`<type>[optional scope]: <description>`
+
+### Allowed Types
+* **feat**: A new feature for the application.
+* **fix**: A bug fix.
+* **docs**: Documentation only changes.
+* **style**: Changes that do not affect the meaning of the code (white-space, formatting, etc).
+* **refactor**: A code change that neither fixes a bug nor adds a feature.
+* **perf**: A code change that improves performance (e.g., MySQL query optimizations).
+* **test**: Adding missing tests or correcting existing tests.
+* **chore**: Changes to the build process or auxiliary tools and libraries (e.g., K8s manifests, GitLab pipelines).
+
+### Scopes for this Project
+* **api**: For .NET / Entity Framework changes.
+* **ui**: For Angular / Tailwind / CSS changes.
+* **db**: For MySQL migrations or indexing changes.
+* **ext**: For VS Code/Zed extension logic.
+* **infra**: For Kubernetes, Docker, or CI/CD changes.
+
+### Rules
+1. Use the imperative, present tense: "change" not "changed" nor "changes".
+2. Don't capitalize the first letter of the description.
+3. No dot (.) at the end.
