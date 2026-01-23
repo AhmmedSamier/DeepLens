@@ -1065,7 +1065,7 @@ export class SearchProvider {
         if (!preview && this.config.isActivityTrackingEnabled()) {
             this.searchEngine.recordActivity(item.id);
             if (this.activityTracker) {
-                this.activityTracker.recordAccess(item.id);
+                this.activityTracker.recordAccess(item);
             }
         }
     }

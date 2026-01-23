@@ -4,7 +4,6 @@ import * as os from 'os';
 import { WorkspaceIndexer } from '../src/core/workspace-indexer';
 import { Config } from '../src/core/config';
 import { TreeSitterParser } from '../src/core/tree-sitter-parser';
-import { IndexPersistence } from '../src/core/index-persistence';
 import { IndexerEnvironment } from '../src/core/indexer-interfaces';
 import { benchmark } from './utils';
 
@@ -59,13 +58,7 @@ export async function runIndexingBenchmark() {
     const parser = new TreeSitterParser(extensionPath);
     await parser.init();
 
-    // Mock Persistence (No-op)
-    const persistence = new IndexPersistence(path.join(tempDir, 'index.json'));
-    // We override save/load to avoid disk I/O noise
-    persistence.save = async () => {};
-    persistence.load = async () => {};
-
-    const indexer = new WorkspaceIndexer(config, parser, persistence, env, extensionPath);
+    const indexer = new WorkspaceIndexer(config, parser, env, extensionPath);
 
     // We need to wait a bit for workers to potentially warm up? No, they start on demand.
 
