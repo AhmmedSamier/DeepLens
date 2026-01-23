@@ -106,7 +106,8 @@
             </Setter>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Background" Value="#3E3E42" />
+                    <Setter Property="Background"
+                            Value="{DynamicResource {x:Static vsshell:VsBrushes.CommandBarHoverKey}}" />
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -312,6 +313,7 @@
 
                             <!--  Icon  -->
                             <TextBlock
+                                x:Name="IconTextBlock"
                                 Grid.Row="0"
                                 Grid.RowSpan="1"
                                 Grid.Column="0"
@@ -330,12 +332,14 @@
                                 VerticalAlignment="Center"
                                 Orientation="Horizontal">
                                 <TextBlock
+                                    x:Name="NameTextBlock"
                                     Margin="0,0,8,0"
                                     FontSize="14"
                                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                                     Text="{Binding Name}" />
 
                                 <TextBlock
+                                    x:Name="DirectoryPathTextBlock"
                                     VerticalAlignment="Bottom"
                                     FontSize="13"
                                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
@@ -345,6 +349,7 @@
 
                             <!--  Full Path (Second Line)  -->
                             <TextBlock
+                                x:Name="RelativePathTextBlock"
                                 Grid.Row="1"
                                 Grid.Column="1"
                                 Margin="6,4,0,0"
@@ -388,6 +393,14 @@
                                 Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
                                 Value="True">
                                 <Setter TargetName="ActionPanel" Property="Visibility" Value="Visible" />
+                                <Setter TargetName="IconTextBlock" Property="Foreground"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}" />
+                                <Setter TargetName="NameTextBlock" Property="Foreground"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}" />
+                                <Setter TargetName="DirectoryPathTextBlock" Property="Foreground"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}" />
+                                <Setter TargetName="RelativePathTextBlock" Property="Foreground"
+                                        Value="{DynamicResource {x:Static vsshell:VsBrushes.HighlightTextKey}}" />
                             </DataTrigger>
                         </DataTemplate.Triggers>
                     </DataTemplate>
