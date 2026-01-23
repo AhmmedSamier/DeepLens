@@ -1,81 +1,102 @@
-# DeepLens Project Context
+# DeepLens
 
-## Project Overview
+DeepLens is a high-performance "Search Everywhere" tool for VS Code and Visual Studio, powered by a standalone language server. It provides unified navigation across types, symbols, files, and text with fuzzy matching, CamelHumps support, and activity-based ranking.
 
-**DeepLens** is a high-performance "Search Everywhere" navigation tool designed for both **VS Code** and **Visual Studio 2026**. It provides unified search capabilities for types, symbols, files, text, and API endpoints, powered by a standalone, highly optimized search engine.
+## Project Structure
 
-### Key Features
-*   **Search Everywhere**: Unified dialog for finding classes, methods, files, and text.
-*   **Performance**: Built with a focus on speed (Tree-sitter parsing, parallel text search via Ripgrep, custom caching).
-*   **Rider-style CodeLens**: Displays reference and implementation counts directly in the editor.
-*   **LSP-Based**: The core search logic is implemented as a Language Server, allowing it to be shared between different IDEs (VS Code and Visual Studio).
+The repository is a monorepo containing:
 
-## Architecture
+- **`language-server/`**: The core logic implemented as a Language Server Protocol (LSP) server. It uses `tree-sitter` for parsing and provides indexing and search capabilities.
+- **`vscode-extension/`**: The Visual Studio Code client that consumes the language server and integrates with VS Code's UI (QuickPick, CodeLens).
+- **`visual-studio-extension/`**: The Visual Studio (Classic) extension (C#) integration.
 
-The project is structured as a monorepo with three main components:
+## Technologies
 
-### 1. Language Server (`language-server/`)
-The brain of DeepLens. It handles indexing, parsing, and search logic.
-*   **Tech Stack**: TypeScript, Bun, Tree-sitter, Fuzzysort, Ripgrep, `vscode-languageserver`.
-*   **Responsibilities**:
-    *   Parsing code using Tree-sitter.
-    *   Indexing symbols and files.
-    *   Executing fuzzy searches.
-    *   Managing search cache and persistence.
+- **Runtime/Package Manager:** [Bun](https://bun.sh) (for TS/JS parts)
+- **Languages:** TypeScript (Core & VS Code), C# (Visual Studio)
+- **Parsing:** `web-tree-sitter` and various `tree-sitter-*` grammars.
+- **Protocol:** VS Code Language Server Protocol.
+- **Testing:** `bun test` (Server), `mocha` + `@vscode/test-electron` (VS Code).
 
-### 2. VS Code Extension (`vscode-extension/`)
-The client for Visual Studio Code.
-*   **Tech Stack**: TypeScript, VS Code API, `vscode-languageclient`.
-*   **Responsibilities**:
-    *   Starting the Language Server.
-    *   Providing the UI for search (QuickPick, InputBox).
-    *   Rendering CodeLenses.
-    *   Handling user configuration.
-
-### 3. Visual Studio Extension (`visual-studio-extension/`)
-The client for Visual Studio 2022/2026.
-*   **Tech Stack**: C#, .NET, Visual Studio SDK.
-*   **Responsibilities**:
-    *   Integration with Visual Studio's Tool Windows and Command system.
-    *   Interfacing with the Language Server (via LSP or direct process communication).
-
-## Development & Build
+## Getting Started
 
 ### Prerequisites
-*   **Node.js** & **Bun** (Bun is the primary runtime for scripts).
-*   **Visual Studio 2022+** (for C# extension).
 
-### 1. Language Server (`language-server/`)
-Run commands from the `language-server` directory:
-*   **Build**: `bun run build` (Compiles TS to JS, sets up parsers).
-*   **Test**: `bun test` (Runs unit tests).
-*   **Benchmark**: `bun run benchmark` (Performance tests).
-*   **Lint**: `bun run lint`.
+- **Bun**: This project uses `bun` for package management and running scripts.
+- **Node.js**: Required for some VS Code extension build tools.
 
-### 2. VS Code Extension (`vscode-extension/`)
-Run commands from the `vscode-extension` directory:
-*   **Install Dependencies**: `bun install`.
-*   **Build (Dev)**: `bun run compile` (Uses esbuild).
-*   **Watch**: `bun run watch`.
-*   **Package**: `bun run vsix` (Creates `.vsix` installer).
-*   **Test**: `bun run test`.
+### Setup
 
-### 3. Visual Studio Extension (`visual-studio-extension/`)
-*   Open `DeepLensVisualStudio.slnx` in Visual Studio.
-*   Build the solution to generate the VSIX.
+1.  **Install dependencies:**
 
-## Key Conventions
+    ```bash
+    # In language-server directory
+    cd language-server
+    bun install
 
-*   **Package Manager**: `bun` is used for script execution and package management in JS/TS folders.
-*   **Formatting**: Prettier is used (`.prettierrc`).
-*   **Linting**: ESLint is used (`eslint.config.js`).
-*   **Testing**:
-    *   `bun test` for fast unit tests in the language server.
-    *   `mocha` for integration tests in the VS Code extension.
+    # In vscode-extension directory
+    cd ../vscode-extension
+    bun install
+    ```
 
-## Current Focus (from `tasks.md`)
+## Development Workflow
 
-*   **Memory Optimization**: Refactoring the `SearchEngine` to reduce memory footprint.
-    *   Moving from Array of Objects (`PreparedItem[]`) to Structure of Arrays (Parallel arrays).
-    *   Optimizing scope storage.
-    *   Reducing object creation during indexing.
+### Building
+
+The VS Code extension depends on the language server. The `compile` script in the VS Code extension handles building both.
+
+```bash
+cd vscode-extension
+bun run compile
+```
+
+This command will:
+1.  Clean previous builds.
+2.  Bundle the VS Code extension code.
+3.  Build the Language Server (`dist/server.js`, `dist/indexer-worker.js`).
+4.  Copy necessary artifacts (parsers, binaries) to the extension's output directory.
+
+### Running Tests
+
+**Language Server:**
+```bash
+cd language-server
+bun run test
+```
+
+**VS Code Extension:**
+```bash
+cd vscode-extension
+bun run test
+```
+*Note: VS Code tests run in a headless VS Code instance.*
+
+### Benchmarks
+
+To run performance benchmarks for the language server:
+
+```bash
+cd language-server
+bun run benchmark
+```
+Or use the root script:
+```bash
+./run_benchmarks.sh
+```
+
+### Packaging
+
+To create a `.vsix` for VS Code:
+
+```bash
+cd vscode-extension
+bun run vsix
+```
+
+## Conventions
+
+-   **Code Style:** Adhere to `eslint` and `prettier` configurations.
+    -   Lint: `bun run lint`
+    -   Format: `bun run format`
+-   **Commits:** Follow standard git commit conventions.
+-   **CI:** Check `.github/workflows/ci.yml` for the continuous integration pipeline details.
