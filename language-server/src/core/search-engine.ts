@@ -26,6 +26,20 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
     [SearchItemType.ENDPOINT]: 1.4,
 };
 
+const SCOPE_BY_ITEM_TYPE: Record<SearchItemType, SearchScope> = {
+    [SearchItemType.CLASS]: SearchScope.TYPES,
+    [SearchItemType.INTERFACE]: SearchScope.TYPES,
+    [SearchItemType.ENUM]: SearchScope.TYPES,
+    [SearchItemType.FUNCTION]: SearchScope.SYMBOLS,
+    [SearchItemType.METHOD]: SearchScope.SYMBOLS,
+    [SearchItemType.PROPERTY]: SearchScope.PROPERTIES,
+    [SearchItemType.VARIABLE]: SearchScope.PROPERTIES,
+    [SearchItemType.FILE]: SearchScope.FILES,
+    [SearchItemType.TEXT]: SearchScope.TEXT,
+    [SearchItemType.COMMAND]: SearchScope.COMMANDS,
+    [SearchItemType.ENDPOINT]: SearchScope.ENDPOINTS,
+};
+
 /**
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
@@ -814,7 +828,8 @@ export class SearchEngine implements ISearchProvider {
         
         // --- INLINED calculateUnifiedScore ---
         let score = -1;
-        let resultScope = this.getScopeForItemType(item.type);
+        // Optimization: Defer scope calculation until we know we have a match
+        // let resultScope = this.getScopeForItemType(item.type);
 
         // 1. Fuzzy Scoring (Inlined calculateBasicScore -> calculateItemScore)
         let bestFuzzyScore = -Infinity;
@@ -867,12 +882,13 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // 2. URL/Endpoint Match
+        let isEndpointMatch = false;
         if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
              if (RouteMatcher.isMatch(item.name, query)) {
                 const urlScore = 1.5;
                 if (urlScore > score) {
                     score = urlScore;
-                    resultScope = SearchScope.ENDPOINTS;
+                    isEndpointMatch = true;
                 }
             }
         }
@@ -893,6 +909,10 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
             }
+
+            const resultScope = isEndpointMatch
+                ? SearchScope.ENDPOINTS
+                : this.getScopeForItemType(item.type);
 
             heap.push({
                 item,
@@ -1060,28 +1080,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private getScopeForItemType(type: SearchItemType): SearchScope {
-        switch (type) {
-            case SearchItemType.CLASS:
-            case SearchItemType.INTERFACE:
-            case SearchItemType.ENUM:
-                return SearchScope.TYPES;
-            case SearchItemType.FUNCTION:
-            case SearchItemType.METHOD:
-                return SearchScope.SYMBOLS;
-            case SearchItemType.PROPERTY:
-            case SearchItemType.VARIABLE:
-                return SearchScope.PROPERTIES;
-            case SearchItemType.FILE:
-                return SearchScope.FILES;
-            case SearchItemType.TEXT:
-                return SearchScope.TEXT;
-            case SearchItemType.COMMAND:
-                return SearchScope.COMMANDS;
-            case SearchItemType.ENDPOINT:
-                return SearchScope.ENDPOINTS;
-            default:
-                return SearchScope.EVERYTHING;
-        }
+        return SCOPE_BY_ITEM_TYPE[type] ?? SearchScope.EVERYTHING;
     }
 
     resolveItems(itemIds: string[]): SearchResult[] {
