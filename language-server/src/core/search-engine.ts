@@ -33,6 +33,51 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
     [SearchItemType.ENDPOINT]: 1.4,
 };
 
+const TYPE_TO_ID: Record<SearchItemType, number> = {
+    [SearchItemType.FILE]: 1,
+    [SearchItemType.CLASS]: 2,
+    [SearchItemType.INTERFACE]: 3,
+    [SearchItemType.ENUM]: 4,
+    [SearchItemType.FUNCTION]: 5,
+    [SearchItemType.METHOD]: 6,
+    [SearchItemType.PROPERTY]: 7,
+    [SearchItemType.VARIABLE]: 8,
+    [SearchItemType.TEXT]: 9,
+    [SearchItemType.COMMAND]: 10,
+    [SearchItemType.ENDPOINT]: 11,
+};
+
+// 0 is reserved/undefined, boosts start from 1
+const ID_TO_BOOST = [
+    1.0, // 0 (fallback)
+    ITEM_TYPE_BOOSTS[SearchItemType.FILE],
+    ITEM_TYPE_BOOSTS[SearchItemType.CLASS],
+    ITEM_TYPE_BOOSTS[SearchItemType.INTERFACE],
+    ITEM_TYPE_BOOSTS[SearchItemType.ENUM],
+    ITEM_TYPE_BOOSTS[SearchItemType.FUNCTION],
+    ITEM_TYPE_BOOSTS[SearchItemType.METHOD],
+    ITEM_TYPE_BOOSTS[SearchItemType.PROPERTY],
+    ITEM_TYPE_BOOSTS[SearchItemType.VARIABLE],
+    ITEM_TYPE_BOOSTS[SearchItemType.TEXT],
+    ITEM_TYPE_BOOSTS[SearchItemType.COMMAND],
+    ITEM_TYPE_BOOSTS[SearchItemType.ENDPOINT],
+];
+
+const ID_TO_SCOPE = [
+    SearchScope.EVERYTHING, // 0
+    SearchScope.FILES,
+    SearchScope.TYPES,
+    SearchScope.TYPES,
+    SearchScope.TYPES,
+    SearchScope.SYMBOLS,
+    SearchScope.SYMBOLS,
+    SearchScope.PROPERTIES,
+    SearchScope.PROPERTIES,
+    SearchScope.TEXT,
+    SearchScope.COMMANDS,
+    SearchScope.ENDPOINTS,
+];
+
 /**
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
@@ -43,6 +88,7 @@ export class SearchEngine implements ISearchProvider {
 
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
+    private itemTypeIds: Uint8Array = new Uint8Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
@@ -97,6 +143,7 @@ export class SearchEngine implements ISearchProvider {
      */
     setItems(items: SearchableItem[]): void {
         this.items = items;
+        this.itemTypeIds = new Uint8Array(items.length);
         this.itemsMap.clear();
         this.preparedCache.clear();
         this.preparedLowCache.clear();
@@ -114,6 +161,13 @@ export class SearchEngine implements ISearchProvider {
         // Pre-calculate start index for new items
         const startIndex = this.items.length;
 
+        // Resize itemTypeIds
+        if (this.itemTypeIds.length < startIndex + items.length) {
+            const newTypeIds = new Uint8Array(startIndex + items.length);
+            newTypeIds.set(this.itemTypeIds);
+            this.itemTypeIds = newTypeIds;
+        }
+
         // Append items
         this.items.push(...items);
 
@@ -124,6 +178,7 @@ export class SearchEngine implements ISearchProvider {
 
     private processAddedItem(item: SearchableItem, globalIndex: number): void {
         this.itemsMap.set(item.id, item);
+        this.itemTypeIds[globalIndex] = TYPE_TO_ID[item.type];
 
         // Update file paths cache
         if (item.type === SearchItemType.FILE) {
@@ -180,6 +235,7 @@ export class SearchEngine implements ISearchProvider {
 
     private moveItem(read: number, write: number): void {
         this.items[write] = this.items[read];
+        this.itemTypeIds[write] = this.itemTypeIds[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedNamesLow[write] = this.preparedNamesLow[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
@@ -191,6 +247,7 @@ export class SearchEngine implements ISearchProvider {
         // Truncate arrays if items were removed
         if (write < count) {
             this.items.length = write;
+            this.itemTypeIds = this.itemTypeIds.slice(0, write);
             this.preparedNames.length = write;
             this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
@@ -268,6 +325,7 @@ export class SearchEngine implements ISearchProvider {
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
             const item = this.items[i];
+            this.itemTypeIds[i] = TYPE_TO_ID[item.type];
 
             if (item.type === SearchItemType.FILE) {
                 this.filePaths.push(item.filePath);
@@ -346,6 +404,7 @@ export class SearchEngine implements ISearchProvider {
      */
     clear(): void {
         this.items = [];
+        this.itemTypeIds = new Uint8Array(0);
         this.preparedNames = [];
         this.preparedNamesLow = [];
         this.preparedFullNames = [];
@@ -387,6 +446,7 @@ export class SearchEngine implements ISearchProvider {
         size += this.items.length * 200;
 
         // Parallel arrays
+        size += this.itemTypeIds.byteLength;
         size += this.preparedNames.length * 8;
         size += this.preparedNamesLow.length * 8;
         size += this.preparedFullNames.length * 8;
@@ -948,29 +1008,40 @@ export class SearchEngine implements ISearchProvider {
         minScore: number,
         heap: MinHeap<SearchResult>,
     ): void {
-        const item = this.items[i];
-        if (!item) return;
+        // Optimized: Delay accessing this.items[i] (object) until we know it's a match.
+        // This avoids cache misses for filtered-out items.
 
         // --- INLINED calculateUnifiedScore ---
         let score = this.computeFuzzyScore(i, query, minScore);
 
         if (score < 0.9 && enableCamelHumps) {
-            const camelScore = this.computeCamelHumpsScore(i, query.length, queryUpper, item.type);
+            const camelScore = this.computeCamelHumpsScore(i, query.length, queryUpper);
             if (camelScore > score) {
                 score = camelScore; // Use CamelHumps if better
             }
         }
 
-        let resultScope = this.getScopeForItemType(item.type);
+        const typeId = this.itemTypeIds[i];
+        let resultScope = ID_TO_SCOPE[typeId];
 
         // 2. URL/Endpoint Match
-        if (isPotentialUrl && item.type === SearchItemType.ENDPOINT) {
-            const urlScore = this.computeUrlScore(item.name, query);
-            if (urlScore > score) {
-                score = urlScore;
-                resultScope = SearchScope.ENDPOINTS;
+        if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+            // Need name for URL match. Use prepared target or fallback to item.
+            const name = this.preparedNames[i]?.target;
+            if (name) {
+                const urlScore = this.computeUrlScore(name, query);
+                if (urlScore > score) {
+                    score = urlScore;
+                    resultScope = SearchScope.ENDPOINTS;
+                }
             }
         }
+
+        if (score <= minScore) return;
+
+        // Now access the full item object
+        const item = this.items[i];
+        if (!item) return;
 
         // 3. Activity Boosting
         score = this.computeActivityScore(item.id, score, minScore);
@@ -981,8 +1052,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private computeFuzzyScore(i: number, query: string, minScore: number): number {
-        const item = this.items[i];
-        const boost = ITEM_TYPE_BOOSTS[item.type] || 1.0;
+        const boost = ID_TO_BOOST[this.itemTypeIds[i]] || 1.0;
         let bestScore = -Infinity;
         const queryLen = query.length;
 
@@ -1014,14 +1084,14 @@ export class SearchEngine implements ISearchProvider {
         return -Infinity;
     }
 
-    private computeCamelHumpsScore(i: number, queryLen: number, queryUpper: string, type: SearchItemType): number {
+    private computeCamelHumpsScore(i: number, queryLen: number, queryUpper: string): number {
         const capitals = this.preparedCapitals[i];
         if (capitals) {
             const matchIndex = capitals.indexOf(queryUpper);
             if (matchIndex !== -1) {
                 const lengthRatio = queryLen / capitals.length;
                 const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                return lengthRatio * positionBoost * 0.8 * (ITEM_TYPE_BOOSTS[type] || 1.0);
+                return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
             }
         }
         return -Infinity;
@@ -1107,7 +1177,7 @@ export class SearchEngine implements ISearchProvider {
         );
 
         if (fuzzyScore > minScore) {
-            return this.applyItemTypeBoost(fuzzyScore, item.type);
+            return this.applyItemTypeBoost(fuzzyScore, this.itemTypeIds[i]);
         }
 
         if (enableCamelHumps) {
@@ -1115,7 +1185,7 @@ export class SearchEngine implements ISearchProvider {
             if (capitals) {
                 const camelScore = this.camelHumpsMatch(capitals, queryUpper);
                 if (camelScore > 0) {
-                    return this.applyItemTypeBoost(camelScore, item.type);
+                    return this.applyItemTypeBoost(camelScore, this.itemTypeIds[i]);
                 }
             }
         }
@@ -1207,8 +1277,8 @@ export class SearchEngine implements ISearchProvider {
         return Math.max(0, Math.min(1, score));
     }
 
-    private applyItemTypeBoost(score: number, type: SearchItemType): number {
-        return score * (ITEM_TYPE_BOOSTS[type] || 1.0);
+    private applyItemTypeBoost(score: number, typeId: number): number {
+        return score * (ID_TO_BOOST[typeId] || 1.0);
     }
 
     private getScopeForItemType(type: SearchItemType): SearchScope {
@@ -1324,7 +1394,7 @@ export class SearchEngine implements ISearchProvider {
             if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
                 const result: SearchResult = {
                     item,
-                    score: this.applyItemTypeBoost(1.0, item.type),
+                    score: this.applyItemTypeBoost(1.0, this.itemTypeIds[i]),
                     scope: this.getScopeForItemType(item.type),
                 };
                 results.push(result);
