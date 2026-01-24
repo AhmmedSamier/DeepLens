@@ -373,8 +373,9 @@ export class SearchProvider {
             const results = await this.searchEngine.getRecentItems(20);
 
             if (!results || results.length === 0) {
-                quickPick.items = [];
+                quickPick.items = this.getWelcomeItems();
                 this.updateTitle(quickPick, 0);
+                quickPick.title += ' - Quick Start';
                 return;
             }
 
@@ -928,6 +929,36 @@ export class SearchProvider {
                 scope: this.currentScope,
             },
         };
+    }
+
+    /**
+     * Get welcome items for empty state
+     */
+    private getWelcomeItems(): SearchResultItem[] {
+        const items = [
+            ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
+            ['/classes', 'Search Classes', 'Find classes, interfaces, and enums (/classes)', SearchScope.TYPES],
+            ['/files', 'Search Files', 'Find files by name or path (/files)', SearchScope.FILES],
+            ['/symbols', 'Search Symbols', 'Find methods, functions, and variables (/symbols)', SearchScope.SYMBOLS],
+            ['/text', 'Search Text', 'Find text content across all files (/text)', SearchScope.TEXT],
+        ] as const;
+
+        return items.map(([cmd, name, detail, scope]) => {
+            const item = this.resultToQuickPickItem({
+                item: {
+                    id: `slash-cmd:${cmd}`,
+                    name,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail,
+                },
+                score: 1,
+                scope,
+            });
+            item.iconPath = new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground'));
+            item.alwaysShow = true;
+            return item;
+        });
     }
 
     /**
