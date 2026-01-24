@@ -136,6 +136,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     activityTracker = new ActivityTracker(storagePath);
     searchEngine = new SearchEngine();
+    searchEngine.setWorkspaceRoots(folders);
 
     // Register Providers
     searchEngine.registerProvider(new RecentProvider(activityTracker));

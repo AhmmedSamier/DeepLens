@@ -181,4 +181,45 @@ describe('SearchEngine', () => {
         expect(preparedLowCache.size).toBeGreaterThan(20000);
         expect(preparedLowCache.has('Item0')).toBe(true);
     });
+
+    it('should filter by OPEN scope', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+        engine.setActiveFiles(['/src/File1.ts']);
+
+        const results = await engine.search({
+            query: 'File',
+            scope: SearchScope.OPEN,
+        });
+
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('File1.ts');
+    });
+
+    it('should filter by MODIFIED scope', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+
+        // Mock GitProvider
+        const mockGitProvider = {
+            getModifiedFiles: async () => new Set(['/src/File2.ts'])
+        };
+        (engine as any).gitProvider = mockGitProvider;
+
+        const results = await engine.search({
+            query: 'File',
+            scope: SearchScope.MODIFIED,
+        });
+
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('File2.ts');
+    });
 });
