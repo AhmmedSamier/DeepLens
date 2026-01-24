@@ -1,32 +1,32 @@
 [
   {
     "name": "Fuzzy Search 'File100'",
-    "avgMs": 5.490617940000001,
-    "totalMs": 549.0617940000001
+    "avgMs": 3.6386071299999996,
+    "totalMs": 363.860713
   },
   {
     "name": "CamelHumps Search 'FCC'",
-    "avgMs": 6.04689212,
-    "totalMs": 604.689212
+    "avgMs": 4.11355584,
+    "totalMs": 411.355584
   },
   {
     "name": "Burst Search 'calc'",
-    "avgMs": 0.014841480000000047,
-    "totalMs": 1.4841480000000047
+    "avgMs": 0.013902320000000827,
+    "totalMs": 1.3902320000000827
   },
   {
     "name": "Parse 500-method TS Class",
-    "avgMs": 93.25441259999998,
-    "totalMs": 932.5441259999998
+    "avgMs": 76.86085659999999,
+    "totalMs": 768.6085659999999
   },
   {
     "name": "Text Search 100 files",
-    "avgMs": 9.130751099999998,
-    "totalMs": 91.30751099999998
+    "avgMs": 3.6555932999999867,
+    "totalMs": 36.55593299999987
   },
   {
     "name": "Index 1000 files",
-    "avgMs": 315.7291713333334,
-    "totalMs": 947.1875140000002
+    "avgMs": 300.1188853333333,
+    "totalMs": 900.3566559999999
   }
 ]

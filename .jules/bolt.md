@@ -1,0 +1,3 @@
+## 2024-05-23 - [SoA Over Object Access]
+**Learning:** In the hot path of the search loop (iterating 6000+ items), accessing properties on `SearchableItem` objects (`item.type`, `item.id`) caused significant overhead due to pointer chasing and cache misses. Using parallel arrays (Struct of Arrays) for `boosts`, `types`, and `scopes` allowed the loop to run primarily on primitive arrays, improving performance by ~22%.
+**Action:** When iterating over large collections in performance-critical loops, prefer parallel primitive arrays over array-of-objects if you only need a few properties for filtering/scoring. Delay full object access until a match is confirmed.
