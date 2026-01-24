@@ -64,6 +64,11 @@ export class SearchProvider {
         ['/a ', SearchScope.EVERYTHING],
         ['/all ', SearchScope.EVERYTHING],
         ['/everything ', SearchScope.EVERYTHING],
+        ['/open ', SearchScope.OPEN],
+        ['/o ', SearchScope.OPEN],
+        ['/modified ', SearchScope.MODIFIED],
+        ['/m ', SearchScope.MODIFIED],
+        ['/git ', SearchScope.MODIFIED],
     ]);
 
     constructor(
@@ -119,6 +124,8 @@ export class SearchProvider {
 
         const buttonConfigs = [
             { scope: SearchScope.EVERYTHING, icon: 'search', label: 'All', shortcut: '/all' },
+            { scope: SearchScope.OPEN, icon: 'book', label: 'Open Files', shortcut: '/o' },
+            { scope: SearchScope.MODIFIED, icon: 'git-merge', label: 'Modified', shortcut: '/m' },
             { scope: SearchScope.TYPES, icon: this.ICON_CLASS, label: 'Classes', shortcut: '/t' },
             { scope: SearchScope.SYMBOLS, icon: 'symbol-method', label: 'Symbols', shortcut: '/s' },
             { scope: SearchScope.FILES, icon: 'file', label: 'Files', shortcut: '/f' },
@@ -145,6 +152,10 @@ export class SearchProvider {
         switch (scope) {
             case SearchScope.EVERYTHING:
                 return new vscode.ThemeIcon('search', color);
+            case SearchScope.OPEN:
+                return new vscode.ThemeIcon('book', color);
+            case SearchScope.MODIFIED:
+                return new vscode.ThemeIcon('git-merge', color);
             case SearchScope.TYPES:
                 return new vscode.ThemeIcon(this.ICON_CLASS, color);
             case SearchScope.SYMBOLS:
@@ -173,6 +184,8 @@ export class SearchProvider {
         // Add buttons in the desired order
         const orderedScopes = [
             SearchScope.EVERYTHING,
+            SearchScope.OPEN,
+            SearchScope.MODIFIED,
             SearchScope.TEXT,
             SearchScope.FILES,
             SearchScope.TYPES,
@@ -209,6 +222,10 @@ export class SearchProvider {
      */
     private getPlaceholder(): string {
         switch (this.currentScope) {
+            case SearchScope.OPEN:
+                return 'Open Files: Type to search in currently open files...';
+            case SearchScope.MODIFIED:
+                return 'Modified: Type to search in modified/untracked files...';
             case SearchScope.TYPES:
                 return 'Classes: Type to search in classes only...';
             case SearchScope.SYMBOLS:
@@ -236,6 +253,12 @@ export class SearchProvider {
         let filterName: string;
 
         switch (this.currentScope) {
+            case SearchScope.OPEN:
+                filterName = 'Open Files';
+                break;
+            case SearchScope.MODIFIED:
+                filterName = 'Modified Files';
+                break;
             case SearchScope.TYPES:
                 filterName = 'Classes';
                 break;
@@ -430,6 +453,11 @@ export class SearchProvider {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === 'Copy Path') {
                 vscode.env.clipboard.writeText(result.item.filePath);
+            } else if (e.button.tooltip === 'Copy Reference') {
+                const ref = result.item.containerName
+                    ? `${result.item.containerName}.${result.item.name}`
+                    : result.item.name;
+                vscode.env.clipboard.writeText(ref);
             } else if (e.button.tooltip === 'Copy Relative Path') {
                 const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
                 vscode.env.clipboard.writeText(relativePath);
@@ -522,6 +550,8 @@ export class SearchProvider {
         const processedScopes = new Set<SearchScope>();
 
         const slashCommands = [
+            { scope: SearchScope.OPEN, label: '/open', desc: 'Search Open Files' },
+            { scope: SearchScope.MODIFIED, label: '/modified', desc: 'Search Modified Files' },
             { scope: SearchScope.TYPES, label: '/classes', desc: 'Search Classes' },
             { scope: SearchScope.SYMBOLS, label: '/symbols', desc: 'Search Symbols' },
             { scope: SearchScope.FILES, label: '/files', desc: 'Search Files' },
@@ -945,6 +975,10 @@ export class SearchProvider {
                 {
                     iconPath: new vscode.ThemeIcon('copy'),
                     tooltip: 'Copy Path',
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('references'),
+                    tooltip: 'Copy Reference',
                 },
                 {
                     iconPath: new vscode.ThemeIcon('file-submodule'),

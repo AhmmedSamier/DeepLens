@@ -3,6 +3,7 @@ import * as Fuzzysort from 'fuzzysort';
 import * as path from 'path';
 import { CancellationToken } from 'vscode-languageserver';
 import { Config } from './config';
+import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
 import { RouteMatcher } from './route-matcher';
@@ -111,6 +112,7 @@ export class SearchEngine implements ISearchProvider {
     private logger?: { log: (msg: string) => void; error: (msg: string) => void };
     private activeFiles: Set<string> = new Set();
     private ripgrep: RipgrepService | undefined;
+    private gitProvider: GitProvider | undefined;
 
     /**
      * Set logger
@@ -136,6 +138,13 @@ export class SearchEngine implements ISearchProvider {
      */
     setExtensionPath(extensionPath: string): void {
         this.ripgrep = new RipgrepService(extensionPath);
+    }
+
+    /**
+     * Set workspace roots for git provider
+     */
+    setWorkspaceRoots(roots: string[]): void {
+        this.gitProvider = new GitProvider(roots);
     }
 
     /**
@@ -574,18 +583,26 @@ export class SearchEngine implements ISearchProvider {
         return allResults;
     }
 
-    private executeInternalSearch(
+    private async executeInternalSearch(
         effectiveQuery: string,
         scope: SearchScope,
         enableCamelHumps: boolean,
         maxResults: number,
         targetLine: number | undefined,
-    ): SearchResult[] {
+    ): Promise<SearchResult[]> {
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
 
         // 1. Filter and search
-        // Pass the indices we want to search. undefined means "all"
-        const indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+        let indices: number[] | undefined;
+
+        if (scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+        } else if (scope === SearchScope.MODIFIED) {
+            indices = await this.getIndicesForModifiedFiles();
+        } else {
+            // Pass the indices we want to search. undefined means "all"
+            indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+        }
 
         // Unified search (Fuzzy + CamelHumps in single pass)
         let results = this.performUnifiedSearch(indices, normalizedQuery, enableCamelHumps, maxResults, scope);
@@ -596,6 +613,31 @@ export class SearchEngine implements ISearchProvider {
         }
 
         return results;
+    }
+
+    private getIndicesForOpenFiles(): number[] {
+        const indices: number[] = [];
+        const count = this.items.length;
+        for (let i = 0; i < count; i++) {
+            if (this.activeFiles.has(this.items[i].filePath)) {
+                indices.push(i);
+            }
+        }
+        return indices;
+    }
+
+    private async getIndicesForModifiedFiles(): Promise<number[]> {
+        if (!this.gitProvider) return [];
+        const modifiedFiles = await this.gitProvider.getModifiedFiles();
+        const indices: number[] = [];
+        const count = this.items.length;
+        for (let i = 0; i < count; i++) {
+            // Normalize path for comparison just in case
+            if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
+                indices.push(i);
+            }
+        }
+        return indices;
     }
 
     private applyTargetLine(results: SearchResult[], targetLine: number): SearchResult[] {
@@ -1341,7 +1383,14 @@ export class SearchEngine implements ISearchProvider {
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
 
         // Pass indices for burst match
-        const indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+        let indices: number[] | undefined;
+        if (scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+        } else if (scope === SearchScope.MODIFIED) {
+            return [];
+        } else {
+            indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+        }
 
         let results: SearchResult[] = this.findBurstMatches(
             indices,
