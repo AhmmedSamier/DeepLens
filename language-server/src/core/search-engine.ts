@@ -1054,12 +1054,19 @@ export class SearchEngine implements ISearchProvider {
         // This avoids cache misses for filtered-out items.
 
         // --- INLINED calculateUnifiedScore ---
-        let score = this.computeFuzzyScore(i, query, minScore);
+        let score = -Infinity;
 
-        if (score < 0.9 && enableCamelHumps) {
-            const camelScore = this.computeCamelHumpsScore(i, query.length, queryUpper);
-            if (camelScore > score) {
-                score = camelScore; // Use CamelHumps if better
+        // Optimization: Check CamelHumps first (cheaper)
+        if (enableCamelHumps) {
+            score = this.computeCamelHumpsScore(i, query.length, queryUpper);
+        }
+
+        // Only run expensive Fuzzy search if CamelHumps didn't yield a strong match
+        // Threshold 1.0 ensures we only skip if we have a very strong CamelHumps match
+        if (score < 1.0) {
+            const fuzzyScore = this.computeFuzzyScore(i, query, Math.max(minScore, score));
+            if (fuzzyScore > score) {
+                score = fuzzyScore;
             }
         }
 
@@ -1094,7 +1101,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private computeFuzzyScore(i: number, query: string, minScore: number): number {
-        const boost = ID_TO_BOOST[this.itemTypeIds[i]] || 1.0;
+        // Optimization: Defer boost lookup until match is confirmed
         let bestScore = -Infinity;
         const queryLen = query.length;
 
@@ -1102,19 +1109,25 @@ export class SearchEngine implements ISearchProvider {
         const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
         if (nameScore > minScore) bestScore = nameScore;
 
-        if (bestScore >= 0.9) return bestScore * boost;
+        if (bestScore >= 0.9) {
+            return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+        }
 
         // Full Name (0.9)
         const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
         if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
 
-        if (bestScore >= 0.8) return bestScore * boost;
+        if (bestScore >= 0.8) {
+            return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+        }
 
         // Path (0.8)
         const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
         if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
 
-        if (bestScore > minScore) return bestScore * boost;
+        if (bestScore > minScore) {
+            return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+        }
         return -Infinity;
     }
 
