@@ -5,3 +5,7 @@
 ## 2026-01-23 - [Empty State Discovery]
 **Learning:** Empty history states in search interfaces are a wasted opportunity. Instead of showing a blank list, presenting "Quick Start" or "Welcome" items helps users discover features (like filter commands) that are otherwise hidden.
 **Action:** Populate empty history/initial states with clickable "Tips" or "Command Shortcuts" that guide the user on how to use the tool.
+
+## 2026-01-25 - [Actionable Empty States]
+**Learning:** When a scoped search returns no results, passive advice (e.g., "Try /all") is less effective than providing a direct action. Users prefer a one-click "Search Everywhere" button inside the empty state item over re-typing commands or finding filter buttons.
+**Action:** In empty states caused by filters, always inject an interactive `QuickInputButton` that clears the filter and immediately re-triggers the search.
