@@ -1053,18 +1053,19 @@ export class SearchEngine implements ISearchProvider {
         // Optimized: Delay accessing this.items[i] (object) until we know it's a match.
         // This avoids cache misses for filtered-out items.
 
+        const typeId = this.itemTypeIds[i];
+
         // --- INLINED calculateUnifiedScore ---
-        let score = this.computeFuzzyScore(i, query, minScore);
+        let score = this.computeFuzzyScore(i, typeId, query, minScore);
 
         if (score < 0.9 && enableCamelHumps) {
-            const camelScore = this.computeCamelHumpsScore(i, query.length, queryUpper);
+            const camelScore = this.computeCamelHumpsScore(i, typeId, query.length, queryUpper);
             if (camelScore > score) {
                 score = camelScore; // Use CamelHumps if better
             }
         }
 
-        const typeId = this.itemTypeIds[i];
-        let resultScope = ID_TO_SCOPE[typeId];
+        let resultScope: SearchScope | undefined;
 
         // 2. URL/Endpoint Match
         if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
@@ -1081,6 +1082,10 @@ export class SearchEngine implements ISearchProvider {
 
         if (score <= minScore) return;
 
+        if (resultScope === undefined) {
+            resultScope = ID_TO_SCOPE[typeId];
+        }
+
         // Now access the full item object
         const item = this.items[i];
         if (!item) return;
@@ -1093,7 +1098,7 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
-    private computeFuzzyScore(i: number, query: string, minScore: number): number {
+    private computeFuzzyScore(i: number, typeId: number, query: string, minScore: number): number {
         let bestScore = -Infinity;
         const queryLen = query.length;
 
@@ -1101,19 +1106,19 @@ export class SearchEngine implements ISearchProvider {
         const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
         if (nameScore > minScore) bestScore = nameScore;
 
-        if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+        if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
 
         // Full Name (0.9)
         const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
         if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
 
-        if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+        if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
 
         // Path (0.8)
         const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
         if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
 
-        if (bestScore > minScore) return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+        if (bestScore > minScore) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
         return -Infinity;
     }
 
@@ -1125,14 +1130,14 @@ export class SearchEngine implements ISearchProvider {
         return -Infinity;
     }
 
-    private computeCamelHumpsScore(i: number, queryLen: number, queryUpper: string): number {
+    private computeCamelHumpsScore(i: number, typeId: number, queryLen: number, queryUpper: string): number {
         const capitals = this.preparedCapitals[i];
         if (capitals) {
             const matchIndex = capitals.indexOf(queryUpper);
             if (matchIndex !== -1) {
                 const lengthRatio = queryLen / capitals.length;
                 const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
+                return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
             }
         }
         return -Infinity;
