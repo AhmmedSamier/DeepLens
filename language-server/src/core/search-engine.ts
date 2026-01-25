@@ -1094,7 +1094,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private computeFuzzyScore(i: number, query: string, minScore: number): number {
-        const boost = ID_TO_BOOST[this.itemTypeIds[i]] || 1.0;
         let bestScore = -Infinity;
         const queryLen = query.length;
 
@@ -1102,19 +1101,19 @@ export class SearchEngine implements ISearchProvider {
         const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
         if (nameScore > minScore) bestScore = nameScore;
 
-        if (bestScore >= 0.9) return bestScore * boost;
+        if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
 
         // Full Name (0.9)
         const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
         if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
 
-        if (bestScore >= 0.8) return bestScore * boost;
+        if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
 
         // Path (0.8)
         const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
         if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
 
-        if (bestScore > minScore) return bestScore * boost;
+        if (bestScore > minScore) return bestScore * (ID_TO_BOOST[this.itemTypeIds[i]] || 1.0);
         return -Infinity;
     }
 
