@@ -37,6 +37,7 @@ export class SearchProvider {
     private readonly TOOLTIP_REBUILD_INDEX = 'Rebuild Index (Fix missing files)';
     private readonly TOOLTIP_CLEAR_CACHE = 'Clear Index Cache (Fix corruption)';
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
+    private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
 
     private matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
@@ -452,7 +453,34 @@ export class SearchProvider {
 
         quickPick.onDidTriggerItemButton((e) => {
             const result = (e.item as SearchResultItem).result;
-            if (e.button.tooltip === 'Copy Path') {
+            if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
+                // Update user selection
+                this.userSelectedScope = SearchScope.EVERYTHING;
+
+                // Also update current scope
+                this.currentScope = SearchScope.EVERYTHING;
+
+                // Check if we need to update the query prefix
+                const currentQuery = quickPick.value;
+
+                // Check if current query has ANY known prefix
+                for (const [prefix] of this.PREFIX_MAP.entries()) {
+                    if (currentQuery.toLowerCase().startsWith(prefix)) {
+                        // Clear the prefix when switching scopes
+                        const replacement = '';
+                        quickPick.value = replacement + currentQuery.slice(prefix.length);
+                        break;
+                    }
+                }
+
+                quickPick.placeholder = this.getPlaceholder();
+                this.updateFilterButtons(quickPick);
+
+                // Re-run search with new filter
+                const { text } = this.parseQuery(quickPick.value);
+                const queryId = ++this.lastQueryId;
+                this.performSearch(quickPick, text, queryId);
+            } else if (e.button.tooltip === 'Copy Path') {
                 vscode.env.clipboard.writeText(result.item.filePath);
             } else if (e.button.tooltip === 'Copy Reference') {
                 const ref = result.item.containerName
@@ -897,26 +925,37 @@ export class SearchProvider {
                 ? 'Try switching to Global search (/all) or check for typos'
                 : `We couldn't find '${query}'. Try /all scope, checking for typos, or adjusting your settings.`;
 
+        const buttons: vscode.QuickInputButton[] = [];
+
+        if (this.currentScope !== SearchScope.EVERYTHING) {
+            buttons.push({
+                iconPath: new vscode.ThemeIcon('search'),
+                tooltip: this.TOOLTIP_SEARCH_EVERYWHERE,
+            });
+        }
+
+        buttons.push(
+            {
+                iconPath: new vscode.ThemeIcon('refresh'),
+                tooltip: this.TOOLTIP_REBUILD_INDEX,
+            },
+            {
+                iconPath: new vscode.ThemeIcon('trash'),
+                tooltip: this.TOOLTIP_CLEAR_CACHE,
+            },
+            {
+                iconPath: new vscode.ThemeIcon('settings-gear'),
+                tooltip: this.TOOLTIP_SETTINGS,
+            },
+        );
+
         return {
             label: 'No results found',
             description: `No matching items found for '${query}'`,
             detail: detail,
             alwaysShow: true,
             iconPath: new vscode.ThemeIcon('search', new vscode.ThemeColor('descriptionForeground')),
-            buttons: [
-                {
-                    iconPath: new vscode.ThemeIcon('refresh'),
-                    tooltip: this.TOOLTIP_REBUILD_INDEX,
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('trash'),
-                    tooltip: this.TOOLTIP_CLEAR_CACHE,
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('settings-gear'),
-                    tooltip: this.TOOLTIP_SETTINGS,
-                },
-            ],
+            buttons: buttons,
             result: {
                 item: {
                     id: 'empty-state',
