@@ -134,14 +134,24 @@ export class DeepLensLspClient implements ISearchProvider {
                     return;
                 }
 
-                if (value.percentage === 100 || value.message?.startsWith('Done')) {
-                    progress.report({ message: value.message || 'Done', increment: 100 - lastPercentage });
-                    this.onProgress.fire({ state: 'end', message: value.message || 'Done', percentage: 100 });
+                const isFinished =
+                    value.percentage === 100 ||
+                    value.message?.startsWith('Done') ||
+                    value.message === 'Cancelled' ||
+                    value.message === 'Failed';
+
+                if (isFinished) {
+                    const message = value.message || 'Done';
+                    progress.report({ message: message, increment: 100 - lastPercentage });
+                    this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
+
+                    // Use a shorter timeout for cancellation so it doesn't linger unnecessarily
+                    const timeout = message === 'Cancelled' ? 2000 : 3000;
 
                     setTimeout(() => {
                         resolve();
                         disposable.dispose();
-                    }, 3000);
+                    }, timeout);
                     return;
                 }
 
