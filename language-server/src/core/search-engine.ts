@@ -1439,12 +1439,23 @@ export class SearchEngine implements ISearchProvider {
             // Check max results break
             if (results.length >= maxResults) return;
 
-            const item = this.items[i];
-            if (!item) return;
+            // Optimization: Access parallel array first before full object to improve cache locality.
+            // Only access this.items[i] if strictly necessary (match found or cache missing).
+            let nameLower = this.preparedNamesLow[i];
+            let item: SearchableItem | undefined;
 
-            const nameLower = this.preparedNamesLow[i] || item.name.toLowerCase();
+            if (nameLower === null || nameLower === undefined) {
+                item = this.items[i];
+                if (!item) return;
+                nameLower = item.name.toLowerCase();
+            }
 
             if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
+                if (!item) {
+                    item = this.items[i];
+                    if (!item) return;
+                }
+
                 const result: SearchResult = {
                     item,
                     score: this.applyItemTypeBoost(1.0, this.itemTypeIds[i]),
