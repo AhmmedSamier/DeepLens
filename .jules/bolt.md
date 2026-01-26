@@ -9,3 +9,7 @@
 ## 2024-05-25 - Primitive Argument Passing for SoA
 **Learning:** Even fast typed array accesses (e.g., `this.itemTypeIds[i]`) have overhead when repeated in tight loops (fuzzy matching). Passing the value as a primitive argument to helper methods yielded a significant speedup (~40%) by avoiding repeated property access and `this` lookups.
 **Action:** When using SoA, fetch values once at the top of the loop and pass them down to helper functions.
+
+## 2024-05-26 - Lazy Object Access in Burst Search
+**Learning:** In `burstSearch`, checking `preparedNamesLow` (parallel array) *before* accessing `this.items[i]` (object) reduced the "no match" scan time by ~4% (4.13ms -> 3.97ms for 50k items). While skipping object access is faster, ensuring robustness (fallback for missing cache) adds slight overhead but maintains correctness.
+**Action:** When iterating parallel arrays, use them as a fast path filter but ensure a fallback path exists if data synchronization is not guaranteed.

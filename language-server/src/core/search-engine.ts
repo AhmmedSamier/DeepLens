@@ -1435,24 +1435,40 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const results: SearchResult[] = [];
 
+        const addResult = (item: SearchableItem, typeId: number) => {
+            const result: SearchResult = {
+                item,
+                score: this.applyItemTypeBoost(1.0, typeId),
+                scope: ID_TO_SCOPE[typeId],
+            };
+            results.push(result);
+            if (onResult) {
+                onResult(result);
+            }
+        };
+
         const processItem = (i: number) => {
             // Check max results break
             if (results.length >= maxResults) return;
 
-            const item = this.items[i];
-            if (!item) return;
+            // Optimization: Check parallel array match BEFORE accessing the full item object
+            // This prevents cache misses for non-matching items
+            const cachedName = this.preparedNamesLow[i];
 
-            const nameLower = this.preparedNamesLow[i] || item.name.toLowerCase();
-
-            if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
-                const result: SearchResult = {
-                    item,
-                    score: this.applyItemTypeBoost(1.0, this.itemTypeIds[i]),
-                    scope: this.getScopeForItemType(item.type),
-                };
-                results.push(result);
-                if (onResult) {
-                    onResult(result);
+            if (cachedName) {
+                // Fast path
+                if (cachedName === queryLower || cachedName.startsWith(queryLower)) {
+                    const item = this.items[i];
+                    if (item) addResult(item, this.itemTypeIds[i]);
+                }
+            } else {
+                // Slow path (Fallback if cache missing)
+                const item = this.items[i];
+                if (item) {
+                    const name = item.name.toLowerCase();
+                    if (name === queryLower || name.startsWith(queryLower)) {
+                        addResult(item, this.itemTypeIds[i]);
+                    }
                 }
             }
         };
