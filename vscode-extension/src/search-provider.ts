@@ -1,3 +1,4 @@
+import * as Fuzzysort from 'fuzzysort';
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';
@@ -108,6 +109,7 @@ export class SearchProvider {
 
                         // Update UI incrementally if this is still the active search
                         if (requestId === this.lastQueryId) {
+                            // We don't have easy access to query here, so no highlights for incremental stream (acceptable trade-off)
                             this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r));
                             this.updateTitle(this.currentQuickPick, results.length);
                         }
@@ -451,6 +453,7 @@ export class SearchProvider {
 
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
+        // eslint-disable-next-line sonarjs/cognitive-complexity
         quickPick.onDidTriggerItemButton((e) => {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
@@ -626,7 +629,7 @@ export class SearchProvider {
         }
 
         if (commandSuggestions.length > 0) {
-            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r));
+            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r, query));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
         }
@@ -704,7 +707,7 @@ export class SearchProvider {
             }
 
             if (instantResults.length > 0) {
-                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
                 this.updateTitle(quickPick, instantResults.length);
             }
             // Don't clear items here - let history stay until we have real results (avoid flicker)
@@ -735,7 +738,7 @@ export class SearchProvider {
 
                     // Update if we have more results
                     if (burstResults.length > 0) {
-                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
+                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
@@ -909,7 +912,7 @@ export class SearchProvider {
                 quickPick.items = [this.getEmptyStateItem(query)];
                 this.updateTitle(quickPick, 0, duration);
             } else {
-                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result, query));
                 this.updateTitle(quickPick, results.length, duration);
             }
             this.streamingResults.delete(queryId); // Done with streaming for this query
@@ -1003,7 +1006,7 @@ export class SearchProvider {
     /**
      * Convert search result to QuickPick item
      */
-    private resultToQuickPickItem(result: SearchResult): SearchResultItem {
+    private resultToQuickPickItem(result: SearchResult, query?: string): SearchResultItem {
         const { item } = result;
         const icon = this.getIconForItemType(item.type);
         const iconColor = this.getIconColorForItemType(item.type);
@@ -1011,8 +1014,29 @@ export class SearchProvider {
         // Create colored icon
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
-        // Don't add icon to label - iconPath will render it
-        const label = item.name;
+        // Calculate highlights if missing (for fuzzy search)
+        let highlights: [number, number][] | undefined;
+        if (result.highlights) {
+            // Use existing highlights (e.g., from Text Search)
+            // Ensure type compatibility: number[][] -> [number, number][]
+            highlights = result.highlights.map((h) => [h[0], h[1]]);
+        } else if (query) {
+            // Generate fuzzy highlights on the fly for UI
+            const match = Fuzzysort.single(query, item.name);
+            if (match) {
+                highlights = this.indicesToRanges(match.indexes);
+            }
+        }
+
+        // Configure label with highlights if available
+        let label: string | vscode.QuickPickItemLabel = item.name;
+        if (highlights && highlights.length > 0) {
+            label = {
+                label: item.name,
+                highlights: highlights,
+            };
+        }
+
         let description = '';
         let detail = '';
 
@@ -1064,6 +1088,35 @@ export class SearchProvider {
                 },
             ],
         };
+    }
+
+    /**
+     * Convert sorted indices to [start, end] ranges
+     */
+    private indicesToRanges(indices: number[]): [number, number][] {
+        if (!indices || indices.length === 0) {
+            return [];
+        }
+
+        // Sort indices just in case
+        indices.sort((a, b) => a - b);
+
+        const ranges: [number, number][] = [];
+        let start = indices[0];
+        let end = start + 1;
+
+        for (let i = 1; i < indices.length; i++) {
+            if (indices[i] === end) {
+                end++;
+            } else {
+                ranges.push([start, end]);
+                start = indices[i];
+                end = start + 1;
+            }
+        }
+        ranges.push([start, end]);
+
+        return ranges;
     }
 
     /**
