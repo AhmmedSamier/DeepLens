@@ -451,6 +451,7 @@ export class SearchProvider {
 
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
+        // eslint-disable-next-line sonarjs/cognitive-complexity
         quickPick.onDidTriggerItemButton((e) => {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
@@ -1001,6 +1002,15 @@ export class SearchProvider {
     }
 
     /**
+     * Check if a file has unsaved changes
+     */
+    private isFileDirty(filePath: string): boolean {
+        // Normalize for comparison
+        const targetPath = vscode.Uri.file(filePath).fsPath;
+        return vscode.workspace.textDocuments.some((doc) => doc.isDirty && doc.uri.fsPath === targetPath);
+    }
+
+    /**
      * Convert search result to QuickPick item
      */
     private resultToQuickPickItem(result: SearchResult): SearchResultItem {
@@ -1019,6 +1029,12 @@ export class SearchProvider {
         // Add container name if available
         if (item.containerName) {
             description = item.containerName;
+        }
+
+        // Add unsaved indicator for dirty files
+        if (item.type === SearchItemType.FILE && this.isFileDirty(item.filePath)) {
+            const indicator = '$(circle-filled)'; // VS Code unsaved indicator style
+            description = description ? `${indicator} ${description}` : indicator;
         }
 
         // Add file path and line number
