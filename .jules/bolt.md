@@ -9,3 +9,15 @@
 ## 2024-05-25 - Primitive Argument Passing for SoA
 **Learning:** Even fast typed array accesses (e.g., `this.itemTypeIds[i]`) have overhead when repeated in tight loops (fuzzy matching). Passing the value as a primitive argument to helper methods yielded a significant speedup (~40%) by avoiding repeated property access and `this` lookups.
 **Action:** When using SoA, fetch values once at the top of the loop and pass them down to helper functions.
+
+## 2024-05-26 - Avoid Eager Optimization of Cold Paths
+**Learning:** Optimizing `ID_TO_BOOST` lookup by hoisting it before the match check caused a regression because it added overhead to the vast majority of non-matching items (cold path).
+**Action:** Always profile whether an "optimization" forces work onto the cold path.
+
+## 2024-05-26 - Float32Array vs Array for Small Lookups
+**Learning:** Converting a small (12 items) lookup table from `Array` to `Float32Array` did not yield performance improvements and possibly added overhead (likely boxing/unboxing or boundary checks) in V8.
+**Action:** For very small lookup tables used in hot loops, standard JS Arrays are often fast enough or faster due to V8's SMI optimizations.
+
+## 2024-05-26 - Inlining Function Wrappers
+**Learning:** Inlining a small wrapper function (`calculateFieldScore`) that checked for null/length before calling a library function (`Fuzzysort.single`) yielded a ~6% speedup in the fuzzy search hot loop by eliminating function call overhead.
+**Action:** Inline small, frequent checks in hot loops.
