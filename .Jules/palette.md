@@ -13,3 +13,11 @@
 ## 2026-01-26 - [Manual Highlighting in QuickPick]
 **Learning:** When using `alwaysShow: true` to bypass VS Code's internal filtering, we also lose the native match highlighting. This creates a disconnect where users see results but not *why* they matched.
 **Action:** Use `fuzzysort` or similar to manually calculate match indices and provide them via `QuickPickItemLabel` to restore visual feedback.
+
+## 2026-01-26 - [Unsaved Changes Indicator]
+**Learning:** `QuickPickItem` does not support custom highlights via `label` object in this API version, nor does `alwaysShow: true` allow native highlighting. This creates a need for alternative visual cues.
+**Action:** Instead of highlights, added a `` indicator to the `description` of open, dirty files to provide valuable context without breaking the UI constraints.
+
+## 2026-01-26 - [Unsaved Changes Indicator]
+**Learning:** QuickPickItem does not support custom highlights via label object in this API version, nor does alwaysShow allow native highlighting. This creates a need for alternative visual cues.
+**Action:** Instead of highlights, added a $(circle-filled) indicator to the description of open, dirty files to provide valuable context without breaking the UI constraints.
