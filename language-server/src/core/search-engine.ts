@@ -1103,20 +1103,37 @@ export class SearchEngine implements ISearchProvider {
         const queryLen = query.length;
 
         // Name (1.0)
-        const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
-        if (nameScore > minScore) bestScore = nameScore;
+        const preparedName = this.preparedNames[i];
+        if (preparedName && queryLen <= preparedName.target.length) {
+            const res = Fuzzysort.single(query, preparedName);
+            if (res && res.score > minScore) {
+                bestScore = res.score;
+            }
+        }
 
         if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
 
         // Full Name (0.9)
-        const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
-        if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
+        const preparedFullName = this.preparedFullNames[i];
+        if (preparedFullName && queryLen <= preparedFullName.target.length) {
+            const res = Fuzzysort.single(query, preparedFullName);
+            if (res) {
+                const score = res.score * 0.9;
+                if (score > bestScore) bestScore = score;
+            }
+        }
 
         if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
 
         // Path (0.8)
-        const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
-        if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
+        const preparedPath = this.preparedPaths[i];
+        if (preparedPath && queryLen <= preparedPath.target.length) {
+            const res = Fuzzysort.single(query, preparedPath);
+            if (res) {
+                const score = res.score * 0.8;
+                if (score > bestScore) bestScore = score;
+            }
+        }
 
         if (bestScore > minScore) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
         return -Infinity;
