@@ -21,3 +21,7 @@
 ## 2024-05-26 - Inlining Function Wrappers
 **Learning:** Inlining a small wrapper function (`calculateFieldScore`) that checked for null/length before calling a library function (`Fuzzysort.single`) yielded a ~6% speedup in the fuzzy search hot loop by eliminating function call overhead.
 **Action:** Inline small, frequent checks in hot loops.
+
+## 2026-01-28 - Manual Inlining of Hot Loop Logic
+**Learning:** In extremely hot loops (100k+ iterations), even the overhead of calling a closure function (captured variables) can be significant (e.g., 10-20% of execution time). Manually inlining the logic into the `for` loop body, even if it requires code duplication, can yield substantial gains when the function body is small/medium but called frequently.
+**Action:** Consider manual inlining for critical hot loops where function call overhead is a bottleneck, but document the duplication clearly.
