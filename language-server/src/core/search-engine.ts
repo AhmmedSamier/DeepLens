@@ -1029,6 +1029,7 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const MIN_SCORE = 0.01;
+        const queryLen = query.length;
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
@@ -1045,7 +1046,6 @@ export class SearchEngine implements ISearchProvider {
 
         const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
             let score = -Infinity;
-            const queryLen = query.length;
 
             // Name (1.0)
             const preparedName = preparedNames[i];
