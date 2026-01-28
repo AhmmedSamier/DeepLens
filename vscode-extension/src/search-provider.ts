@@ -9,6 +9,7 @@ import {
     SearchScope,
     SearchableItem,
 } from '../../language-server/src/core/types';
+import * as fuzzysort from 'fuzzysort';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 
@@ -115,7 +116,8 @@ export class SearchProvider {
 
                         // Update UI incrementally if this is still the active search
                         if (requestId === this.lastQueryId) {
-                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r));
+                            const { text } = this.parseQuery(this.currentQuickPick.value);
+                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r, text));
                             this.updateTitle(this.currentQuickPick, results.length);
                         }
                     }
@@ -644,7 +646,7 @@ export class SearchProvider {
         }
 
         if (commandSuggestions.length > 0) {
-            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r));
+            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r, query));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
         }
@@ -722,7 +724,7 @@ export class SearchProvider {
             }
 
             if (instantResults.length > 0) {
-                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
                 this.updateTitle(quickPick, instantResults.length);
             }
             // Don't clear items here - let history stay until we have real results (avoid flicker)
@@ -753,7 +755,7 @@ export class SearchProvider {
 
                     // Update if we have more results
                     if (burstResults.length > 0) {
-                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
+                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
@@ -927,7 +929,7 @@ export class SearchProvider {
                 quickPick.items = [this.getEmptyStateItem(query)];
                 this.updateTitle(quickPick, 0, duration);
             } else {
-                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result, query));
                 this.updateTitle(quickPick, results.length, duration);
             }
             this.streamingResults.delete(queryId); // Done with streaming for this query
@@ -1028,9 +1030,51 @@ export class SearchProvider {
     }
 
     /**
+     * Convert fuzzysort indexes to VS Code ranges
+     */
+    private indexesToRanges(indexes: readonly number[]): [number, number][] {
+        if (!indexes || indexes.length === 0) {
+            return [];
+        }
+
+        const sortedIndexes = [...indexes].sort((a, b) => a - b);
+
+        const ranges: [number, number][] = [];
+        let start = sortedIndexes[0];
+        let end = start + 1;
+
+        for (let i = 1; i < sortedIndexes.length; i++) {
+            if (sortedIndexes[i] === end) {
+                end++;
+            } else {
+                ranges.push([start, end]);
+                start = sortedIndexes[i];
+                end = start + 1;
+            }
+        }
+        ranges.push([start, end]);
+        return ranges;
+    }
+
+    /**
+     * Calculate highlights for item name
+     */
+    private calculateHighlights(name: string, query: string): [number, number][] {
+        if (!query) {
+            return [];
+        }
+
+        const res = fuzzysort.single(query, name);
+        if (res) {
+            return this.indexesToRanges(res.indexes);
+        }
+        return [];
+    }
+
+    /**
      * Convert search result to QuickPick item
      */
-    private resultToQuickPickItem(result: SearchResult): SearchResultItem {
+    private resultToQuickPickItem(result: SearchResult, query?: string): SearchResultItem {
         const { item } = result;
         const icon = this.getIconForItemType(item.type);
         const iconColor = this.getIconColorForItemType(item.type);
@@ -1039,8 +1083,21 @@ export class SearchProvider {
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
         // Don't add icon to label - iconPath will render it
-        const label = item.name;
+        let label: string | { label: string; highlights?: [number, number][] } = item.name;
         let description = '';
+
+        // Calculate highlights if not provided
+        let highlights = result.highlights;
+        if ((!highlights || highlights.length === 0) && query) {
+            highlights = this.calculateHighlights(item.name, query);
+        }
+
+        if (highlights && highlights.length > 0) {
+            label = {
+                label: item.name,
+                highlights: highlights as [number, number][],
+            };
+        }
         let detail = '';
 
         // Add container name if available
@@ -1068,7 +1125,7 @@ export class SearchProvider {
         }
 
         return {
-            label,
+            label: label as any,
             description,
             detail,
             iconPath: coloredIcon,

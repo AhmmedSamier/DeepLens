@@ -21,3 +21,7 @@
 ## 2026-01-26 - [Unsaved Changes Indicator]
 **Learning:** QuickPickItem does not support custom highlights via label object in this API version, nor does alwaysShow allow native highlighting. This creates a need for alternative visual cues.
 **Action:** Instead of highlights, added a $(circle-filled) indicator to the description of open, dirty files to provide valuable context without breaking the UI constraints.
+
+## 2026-02-04 - [QuickPickItemLabel Type Mismatch]
+**Learning:** The `@types/vscode` package (even recent versions) may not reflect all runtime capabilities, such as `QuickPickItem.label` accepting a `QuickPickItemLabel` object (introduced in 1.76) instead of just a string.
+**Action:** When targeting a VS Code version that supports a feature (verified via release notes) but types are missing, use type casting (e.g., `label as any`) to leverage the feature without TypeScript errors, ensuring the `engines` field in `package.json` enforces the minimum runtime requirement.
