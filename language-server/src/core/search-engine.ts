@@ -405,7 +405,8 @@ export class SearchEngine implements ISearchProvider {
      * Set the list of currently active or open files to prioritize them
      */
     setActiveFiles(files: string[]): void {
-        this.activeFiles = new Set(files.map((f) => path.normalize(f)));
+        // Normalize and lowercase for case-insensitive comparison
+        this.activeFiles = new Set(files.map((f) => path.normalize(f).toLowerCase()));
     }
 
     /**
@@ -619,7 +620,9 @@ export class SearchEngine implements ISearchProvider {
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            if (this.activeFiles.has(this.items[i].filePath)) {
+            // Check normalized lowercase path (files in Set are already normalized & lowercased)
+            // We assume item.filePath is structurally normalized by WorkspaceIndexer, so we only need lowercase
+            if (this.activeFiles.has(this.items[i].filePath.toLowerCase())) {
                 indices.push(i);
             }
         }
@@ -628,12 +631,19 @@ export class SearchEngine implements ISearchProvider {
 
     private async getIndicesForModifiedFiles(): Promise<number[]> {
         if (!this.gitProvider) return [];
-        const modifiedFiles = await this.gitProvider.getModifiedFiles();
+        const modifiedFilesRaw = await this.gitProvider.getModifiedFiles();
+
+        // Normalize and lowercase the set for comparison
+        const modifiedFiles = new Set<string>();
+        for (const file of modifiedFilesRaw) {
+            modifiedFiles.add(path.normalize(file).toLowerCase());
+        }
+
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            // Normalize path for comparison just in case
-            if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
+            // Check normalized lowercase path
+            if (modifiedFiles.has(this.items[i].filePath.toLowerCase())) {
                 indices.push(i);
             }
         }
