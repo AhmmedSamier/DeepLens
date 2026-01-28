@@ -39,6 +39,13 @@ export class SearchProvider {
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
 
+    // Tooltips for item buttons
+    private readonly TOOLTIP_COPY_PATH = 'Copy Path';
+    private readonly TOOLTIP_COPY_REF = 'Copy Reference';
+    private readonly TOOLTIP_COPY_REL = 'Copy Relative Path';
+    private readonly TOOLTIP_OPEN_SIDE = 'Open to the Side';
+    private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
+
     private matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
@@ -115,6 +122,13 @@ export class SearchProvider {
                 }
             });
         }
+    }
+
+    /**
+     * Show transient feedback in status bar
+     */
+    private showFeedback(message: string): void {
+        vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
     }
 
     /**
@@ -452,7 +466,7 @@ export class SearchProvider {
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
         // eslint-disable-next-line sonarjs/cognitive-complexity
-        quickPick.onDidTriggerItemButton((e) => {
+        quickPick.onDidTriggerItemButton(async (e) => {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
                 // Update user selection
@@ -481,21 +495,24 @@ export class SearchProvider {
                 const { text } = this.parseQuery(quickPick.value);
                 const queryId = ++this.lastQueryId;
                 this.performSearch(quickPick, text, queryId);
-            } else if (e.button.tooltip === 'Copy Path') {
-                vscode.env.clipboard.writeText(result.item.filePath);
-            } else if (e.button.tooltip === 'Copy Reference') {
+            } else if (e.button.tooltip === this.TOOLTIP_COPY_PATH) {
+                await vscode.env.clipboard.writeText(result.item.filePath);
+                this.showFeedback('Path copied to clipboard');
+            } else if (e.button.tooltip === this.TOOLTIP_COPY_REF) {
                 const ref = result.item.containerName
                     ? `${result.item.containerName}.${result.item.name}`
                     : result.item.name;
-                vscode.env.clipboard.writeText(ref);
-            } else if (e.button.tooltip === 'Copy Relative Path') {
+                await vscode.env.clipboard.writeText(ref);
+                this.showFeedback('Reference copied to clipboard');
+            } else if (e.button.tooltip === this.TOOLTIP_COPY_REL) {
                 const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
-                vscode.env.clipboard.writeText(relativePath);
-            } else if (e.button.tooltip === 'Open to the Side') {
+                await vscode.env.clipboard.writeText(relativePath);
+                this.showFeedback('Relative path copied to clipboard');
+            } else if (e.button.tooltip === this.TOOLTIP_OPEN_SIDE) {
                 accepted = true;
                 this.navigateToItem(result, vscode.ViewColumn.Beside);
                 quickPick.hide();
-            } else if (e.button.tooltip === 'Reveal in File Explorer') {
+            } else if (e.button.tooltip === this.TOOLTIP_REVEAL) {
                 const uri = vscode.Uri.file(result.item.filePath);
                 vscode.commands.executeCommand('revealInExplorer', uri);
             } else if (e.button.tooltip === this.TOOLTIP_REBUILD_INDEX) {
@@ -1060,23 +1077,23 @@ export class SearchProvider {
             buttons: [
                 {
                     iconPath: new vscode.ThemeIcon('copy'),
-                    tooltip: 'Copy Path',
+                    tooltip: this.TOOLTIP_COPY_PATH,
                 },
                 {
                     iconPath: new vscode.ThemeIcon('references'),
-                    tooltip: 'Copy Reference',
+                    tooltip: this.TOOLTIP_COPY_REF,
                 },
                 {
                     iconPath: new vscode.ThemeIcon('file-submodule'),
-                    tooltip: 'Copy Relative Path',
+                    tooltip: this.TOOLTIP_COPY_REL,
                 },
                 {
                     iconPath: new vscode.ThemeIcon('split-horizontal'),
-                    tooltip: 'Open to the Side',
+                    tooltip: this.TOOLTIP_OPEN_SIDE,
                 },
                 {
                     iconPath: new vscode.ThemeIcon('folder-opened'),
-                    tooltip: 'Reveal in File Explorer',
+                    tooltip: this.TOOLTIP_REVEAL,
                 },
             ],
         };
