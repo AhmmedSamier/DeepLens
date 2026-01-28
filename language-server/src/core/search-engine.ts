@@ -733,18 +733,29 @@ export class SearchEngine implements ISearchProvider {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const startTime = Date.now();
         const results: SearchResult[] = [];
-        const queryLower = query.toLowerCase();
+
+        // Prepare Regex for fast searching without string allocation (avoids toLowerCase())
+        const queryRegex = new RegExp(SearchEngine.escapeRegExp(query), 'i');
 
         // Fallback: Node.js Stream Search
         // We still need fileItems for the fallback implementation
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
 
         // Zed Optimization: Prioritize active/open files
-        const prioritizedFiles = fileItems.sort((a, b) => {
-            const aActive = this.activeFiles.has(path.normalize(a.filePath)) ? 1 : 0;
-            const bActive = this.activeFiles.has(path.normalize(b.filePath)) ? 1 : 0;
-            return bActive - aActive;
-        });
+        // Optimization: Use O(N) partitioning instead of O(N log N) sort with repeated path.normalize
+        const activeItems: SearchableItem[] = [];
+        const inactiveItems: SearchableItem[] = [];
+
+        for (const item of fileItems) {
+            // Check against set of normalized lowercase paths
+            if (this.activeFiles.has(path.normalize(item.filePath).toLowerCase())) {
+                activeItems.push(item);
+            } else {
+                inactiveItems.push(item);
+            }
+        }
+
+        const prioritizedFiles = activeItems.concat(inactiveItems);
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -784,7 +795,7 @@ export class SearchEngine implements ISearchProvider {
 
                         await this.scanFileStream(
                             fileItem,
-                            queryLower,
+                            queryRegex,
                             query.length,
                             maxResults,
                             results,
@@ -819,7 +830,7 @@ export class SearchEngine implements ISearchProvider {
 
     private async scanFileStream(
         fileItem: SearchableItem,
-        queryLower: string,
+        queryRegex: RegExp,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -846,7 +857,7 @@ export class SearchEngine implements ISearchProvider {
                 // Process full lines
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     buffer,
-                    queryLower,
+                    queryRegex,
                     queryLength,
                     maxResults,
                     results,
@@ -873,7 +884,7 @@ export class SearchEngine implements ISearchProvider {
             stream.on('end', () => {
                 // Process last line if any
                 if (buffer.length > 0) {
-                    const matchIndex = buffer.toLowerCase().indexOf(queryLower);
+                    const matchIndex = buffer.search(queryRegex);
                     if (matchIndex >= 0) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
@@ -903,7 +914,7 @@ export class SearchEngine implements ISearchProvider {
 
     private processBufferLines(
         buffer: string,
-        queryLower: string,
+        queryRegex: RegExp,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -926,8 +937,8 @@ export class SearchEngine implements ISearchProvider {
                 continue;
             }
 
-            // Simple case insensitive check
-            const matchIndex = line.toLowerCase().indexOf(queryLower);
+            // Optimized: RegExp search avoids creating new strings with toLowerCase()
+            const matchIndex = line.search(queryRegex);
 
             if (matchIndex >= 0) {
                 const trimmedLine = line.trim();
@@ -1612,5 +1623,9 @@ export class SearchEngine implements ISearchProvider {
 
     recordActivity(): void {
         // No-op
+    }
+
+    private static escapeRegExp(string: string): string {
+        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 }
