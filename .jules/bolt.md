@@ -25,3 +25,7 @@
 ## 2024-05-27 - RegExp vs String.toLowerCase().indexOf()
 **Learning:** For case-insensitive substring search, using `new RegExp(escape(needle), 'i').search(haystack)` is significantly faster (~5x) than `haystack.toLowerCase().indexOf(needleLower)` in V8, because it avoids allocating a new lowercased string for the haystack on every check.
 **Action:** Replace `haystack.toLowerCase().indexOf(needle)` with RegExp search in hot loops where haystack varies.
+
+## 2024-05-28 - Regex Scanning over Line Slicing
+**Learning:** For streaming text search, repeatedly slicing strings from a buffer to check against a regex (even if not matching) is much slower than running a global regex on the buffer first to find match indices. Slicing creates objects and pressure on GC.
+**Action:** In stream processing, scan the chunk for tokens/matches first, then only process/slice the lines that contain them.
