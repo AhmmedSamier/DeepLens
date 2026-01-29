@@ -29,3 +29,7 @@
 ## 2024-05-28 - Regex Scanning over Line Slicing
 **Learning:** For streaming text search, repeatedly slicing strings from a buffer to check against a regex (even if not matching) is much slower than running a global regex on the buffer first to find match indices. Slicing creates objects and pressure on GC.
 **Action:** In stream processing, scan the chunk for tokens/matches first, then only process/slice the lines that contain them.
+
+## 2024-05-29 - Manual String Building vs Regex
+**Learning:** Replacing eager string manipulation with regex (`text.slice(1).replace(/[^A-Z]/g, '').toUpperCase()`) with a manual loop and char code checks yielded a ~4.6x speedup in isolation and ~10% improvement in overall indexing time (100k items). Regex overhead and intermediate string allocations add up in hot paths like indexing.
+**Action:** For simple string transformations in critical loops (like startup or indexing), prefer manual loops over regex-based string methods.
