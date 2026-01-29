@@ -735,7 +735,7 @@ export class SearchEngine implements ISearchProvider {
         const results: SearchResult[] = [];
 
         // Prepare Regex for fast searching without string allocation (avoids toLowerCase())
-        const queryRegex = new RegExp(SearchEngine.escapeRegExp(query), 'i');
+        const queryRegex = new RegExp(SearchEngine.escapeRegExp(query), 'gi');
 
         // Fallback: Node.js Stream Search
         // We still need fileItems for the fallback implementation
@@ -926,35 +926,38 @@ export class SearchEngine implements ISearchProvider {
         let newlineIndex;
         let lineIndex = startLineIndex;
 
+        // Optimization: Scan the buffer for matches first to avoid slicing every line
+        const matchIndices = this.findMatchesInBuffer(buffer, queryRegex);
+        let currentMatchIdx = 0;
+
         while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            // Optimized: Avoid slicing buffer repeatedly. Only slice the line we need.
-            const line = buffer.slice(lastIndex, newlineIndex);
+            const lineStart = lastIndex;
+            const lineEnd = newlineIndex;
             lastIndex = newlineIndex + 1;
 
-            // Skip extremely long lines (minified code)
-            if (line.length > 10000) {
-                lineIndex++;
-                continue;
-            }
+            // Check if we have any matches in this line
+            const { firstMatchIndex, nextMatchIdx } = this.findFirstMatchInLine(
+                matchIndices,
+                currentMatchIdx,
+                lineStart,
+                lineEnd,
+            );
+            currentMatchIdx = nextMatchIdx;
 
-            // Optimized: RegExp search avoids creating new strings with toLowerCase()
-            const matchIndex = line.search(queryRegex);
-
-            if (matchIndex >= 0) {
-                const trimmedLine = line.trim();
-                if (trimmedLine.length > 0) {
-                    const indentation = line.search(/\S|$/);
-                    const result = this.createSearchResult(
-                        fileItem,
-                        trimmedLine,
+            if (firstMatchIndex !== -1) {
+                // Skip extremely long lines (minified code)
+                if (lineEnd - lineStart <= 10000) {
+                    this.processMatchedLine(
+                        buffer,
+                        lineStart,
+                        lineEnd,
+                        firstMatchIndex,
                         lineIndex,
-                        matchIndex,
                         queryLength,
-                        indentation,
+                        fileItem,
+                        results,
+                        pendingResults,
                     );
-
-                    results.push(result);
-                    pendingResults.push(result);
                 }
             }
 
@@ -968,6 +971,78 @@ export class SearchEngine implements ISearchProvider {
         // Keep remainder
         const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
         return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+    }
+
+    private findMatchesInBuffer(buffer: string, queryRegex: RegExp): number[] {
+        queryRegex.lastIndex = 0;
+        const matchIndices: number[] = [];
+        let match;
+        while ((match = queryRegex.exec(buffer)) !== null) {
+            matchIndices.push(match.index);
+        }
+        return matchIndices;
+    }
+
+    private findFirstMatchInLine(
+        matchIndices: number[],
+        currentMatchIdx: number,
+        lineStart: number,
+        lineEnd: number,
+    ): { firstMatchIndex: number; nextMatchIdx: number } {
+        let idx = currentMatchIdx;
+        let firstMatchIndex = -1;
+
+        // Advance to the first match >= lineStart
+        while (idx < matchIndices.length && matchIndices[idx] < lineStart) {
+            idx++;
+        }
+
+        // Check matches within current line [lineStart, lineEnd)
+        while (idx < matchIndices.length) {
+            const mIdx = matchIndices[idx];
+            if (mIdx >= lineEnd) break; // Belongs to next line
+
+            if (firstMatchIndex === -1) {
+                firstMatchIndex = mIdx;
+            }
+            idx++;
+        }
+
+        return { firstMatchIndex, nextMatchIdx: idx };
+    }
+
+    private processMatchedLine(
+        buffer: string,
+        lineStart: number,
+        lineEnd: number,
+        matchIdxInLine: number,
+        lineIndex: number,
+        queryLength: number,
+        fileItem: SearchableItem,
+        results: SearchResult[],
+        pendingResults: SearchResult[],
+    ): void {
+        // Slice only when we know there is a match
+        const line = buffer.slice(lineStart, lineEnd);
+        const trimmedLine = line.trim();
+
+        if (trimmedLine.length > 0) {
+            const indentation = line.search(/\S|$/);
+            // matchIdxInLine is absolute (relative to buffer start). Convert to relative to line.
+            const relativeMatchIndex = matchIdxInLine - lineStart;
+
+            const result = this.createSearchResult(
+                fileItem,
+                trimmedLine,
+                lineIndex,
+                relativeMatchIndex,
+                queryLength,
+                indentation,
+            );
+
+            results.push(result);
+            pendingResults.push(result);
+        }
     }
 
     private createSearchResult(
