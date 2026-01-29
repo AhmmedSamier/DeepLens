@@ -1124,14 +1124,11 @@ export class SearchProvider {
             description = description ? `${description} - ${item.detail}` : item.detail;
         }
 
-        return {
-            label: label as any,
-            description,
-            detail,
-            iconPath: coloredIcon,
-            alwaysShow: true, // Crucial: prevent VS Code from re-filtering our fuzzy results
-            result,
-            buttons: [
+        // Conditional buttons based on item type
+        const buttons: vscode.QuickInputButton[] = [];
+
+        if (item.type !== SearchItemType.COMMAND) {
+            buttons.push(
                 {
                     iconPath: new vscode.ThemeIcon('copy'),
                     tooltip: this.TOOLTIP_COPY_PATH,
@@ -1152,7 +1149,18 @@ export class SearchProvider {
                     iconPath: new vscode.ThemeIcon('folder-opened'),
                     tooltip: this.TOOLTIP_REVEAL,
                 },
-            ],
+            );
+        }
+
+        return {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            label: label as any,
+            description,
+            detail,
+            iconPath: coloredIcon,
+            alwaysShow: true, // Crucial: prevent VS Code from re-filtering our fuzzy results
+            result,
+            buttons: buttons,
         };
     }
 
