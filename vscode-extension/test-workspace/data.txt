@@ -1,0 +1,2 @@
+DeepLens is a high-performance search engine.
+It supports fuzzy matching and CamelHumps.

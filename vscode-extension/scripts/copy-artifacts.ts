@@ -42,9 +42,24 @@ async function copyArtifacts() {
       }
   } else {
       console.warn(`Warning: bin directory not found in server dist: ${binSrc}`);
-      // Don't fail the build, as in some envs we might rely on system rg? 
-      // Actually per analysis, the code relies on it, but maybe for dev it's okay?
-      // Let's just warn.
+  }
+
+  // Copy parsers directory (contains WASM files)
+  const parsersSrc = join(serverDist, "parsers");
+  const parsersDest = join(extensionDist, "parsers");
+
+  if (existsSync(parsersSrc)) {
+      console.log(`Copying parsers directory from ${parsersSrc} to ${parsersDest}`);
+      if (!existsSync(parsersDest)) {
+          await mkdir(parsersDest, { recursive: true });
+      }
+
+      const parserFiles = await import("fs").then(fs => fs.readdirSync(parsersSrc));
+      for (const file of parserFiles) {
+          await copyFile(join(parsersSrc, file), join(parsersDest, file));
+      }
+  } else {
+      console.warn(`Warning: parsers directory not found in server dist: ${parsersSrc}`);
   }
 }
 
