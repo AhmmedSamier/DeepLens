@@ -95,22 +95,18 @@ export class ActivityTracker {
             existing.lastAccessed = now;
             existing.accessCount += 1;
             existing.item = item; // Update item metadata
-            existing.score = this.calculateScore(existing);
         } else {
             this.activities.set(item.id, {
                 itemId: item.id,
                 lastAccessed: now,
                 accessCount: 1,
                 item: item,
-                score: this.calculateScore({ itemId: item.id, lastAccessed: now, accessCount: 1, score: 0 }),
+                score: 0, // Will be calculated in recalculateAllScores
             });
         }
 
         // Recalculate all scores to maintain relative rankings
         this.recalculateAllScores();
-
-        // Immediate save for history reliability
-        this.saveActivities();
     }
 
     /**
@@ -151,7 +147,7 @@ export class ActivityTracker {
     /**
      * Calculate activity score based on recency and frequency
      */
-    private calculateScore(record: ActivityRecord): number {
+    private calculateScore(record: ActivityRecord, maxAccessCount?: number): number {
         const now = Date.now();
         const daysSinceLastAccess = (now - record.lastAccessed) / (1000 * 60 * 60 * 24);
 
@@ -160,8 +156,8 @@ export class ActivityTracker {
         const recencyScore = 1 / (1 + daysSinceLastAccess);
 
         // Frequency score: normalized by max access count
-        const maxAccessCount = this.getMaxAccessCount();
-        const frequencyScore = maxAccessCount > 0 ? record.accessCount / maxAccessCount : 0;
+        const max = maxAccessCount ?? this.getMaxAccessCount();
+        const frequencyScore = max > 0 ? record.accessCount / max : 0;
 
         // Weighted combination: recency matters more than frequency
         return recencyScore * 0.6 + frequencyScore * 0.4;
@@ -184,8 +180,9 @@ export class ActivityTracker {
      * Recalculate all activity scores
      */
     private recalculateAllScores(): void {
+        const maxAccessCount = this.getMaxAccessCount();
         for (const record of this.activities.values()) {
-            record.score = this.calculateScore(record);
+            record.score = this.calculateScore(record, maxAccessCount);
         }
     }
 

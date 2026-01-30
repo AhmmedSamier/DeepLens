@@ -1,5 +1,3 @@
-import * as crypto from 'crypto';
-import * as fs from 'fs';
 import { parentPort, workerData } from 'worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { SearchableItem } from './types';
@@ -29,24 +27,12 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
 
         const { filePaths } = message;
         const allItems: SearchableItem[] = [];
-        const fileResults: { filePath: string; mtime: number; hash: string; symbols: SearchableItem[] }[] = [];
 
         for (const filePath of filePaths) {
             try {
-                const stats = await fs.promises.stat(filePath);
-                const content = await fs.promises.readFile(filePath);
-                const hash = crypto.createHash('sha256').update(content).digest('hex');
-
                 // parser.parseFile handles internal errors and returns empty array if failed
                 const items = await parser.parseFile(filePath);
                 allItems.push(...items);
-
-                fileResults.push({
-                    filePath,
-                    mtime: Number(stats.mtime),
-                    hash,
-                    symbols: items,
-                });
             } catch {
                 // Skip files that can't be read
             }
@@ -56,7 +42,6 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
         parentPort?.postMessage({
             type: 'result',
             items: allItems,
-            fileResults,
             count: filePaths.length,
         });
     } catch (error) {

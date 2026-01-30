@@ -1,11 +1,18 @@
-import { ActivityTracker } from '../src/core/activity-tracker';
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
+import { ActivityTracker } from '../src/core/activity-tracker';
+import { SearchableItem, SearchItemType } from '../src/core/types';
+import { benchmark } from './utils';
 
+/**
+ * Benchmarks for ActivityTracker covering both record access performance
+ * and I/O efficiency (async saving).
+ */
 export async function runActivityTrackerBenchmarks() {
-    console.log("=== Activity Tracker Benchmarks ===");
+    console.log('=== Activity Tracker Benchmarks ===');
 
-    const TMP_DIR = path.join(__dirname, 'tmp_bench_activity');
+    const TMP_DIR = path.join(os.tmpdir(), 'deeplens-activity-bench-' + Date.now());
     if (fs.existsSync(TMP_DIR)) {
         fs.rmSync(TMP_DIR, { recursive: true, force: true });
     }
@@ -15,24 +22,35 @@ export async function runActivityTrackerBenchmarks() {
 
     try {
         tracker = new ActivityTracker(TMP_DIR);
-        const itemCount = 1000;
+        const ITEM_COUNT = 5000;
+        const items: SearchableItem[] = [];
 
-        // Populate with data
-        console.log(`Populating state with ${itemCount} items...`);
-        for (let i = 0; i < itemCount; i++) {
-             const item = {
-                id: `file_${i}`,
-                name: `file_${i}`,
-                kind: 1,
-                containerName: 'src',
-                uri: `file:///src/file_${i}`,
-                relativePath: `src/file_${i}`
-            } as any;
+        // Pre-populate items
+        console.log(`Pre-populating ${ITEM_COUNT} items...`);
+        for (let i = 0; i < ITEM_COUNT; i++) {
+            const item: SearchableItem = {
+                id: `file-${i}`,
+                name: `File${i}.ts`,
+                type: SearchItemType.FILE,
+                filePath: `/src/File${i}.ts`,
+            };
+            items.push(item);
+            // Record initial access to populate internal map
             tracker.recordAccess(item);
         }
-        console.log('State populated.');
 
-        // Measure I/O burst
+        // 1. Benchmark single access performance
+        await benchmark(
+            `Record Access (N=${ITEM_COUNT})`,
+            async () => {
+                // Pick a random item to access
+                const idx = Math.floor(Math.random() * ITEM_COUNT);
+                tracker!.recordAccess(items[idx]);
+            },
+            50,
+        );
+
+        // 2. Measure I/O burst (specifically for async save functionality)
         console.log('Measuring I/O Burst (100 concurrent saveActivities)...');
         const ioStart = performance.now();
         const promises = [];
@@ -45,7 +63,6 @@ export async function runActivityTrackerBenchmarks() {
 
         await Promise.all(promises);
         console.log('All I/O operations completed.');
-
     } catch (e) {
         console.error('Benchmark error:', e);
     } finally {
@@ -56,9 +73,10 @@ export async function runActivityTrackerBenchmarks() {
             fs.rmSync(TMP_DIR, { recursive: true, force: true });
         }
     }
-    console.log("\n");
+    console.log('\n');
 }
 
-if (import.meta.main) {
-    runActivityTrackerBenchmarks();
+// Auto-run if executed directly
+if (import.meta.main || (typeof require !== 'undefined' && require.main === module)) {
+    runActivityTrackerBenchmarks().catch(console.error);
 }
