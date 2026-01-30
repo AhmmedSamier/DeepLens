@@ -32,6 +32,10 @@ export class ActivityTracker {
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
 
+    // Coalescing save operations
+    private needsSave = false;
+    private savePromise: Promise<void> | null = null;
+
     constructor(
         storageOrContext:
             | string
@@ -59,10 +63,8 @@ export class ActivityTracker {
                 save: async (data) => {
                     const file = path.join(storagePath, 'activity.json');
                     try {
-                        if (!fs.existsSync(storagePath)) {
-                            fs.mkdirSync(storagePath, { recursive: true });
-                        }
-                        fs.writeFileSync(file, JSON.stringify(data));
+                        await fs.promises.mkdir(storagePath, { recursive: true });
+                        await fs.promises.writeFile(file, JSON.stringify(data));
                     } catch {
                         // Safe to ignore or log to file if we had a reference
                     }
@@ -222,15 +224,30 @@ export class ActivityTracker {
      * Save activities to storage
      */
     async saveActivities(): Promise<void> {
-        try {
-            const data: Record<string, ActivityRecord> = {};
-            for (const [key, value] of this.activities.entries()) {
-                data[key] = value;
-            }
+        this.needsSave = true;
 
-            await this.storage.save(data);
+        if (!this.savePromise) {
+            this.savePromise = this.runSaveLoop();
+        }
+
+        return this.savePromise;
+    }
+
+    private async runSaveLoop(): Promise<void> {
+        try {
+            while (this.needsSave) {
+                this.needsSave = false;
+                const data: Record<string, ActivityRecord> = {};
+                for (const [key, value] of this.activities.entries()) {
+                    data[key] = value;
+                }
+
+                await this.storage.save(data);
+            }
         } catch {
             // Safe ignore
+        } finally {
+            this.savePromise = null;
         }
     }
 

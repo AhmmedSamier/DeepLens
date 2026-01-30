@@ -2,6 +2,7 @@ import { runSearchBenchmarks } from './search.bench';
 import { runParserBenchmarks } from './parser.bench';
 import { runTextSearchBenchmarks } from './text-search.bench';
 import { runIndexingBenchmark } from './indexing.bench';
+import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { saveBenchmarks } from './utils';
 import * as path from 'path';
 
@@ -12,6 +13,7 @@ async function main() {
     await runParserBenchmarks();
     await runTextSearchBenchmarks();
     await runIndexingBenchmark();
+    await runActivityTrackerBenchmarks();
 
     console.log("Benchmarks completed.");
 
