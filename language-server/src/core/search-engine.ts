@@ -1119,6 +1119,7 @@ export class SearchEngine implements ISearchProvider {
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
+        const preparedQueryForUrl = isPotentialUrl ? RouteMatcher.prepare(query) : null;
 
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
@@ -1205,7 +1206,7 @@ export class SearchEngine implements ISearchProvider {
             if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
                 const name = preparedNames[i]?.target;
                 if (name) {
-                    if (RouteMatcher.isMatch(name, query)) {
+                    if (RouteMatcher.isMatch(name, preparedQueryForUrl || query)) {
                         const urlScore = 1.5;
                         if (urlScore > score) {
                             score = urlScore;
@@ -1658,13 +1659,14 @@ export class SearchEngine implements ISearchProvider {
         maxResults?: number,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
+        const preparedQuery = RouteMatcher.prepare(queryLower);
 
         const checkItem = (i: number) => {
             if (maxResults && results.length >= maxResults) return;
 
             const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, queryLower)) {
+                if (RouteMatcher.isMatch(item.name, preparedQuery)) {
                     results.push({
                         item,
                         score: 2.0,
