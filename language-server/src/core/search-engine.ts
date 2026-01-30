@@ -1034,6 +1034,7 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const MIN_SCORE = 0.01;
+        const queryLen = query.length;
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
@@ -1042,17 +1043,72 @@ export class SearchEngine implements ISearchProvider {
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
         const preparedNames = this.preparedNames;
+        const preparedFullNames = this.preparedFullNames;
+        const preparedPaths = this.preparedPaths;
+        const preparedCapitals = this.preparedCapitals;
+
+        // Local helper for field score to avoid closure overhead if possible, or just avoid `this`
+        const calculateFieldScoreLocal = (prepared: Fuzzysort.Prepared | null): number => {
+            if (prepared && queryLen <= prepared.target.length) {
+                const res = Fuzzysort.single(query, prepared);
+                return res ? res.score : -Infinity;
+            }
+            return -Infinity;
+        };
+
+        // Local helper for CamelHumps
+        const computeCamelHumpsScoreLocal = (
+            i: number,
+            typeId: number,
+        ): number => {
+            const capitals = preparedCapitals[i];
+            if (capitals) {
+                const matchIndex = capitals.indexOf(queryUpper);
+                if (matchIndex !== -1) {
+                    const lengthRatio = queryLen / capitals.length;
+                    const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                    return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
+                }
+            }
+            return -Infinity;
+        };
+
+        // Local helper for Fuzzy Score
+        const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
+            const boost = ID_TO_BOOST[typeId] || 1.0;
+            let bestScore = -Infinity;
+
+            // Name (1.0)
+            const nameScore = calculateFieldScoreLocal(preparedNames[i]);
+            if (nameScore > MIN_SCORE) bestScore = nameScore;
+
+            if (bestScore >= 0.9) return bestScore * boost;
+
+            // Full Name (0.9)
+            const fullNameScore = calculateFieldScoreLocal(preparedFullNames[i]);
+            if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
+
+            if (bestScore >= 0.8) return bestScore * boost;
+
+            // Path (0.8)
+            const pathScore = calculateFieldScoreLocal(preparedPaths[i]);
+            if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
+
+            if (bestScore > MIN_SCORE) return bestScore * boost;
+            return -Infinity;
+        };
 
         // Helper to process a single item index
+        // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
             const typeId = itemTypeIds[i];
 
             // 1. Fuzzy Score
-            let score = this.computeFuzzyScore(i, query, MIN_SCORE);
+            let score = computeFuzzyScoreLocal(i, typeId);
 
             // 2. CamelHumps Score
             if (score < 0.9 && enableCamelHumps) {
-                const camelScore = this.computeCamelHumpsScore(i, typeId, query.length, queryUpper);
+                const camelScore = computeCamelHumpsScoreLocal(i, typeId);
                 if (camelScore > score) {
                     score = camelScore;
                 }
@@ -1104,52 +1160,6 @@ export class SearchEngine implements ISearchProvider {
         }
 
         return heap.getSorted();
-    }
-
-    private computeFuzzyScore(i: number, query: string, minScore: number): number {
-        const boost = ID_TO_BOOST[this.itemTypeIds[i]] || 1.0;
-        let bestScore = -Infinity;
-        const queryLen = query.length;
-
-        // Name (1.0)
-        const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
-        if (nameScore > minScore) bestScore = nameScore;
-
-        if (bestScore >= 0.9) return bestScore * boost;
-
-        // Full Name (0.9)
-        const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
-        if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
-
-        if (bestScore >= 0.8) return bestScore * boost;
-
-        // Path (0.8)
-        const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
-        if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
-
-        if (bestScore > minScore) return bestScore * boost;
-        return -Infinity;
-    }
-
-    private calculateFieldScore(query: string, prepared: Fuzzysort.Prepared | null, queryLen: number): number {
-        if (prepared && queryLen <= prepared.target.length) {
-            const res = Fuzzysort.single(query, prepared);
-            return res ? res.score : -Infinity;
-        }
-        return -Infinity;
-    }
-
-    private computeCamelHumpsScore(i: number, typeId: number, queryLen: number, queryUpper: string): number {
-        const capitals = this.preparedCapitals[i];
-        if (capitals) {
-            const matchIndex = capitals.indexOf(queryUpper);
-            if (matchIndex !== -1) {
-                const lengthRatio = queryLen / capitals.length;
-                const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
-            }
-        }
-        return -Infinity;
     }
 
     private computeUrlScore(name: string, query: string): number {
