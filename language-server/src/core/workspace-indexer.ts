@@ -318,6 +318,7 @@ export class WorkspaceIndexer {
                     const relativePath = this.intern(this.env.asRelativePath(filePath));
                     const internedFilePath = this.intern(filePath);
                     const internedFileName = this.intern(fileName);
+                    const size = await this.getFileSize(filePath);
 
                     batch.push({
                         id: `file:${filePath}`,
@@ -327,12 +328,22 @@ export class WorkspaceIndexer {
                         relativeFilePath: relativePath,
                         detail: relativePath,
                         fullName: relativePath,
+                        size,
                     });
                 }),
             );
             if (batch.length > 0) {
                 collector(batch);
             }
+        }
+    }
+
+    private async getFileSize(filePath: string): Promise<number | undefined> {
+        try {
+            const stats = await fs.promises.stat(filePath);
+            return stats.size;
+        } catch {
+            return undefined;
         }
     }
 
@@ -841,6 +852,7 @@ export class WorkspaceIndexer {
             filePath: internedFilePath,
             detail: relativePath,
             fullName: relativePath,
+            size: await this.getFileSize(filePath),
         };
         this.fireItemsAdded([fileItem]);
 
@@ -871,6 +883,23 @@ export class WorkspaceIndexer {
 
         // Invalidate hash to force re-calculation
         this.fileHashes.delete(filePath);
+
+        // Re-add file item with updated size
+        const fileName = path.basename(filePath);
+        const relativePath = this.intern(this.env.asRelativePath(filePath));
+        const internedFilePath = this.intern(filePath);
+        const internedFileName = this.intern(fileName);
+
+        const fileItem: SearchableItem = {
+            id: `file:${filePath}`,
+            name: internedFileName,
+            type: SearchItemType.FILE,
+            filePath: internedFilePath,
+            detail: relativePath,
+            fullName: relativePath,
+            size: await this.getFileSize(filePath),
+        };
+        this.fireItemsAdded([fileItem]);
 
         // Re-index symbols (it will check cache internally)
         await this.indexFileSymbols(filePath);
