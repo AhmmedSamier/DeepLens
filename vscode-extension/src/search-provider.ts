@@ -995,14 +995,49 @@ export class SearchProvider {
      */
     private getWelcomeItems(): SearchResultItem[] {
         const items = [
-            ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
-            ['/classes', 'Search Classes', 'Find classes, interfaces, and enums (/classes)', SearchScope.TYPES],
-            ['/files', 'Search Files', 'Find files by name or path (/files)', SearchScope.FILES],
-            ['/symbols', 'Search Symbols', 'Find methods, functions, and variables (/symbols)', SearchScope.SYMBOLS],
-            ['/text', 'Search Text', 'Find text content across all files (/text)', SearchScope.TEXT],
-        ] as const;
+            {
+                cmd: '/all',
+                name: 'Search Everything',
+                detail: 'Type to search classes, files, symbols, and more',
+                scope: SearchScope.EVERYTHING,
+                icon: 'search',
+                representativeType: SearchItemType.COMMAND,
+            },
+            {
+                cmd: '/classes',
+                name: 'Search Classes',
+                detail: 'Find classes, interfaces, and enums (/classes)',
+                scope: SearchScope.TYPES,
+                icon: 'symbol-class',
+                representativeType: SearchItemType.CLASS,
+            },
+            {
+                cmd: '/files',
+                name: 'Search Files',
+                detail: 'Find files by name or path (/files)',
+                scope: SearchScope.FILES,
+                icon: 'file',
+                representativeType: SearchItemType.FILE,
+            },
+            {
+                cmd: '/symbols',
+                name: 'Search Symbols',
+                detail: 'Find methods, functions, and variables (/symbols)',
+                scope: SearchScope.SYMBOLS,
+                icon: 'symbol-method',
+                representativeType: SearchItemType.METHOD,
+            },
+            {
+                cmd: '/text',
+                name: 'Search Text',
+                detail: 'Find text content across all files (/text)',
+                scope: SearchScope.TEXT,
+                icon: 'whole-word',
+                representativeType: SearchItemType.TEXT,
+            },
+        ];
 
-        return items.map(([cmd, name, detail, scope]) => {
+        return items.map(({ cmd, name, detail, scope, icon, representativeType }) => {
             const item = this.resultToQuickPickItem({
                 item: {
                     id: `slash-cmd:${cmd}`,
@@ -1014,7 +1049,11 @@ export class SearchProvider {
                 score: 1,
                 scope,
             });
-            item.iconPath = new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground'));
+
+            // Use specific semantic icon and color
+            const color =
+                this.getIconColorForItemType(representativeType) || new vscode.ThemeColor('textLink.foreground');
+            item.iconPath = new vscode.ThemeIcon(icon, color);
             item.alwaysShow = true;
             return item;
         });
