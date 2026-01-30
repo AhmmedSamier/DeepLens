@@ -25,6 +25,30 @@ import { IndexStats, SearchItemType, SearchOptions, SearchResult, SearchScope } 
 import { CancellationError, WorkspaceIndexer } from './core/workspace-indexer';
 import { LspIndexerEnvironment } from './indexer-client';
 
+/**
+ * Robustly convert URI to file path handling Windows drive letters and UNC paths
+ */
+function uriToPath(uri: string): string {
+    if (uri.startsWith('file:///')) {
+        const decoded = decodeURIComponent(uri);
+        const afterSlash = decoded.slice(7); // /c:/foo or /usr/bin
+
+        // Windows drive letter check (e.g., /c: or /C:)
+        if (/^\/[a-zA-Z]:/.test(afterSlash)) {
+            // Strip leading slash for Windows path: c:/foo
+            return path.normalize(afterSlash.slice(1));
+        }
+        // Unix-like absolute path
+        return path.normalize(afterSlash);
+    }
+
+    if (uri.startsWith('file://')) {
+        return path.normalize(decodeURIComponent(uri.slice(7)));
+    }
+
+    return uri;
+}
+
 // Custom requests
 export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/burstSearch');
 export const ResolveItemsRequest = new RequestType<{ itemIds: string[] }, SearchResult[], void>(
@@ -98,24 +122,9 @@ connection.onInitialize(async (params: InitializeParams) => {
     // Resolve workspace folders
     let folders: string[] = [];
     if (params.workspaceFolders) {
-        folders = params.workspaceFolders.map((f) => {
-            const uri = f.uri;
-            if (uri.startsWith('file:///')) {
-                return path.normalize(decodeURIComponent(uri.slice(8)));
-            }
-            if (uri.startsWith('file://')) {
-                return path.normalize(decodeURIComponent(uri.slice(7)));
-            }
-            return uri;
-        });
+        folders = params.workspaceFolders.map((f) => uriToPath(f.uri));
     } else if (params.rootUri) {
-        if (params.rootUri.startsWith('file:///')) {
-            folders = [path.normalize(decodeURIComponent(params.rootUri.slice(8)))];
-        } else if (params.rootUri.startsWith('file://')) {
-            folders = [path.normalize(decodeURIComponent(params.rootUri.slice(7)))];
-        } else {
-            folders = [params.rootUri];
-        }
+        folders = [uriToPath(params.rootUri)];
     } else if (params.rootPath) {
         folders = [params.rootPath];
     }
@@ -152,12 +161,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     // Sync active files for prioritization
     const updateActiveFiles = () => {
-        const openFiles = documents.all().map((doc) => {
-            const uri = doc.uri;
-            if (uri.startsWith('file:///')) return path.normalize(decodeURIComponent(uri.slice(8)));
-            if (uri.startsWith('file://')) return path.normalize(decodeURIComponent(uri.slice(7)));
-            return uri;
-        });
+        const openFiles = documents.all().map((doc) => uriToPath(doc.uri));
         searchEngine.setActiveFiles(openFiles);
     };
 

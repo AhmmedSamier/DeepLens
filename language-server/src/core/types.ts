@@ -63,6 +63,8 @@ export interface SearchableItem {
     detail?: string;
     /** Command ID (for commands) */
     commandId?: string;
+    /** File size in bytes (optional) */
+    size?: number;
 }
 
 /**
