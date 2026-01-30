@@ -1027,251 +1027,93 @@ export class SearchEngine implements ISearchProvider {
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
         const preparedNames = this.preparedNames;
-        const preparedFullNames = this.preparedFullNames;
-        const preparedPaths = this.preparedPaths;
-        const preparedCapitals = this.preparedCapitals;
-        const getActivityScore = this.getActivityScore;
-        const activityWeight = this.activityWeight;
 
-        const queryLen = query.length;
+        // Helper to process a single item index
+        const processIndex = (i: number) => {
+            const typeId = itemTypeIds[i];
 
-        // DUPLICATED LOGIC: The scoring logic is manually inlined into both loops below to avoid
-        // closure call overhead. This yields a ~20% performance improvement in the hot search loop.
-        // Please keep both branches synchronized when modifying scoring logic.
+            // 1. Fuzzy Score
+            let score = this.computeFuzzyScore(i, query, MIN_SCORE);
 
-        if (indices) {
-            for (let k = 0; k < indices.length; k++) {
-                const i = indices[k];
-                const typeId = itemTypeIds[i];
-                let score = -Infinity;
-
-                // Name (1.0)
-                const preparedName = preparedNames[i];
-                if (preparedName && queryLen <= preparedName.target.length) {
-                    const res = Fuzzysort.single(query, preparedName);
-                    if (res && res.score > MIN_SCORE) {
-                        score = res.score;
-                    }
+            // 2. CamelHumps Score
+            if (score < 0.9 && enableCamelHumps) {
+                const camelScore = this.computeCamelHumpsScore(i, typeId, query.length, queryUpper);
+                if (camelScore > score) {
+                    score = camelScore;
                 }
+            }
 
-                if (score >= 0.9) {
-                    score = score * (ID_TO_BOOST[typeId] || 1.0);
-                } else {
-                    // Full Name (0.9)
-                    let bestScore = score;
-                    const preparedFullName = preparedFullNames[i];
-                    if (preparedFullName && queryLen <= preparedFullName.target.length) {
-                        const res = Fuzzysort.single(query, preparedFullName);
-                        if (res) {
-                            const s = res.score * 0.9;
-                            if (s > bestScore) bestScore = s;
-                        }
-                    }
+            let resultScope: SearchScope | undefined;
 
-                    if (bestScore >= 0.8) {
-                        score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
-                    } else {
-                        // Path (0.8)
-                        const preparedPath = preparedPaths[i];
-                        if (preparedPath && queryLen <= preparedPath.target.length) {
-                            const res = Fuzzysort.single(query, preparedPath);
-                            if (res) {
-                                const s = res.score * 0.8;
-                                if (s > bestScore) bestScore = s;
-                            }
-                        }
-
-                        if (bestScore > MIN_SCORE) {
-                            score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
-                        } else {
-                            score = -Infinity;
-                        }
-                    }
-                }
-
-                if (score < 0.9 && enableCamelHumps) {
-                    const capitals = preparedCapitals[i];
-                    let camelScore = -Infinity;
-                    if (capitals) {
-                        const matchIndex = capitals.indexOf(queryUpper);
-                        if (matchIndex !== -1) {
-                            const lengthRatio = queryLen / capitals.length;
-                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                            camelScore = lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
-                        }
-                    }
-
-                    if (camelScore > score) {
-                        score = camelScore; // Use CamelHumps if better
-                    }
-                }
-
-                let resultScope: SearchScope | undefined;
-
-                // 2. URL/Endpoint Match
-                if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
-                    const name = preparedNames[i]?.target;
-                    if (name) {
-                        if (RouteMatcher.isMatch(name, query)) {
-                            const urlScore = 1.5;
-                            if (urlScore > score) {
-                                score = urlScore;
-                                resultScope = SearchScope.ENDPOINTS;
-                            }
-                        }
-                    }
-                }
-
-                if (score > MIN_SCORE) {
-                    if (resultScope === undefined) {
-                        resultScope = ID_TO_SCOPE[typeId];
-                    }
-
-                    // Now access the full item object
-                    const item = items[i];
-                    if (item) {
-                        // 3. Activity Boosting
-                        if (getActivityScore && score > 0.05) {
-                            const activityScore = getActivityScore(item.id);
-                            if (activityScore > 0) {
-                                score = score * (1 - activityWeight) + activityScore * activityWeight;
-                            }
-                        }
-
-                        if (score > MIN_SCORE) {
-                            if (heap.isFull()) {
-                                const minItem = heap.peek();
-                                if (minItem && score <= minItem.score) {
-                                    continue;
-                                }
-                            }
-                            heap.push({
-                                item,
-                                score,
-                                scope: resultScope,
-                            });
+            // 3. URL/Endpoint Match
+            if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+                const name = preparedNames[i]?.target;
+                if (name) {
+                    if (RouteMatcher.isMatch(name, query)) {
+                        const urlScore = 1.5;
+                        if (urlScore > score) {
+                            score = urlScore;
+                            resultScope = SearchScope.ENDPOINTS;
                         }
                     }
                 }
             }
-        } else {
-            const count = items.length;
-            for (let i = 0; i < count; i++) {
-                const typeId = itemTypeIds[i];
-                let score = -Infinity;
 
-                // Name (1.0)
-                const preparedName = preparedNames[i];
-                if (preparedName && queryLen <= preparedName.target.length) {
-                    const res = Fuzzysort.single(query, preparedName);
-                    if (res && res.score > MIN_SCORE) {
-                        score = res.score;
-                    }
+            if (score > MIN_SCORE) {
+                if (resultScope === undefined) {
+                    resultScope = ID_TO_SCOPE[typeId];
                 }
 
-                if (score >= 0.9) {
-                    score = score * (ID_TO_BOOST[typeId] || 1.0);
-                } else {
-                    // Full Name (0.9)
-                    let bestScore = score;
-                    const preparedFullName = preparedFullNames[i];
-                    if (preparedFullName && queryLen <= preparedFullName.target.length) {
-                        const res = Fuzzysort.single(query, preparedFullName);
-                        if (res) {
-                            const s = res.score * 0.9;
-                            if (s > bestScore) bestScore = s;
-                        }
-                    }
+                // Now access the full item object
+                const item = items[i];
+                if (!item) return;
 
-                    if (bestScore >= 0.8) {
-                        score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
-                    } else {
-                        // Path (0.8)
-                        const preparedPath = preparedPaths[i];
-                        if (preparedPath && queryLen <= preparedPath.target.length) {
-                            const res = Fuzzysort.single(query, preparedPath);
-                            if (res) {
-                                const s = res.score * 0.8;
-                                if (s > bestScore) bestScore = s;
-                            }
-                        }
-
-                        if (bestScore > MIN_SCORE) {
-                            score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
-                        } else {
-                            score = -Infinity;
-                        }
-                    }
-                }
-
-                if (score < 0.9 && enableCamelHumps) {
-                    const capitals = preparedCapitals[i];
-                    let camelScore = -Infinity;
-                    if (capitals) {
-                        const matchIndex = capitals.indexOf(queryUpper);
-                        if (matchIndex !== -1) {
-                            const lengthRatio = queryLen / capitals.length;
-                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                            camelScore = lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
-                        }
-                    }
-
-                    if (camelScore > score) {
-                        score = camelScore; // Use CamelHumps if better
-                    }
-                }
-
-                let resultScope: SearchScope | undefined;
-
-                // 2. URL/Endpoint Match
-                if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
-                    const name = preparedNames[i]?.target;
-                    if (name) {
-                        if (RouteMatcher.isMatch(name, query)) {
-                            const urlScore = 1.5;
-                            if (urlScore > score) {
-                                score = urlScore;
-                                resultScope = SearchScope.ENDPOINTS;
-                            }
-                        }
-                    }
-                }
+                // 4. Activity Boosting
+                score = this.computeActivityScore(item.id, score, MIN_SCORE);
 
                 if (score > MIN_SCORE) {
-                    if (resultScope === undefined) {
-                        resultScope = ID_TO_SCOPE[typeId];
-                    }
-
-                    // Now access the full item object
-                    const item = items[i];
-                    if (item) {
-                        // 3. Activity Boosting
-                        if (getActivityScore && score > 0.05) {
-                            const activityScore = getActivityScore(item.id);
-                            if (activityScore > 0) {
-                                score = score * (1 - activityWeight) + activityScore * activityWeight;
-                            }
-                        }
-
-                        if (score > MIN_SCORE) {
-                            if (heap.isFull()) {
-                                const minItem = heap.peek();
-                                if (minItem && score <= minItem.score) {
-                                    continue;
-                                }
-                            }
-                            heap.push({
-                                item,
-                                score,
-                                scope: resultScope,
-                            });
-                        }
-                    }
+                    this.tryPushToHeap(heap, item, score, resultScope);
                 }
+            }
+        };
+
+        if (indices) {
+            for (let k = 0; k < indices.length; k++) {
+                processIndex(indices[k]);
+            }
+        } else {
+            const count = this.items.length;
+            for (let i = 0; i < count; i++) {
+                processIndex(i);
             }
         }
 
         return heap.getSorted();
+    }
+
+    private computeFuzzyScore(i: number, query: string, minScore: number): number {
+        const boost = ID_TO_BOOST[this.itemTypeIds[i]] || 1.0;
+        let bestScore = -Infinity;
+        const queryLen = query.length;
+
+        // Name (1.0)
+        const nameScore = this.calculateFieldScore(query, this.preparedNames[i], queryLen);
+        if (nameScore > minScore) bestScore = nameScore;
+
+        if (bestScore >= 0.9) return bestScore * boost;
+
+        // Full Name (0.9)
+        const fullNameScore = this.calculateFieldScore(query, this.preparedFullNames[i], queryLen);
+        if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
+
+        if (bestScore >= 0.8) return bestScore * boost;
+
+        // Path (0.8)
+        const pathScore = this.calculateFieldScore(query, this.preparedPaths[i], queryLen);
+        if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
+
+        if (bestScore > minScore) return bestScore * boost;
+        return -Infinity;
     }
 
     private calculateFieldScore(query: string, prepared: Fuzzysort.Prepared | null, queryLen: number): number {

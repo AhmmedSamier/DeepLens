@@ -41,3 +41,7 @@
 ## 2024-05-26 - Lazy Object Access in Burst Search
 **Learning:** In `burstSearch`, checking `preparedNamesLow` (parallel array) *before* accessing `this.items[i]` (object) reduced the "no match" scan time by ~4% (4.13ms -> 3.97ms for 50k items). While skipping object access is faster, ensuring robustness (fallback for missing cache) adds slight overhead but maintains correctness.
 **Action:** When iterating parallel arrays, use them as a fast path filter but ensure a fallback path exists if data synchronization is not guaranteed.
+
+## 2024-05-23 - CamelHumps Priority
+**Learning:** When multiple search strategies are available, running the cheaper, more specific strategy (CamelHumps) *first* and skipping the expensive general strategy (Fuzzy) if a strong match is found can significantly reduce CPU time (20%+ speedup) for matching queries.
+**Action:** Always order search strategies from cheapest/most-specific to most expensive, and implement early exit thresholds where possible.

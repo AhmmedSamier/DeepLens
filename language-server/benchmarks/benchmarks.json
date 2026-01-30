@@ -1,32 +1,42 @@
 [
-    {
-        "name": "Fuzzy Search 'File100'",
-        "avgMs": 5.19427018,
-        "totalMs": 519.427018
-    },
-    {
-        "name": "CamelHumps Search 'FCC'",
-        "avgMs": 5.981954829999999,
-        "totalMs": 598.195483
-    },
-    {
-        "name": "Burst Search 'calc'",
-        "avgMs": 0.012986700000000155,
-        "totalMs": 1.2986700000000155
-    },
-    {
-        "name": "Parse 500-method TS Class",
-        "avgMs": 75.4896765,
-        "totalMs": 754.896765
-    },
-    {
-        "name": "Text Search 100 files",
-        "avgMs": 3.8753488999999943,
-        "totalMs": 38.753488999999945
-    },
-    {
-        "name": "Index 1000 files",
-        "avgMs": 270.093642,
-        "totalMs": 810.2809259999999
-    }
+  {
+    "name": "Fuzzy Search 'File100'",
+    "avgMs": 2.9963490000000004,
+    "totalMs": 299.6349
+  },
+  {
+    "name": "CamelHumps Search 'FCC'",
+    "avgMs": 2.469404,
+    "totalMs": 246.9404
+  },
+  {
+    "name": "Burst Search 'calc'",
+    "avgMs": 0.0076970000000005714,
+    "totalMs": 0.7697000000000571
+  },
+  {
+    "name": "Parse 500-method TS Class",
+    "avgMs": 48.406040000000004,
+    "totalMs": 484.0604000000001
+  },
+  {
+    "name": "Text Search 100 files",
+    "avgMs": 15.967759999999998,
+    "totalMs": 159.67759999999998
+  },
+  {
+    "name": "Index 1000 files",
+    "avgMs": 525.8926000000005,
+    "totalMs": 1577.6778000000013
+  },
+  {
+    "name": "Record Access (N=5000)",
+    "avgMs": 0.5473899999999776,
+    "totalMs": 27.36949999999888
+  },
+  {
+    "name": "recalculateAllScores (N=5000)",
+    "avgMs": 0.6578099999999723,
+    "totalMs": 13.156199999999444
+  }
 ]
