@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'bun:test';
+import * as path from 'path';
 import { SearchEngine } from './search-engine';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
@@ -8,7 +9,7 @@ describe('SearchEngine', () => {
         id,
         name,
         type,
-        filePath: `/${relativePath}`,
+        filePath: path.normalize(`/${relativePath}`),
         relativeFilePath: relativePath,
         fullName: name,
     });
@@ -95,7 +96,7 @@ describe('SearchEngine', () => {
         ];
         engine.setItems(items);
 
-        engine.removeItemsByFile('/src/File1.ts');
+        engine.removeItemsByFile(path.normalize('/src/File1.ts'));
 
         expect(engine.getItemCount()).toBe(1);
         const results = await engine.search({ query: 'File', scope: SearchScope.EVERYTHING });
@@ -133,7 +134,7 @@ describe('SearchEngine', () => {
         expect(initialCacheSize).toBeGreaterThan(0);
 
         // Remove item 2
-        engine.removeItemsByFile('/src/File2.ts');
+        engine.removeItemsByFile(path.normalize('/src/File2.ts'));
 
         // Verify cache size hasn't changed yet (lazy pruning)
         expect(preparedCache.size).toBe(initialCacheSize);
@@ -189,7 +190,7 @@ describe('SearchEngine', () => {
             createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
         ];
         engine.setItems(items);
-        engine.setActiveFiles(['/src/File1.ts']);
+        engine.setActiveFiles([path.normalize('/src/File1.ts')]);
 
         const results = await engine.search({
             query: 'File',
@@ -210,7 +211,7 @@ describe('SearchEngine', () => {
 
         // Mock GitProvider
         const mockGitProvider = {
-            getModifiedFiles: async () => new Set(['/src/File2.ts'])
+            getModifiedFiles: async () => new Set([path.normalize('/src/File2.ts')]),
         };
         (engine as any).gitProvider = mockGitProvider;
 

@@ -22,8 +22,32 @@ import { SymbolProvider } from './core/providers/symbol-provider';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
 import { IndexStats, SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
-import { WorkspaceIndexer } from './core/workspace-indexer';
+import { CancellationError, WorkspaceIndexer } from './core/workspace-indexer';
 import { LspIndexerEnvironment } from './indexer-client';
+
+/**
+ * Robustly convert URI to file path handling Windows drive letters and UNC paths
+ */
+function uriToPath(uri: string): string {
+    if (uri.startsWith('file:///')) {
+        const decoded = decodeURIComponent(uri);
+        const afterSlash = decoded.slice(7); // /c:/foo or /usr/bin
+
+        // Windows drive letter check (e.g., /c: or /C:)
+        if (/^\/[a-zA-Z]:/.test(afterSlash)) {
+            // Strip leading slash for Windows path: c:/foo
+            return path.normalize(afterSlash.slice(1));
+        }
+        // Unix-like absolute path
+        return path.normalize(afterSlash);
+    }
+
+    if (uri.startsWith('file://')) {
+        return path.normalize(decodeURIComponent(uri.slice(7)));
+    }
+
+    return uri;
+}
 
 // Custom requests
 export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/burstSearch');
@@ -98,24 +122,9 @@ connection.onInitialize(async (params: InitializeParams) => {
     // Resolve workspace folders
     let folders: string[] = [];
     if (params.workspaceFolders) {
-        folders = params.workspaceFolders.map((f) => {
-            const uri = f.uri;
-            if (uri.startsWith('file:///')) {
-                return path.normalize(decodeURIComponent(uri.slice(8)));
-            }
-            if (uri.startsWith('file://')) {
-                return path.normalize(decodeURIComponent(uri.slice(7)));
-            }
-            return uri;
-        });
+        folders = params.workspaceFolders.map((f) => uriToPath(f.uri));
     } else if (params.rootUri) {
-        if (params.rootUri.startsWith('file:///')) {
-            folders = [path.normalize(decodeURIComponent(params.rootUri.slice(8)))];
-        } else if (params.rootUri.startsWith('file://')) {
-            folders = [path.normalize(decodeURIComponent(params.rootUri.slice(7)))];
-        } else {
-            folders = [params.rootUri];
-        }
+        folders = [uriToPath(params.rootUri)];
     } else if (params.rootPath) {
         folders = [params.rootPath];
     }
@@ -152,12 +161,7 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     // Sync active files for prioritization
     const updateActiveFiles = () => {
-        const openFiles = documents.all().map((doc) => {
-            const uri = doc.uri;
-            if (uri.startsWith('file:///')) return path.normalize(decodeURIComponent(uri.slice(8)));
-            if (uri.startsWith('file://')) return path.normalize(decodeURIComponent(uri.slice(7)));
-            return uri;
-        });
+        const openFiles = documents.all().map((doc) => uriToPath(doc.uri));
         searchEngine.setActiveFiles(openFiles);
     };
 
@@ -218,47 +222,92 @@ connection.onDidChangeConfiguration(async () => {
     }
 });
 
+let currentIndexingPromise: Promise<void> | undefined;
+
 /**
  * Run indexing with progress reporting
  */
 async function runIndexingWithProgress(): Promise<void> {
+    // If indexing is already running, cancel it and wait for it to stop
+    if (currentIndexingPromise) {
+        workspaceIndexer.cancel();
+        try {
+            await currentIndexingPromise;
+        } catch {
+            // Ignore errors from the cancelled process
+        }
+    }
+
     const token = 'indexing-' + Date.now();
 
-    // Clear existing items to prevent duplicates on rebuild
-    searchEngine.clear();
+    // We need to wait a small bit for the client to be ready for requests immediately after initialized
+    // but creating the progress token handles the handshake
+    try {
+        await connection.sendRequest('window/workDoneProgress/create', { token });
+    } catch (e) {
+        connection.console.error(`Failed to create progress token: ${e}`);
+    }
+
+    const indexingTask = async () => {
+        // Clear existing items to prevent duplicates on rebuild
+        searchEngine.clear();
+
+        try {
+            const startTime = Date.now();
+            let currentPercentage = 0;
+            await workspaceIndexer.indexWorkspace((message, increment) => {
+                if (increment) {
+                    currentPercentage += increment;
+                }
+                // Cap at 99% until explicitly done
+                const percentage = Math.min(99, Math.round(currentPercentage));
+                if (!isShuttingDown) {
+                    connection.sendNotification('deeplens/progress', { token, message, percentage });
+                }
+            });
+
+            const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+            if (!isShuttingDown) {
+                connection.sendNotification('deeplens/progress', {
+                    token,
+                    message: `Done (${duration}s)`,
+                    percentage: 100,
+                });
+            }
+        } catch (error) {
+            if (error instanceof CancellationError) {
+                if (!isShuttingDown) {
+                    connection.sendNotification('deeplens/progress', {
+                        token,
+                        message: 'Cancelled',
+                        percentage: 100,
+                    });
+                }
+                throw error;
+            } else {
+                connection.console.error(`Error during indexing: ${error}`);
+                if (!isShuttingDown) {
+                    connection.sendNotification('deeplens/progress', {
+                        token,
+                        message: 'Failed',
+                        percentage: 100,
+                    });
+                }
+            }
+        }
+    };
+
+    const p = indexingTask();
+    currentIndexingPromise = p;
 
     try {
-        // We need to wait a small bit for the client to be ready for requests immediately after initialized
-        // but creating the progress token handles the handshake
-        await connection.sendRequest('window/workDoneProgress/create', { token });
-
-        const startTime = Date.now();
-        let currentPercentage = 0;
-        await workspaceIndexer.indexWorkspace((message, increment) => {
-            if (increment) {
-                currentPercentage += increment;
-            }
-            // Cap at 99% until explicitly done
-            const percentage = Math.min(99, Math.round(currentPercentage));
-            if (!isShuttingDown) {
-                connection.sendNotification('deeplens/progress', { token, message, percentage });
-            }
-        });
-
-        const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-        if (!isShuttingDown) {
-            connection.sendNotification('deeplens/progress', {
-                token,
-                message: `Done (${duration}s)`,
-                percentage: 100,
-            });
+        await p;
+    } catch {
+        // Ignore errors, they are handled inside indexingTask
+    } finally {
+        if (currentIndexingPromise === p) {
+            currentIndexingPromise = undefined;
         }
-    } catch (error) {
-        connection.console.error(`Error reporting progress: ${error}`);
-        // Fallback without progress
-        // Clear again in case partial indexing occurred before error
-        searchEngine.clear();
-        await workspaceIndexer.indexWorkspace();
     }
 }
 

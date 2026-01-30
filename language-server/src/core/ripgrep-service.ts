@@ -48,6 +48,17 @@ export class RipgrepService {
             }
             if (this.rgPath) break;
         }
+
+        // Ensure executable permissions (hack for VSIXs built on Windows)
+        if (this.rgPath && process.platform !== 'win32') {
+            try {
+                // 0o755 is rwxr-xr-x, necessary for the binary to execute
+                // eslint-disable-next-line sonarjs/file-permissions
+                fs.chmodSync(this.rgPath, 0o755);
+            } catch {
+                // Ignore
+            }
+        }
     }
 
     isAvailable(): boolean {
@@ -114,17 +125,6 @@ export class RipgrepService {
         return new Promise((resolve, reject) => {
             // Append files to args
             const args = [...baseArgs, ...files];
-
-            // Ensure executable permissions (hack for VSIXs built on Windows)
-            if (process.platform !== 'win32') {
-                try {
-                    // 0o755 is rwxr-xr-x, necessary for the binary to execute
-                    // eslint-disable-next-line sonarjs/file-permissions
-                    fs.chmodSync(this.rgPath, 0o755);
-                } catch {
-                    // Ignore
-                }
-            }
 
             const child = cp.spawn(this.rgPath, args, {
                 stdio: ['ignore', 'pipe', 'pipe'], // No stdin needed

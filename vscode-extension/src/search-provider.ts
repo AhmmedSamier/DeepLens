@@ -9,6 +9,7 @@ import {
     SearchScope,
     SearchableItem,
 } from '../../language-server/src/core/types';
+import * as fuzzysort from 'fuzzysort';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 
@@ -38,6 +39,13 @@ export class SearchProvider {
     private readonly TOOLTIP_CLEAR_CACHE = 'Clear Index Cache (Fix corruption)';
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
+
+    // Tooltips for item buttons
+    private readonly TOOLTIP_COPY_PATH = 'Copy Path';
+    private readonly TOOLTIP_COPY_REF = 'Copy Reference';
+    private readonly TOOLTIP_COPY_REL = 'Copy Relative Path';
+    private readonly TOOLTIP_OPEN_SIDE = 'Open to the Side';
+    private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
     private matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
@@ -108,13 +116,21 @@ export class SearchProvider {
 
                         // Update UI incrementally if this is still the active search
                         if (requestId === this.lastQueryId) {
-                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r));
+                            const { text } = this.parseQuery(this.currentQuickPick.value);
+                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r, text));
                             this.updateTitle(this.currentQuickPick, results.length);
                         }
                     }
                 }
             });
         }
+    }
+
+    /**
+     * Show transient feedback in status bar
+     */
+    private showFeedback(message: string): void {
+        vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
     }
 
     /**
@@ -451,7 +467,8 @@ export class SearchProvider {
 
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
-        quickPick.onDidTriggerItemButton((e) => {
+        // eslint-disable-next-line sonarjs/cognitive-complexity
+        quickPick.onDidTriggerItemButton(async (e) => {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
                 // Update user selection
@@ -480,21 +497,24 @@ export class SearchProvider {
                 const { text } = this.parseQuery(quickPick.value);
                 const queryId = ++this.lastQueryId;
                 this.performSearch(quickPick, text, queryId);
-            } else if (e.button.tooltip === 'Copy Path') {
-                vscode.env.clipboard.writeText(result.item.filePath);
-            } else if (e.button.tooltip === 'Copy Reference') {
+            } else if (e.button.tooltip === this.TOOLTIP_COPY_PATH) {
+                await vscode.env.clipboard.writeText(result.item.filePath);
+                this.showFeedback('Path copied to clipboard');
+            } else if (e.button.tooltip === this.TOOLTIP_COPY_REF) {
                 const ref = result.item.containerName
                     ? `${result.item.containerName}.${result.item.name}`
                     : result.item.name;
-                vscode.env.clipboard.writeText(ref);
-            } else if (e.button.tooltip === 'Copy Relative Path') {
+                await vscode.env.clipboard.writeText(ref);
+                this.showFeedback('Reference copied to clipboard');
+            } else if (e.button.tooltip === this.TOOLTIP_COPY_REL) {
                 const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
-                vscode.env.clipboard.writeText(relativePath);
-            } else if (e.button.tooltip === 'Open to the Side') {
+                await vscode.env.clipboard.writeText(relativePath);
+                this.showFeedback('Relative path copied to clipboard');
+            } else if (e.button.tooltip === this.TOOLTIP_OPEN_SIDE) {
                 accepted = true;
                 this.navigateToItem(result, vscode.ViewColumn.Beside);
                 quickPick.hide();
-            } else if (e.button.tooltip === 'Reveal in File Explorer') {
+            } else if (e.button.tooltip === this.TOOLTIP_REVEAL) {
                 const uri = vscode.Uri.file(result.item.filePath);
                 vscode.commands.executeCommand('revealInExplorer', uri);
             } else if (e.button.tooltip === this.TOOLTIP_REBUILD_INDEX) {
@@ -626,7 +646,7 @@ export class SearchProvider {
         }
 
         if (commandSuggestions.length > 0) {
-            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r));
+            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r, query));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
         }
@@ -704,7 +724,7 @@ export class SearchProvider {
             }
 
             if (instantResults.length > 0) {
-                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
                 this.updateTitle(quickPick, instantResults.length);
             }
             // Don't clear items here - let history stay until we have real results (avoid flicker)
@@ -735,7 +755,7 @@ export class SearchProvider {
 
                     // Update if we have more results
                     if (burstResults.length > 0) {
-                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
+                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
@@ -909,7 +929,7 @@ export class SearchProvider {
                 quickPick.items = [this.getEmptyStateItem(query)];
                 this.updateTitle(quickPick, 0, duration);
             } else {
-                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result, query));
                 this.updateTitle(quickPick, results.length, duration);
             }
             this.streamingResults.delete(queryId); // Done with streaming for this query
@@ -1001,9 +1021,60 @@ export class SearchProvider {
     }
 
     /**
+     * Check if a file has unsaved changes
+     */
+    private isFileDirty(filePath: string): boolean {
+        // Normalize for comparison
+        const targetPath = vscode.Uri.file(filePath).fsPath;
+        return vscode.workspace.textDocuments.some((doc) => doc.isDirty && doc.uri.fsPath === targetPath);
+    }
+
+    /**
+     * Convert fuzzysort indexes to VS Code ranges
+     */
+    private indexesToRanges(indexes: readonly number[]): [number, number][] {
+        if (!indexes || indexes.length === 0) {
+            return [];
+        }
+
+        const sortedIndexes = [...indexes].sort((a, b) => a - b);
+
+        const ranges: [number, number][] = [];
+        let start = sortedIndexes[0];
+        let end = start + 1;
+
+        for (let i = 1; i < sortedIndexes.length; i++) {
+            if (sortedIndexes[i] === end) {
+                end++;
+            } else {
+                ranges.push([start, end]);
+                start = sortedIndexes[i];
+                end = start + 1;
+            }
+        }
+        ranges.push([start, end]);
+        return ranges;
+    }
+
+    /**
+     * Calculate highlights for item name
+     */
+    private calculateHighlights(name: string, query: string): [number, number][] {
+        if (!query) {
+            return [];
+        }
+
+        const res = fuzzysort.single(query, name);
+        if (res) {
+            return this.indexesToRanges(res.indexes);
+        }
+        return [];
+    }
+
+    /**
      * Convert search result to QuickPick item
      */
-    private resultToQuickPickItem(result: SearchResult): SearchResultItem {
+    private resultToQuickPickItem(result: SearchResult, query?: string): SearchResultItem {
         const { item } = result;
         const icon = this.getIconForItemType(item.type);
         const iconColor = this.getIconColorForItemType(item.type);
@@ -1012,13 +1083,32 @@ export class SearchProvider {
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
         // Don't add icon to label - iconPath will render it
-        const label = item.name;
+        let label: string | { label: string; highlights?: [number, number][] } = item.name;
         let description = '';
+
+        // Calculate highlights if not provided
+        let highlights = result.highlights;
+        if ((!highlights || highlights.length === 0) && query) {
+            highlights = this.calculateHighlights(item.name, query);
+        }
+
+        if (highlights && highlights.length > 0) {
+            label = {
+                label: item.name,
+                highlights: highlights as [number, number][],
+            };
+        }
         let detail = '';
 
         // Add container name if available
         if (item.containerName) {
             description = item.containerName;
+        }
+
+        // Add unsaved indicator for dirty files
+        if (item.type === SearchItemType.FILE && this.isFileDirty(item.filePath)) {
+            const indicator = '$(circle-filled)'; // VS Code unsaved indicator style
+            description = description ? `${indicator} ${description}` : indicator;
         }
 
         // Add file path and line number
@@ -1034,35 +1124,43 @@ export class SearchProvider {
             description = description ? `${description} - ${item.detail}` : item.detail;
         }
 
+        // Conditional buttons based on item type
+        const buttons: vscode.QuickInputButton[] = [];
+
+        if (item.type !== SearchItemType.COMMAND) {
+            buttons.push(
+                {
+                    iconPath: new vscode.ThemeIcon('copy'),
+                    tooltip: this.TOOLTIP_COPY_PATH,
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('references'),
+                    tooltip: this.TOOLTIP_COPY_REF,
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('file-submodule'),
+                    tooltip: this.TOOLTIP_COPY_REL,
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('split-horizontal'),
+                    tooltip: this.TOOLTIP_OPEN_SIDE,
+                },
+                {
+                    iconPath: new vscode.ThemeIcon('folder-opened'),
+                    tooltip: this.TOOLTIP_REVEAL,
+                },
+            );
+        }
+
         return {
-            label,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            label: label as any,
             description,
             detail,
             iconPath: coloredIcon,
             alwaysShow: true, // Crucial: prevent VS Code from re-filtering our fuzzy results
             result,
-            buttons: [
-                {
-                    iconPath: new vscode.ThemeIcon('copy'),
-                    tooltip: 'Copy Path',
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('references'),
-                    tooltip: 'Copy Reference',
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('file-submodule'),
-                    tooltip: 'Copy Relative Path',
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('split-horizontal'),
-                    tooltip: 'Open to the Side',
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('folder-opened'),
-                    tooltip: 'Reveal in File Explorer',
-                },
-            ],
+            buttons: buttons,
         };
     }
 
