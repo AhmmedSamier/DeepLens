@@ -37,3 +37,7 @@
 ## 2026-01-28 - Manual Inlining of Hot Loop Logic
 **Learning:** In extremely hot loops (100k+ iterations), even the overhead of calling a closure function (captured variables) can be significant (e.g., 10-20% of execution time). Manually inlining the logic into the `for` loop body, even if it requires code duplication, can yield substantial gains when the function body is small/medium but called frequently.
 **Action:** Consider manual inlining for critical hot loops where function call overhead is a bottleneck, but document the duplication clearly.
+
+## 2024-05-26 - Lazy Object Access in Burst Search
+**Learning:** In `burstSearch`, checking `preparedNamesLow` (parallel array) *before* accessing `this.items[i]` (object) reduced the "no match" scan time by ~4% (4.13ms -> 3.97ms for 50k items). While skipping object access is faster, ensuring robustness (fallback for missing cache) adds slight overhead but maintains correctness.
+**Action:** When iterating parallel arrays, use them as a fast path filter but ensure a fallback path exists if data synchronization is not guaranteed.
