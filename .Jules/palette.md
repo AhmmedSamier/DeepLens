@@ -25,3 +25,7 @@
 ## 2026-02-04 - [QuickPickItemLabel Type Mismatch]
 **Learning:** The `@types/vscode` package (even recent versions) may not reflect all runtime capabilities, such as `QuickPickItem.label` accepting a `QuickPickItemLabel` object (introduced in 1.76) instead of just a string.
 **Action:** When targeting a VS Code version that supports a feature (verified via release notes) but types are missing, use type casting (e.g., `label as any`) to leverage the feature without TypeScript errors, ensuring the `engines` field in `package.json` enforces the minimum runtime requirement.
+
+## 2025-05-23 - [Action Button Clutter]
+**Learning:** Universal action buttons (like 'Copy Path') cause confusion on abstract items like Commands. Users hesitate when UI affordances (like 'Reveal in Explorer') contradict the item's nature.
+**Action:** Conditionally render action buttons based on `SearchItemType`. Only show file-related actions for file-backed items.
