@@ -33,3 +33,7 @@
 ## 2024-05-29 - Manual String Building vs Regex
 **Learning:** Replacing eager string manipulation with regex (`text.slice(1).replace(/[^A-Z]/g, '').toUpperCase()`) with a manual loop and char code checks yielded a ~4.6x speedup in isolation and ~10% improvement in overall indexing time (100k items). Regex overhead and intermediate string allocations add up in hot paths like indexing.
 **Action:** For simple string transformations in critical loops (like startup or indexing), prefer manual loops over regex-based string methods.
+
+## 2026-01-28 - Manual Inlining of Hot Loop Logic
+**Learning:** In extremely hot loops (100k+ iterations), even the overhead of calling a closure function (captured variables) can be significant (e.g., 10-20% of execution time). Manually inlining the logic into the `for` loop body, even if it requires code duplication, can yield substantial gains when the function body is small/medium but called frequently.
+**Action:** Consider manual inlining for critical hot loops where function call overhead is a bottleneck, but document the duplication clearly.

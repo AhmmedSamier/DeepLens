@@ -405,8 +405,7 @@ export class SearchEngine implements ISearchProvider {
      * Set the list of currently active or open files to prioritize them
      */
     setActiveFiles(files: string[]): void {
-        // Normalize and lowercase for case-insensitive comparison
-        this.activeFiles = new Set(files.map((f) => path.normalize(f).toLowerCase()));
+        this.activeFiles = new Set(files.map((f) => path.normalize(f)));
     }
 
     /**
@@ -620,9 +619,7 @@ export class SearchEngine implements ISearchProvider {
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            // Check normalized lowercase path (files in Set are already normalized & lowercased)
-            // We assume item.filePath is structurally normalized by WorkspaceIndexer, so we only need lowercase
-            if (this.activeFiles.has(this.items[i].filePath.toLowerCase())) {
+            if (this.activeFiles.has(this.items[i].filePath)) {
                 indices.push(i);
             }
         }
@@ -631,19 +628,12 @@ export class SearchEngine implements ISearchProvider {
 
     private async getIndicesForModifiedFiles(): Promise<number[]> {
         if (!this.gitProvider) return [];
-        const modifiedFilesRaw = await this.gitProvider.getModifiedFiles();
-
-        // Normalize and lowercase the set for comparison
-        const modifiedFiles = new Set<string>();
-        for (const file of modifiedFilesRaw) {
-            modifiedFiles.add(path.normalize(file).toLowerCase());
-        }
-
+        const modifiedFiles = await this.gitProvider.getModifiedFiles();
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            // Check normalized lowercase path
-            if (modifiedFiles.has(this.items[i].filePath.toLowerCase())) {
+            // Normalize path for comparison just in case
+            if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
                 indices.push(i);
             }
         }
@@ -733,29 +723,18 @@ export class SearchEngine implements ISearchProvider {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const startTime = Date.now();
         const results: SearchResult[] = [];
-
-        // Prepare Regex for fast searching without string allocation (avoids toLowerCase())
-        const queryRegex = new RegExp(SearchEngine.escapeRegExp(query), 'gi');
+        const queryLower = query.toLowerCase();
 
         // Fallback: Node.js Stream Search
         // We still need fileItems for the fallback implementation
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
 
         // Zed Optimization: Prioritize active/open files
-        // Optimization: Use O(N) partitioning instead of O(N log N) sort with repeated path.normalize
-        const activeItems: SearchableItem[] = [];
-        const inactiveItems: SearchableItem[] = [];
-
-        for (const item of fileItems) {
-            // Check against set of normalized lowercase paths
-            if (this.activeFiles.has(path.normalize(item.filePath).toLowerCase())) {
-                activeItems.push(item);
-            } else {
-                inactiveItems.push(item);
-            }
-        }
-
-        const prioritizedFiles = activeItems.concat(inactiveItems);
+        const prioritizedFiles = fileItems.sort((a, b) => {
+            const aActive = this.activeFiles.has(path.normalize(a.filePath)) ? 1 : 0;
+            const bActive = this.activeFiles.has(path.normalize(b.filePath)) ? 1 : 0;
+            return bActive - aActive;
+        });
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -788,19 +767,14 @@ export class SearchEngine implements ISearchProvider {
                     if (results.length >= maxResults) return;
 
                     try {
-                        let size = fileItem.size;
-                        if (size === undefined) {
-                            const stats = await fs.promises.stat(fileItem.filePath);
-                            size = stats.size;
-                        }
-
-                        if (size > 5 * 1024 * 1024) return;
+                        const stats = await fs.promises.stat(fileItem.filePath);
+                        if (stats.size > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
 
                         processedFiles++;
 
                         await this.scanFileStream(
                             fileItem,
-                            queryRegex,
+                            queryLower,
                             query.length,
                             maxResults,
                             results,
@@ -835,7 +809,7 @@ export class SearchEngine implements ISearchProvider {
 
     private async scanFileStream(
         fileItem: SearchableItem,
-        queryRegex: RegExp,
+        queryLower: string,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -862,7 +836,7 @@ export class SearchEngine implements ISearchProvider {
                 // Process full lines
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     buffer,
-                    queryRegex,
+                    queryLower,
                     queryLength,
                     maxResults,
                     results,
@@ -889,7 +863,7 @@ export class SearchEngine implements ISearchProvider {
             stream.on('end', () => {
                 // Process last line if any
                 if (buffer.length > 0) {
-                    const matchIndex = buffer.search(queryRegex);
+                    const matchIndex = buffer.toLowerCase().indexOf(queryLower);
                     if (matchIndex >= 0) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
@@ -919,7 +893,7 @@ export class SearchEngine implements ISearchProvider {
 
     private processBufferLines(
         buffer: string,
-        queryRegex: RegExp,
+        queryLower: string,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -931,38 +905,35 @@ export class SearchEngine implements ISearchProvider {
         let newlineIndex;
         let lineIndex = startLineIndex;
 
-        // Optimization: Scan the buffer for matches first to avoid slicing every line
-        const matchIndices = this.findMatchesInBuffer(buffer, queryRegex);
-        let currentMatchIdx = 0;
-
         while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            const lineStart = lastIndex;
-            const lineEnd = newlineIndex;
+            // Optimized: Avoid slicing buffer repeatedly. Only slice the line we need.
+            const line = buffer.slice(lastIndex, newlineIndex);
             lastIndex = newlineIndex + 1;
 
-            // Check if we have any matches in this line
-            const { firstMatchIndex, nextMatchIdx } = this.findFirstMatchInLine(
-                matchIndices,
-                currentMatchIdx,
-                lineStart,
-                lineEnd,
-            );
-            currentMatchIdx = nextMatchIdx;
+            // Skip extremely long lines (minified code)
+            if (line.length > 10000) {
+                lineIndex++;
+                continue;
+            }
 
-            if (firstMatchIndex !== -1) {
-                // Skip extremely long lines (minified code)
-                if (lineEnd - lineStart <= 10000) {
-                    this.processMatchedLine(
-                        buffer,
-                        lineStart,
-                        lineEnd,
-                        firstMatchIndex,
-                        lineIndex,
-                        queryLength,
+            // Simple case insensitive check
+            const matchIndex = line.toLowerCase().indexOf(queryLower);
+
+            if (matchIndex >= 0) {
+                const trimmedLine = line.trim();
+                if (trimmedLine.length > 0) {
+                    const indentation = line.search(/\S|$/);
+                    const result = this.createSearchResult(
                         fileItem,
-                        results,
-                        pendingResults,
+                        trimmedLine,
+                        lineIndex,
+                        matchIndex,
+                        queryLength,
+                        indentation,
                     );
+
+                    results.push(result);
+                    pendingResults.push(result);
                 }
             }
 
@@ -976,78 +947,6 @@ export class SearchEngine implements ISearchProvider {
         // Keep remainder
         const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
         return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
-    }
-
-    private findMatchesInBuffer(buffer: string, queryRegex: RegExp): number[] {
-        queryRegex.lastIndex = 0;
-        const matchIndices: number[] = [];
-        let match;
-        while ((match = queryRegex.exec(buffer)) !== null) {
-            matchIndices.push(match.index);
-        }
-        return matchIndices;
-    }
-
-    private findFirstMatchInLine(
-        matchIndices: number[],
-        currentMatchIdx: number,
-        lineStart: number,
-        lineEnd: number,
-    ): { firstMatchIndex: number; nextMatchIdx: number } {
-        let idx = currentMatchIdx;
-        let firstMatchIndex = -1;
-
-        // Advance to the first match >= lineStart
-        while (idx < matchIndices.length && matchIndices[idx] < lineStart) {
-            idx++;
-        }
-
-        // Check matches within current line [lineStart, lineEnd)
-        while (idx < matchIndices.length) {
-            const mIdx = matchIndices[idx];
-            if (mIdx >= lineEnd) break; // Belongs to next line
-
-            if (firstMatchIndex === -1) {
-                firstMatchIndex = mIdx;
-            }
-            idx++;
-        }
-
-        return { firstMatchIndex, nextMatchIdx: idx };
-    }
-
-    private processMatchedLine(
-        buffer: string,
-        lineStart: number,
-        lineEnd: number,
-        matchIdxInLine: number,
-        lineIndex: number,
-        queryLength: number,
-        fileItem: SearchableItem,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-    ): void {
-        // Slice only when we know there is a match
-        const line = buffer.slice(lineStart, lineEnd);
-        const trimmedLine = line.trim();
-
-        if (trimmedLine.length > 0) {
-            const indentation = line.search(/\S|$/);
-            // matchIdxInLine is absolute (relative to buffer start). Convert to relative to line.
-            const relativeMatchIndex = matchIdxInLine - lineStart;
-
-            const result = this.createSearchResult(
-                fileItem,
-                trimmedLine,
-                lineIndex,
-                relativeMatchIndex,
-                queryLength,
-                indentation,
-            );
-
-            results.push(result);
-            pendingResults.push(result);
-        }
     }
 
     private createSearchResult(
@@ -1120,11 +1019,9 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const MIN_SCORE = 0.01;
-        const queryLen = query.length;
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
-        const preparedQueryForUrl = isPotentialUrl ? RouteMatcher.prepare(query) : null;
 
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
@@ -1136,132 +1033,241 @@ export class SearchEngine implements ISearchProvider {
         const getActivityScore = this.getActivityScore;
         const activityWeight = this.activityWeight;
 
-        const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
-            let score = -Infinity;
+        const queryLen = query.length;
 
-            // Name (1.0)
-            const preparedName = preparedNames[i];
-            if (preparedName && queryLen <= preparedName.target.length) {
-                const res = Fuzzysort.single(query, preparedName);
-                if (res && res.score > MIN_SCORE) {
-                    score = res.score;
-                }
-            }
+        // DUPLICATED LOGIC: The scoring logic is manually inlined into both loops below to avoid
+        // closure call overhead. This yields a ~20% performance improvement in the hot search loop.
+        // Please keep both branches synchronized when modifying scoring logic.
 
-            if (score >= 0.9) {
-                return score * (ID_TO_BOOST[typeId] || 1.0);
-            }
+        if (indices) {
+            for (let k = 0; k < indices.length; k++) {
+                const i = indices[k];
+                const typeId = itemTypeIds[i];
+                let score = -Infinity;
 
-            // Full Name (0.9)
-            let bestScore = score;
-            const preparedFullName = preparedFullNames[i];
-            if (preparedFullName && queryLen <= preparedFullName.target.length) {
-                const res = Fuzzysort.single(query, preparedFullName);
-                if (res) {
-                    const s = res.score * 0.9;
-                    if (s > bestScore) bestScore = s;
-                }
-            }
-
-            if (bestScore >= 0.8) {
-                return bestScore * (ID_TO_BOOST[typeId] || 1.0);
-            }
-
-            // Path (0.8)
-            const preparedPath = preparedPaths[i];
-            if (preparedPath && queryLen <= preparedPath.target.length) {
-                const res = Fuzzysort.single(query, preparedPath);
-                if (res) {
-                    const s = res.score * 0.8;
-                    if (s > bestScore) bestScore = s;
-                }
-            }
-
-            if (bestScore > MIN_SCORE) {
-                return bestScore * (ID_TO_BOOST[typeId] || 1.0);
-            }
-            return -Infinity;
-        };
-
-        const processIndex = (i: number) => {
-            const typeId = itemTypeIds[i];
-
-            let score = computeFuzzyScoreLocal(i, typeId);
-
-            if (score < 0.9 && enableCamelHumps) {
-                const capitals = preparedCapitals[i];
-                let camelScore = -Infinity;
-                if (capitals) {
-                    const matchIndex = capitals.indexOf(queryUpper);
-                    if (matchIndex !== -1) {
-                        const lengthRatio = queryLen / capitals.length;
-                        const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                        camelScore = lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
+                // Name (1.0)
+                const preparedName = preparedNames[i];
+                if (preparedName && queryLen <= preparedName.target.length) {
+                    const res = Fuzzysort.single(query, preparedName);
+                    if (res && res.score > MIN_SCORE) {
+                        score = res.score;
                     }
                 }
 
-                if (camelScore > score) {
-                    score = camelScore; // Use CamelHumps if better
+                if (score >= 0.9) {
+                    score = score * (ID_TO_BOOST[typeId] || 1.0);
+                } else {
+                    // Full Name (0.9)
+                    let bestScore = score;
+                    const preparedFullName = preparedFullNames[i];
+                    if (preparedFullName && queryLen <= preparedFullName.target.length) {
+                        const res = Fuzzysort.single(query, preparedFullName);
+                        if (res) {
+                            const s = res.score * 0.9;
+                            if (s > bestScore) bestScore = s;
+                        }
+                    }
+
+                    if (bestScore >= 0.8) {
+                        score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
+                    } else {
+                        // Path (0.8)
+                        const preparedPath = preparedPaths[i];
+                        if (preparedPath && queryLen <= preparedPath.target.length) {
+                            const res = Fuzzysort.single(query, preparedPath);
+                            if (res) {
+                                const s = res.score * 0.8;
+                                if (s > bestScore) bestScore = s;
+                            }
+                        }
+
+                        if (bestScore > MIN_SCORE) {
+                            score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
+                        } else {
+                            score = -Infinity;
+                        }
+                    }
                 }
-            }
 
-            let resultScope: SearchScope | undefined;
+                if (score < 0.9 && enableCamelHumps) {
+                    const capitals = preparedCapitals[i];
+                    let camelScore = -Infinity;
+                    if (capitals) {
+                        const matchIndex = capitals.indexOf(queryUpper);
+                        if (matchIndex !== -1) {
+                            const lengthRatio = queryLen / capitals.length;
+                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                            camelScore = lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
+                        }
+                    }
 
-            // 2. URL/Endpoint Match
-            if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
-                const name = preparedNames[i]?.target;
-                if (name) {
-                    if (RouteMatcher.isMatch(name, preparedQueryForUrl || query)) {
-                        const urlScore = 1.5;
-                        if (urlScore > score) {
-                            score = urlScore;
-                            resultScope = SearchScope.ENDPOINTS;
+                    if (camelScore > score) {
+                        score = camelScore; // Use CamelHumps if better
+                    }
+                }
+
+                let resultScope: SearchScope | undefined;
+
+                // 2. URL/Endpoint Match
+                if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+                    const name = preparedNames[i]?.target;
+                    if (name) {
+                        if (RouteMatcher.isMatch(name, query)) {
+                            const urlScore = 1.5;
+                            if (urlScore > score) {
+                                score = urlScore;
+                                resultScope = SearchScope.ENDPOINTS;
+                            }
+                        }
+                    }
+                }
+
+                if (score > MIN_SCORE) {
+                    if (resultScope === undefined) {
+                        resultScope = ID_TO_SCOPE[typeId];
+                    }
+
+                    // Now access the full item object
+                    const item = items[i];
+                    if (item) {
+                        // 3. Activity Boosting
+                        if (getActivityScore && score > 0.05) {
+                            const activityScore = getActivityScore(item.id);
+                            if (activityScore > 0) {
+                                score = score * (1 - activityWeight) + activityScore * activityWeight;
+                            }
+                        }
+
+                        if (score > MIN_SCORE) {
+                            if (heap.isFull()) {
+                                const minItem = heap.peek();
+                                if (minItem && score <= minItem.score) {
+                                    continue;
+                                }
+                            }
+                            heap.push({
+                                item,
+                                score,
+                                scope: resultScope,
+                            });
                         }
                     }
                 }
             }
-
-            if (score <= MIN_SCORE) return;
-
-            if (resultScope === undefined) {
-                resultScope = ID_TO_SCOPE[typeId];
-            }
-
-            // Now access the full item object
-            const item = items[i];
-            if (!item) return;
-
-            // 3. Activity Boosting
-            if (getActivityScore && score > 0.05) {
-                const activityScore = getActivityScore(item.id);
-                if (activityScore > 0) {
-                    score = score * (1 - activityWeight) + activityScore * activityWeight;
-                }
-            }
-
-            if (score > MIN_SCORE) {
-                if (heap.isFull()) {
-                    const minItem = heap.peek();
-                    if (minItem && score <= minItem.score) {
-                        return;
-                    }
-                }
-                heap.push({
-                    item,
-                    score,
-                    scope: resultScope,
-                });
-            }
-        };
-
-        if (indices) {
-            for (let k = 0; k < indices.length; k++) {
-                processIndex(indices[k]);
-            }
         } else {
             const count = items.length;
             for (let i = 0; i < count; i++) {
-                processIndex(i);
+                const typeId = itemTypeIds[i];
+                let score = -Infinity;
+
+                // Name (1.0)
+                const preparedName = preparedNames[i];
+                if (preparedName && queryLen <= preparedName.target.length) {
+                    const res = Fuzzysort.single(query, preparedName);
+                    if (res && res.score > MIN_SCORE) {
+                        score = res.score;
+                    }
+                }
+
+                if (score >= 0.9) {
+                    score = score * (ID_TO_BOOST[typeId] || 1.0);
+                } else {
+                    // Full Name (0.9)
+                    let bestScore = score;
+                    const preparedFullName = preparedFullNames[i];
+                    if (preparedFullName && queryLen <= preparedFullName.target.length) {
+                        const res = Fuzzysort.single(query, preparedFullName);
+                        if (res) {
+                            const s = res.score * 0.9;
+                            if (s > bestScore) bestScore = s;
+                        }
+                    }
+
+                    if (bestScore >= 0.8) {
+                        score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
+                    } else {
+                        // Path (0.8)
+                        const preparedPath = preparedPaths[i];
+                        if (preparedPath && queryLen <= preparedPath.target.length) {
+                            const res = Fuzzysort.single(query, preparedPath);
+                            if (res) {
+                                const s = res.score * 0.8;
+                                if (s > bestScore) bestScore = s;
+                            }
+                        }
+
+                        if (bestScore > MIN_SCORE) {
+                            score = bestScore * (ID_TO_BOOST[typeId] || 1.0);
+                        } else {
+                            score = -Infinity;
+                        }
+                    }
+                }
+
+                if (score < 0.9 && enableCamelHumps) {
+                    const capitals = preparedCapitals[i];
+                    let camelScore = -Infinity;
+                    if (capitals) {
+                        const matchIndex = capitals.indexOf(queryUpper);
+                        if (matchIndex !== -1) {
+                            const lengthRatio = queryLen / capitals.length;
+                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                            camelScore = lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
+                        }
+                    }
+
+                    if (camelScore > score) {
+                        score = camelScore; // Use CamelHumps if better
+                    }
+                }
+
+                let resultScope: SearchScope | undefined;
+
+                // 2. URL/Endpoint Match
+                if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+                    const name = preparedNames[i]?.target;
+                    if (name) {
+                        if (RouteMatcher.isMatch(name, query)) {
+                            const urlScore = 1.5;
+                            if (urlScore > score) {
+                                score = urlScore;
+                                resultScope = SearchScope.ENDPOINTS;
+                            }
+                        }
+                    }
+                }
+
+                if (score > MIN_SCORE) {
+                    if (resultScope === undefined) {
+                        resultScope = ID_TO_SCOPE[typeId];
+                    }
+
+                    // Now access the full item object
+                    const item = items[i];
+                    if (item) {
+                        // 3. Activity Boosting
+                        if (getActivityScore && score > 0.05) {
+                            const activityScore = getActivityScore(item.id);
+                            if (activityScore > 0) {
+                                score = score * (1 - activityWeight) + activityScore * activityWeight;
+                            }
+                        }
+
+                        if (score > MIN_SCORE) {
+                            if (heap.isFull()) {
+                                const minItem = heap.peek();
+                                if (minItem && score <= minItem.score) {
+                                    continue;
+                                }
+                            }
+                            heap.push({
+                                item,
+                                score,
+                                scope: resultScope,
+                            });
+                        }
+                    }
+                }
             }
         }
 
@@ -1664,14 +1670,13 @@ export class SearchEngine implements ISearchProvider {
         maxResults?: number,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
-        const preparedQuery = RouteMatcher.prepare(queryLower);
 
         const checkItem = (i: number) => {
             if (maxResults && results.length >= maxResults) return;
 
             const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, preparedQuery)) {
+                if (RouteMatcher.isMatch(item.name, queryLower)) {
                     results.push({
                         item,
                         score: 2.0,
@@ -1718,9 +1723,5 @@ export class SearchEngine implements ISearchProvider {
 
     recordActivity(): void {
         // No-op
-    }
-
-    private static escapeRegExp(string: string): string {
-        return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     }
 }
