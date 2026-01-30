@@ -1,19 +1,23 @@
-import { runSearchBenchmarks } from './search.bench';
-import { runParserBenchmarks } from './parser.bench';
-import { runTextSearchBenchmarks } from './text-search.bench';
-import { runIndexingBenchmark } from './indexing.bench';
-import { saveBenchmarks } from './utils';
 import * as path from 'path';
+import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
+import { runActivityBenchmarks } from './activity.bench';
+import { runIndexingBenchmark } from './indexing.bench';
+import { runParserBenchmarks } from './parser.bench';
+import { runSearchBenchmarks } from './search.bench';
+import { runTextSearchBenchmarks } from './text-search.bench';
+import { saveBenchmarks } from './utils';
 
 async function main() {
-    console.log("Starting DeepLens Benchmarks...\n");
+    console.log('Starting DeepLens Benchmarks...\n');
 
     await runSearchBenchmarks();
     await runParserBenchmarks();
     await runTextSearchBenchmarks();
     await runIndexingBenchmark();
+    await runActivityTrackerBenchmarks();
+    await runActivityBenchmarks();
 
-    console.log("Benchmarks completed.");
+    console.log('Benchmarks completed.');
 
     const outputPath = process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, 'benchmarks.json');
     saveBenchmarks(outputPath);

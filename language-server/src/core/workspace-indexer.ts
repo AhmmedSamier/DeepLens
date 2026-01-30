@@ -8,6 +8,13 @@ import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { SearchableItem, SearchItemType } from './types';
 
+export class CancellationError extends Error {
+    constructor(message: string = 'Operation cancelled') {
+        super(message);
+        this.name = 'CancellationError';
+    }
+}
+
 /**
  * Workspace indexer that scans files and extracts symbols
  */
@@ -16,6 +23,7 @@ export class WorkspaceIndexer {
     private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
 
     private indexing: boolean = false;
+    private cancellationToken = { cancelled: false };
     private watchersActive: boolean = true;
     private watcherCooldownTimer: NodeJS.Timeout | undefined;
     private config: Config;
@@ -133,12 +141,23 @@ export class WorkspaceIndexer {
         }
     }
 
+    /**
+     * Cancel the current indexing operation if one is running
+     */
+    public cancel(): void {
+        if (this.indexing) {
+            this.log('Cancelling indexing operation...');
+            this.cancellationToken.cancelled = true;
+        }
+    }
+
     async indexWorkspace(progressCallback?: (message: string, increment?: number) => void): Promise<void> {
         if (this.indexing) {
             return;
         }
 
         this.indexing = true;
+        this.cancellationToken = { cancelled: false };
         this.stringCache.clear();
         this.updateExcludeMatchers();
 
@@ -148,6 +167,8 @@ export class WorkspaceIndexer {
                 return;
             }
 
+            if (this.cancellationToken.cancelled) throw new CancellationError();
+
             this.log('Step 1/4: Analyzing repository structure...');
             progressCallback?.('Analyzing repository structure...', 10);
 
@@ -155,10 +176,15 @@ export class WorkspaceIndexer {
             this.log('Step 2/4: Scanning workspace files...');
             progressCallback?.('Scanning files...', 10);
             const fileItems: SearchableItem[] = [];
+
+            if (this.cancellationToken.cancelled) throw new CancellationError();
+
             await this.indexFiles((items) => {
                 fileItems.push(...items);
                 this.fireItemsAdded(items);
             });
+
+            if (this.cancellationToken.cancelled) throw new CancellationError();
 
             // Step 3: Index symbols
             this.log(`Step 3/4: Extracting symbols from ${fileItems.length} files...`);
@@ -179,6 +205,8 @@ export class WorkspaceIndexer {
                     progressCallback?.(message);
                 }
             });
+
+            if (this.cancellationToken.cancelled) throw new CancellationError();
 
             // Step 4: Finalize
             this.log('Step 4/4: Setting up file watchers...');
@@ -271,6 +299,10 @@ export class WorkspaceIndexer {
         }
 
         for (const chunk of chunks) {
+            if (this.cancellationToken.cancelled) {
+                throw new CancellationError();
+            }
+
             const batch: SearchableItem[] = [];
             await Promise.all(
                 chunk.map(async (filePath) => {
@@ -286,6 +318,7 @@ export class WorkspaceIndexer {
                     const relativePath = this.intern(this.env.asRelativePath(filePath));
                     const internedFilePath = this.intern(filePath);
                     const internedFileName = this.intern(fileName);
+                    const size = await this.getFileSize(filePath);
 
                     batch.push({
                         id: `file:${filePath}`,
@@ -295,12 +328,22 @@ export class WorkspaceIndexer {
                         relativeFilePath: relativePath,
                         detail: relativePath,
                         fullName: relativePath,
+                        size,
                     });
                 }),
             );
             if (batch.length > 0) {
                 collector(batch);
             }
+        }
+    }
+
+    private async getFileSize(filePath: string): Promise<number | undefined> {
+        try {
+            const stats = await fs.promises.stat(filePath);
+            return stats.size;
+        } catch {
+            return undefined;
         }
     }
 
@@ -414,6 +457,15 @@ export class WorkspaceIndexer {
             const assignTask = async (worker: Worker) => {
                 if (finished) return;
 
+                // Stop assigning if cancelled
+                if (this.cancellationToken.cancelled) {
+                    if (activeTasks === 0) {
+                        finished = true;
+                        resolveAll();
+                    }
+                    return;
+                }
+
                 const batchFiles: string[] = [];
 
                 // We increment activeTasks BEFORE doing anything async to prevent premature resolution
@@ -453,6 +505,18 @@ export class WorkspaceIndexer {
                 const worker = workers[i];
 
                 const onMessage = (message: { type: string; items?: SearchableItem[]; count?: number }) => {
+                    if (this.cancellationToken.cancelled && !finished) {
+                        // If cancelled, just drain remaining tasks and resolve
+                        if (message.type === 'result' || message.type === 'error') {
+                            activeTasks--;
+                            if (activeTasks === 0) {
+                                finished = true;
+                                resolveAll();
+                            }
+                        }
+                        return;
+                    }
+
                     if (message.type === 'result') {
                         const { items, count } = message;
 
@@ -788,6 +852,7 @@ export class WorkspaceIndexer {
             filePath: internedFilePath,
             detail: relativePath,
             fullName: relativePath,
+            size: await this.getFileSize(filePath),
         };
         this.fireItemsAdded([fileItem]);
 
@@ -818,6 +883,23 @@ export class WorkspaceIndexer {
 
         // Invalidate hash to force re-calculation
         this.fileHashes.delete(filePath);
+
+        // Re-add file item with updated size
+        const fileName = path.basename(filePath);
+        const relativePath = this.intern(this.env.asRelativePath(filePath));
+        const internedFilePath = this.intern(filePath);
+        const internedFileName = this.intern(fileName);
+
+        const fileItem: SearchableItem = {
+            id: `file:${filePath}`,
+            name: internedFileName,
+            type: SearchItemType.FILE,
+            filePath: internedFilePath,
+            detail: relativePath,
+            fullName: relativePath,
+            size: await this.getFileSize(filePath),
+        };
+        this.fireItemsAdded([fileItem]);
 
         // Re-index symbols (it will check cache internally)
         await this.indexFileSymbols(filePath);
