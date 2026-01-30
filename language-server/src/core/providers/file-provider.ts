@@ -12,7 +12,12 @@ export class FileProvider implements ISearchProvider {
         const { scope, query } = context;
         if (query.length === 0) return [];
 
-        if (scope !== SearchScope.EVERYTHING && scope !== SearchScope.FILES) {
+        if (
+            scope !== SearchScope.EVERYTHING &&
+            scope !== SearchScope.FILES &&
+            scope !== SearchScope.OPEN &&
+            scope !== SearchScope.MODIFIED
+        ) {
             return [];
         }
 

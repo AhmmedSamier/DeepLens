@@ -564,10 +564,14 @@ export class SearchEngine implements ISearchProvider {
     ): Promise<SearchResult[]> {
         let allResults: SearchResult[] = [];
         for (const provider of this.providers) {
-            const providerResults = await provider.search(context);
-            allResults.push(...providerResults);
-            if (onResult) {
-                providerResults.forEach((r) => onResult(r));
+            try {
+                const providerResults = await provider.search(context);
+                allResults.push(...providerResults);
+                if (onResult) {
+                    providerResults.forEach((r) => onResult(r));
+                }
+            } catch (error) {
+                this.logger?.error(`Provider ${provider.id} failed: ${error}`);
             }
         }
 
@@ -978,7 +982,7 @@ export class SearchEngine implements ISearchProvider {
         };
     }
 
-    public performSymbolSearch(context: SearchContext): SearchResult[] {
+    public async performSymbolSearch(context: SearchContext): Promise<SearchResult[]> {
         const indices =
             context.scope === SearchScope.EVERYTHING
                 ? this.scopedIndices
@@ -987,6 +991,7 @@ export class SearchEngine implements ISearchProvider {
                           this.scopedIndices.get(SearchScope.TYPES) || [],
                           this.scopedIndices.get(SearchScope.PROPERTIES) || [],
                           this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
+                          this.scopedIndices.get(SearchScope.COMMANDS) || [],
                       )
                 : this.scopedIndices.get(context.scope);
 
@@ -999,8 +1004,18 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
-    public performFileSearch(context: SearchContext): SearchResult[] {
-        const indices = this.scopedIndices.get(SearchScope.FILES);
+    public async performFileSearch(context: SearchContext): Promise<SearchResult[]> {
+        let indices: number[] | undefined;
+
+        if (context.scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+        } else if (context.scope === SearchScope.MODIFIED) {
+            indices = await this.getIndicesForModifiedFiles();
+        } else {
+            // FILES or EVERYTHING -> Search all files
+            indices = this.scopedIndices.get(SearchScope.FILES);
+        }
+
         return this.performUnifiedSearch(
             indices,
             context.normalizedQuery,
