@@ -93,22 +93,18 @@ export class ActivityTracker {
             existing.lastAccessed = now;
             existing.accessCount += 1;
             existing.item = item; // Update item metadata
-            existing.score = this.calculateScore(existing);
         } else {
             this.activities.set(item.id, {
                 itemId: item.id,
                 lastAccessed: now,
                 accessCount: 1,
                 item: item,
-                score: this.calculateScore({ itemId: item.id, lastAccessed: now, accessCount: 1, score: 0 }),
+                score: 0, // Will be calculated in recalculateAllScores
             });
         }
 
         // Recalculate all scores to maintain relative rankings
         this.recalculateAllScores();
-
-        // Immediate save for history reliability
-        this.saveActivities();
     }
 
     /**
