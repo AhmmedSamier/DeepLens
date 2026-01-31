@@ -4,7 +4,9 @@ import * as vscode from 'vscode';
 import { SearchScope, SearchItemType } from '../../../../language-server/src/core/types';
 
 suite('Search Integration Test Suite', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let extension: vscode.Extension<any>;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let api: any;
 
     suiteSetup(async function() {

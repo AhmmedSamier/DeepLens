@@ -602,6 +602,7 @@ export class SearchProvider {
     /**
      * Suggest slash commands based on query
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
@@ -992,7 +993,7 @@ export class SearchProvider {
         const detail =
             this.currentScope !== SearchScope.EVERYTHING
                 ? 'Try switching to Global search (/all) or check for typos'
-                : `We couldn't find '${query}'. Try /all scope, checking for typos, or adjusting your settings.`;
+                : `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`;
 
         const buttons: vscode.QuickInputButton[] = [];
 
