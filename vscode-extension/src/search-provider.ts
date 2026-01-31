@@ -116,8 +116,7 @@ export class SearchProvider {
 
                         // Update UI incrementally if this is still the active search
                         if (requestId === this.lastQueryId) {
-                            const { text } = this.parseQuery(this.currentQuickPick.value);
-                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r, text));
+                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r));
                             this.updateTitle(this.currentQuickPick, results.length);
                         }
                     }
@@ -646,7 +645,7 @@ export class SearchProvider {
         }
 
         if (commandSuggestions.length > 0) {
-            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r, query));
+            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
         }
@@ -755,7 +754,7 @@ export class SearchProvider {
 
                     // Update if we have more results
                     if (burstResults.length > 0) {
-                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
+                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
@@ -929,7 +928,7 @@ export class SearchProvider {
                 quickPick.items = [this.getEmptyStateItem(query)];
                 this.updateTitle(quickPick, 0, duration);
             } else {
-                quickPick.items = results.map((result) => this.resultToQuickPickItem(result, query));
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
                 this.updateTitle(quickPick, results.length, duration);
             }
             this.streamingResults.delete(queryId); // Done with streaming for this query
@@ -1030,51 +1029,9 @@ export class SearchProvider {
     }
 
     /**
-     * Convert fuzzysort indexes to VS Code ranges
-     */
-    private indexesToRanges(indexes: readonly number[]): [number, number][] {
-        if (!indexes || indexes.length === 0) {
-            return [];
-        }
-
-        const sortedIndexes = [...indexes].sort((a, b) => a - b);
-
-        const ranges: [number, number][] = [];
-        let start = sortedIndexes[0];
-        let end = start + 1;
-
-        for (let i = 1; i < sortedIndexes.length; i++) {
-            if (sortedIndexes[i] === end) {
-                end++;
-            } else {
-                ranges.push([start, end]);
-                start = sortedIndexes[i];
-                end = start + 1;
-            }
-        }
-        ranges.push([start, end]);
-        return ranges;
-    }
-
-    /**
-     * Calculate highlights for item name
-     */
-    private calculateHighlights(name: string, query: string): [number, number][] {
-        if (!query) {
-            return [];
-        }
-
-        const res = fuzzysort.single(query, name);
-        if (res) {
-            return this.indexesToRanges(res.indexes);
-        }
-        return [];
-    }
-
-    /**
      * Convert search result to QuickPick item
      */
-    private resultToQuickPickItem(result: SearchResult, query?: string): SearchResultItem {
+    private resultToQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
         const icon = this.getIconForItemType(item.type);
         const iconColor = this.getIconColorForItemType(item.type);
@@ -1083,21 +1040,8 @@ export class SearchProvider {
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
         // Don't add icon to label - iconPath will render it
-        let label: string | { label: string; highlights?: [number, number][] } = item.name;
+        const label = item.name;
         let description = '';
-
-        // Calculate highlights if not provided
-        let highlights = result.highlights;
-        if ((!highlights || highlights.length === 0) && query) {
-            highlights = this.calculateHighlights(item.name, query);
-        }
-
-        if (highlights && highlights.length > 0) {
-            label = {
-                label: item.name,
-                highlights: highlights as [number, number][],
-            };
-        }
         let detail = '';
 
         // Add container name if available
