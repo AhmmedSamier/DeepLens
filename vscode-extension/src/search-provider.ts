@@ -9,9 +9,9 @@ import {
     SearchScope,
     SearchableItem,
 } from '../../language-server/src/core/types';
-import * as fuzzysort from 'fuzzysort';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
+import { SlashCommandService } from './slash-command-service';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -21,6 +21,7 @@ export class SearchProvider {
     private config: Config;
     private activityTracker: ActivityTracker | undefined;
     private commandIndexer: CommandIndexer | undefined;
+    private slashCommandService: SlashCommandService;
     private currentScope: SearchScope = SearchScope.EVERYTHING;
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
     private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
@@ -54,17 +55,21 @@ export class SearchProvider {
         borderRadius: '2px',
     });
 
-    // Prefix mapping for search scopes
+    // Prefix mapping for search scopes (slash commands from SlashCommandService)
+    // Only includes prefixes with trailing space - commands must be followed by space to trigger
+    // This allows typing "/txt" without immediately switching to "/t" (types)
     private readonly PREFIX_MAP = new Map<string, SearchScope>([
         ['/t ', SearchScope.TYPES],
         ['/classes ', SearchScope.TYPES],
+        ['/types ', SearchScope.TYPES],
+        ['/c ', SearchScope.TYPES],
         ['/txt ', SearchScope.TEXT],
         ['/text ', SearchScope.TEXT],
         ['/s ', SearchScope.SYMBOLS],
         ['/symbols ', SearchScope.SYMBOLS],
         ['/f ', SearchScope.FILES],
         ['/files ', SearchScope.FILES],
-        ['/c ', SearchScope.COMMANDS],
+        ['/cmd ', SearchScope.COMMANDS],
         ['/commands ', SearchScope.COMMANDS],
         ['/p ', SearchScope.PROPERTIES],
         ['/properties ', SearchScope.PROPERTIES],
@@ -73,10 +78,10 @@ export class SearchProvider {
         ['/a ', SearchScope.EVERYTHING],
         ['/all ', SearchScope.EVERYTHING],
         ['/everything ', SearchScope.EVERYTHING],
-        ['/open ', SearchScope.OPEN],
         ['/o ', SearchScope.OPEN],
-        ['/modified ', SearchScope.MODIFIED],
+        ['/open ', SearchScope.OPEN],
         ['/m ', SearchScope.MODIFIED],
+        ['/modified ', SearchScope.MODIFIED],
         ['/git ', SearchScope.MODIFIED],
     ]);
 
@@ -90,6 +95,7 @@ export class SearchProvider {
         this.config = config;
         this.activityTracker = activityTracker;
         this.commandIndexer = commandIndexer;
+        this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
 
         // Set up activity tracking in search engine if enabled (only for local engines)
@@ -569,11 +575,14 @@ export class SearchProvider {
 
     /**
      * Parse query to extract scope and search term
+     * Only considers a command complete if it's followed by a space (e.g., "/t ")
      */
     private parseQuery(query: string): { scope: SearchScope | undefined; text: string } {
-        // Check for prefixes
+        // Check for prefixes with space (completed commands)
+        // We only auto-switch scope if the command is followed by space
+        // This allows typing "/txt" without immediately switching to "/t" (types)
         for (const [prefix, scope] of this.PREFIX_MAP.entries()) {
-            if (query.toLowerCase().startsWith(prefix)) {
+            if (query.toLowerCase().startsWith(prefix) && prefix.endsWith(' ')) {
                 return {
                     scope,
                     text: query.slice(prefix.length),
@@ -594,61 +603,102 @@ export class SearchProvider {
      * Suggest slash commands based on query
      */
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
+        const commands = this.slashCommandService.getCommands(query);
+        const recentCommands = this.slashCommandService.getRecentCommands();
+        
         const commandSuggestions: SearchResult[] = [];
-        const processedScopes = new Set<SearchScope>();
+        const seen = new Set<string>();
 
-        const slashCommands = [
-            { scope: SearchScope.OPEN, label: '/open', desc: 'Search Open Files' },
-            { scope: SearchScope.MODIFIED, label: '/modified', desc: 'Search Modified Files' },
-            { scope: SearchScope.TYPES, label: '/classes', desc: 'Search Classes' },
-            { scope: SearchScope.SYMBOLS, label: '/symbols', desc: 'Search Symbols' },
-            { scope: SearchScope.FILES, label: '/files', desc: 'Search Files' },
-            { scope: SearchScope.TEXT, label: '/text', desc: 'Search Text' },
-            { scope: SearchScope.COMMANDS, label: '/commands', desc: 'Search Commands' },
-            { scope: SearchScope.PROPERTIES, label: '/properties', desc: 'Search Properties' },
-            { scope: SearchScope.ENDPOINTS, label: '/endpoints', desc: 'Search Endpoints' },
-            { scope: SearchScope.EVERYTHING, label: '/all', desc: 'Search Everything' },
-        ];
+        // Add recent commands first with a visual indicator
+        for (const cmd of recentCommands) {
+            if (seen.has(cmd.name)) continue;
+            if (query && !cmd.name.toLowerCase().startsWith(query.toLowerCase()) &&
+                !cmd.aliases.some(a => a.toLowerCase().startsWith(query.toLowerCase()))) continue;
 
-        for (const { scope, label, desc } of slashCommands) {
-            if (processedScopes.has(scope)) {
-                continue;
-            }
+            const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
+            const description = cmd.keyboardShortcut ? `${cmd.description} • ${cmd.keyboardShortcut}` : cmd.description;
 
-            // Find prefix from map
-            let prefix = '';
-            for (const [p, s] of this.PREFIX_MAP.entries()) {
-                if (s === scope) {
-                    prefix = p;
-                    break;
-                }
-            }
+            commandSuggestions.push({
+                item: {
+                    id: 'slash-cmd:' + primaryAlias,
+                    name: primaryAlias,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: `↺ Recent • ${description}`,
+                    containerName: this.getCategoryLabel(cmd.category),
+                },
+                score: 1000,
+                scope: SearchScope.COMMANDS,
+            });
+            seen.add(cmd.name);
+        }
 
-            if (!prefix) {
-                continue;
-            }
+        // Add matching commands
+        for (const cmd of commands) {
+            if (seen.has(cmd.name)) continue;
 
-            if (label.startsWith(query.toLowerCase()) || prefix.trim().startsWith(query.toLowerCase().trim())) {
-                commandSuggestions.push({
-                    item: {
-                        id: 'slash-cmd:' + prefix,
-                        name: label,
-                        type: SearchItemType.COMMAND,
-                        filePath: '',
-                        detail: desc,
-                    },
-                    score: 1,
-                    scope: SearchScope.COMMANDS,
-                });
-                processedScopes.add(scope);
-            }
+            const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
+            const aliasText = cmd.aliases.length > 1 ? ` (${cmd.aliases.slice(1).slice(0, 2).join(', ')})` : '';
+            const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
+            const description = cmd.description + aliasText + shortcutText;
+
+            commandSuggestions.push({
+                item: {
+                    id: 'slash-cmd:' + primaryAlias,
+                    name: primaryAlias,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: description,
+                    containerName: this.getCategoryLabel(cmd.category),
+                },
+                score: 1,
+                scope: SearchScope.COMMANDS,
+            });
+            seen.add(cmd.name);
         }
 
         if (commandSuggestions.length > 0) {
-            quickPick.items = commandSuggestions.map((r) => this.resultToQuickPickItem(r));
+            quickPick.items = commandSuggestions.map((r) => this.resultToSlashCommandQuickPickItem(r));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
         }
+    }
+
+    private getCategoryLabel(category: string): string {
+        switch (category) {
+            case 'Search':
+                return 'Search';
+            case 'Navigation':
+                return 'Navigation';
+            case 'Files':
+                return 'Files';
+            case 'Refactoring':
+                return 'Refactoring';
+            case 'Actions':
+                return 'Actions';
+            default:
+                return category;
+        }
+    }
+
+    private resultToSlashCommandQuickPickItem(result: SearchResult): SearchResultItem {
+        const { item } = result;
+        const slashCmd = this.slashCommandService.getCommand(item.name.slice('slash-cmd:'.length));
+        const iconColor = new vscode.ThemeColor('textLink.foreground');
+
+        // Show primary alias (short form) as label
+        const label = slashCmd ? this.slashCommandService.getPrimaryAlias(slashCmd) : item.name;
+
+        return {
+            label: label,
+            description: item.containerName,
+            detail: item.detail,
+            iconPath: slashCmd
+                ? new vscode.ThemeIcon(slashCmd.icon, iconColor)
+                : new vscode.ThemeIcon('run', iconColor),
+            alwaysShow: true,
+            result,
+        };
     }
 
     private async handleQueryChange(
@@ -723,7 +773,7 @@ export class SearchProvider {
             }
 
             if (instantResults.length > 0) {
-                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r, trimmedQuery));
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
                 this.updateTitle(quickPick, instantResults.length);
             }
             // Don't clear items here - let history stay until we have real results (avoid flicker)
@@ -995,10 +1045,10 @@ export class SearchProvider {
     private getWelcomeItems(): SearchResultItem[] {
         const items = [
             ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
-            ['/classes', 'Search Classes', 'Find classes, interfaces, and enums (/classes)', SearchScope.TYPES],
-            ['/files', 'Search Files', 'Find files by name or path (/files)', SearchScope.FILES],
-            ['/symbols', 'Search Symbols', 'Find methods, functions, and variables (/symbols)', SearchScope.SYMBOLS],
-            ['/text', 'Search Text', 'Find text content across all files (/text)', SearchScope.TEXT],
+            ['/t', 'Search Classes', 'Find classes, interfaces, and enums (/t)', SearchScope.TYPES],
+            ['/f', 'Search Files', 'Find files by name or path (/f)', SearchScope.FILES],
+            ['/s', 'Search Symbols', 'Find methods, functions, and variables (/s)', SearchScope.SYMBOLS],
+            ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
         ] as const;
 
         return items.map(([cmd, name, detail, scope]) => {
@@ -1202,8 +1252,8 @@ export class SearchProvider {
 
             const functionalPrefix = item.id.substring('slash-cmd:'.length);
 
-            // Find scope for this prefix
-            const scope = this.PREFIX_MAP.get(functionalPrefix);
+            // Find scope for this prefix (add space to match PREFIX_MAP)
+            const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
             if (scope) {
                 this.userSelectedScope = scope; // <--- FIX: Persist user selection
                 this.currentScope = scope;

@@ -631,7 +631,8 @@ namespace DeepLensVisualStudio.ToolWindows
             _searchCts = new CancellationTokenSource();
             var token = _searchCts.Token;
 
-            // Auto-execute slash command if followed by space
+            // Only consider slash command complete if followed by space
+            // This allows typing "/txt" without immediately switching to "/t" (types)
             if (!string.IsNullOrEmpty(SearchQuery) && SearchQuery.EndsWith(" "))
             {
                 var trimmed = SearchQuery.Trim();
@@ -659,15 +660,21 @@ namespace DeepLensVisualStudio.ToolWindows
                 var commands = _slashCommandService.GetCommands(query);
                 if (commands.Any())
                 {
-                    foreach (var cmd in commands)
+                foreach (var cmd in commands)
                     {
+                        var primaryAlias = _slashCommandService.GetPrimaryAlias(cmd);
+                        var description = !string.IsNullOrEmpty(cmd.KeyboardShortcut) 
+                            ? $"{cmd.Description} • {cmd.KeyboardShortcut}" 
+                            : cmd.Description;
+
                         Results.Add(new SearchResultViewModel
                         {
-                            Name = cmd.Name,
+                            Name = primaryAlias,
                             Kind = "Command",
-                            ContainerName = cmd.Description,
+                            ContainerName = _slashCommandService.GetCategoryLabel(cmd.Category),
                             FilePath = "",
-                            RelativePath = ""
+                            RelativePath = "",
+                            Line = 0
                         });
                     }
                     OnPropertyChanged(nameof(ResultCountText));
@@ -1026,14 +1033,72 @@ namespace DeepLensVisualStudio.ToolWindows
 
         private void ExecuteSlashCommand(string commandName)
         {
-            switch (commandName)
+            var cmd = _slashCommandService.GetCommand(commandName);
+            if (cmd != null)
             {
-                case "/all": FilterAll = true; break;
-                case "/classes": FilterClasses = true; break;
-                case "/symbols": FilterSymbols = true; break;
-                case "/files": FilterFiles = true; break;
-                case "/text": FilterText = true; break;
-                case "/endpoints": FilterEndpoints = true; break;
+                _slashCommandService.RecordUsage(cmd.Name);
+                
+                switch (cmd.Name.ToLowerInvariant())
+                {
+                    case "/all":
+                    case "/a":
+                        FilterAll = true;
+                        break;
+                    case "/t":
+                    case "/classes":
+                    case "/types":
+                    case "/type":
+                    case "/c":
+                        FilterClasses = true;
+                        break;
+                    case "/s":
+                    case "/symbols":
+                    case "/symbol":
+                        FilterSymbols = true;
+                        break;
+                    case "/f":
+                    case "/files":
+                    case "/file":
+                        FilterFiles = true;
+                        break;
+                    case "/txt":
+                    case "/text":
+                    case "/find":
+                    case "/grep":
+                        FilterText = true;
+                        break;
+                    case "/e":
+                    case "/endpoints":
+                    case "/endpoint":
+                    case "/routes":
+                    case "/api":
+                        FilterEndpoints = true;
+                        break;
+                    case "/o":
+                    case "/open":
+                    case "/opened":
+                        FilterAll = true;
+                        break;
+                    case "/m":
+                    case "/modified":
+                    case "/mod":
+                    case "/git":
+                    case "/changed":
+                        FilterAll = true;
+                        break;
+                    case "/p":
+                    case "/properties":
+                    case "/prop":
+                    case "/field":
+                        FilterAll = true;
+                        break;
+                    case "/cmd":
+                    case "/commands":
+                    case "/action":
+                    case "/run":
+                        FilterAll = true;
+                        break;
+                }
             }
             SearchQuery = "";
         }
