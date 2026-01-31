@@ -1047,15 +1047,6 @@ export class SearchEngine implements ISearchProvider {
         const preparedPaths = this.preparedPaths;
         const preparedCapitals = this.preparedCapitals;
 
-        // Local helper for field score to avoid closure overhead if possible, or just avoid `this`
-        const calculateFieldScoreLocal = (prepared: Fuzzysort.Prepared | null): number => {
-            if (prepared && queryLen <= prepared.target.length) {
-                const res = Fuzzysort.single(query, prepared);
-                return res ? res.score : -Infinity;
-            }
-            return -Infinity;
-        };
-
         // Local helper for CamelHumps
         const computeCamelHumpsScoreLocal = (
             i: number,
@@ -1075,26 +1066,44 @@ export class SearchEngine implements ISearchProvider {
 
         // Local helper for Fuzzy Score
         const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
-            const boost = ID_TO_BOOST[typeId] || 1.0;
             let bestScore = -Infinity;
 
             // Name (1.0)
-            const nameScore = calculateFieldScoreLocal(preparedNames[i]);
-            if (nameScore > MIN_SCORE) bestScore = nameScore;
+            const pName = preparedNames[i];
+            if (pName && queryLen <= pName.target.length) {
+                const res = Fuzzysort.single(query, pName);
+                if (res) {
+                    const score = res.score;
+                    if (score > MIN_SCORE) bestScore = score;
+                }
+            }
 
-            if (bestScore >= 0.9) return bestScore * boost;
+            // Optimization: Defer boost lookup until match is confirmed
+            if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
 
             // Full Name (0.9)
-            const fullNameScore = calculateFieldScoreLocal(preparedFullNames[i]);
-            if (fullNameScore * 0.9 > bestScore) bestScore = fullNameScore * 0.9;
+            const pFull = preparedFullNames[i];
+            if (pFull && queryLen <= pFull.target.length) {
+                const res = Fuzzysort.single(query, pFull);
+                if (res) {
+                    const score = res.score;
+                    if (score * 0.9 > bestScore) bestScore = score * 0.9;
+                }
+            }
 
-            if (bestScore >= 0.8) return bestScore * boost;
+            if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
 
             // Path (0.8)
-            const pathScore = calculateFieldScoreLocal(preparedPaths[i]);
-            if (pathScore * 0.8 > bestScore) bestScore = pathScore * 0.8;
+            const pPath = preparedPaths[i];
+            if (pPath && queryLen <= pPath.target.length) {
+                const res = Fuzzysort.single(query, pPath);
+                if (res) {
+                    const score = res.score;
+                    if (score * 0.8 > bestScore) bestScore = score * 0.8;
+                }
+            }
 
-            if (bestScore > MIN_SCORE) return bestScore * boost;
+            if (bestScore > MIN_SCORE) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
             return -Infinity;
         };
 
