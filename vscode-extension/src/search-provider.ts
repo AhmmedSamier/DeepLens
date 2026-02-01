@@ -1092,15 +1092,7 @@ export class SearchProvider {
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
         // Don't add icon to label - iconPath will render it
-        let label: string | vscode.QuickPickItemLabel = item.name;
-
-        // Apply highlights if available
-        if (result.highlights && result.highlights.length > 0) {
-            label = {
-                label: item.name,
-                highlights: result.highlights as [number, number][],
-            };
-        }
+        const label = item.name;
 
         let description = '';
         let detail = '';
