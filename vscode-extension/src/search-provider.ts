@@ -919,6 +919,8 @@ export class SearchProvider {
             requestId: queryId,
         };
 
+        // Clear stale results from previous queries
+        this.streamingResults.clear();
         this.streamingResults.set(queryId, []);
 
         const startTime = Date.now();
@@ -1090,7 +1092,16 @@ export class SearchProvider {
         const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
 
         // Don't add icon to label - iconPath will render it
-        const label = item.name;
+        let label: string | vscode.QuickPickItemLabel = item.name;
+
+        // Apply highlights if available
+        if (result.highlights && result.highlights.length > 0) {
+            label = {
+                label: item.name,
+                highlights: result.highlights as [number, number][],
+            };
+        }
+
         let description = '';
         let detail = '';
 
@@ -1147,8 +1158,7 @@ export class SearchProvider {
         }
 
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: label as any,
+            label,
             description,
             detail,
             iconPath: coloredIcon,
