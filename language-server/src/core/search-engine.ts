@@ -1053,23 +1053,6 @@ export class SearchEngine implements ISearchProvider {
         const preparedPaths = this.preparedPaths;
         const preparedCapitals = this.preparedCapitals;
 
-        // Local helper for CamelHumps
-        const computeCamelHumpsScoreLocal = (
-            i: number,
-            typeId: number,
-        ): number => {
-            const capitals = preparedCapitals[i];
-            if (capitals) {
-                const matchIndex = capitals.indexOf(queryUpper);
-                if (matchIndex !== -1) {
-                    const lengthRatio = queryLen / capitals.length;
-                    const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                    return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
-                }
-            }
-            return -Infinity;
-        };
-
         // Local helper for Fuzzy Score
         const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
             let bestScore = -Infinity;
@@ -1117,15 +1100,36 @@ export class SearchEngine implements ISearchProvider {
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
             const typeId = itemTypeIds[i];
+            let score = -Infinity;
+            let skippedFuzzy = false;
 
-            // 1. Fuzzy Score
-            let score = computeFuzzyScoreLocal(i, typeId);
+            // 1. CamelHumps Score (Run first as it's cheaper)
+            if (enableCamelHumps) {
+                // Inlined CamelHumps logic to avoid closure overhead
+                const capitals = preparedCapitals[i];
+                if (capitals) {
+                    const matchIndex = capitals.indexOf(queryUpper);
+                    if (matchIndex !== -1) {
+                        const lengthRatio = queryLen / capitals.length;
+                        const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                        const camelScore = lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
+                        if (camelScore > score) {
+                            score = camelScore;
+                            // Optimization: If CamelHumps returns a strong match, it's likely an abbreviation
+                            // or exact capital match. We can skip the expensive fuzzy search.
+                            if (score > 1.0) {
+                                skippedFuzzy = true;
+                            }
+                        }
+                    }
+                }
+            }
 
-            // 2. CamelHumps Score
-            if (score < 0.9 && enableCamelHumps) {
-                const camelScore = computeCamelHumpsScoreLocal(i, typeId);
-                if (camelScore > score) {
-                    score = camelScore;
+            // 2. Fuzzy Score
+            if (!skippedFuzzy) {
+                const fuzzyScore = computeFuzzyScoreLocal(i, typeId);
+                if (fuzzyScore > score) {
+                    score = fuzzyScore;
                 }
             }
 

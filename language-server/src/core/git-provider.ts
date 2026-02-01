@@ -33,10 +33,7 @@ export class GitProvider {
                     this.addFilesToSet(modifiedFiles, root, stagedOutput);
 
                     // 3. Get untracked files
-                    const untrackedOutput = await this.execGit(
-                        ['ls-files', '--others', '--exclude-standard'],
-                        root,
-                    );
+                    const untrackedOutput = await this.execGit(['ls-files', '--others', '--exclude-standard'], root);
                     this.addFilesToSet(modifiedFiles, root, untrackedOutput);
                 } catch (error) {
                     // Ignore errors (e.g., not a git repo)
