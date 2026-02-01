@@ -28,7 +28,7 @@
 
 ## 2024-05-28 - Regex Scanning over Line Slicing
 **Learning:** For streaming text search, repeatedly slicing strings from a buffer to check against a regex (even if not matching) is much slower than running a global regex on the buffer first to find match indices. Slicing creates objects and pressure on GC.
-**Action:** In stream processing, scan the chunk for tokens/matches first, then only process/slice the lines that contain them.
+**Action:** In stream processing, scan the chunk for tokens/matches first, only process/slice the lines that contain them.
 
 ## 2024-05-29 - Manual String Building vs Regex
 **Learning:** Replacing eager string manipulation with regex (`text.slice(1).replace(/[^A-Z]/g, '').toUpperCase()`) with a manual loop and char code checks yielded a ~4.6x speedup in isolation and ~10% improvement in overall indexing time (100k items). Regex overhead and intermediate string allocations add up in hot paths like indexing.
@@ -45,3 +45,7 @@
 ## 2024-05-23 - CamelHumps Priority
 **Learning:** When multiple search strategies are available, running the cheaper, more specific strategy (CamelHumps) *first* and skipping the expensive general strategy (Fuzzy) if a strong match is found can significantly reduce CPU time (20%+ speedup) for matching queries.
 **Action:** Always order search strategies from cheapest/most-specific to most expensive, and implement early exit thresholds where possible.
+
+## 2024-06-03 - Strategy Reordering with Inlining
+**Learning:** Combining manual loop inlining with strategy reordering (CamelHumps > Fuzzy) yielded a ~8% speedup in unified search. Inlining avoids closure overhead in the hot loop, and checking the cheap CamelHumps match first allows skipping the expensive fuzzy match for abbreviations.
+**Action:** For critical search loops, inline helper functions and prioritize cheap/exact match checks to short-circuit expensive logic.
