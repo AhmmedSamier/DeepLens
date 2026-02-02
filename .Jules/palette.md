@@ -33,3 +33,7 @@
 ## 2025-05-27 - [Context-Aware Empty States]
 **Learning:** Suggesting actions the user has already taken (e.g., "Try /all" when already in Global scope) frustrates users and erodes trust.
 **Action:** Ensure empty state messages are context-aware. If the scope is already global, suggest deeper debugging steps like checking exclusions or rebuilding the index.
+
+## 2026-05-28 - [In-List History Management]
+**Learning:** Users hesitate to leave a workflow (like search) to manage its settings (like clearing history). Placing management actions directly within the list content (e.g., as the last item) maintains flow.
+**Action:** When displaying history or recent items, append a "Clear History" action item directly to the list, allowing immediate maintenance without context switching.
