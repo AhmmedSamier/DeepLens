@@ -1055,7 +1055,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Optimization: Inlined logic to avoid function call overhead in hot loop (approx 100k+ iterations)
         if (indices) {
-            // Duplicate logic to strictly avoid closure call overhead in hot loop
+            // Logic is manually inlined to strictly avoid closure call overhead in hot loop
             const len = indices.length;
             for (let k = 0; k < len; k++) {
                 const i = indices[k];
