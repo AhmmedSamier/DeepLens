@@ -1,0 +1,121 @@
+$ bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts
+Setting up WASM files in /app/language-server/dist/parsers...
+Copied web-tree-sitter.wasm
+Copied tree-sitter-typescript.wasm
+Copied tree-sitter-tsx.wasm
+Copied tree-sitter-javascript.wasm
+Copied tree-sitter-c_sharp.wasm
+Copied tree-sitter-python.wasm
+Copied tree-sitter-java.wasm
+Copied tree-sitter-go.wasm
+Copied tree-sitter-cpp.wasm
+Copied tree-sitter-c.wasm
+Copied tree-sitter-ruby.wasm
+Copied tree-sitter-php.wasm
+Copied tree-sitter-php_only.wasm
+Starting DeepLens Benchmarks...
+
+=== Route Matcher Benchmarks ===
+Initialized engine with 50000 items.
+Running benchmark: Route Match Search 'api/v1/users' (100 iterations)...
+  -> Avg: 252.597ms | Total: 25259.688ms
+Running benchmark: Route Match Burst 'api/v1/users' (100 iterations)...
+  -> Avg: 0.026ms | Total: 2.582ms
+
+
+=== Search Engine Benchmarks ===
+Initialized engine with 6000 items.
+Running benchmark: Fuzzy Search 'File100' (100 iterations)...
+  -> Avg: 5.206ms | Total: 520.552ms
+Running benchmark: CamelHumps Search 'FCC' (100 iterations)...
+  -> Avg: 5.521ms | Total: 552.110ms
+Running benchmark: Burst Search 'calc' (100 iterations)...
+  -> Avg: 0.008ms | Total: 0.813ms
+
+
+=== Parser Benchmarks ===
+Running benchmark: Parse 500-method TS Class (10 iterations)...
+  -> Avg: 86.715ms | Total: 867.145ms
+
+
+=== Text Search Benchmarks ===
+Running benchmark: Text Search 100 files (10 iterations)...
+  -> Avg: 5.061ms | Total: 50.614ms
+
+
+=== Indexing Benchmarks ===
+Using temp dir: /tmp/deeplens-bench-BC0RfY
+Generating 1000 files...
+Running benchmark: Index 1000 files (3 iterations)...
+Git file listing failed for /tmp/deeplens-bench-BC0RfY: 976 |
+977 |             child.on('close', (code) => {
+978 |                 if (code === 0) {
+979 |                     resolve(stdout);
+980 |                 } else {
+981 |                     reject(new Error(`Git exited with code ${code}: ${stderr}`));
+                                 ^
+error: Git exited with code 128: fatal: not a git repository (or any of the parent directories): .git
+
+      at <anonymous> (/app/language-server/src/core/workspace-indexer.ts:981:28)
+      at emit (node:events:96:22)
+      at #maybeClose (node:child_process:739:16)
+      at #handleOnExit (node:child_process:513:72)
+
+Git file listing failed for /tmp/deeplens-bench-BC0RfY: 976 |
+977 |             child.on('close', (code) => {
+978 |                 if (code === 0) {
+979 |                     resolve(stdout);
+980 |                 } else {
+981 |                     reject(new Error(`Git exited with code ${code}: ${stderr}`));
+                                 ^
+error: Git exited with code 128: fatal: not a git repository (or any of the parent directories): .git
+
+      at <anonymous> (/app/language-server/src/core/workspace-indexer.ts:981:28)
+      at emit (node:events:96:22)
+      at #maybeClose (node:child_process:739:16)
+      at #handleOnExit (node:child_process:513:72)
+
+Git file listing failed for /tmp/deeplens-bench-BC0RfY: 976 |
+977 |             child.on('close', (code) => {
+978 |                 if (code === 0) {
+979 |                     resolve(stdout);
+980 |                 } else {
+981 |                     reject(new Error(`Git exited with code ${code}: ${stderr}`));
+                                 ^
+error: Git exited with code 128: fatal: not a git repository (or any of the parent directories): .git
+
+      at <anonymous> (/app/language-server/src/core/workspace-indexer.ts:981:28)
+      at emit (node:events:96:22)
+      at #maybeClose (node:child_process:739:16)
+      at #handleOnExit (node:child_process:513:72)
+
+Git file listing failed for /tmp/deeplens-bench-BC0RfY: 976 |
+977 |             child.on('close', (code) => {
+978 |                 if (code === 0) {
+979 |                     resolve(stdout);
+980 |                 } else {
+981 |                     reject(new Error(`Git exited with code ${code}: ${stderr}`));
+                                 ^
+error: Git exited with code 128: fatal: not a git repository (or any of the parent directories): .git
+
+      at <anonymous> (/app/language-server/src/core/workspace-indexer.ts:981:28)
+      at emit (node:events:96:22)
+      at #maybeClose (node:child_process:739:16)
+      at #handleOnExit (node:child_process:513:72)
+
+  -> Avg: 484.644ms | Total: 1453.933ms
+=== Activity Tracker Benchmarks ===
+Pre-populating 5000 items...
+Running benchmark: Record Access (N=5000) (50 iterations)...
+  -> Avg: 0.756ms | Total: 37.823ms
+Measuring I/O Burst (100 concurrent saveActivities)...
+Main Thread Blocking Time: 6.0678 ms (should be <1ms for async)
+All I/O operations completed.
+
+
+--- Activity Tracker Benchmarks ---
+Populating tracker with 5000 items...
+Running benchmark: recalculateAllScores (N=5000) (20 iterations)...
+  -> Avg: 1.003ms | Total: 20.056ms
+Benchmarks completed.
+Benchmark results saved to /app/language-server/benchmarks/benchmarks.json
