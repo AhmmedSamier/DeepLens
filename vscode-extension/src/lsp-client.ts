@@ -120,8 +120,8 @@ export class DeepLensLspClient implements ISearchProvider {
         this.fallbackProgressState.set(token, { started: true });
         this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
 
-        vscode.window
-            .withProgress(
+        Promise.resolve(
+            vscode.window.withProgress(
                 {
                     location: vscode.ProgressLocation.Notification,
                     title: 'DeepLens Indexing',
@@ -132,10 +132,10 @@ export class DeepLensLspClient implements ISearchProvider {
                         this.createProgressHandler(token, progress, resolve);
                     });
                 },
-            )
-            .catch(() => {
-                this.activeProgressTokens.delete(token);
-            });
+            ),
+        ).catch(() => {
+            this.activeProgressTokens.delete(token);
+        });
     }
 
     private createProgressHandler(

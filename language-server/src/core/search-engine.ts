@@ -636,7 +636,7 @@ export class SearchEngine implements ISearchProvider {
         const modifiedFiles = await this.gitProvider.getModifiedFiles();
         const indices: number[] = [];
         const count = this.items.length;
-        
+
         console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
         // if (modifiedFiles.size > 0) {
         //     console.error(`[SearchEngine] Sample modified: ${Array.from(modifiedFiles)[0]}`);
@@ -1012,7 +1012,7 @@ export class SearchEngine implements ISearchProvider {
         } else if (context.scope === SearchScope.MODIFIED) {
             indices = await this.getIndicesForModifiedFiles();
             // console.error(`[SearchEngine] Modified indices found: ${indices.length}`);
-            
+
             // Filter out files, keep only symbols
             indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
             // console.error(`[SearchEngine] Modified indices after symbol filter: ${indices.length}`);

@@ -247,8 +247,8 @@ async function shutdownServer(exitCode?: number): Promise<void> {
             }
         }
         workspaceIndexer?.dispose();
-        if (treeSitterParser && typeof (treeSitterParser as { dispose?: () => void }).dispose === 'function') {
-            (treeSitterParser as { dispose: () => void }).dispose();
+        if (treeSitterParser && typeof (treeSitterParser as any).dispose === 'function') {
+            (treeSitterParser as any).dispose();
         }
     } finally {
         if (activityTracker) {
