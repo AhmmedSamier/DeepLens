@@ -224,10 +224,47 @@ connection.onDidChangeConfiguration(async () => {
 
 let currentIndexingPromise: Promise<void> | undefined;
 
+async function shutdownServer(exitCode?: number): Promise<void> {
+    if (isShuttingDown) {
+        if (exitCode !== undefined) {
+            process.exit(exitCode);
+        }
+        return;
+    }
+
+    isShuttingDown = true;
+
+    try {
+        workspaceIndexer?.cancel();
+        if (currentIndexingPromise) {
+            try {
+                await currentIndexingPromise;
+            } catch {
+                // Ignore errors from the cancelled process
+            }
+        }
+        workspaceIndexer?.dispose();
+        if (treeSitterParser && typeof (treeSitterParser as { dispose?: () => void }).dispose === 'function') {
+            (treeSitterParser as { dispose: () => void }).dispose();
+        }
+    } finally {
+        if (activityTracker) {
+            activityTracker.saveActivities();
+        }
+        connection.console.log('DeepLens Language Server shutting down');
+        if (exitCode !== undefined) {
+            process.exit(exitCode);
+        }
+    }
+}
+
 /**
  * Run indexing with progress reporting
  */
 async function runIndexingWithProgress(): Promise<void> {
+    if (isShuttingDown) {
+        return;
+    }
     // If indexing is already running, cancel it and wait for it to stop
     if (currentIndexingPromise) {
         workspaceIndexer.cancel();
@@ -239,6 +276,10 @@ async function runIndexingWithProgress(): Promise<void> {
     }
 
     const token = 'indexing-' + Date.now();
+
+    if (isShuttingDown) {
+        return;
+    }
 
     // We need to wait a small bit for the client to be ready for requests immediately after initialized
     // but creating the progress token handles the handshake
@@ -441,16 +482,11 @@ connection.onRequest(IndexStatsRequest, async () => {
 
 // Handle shutdown gracefully
 connection.onShutdown(() => {
-    isShuttingDown = true;
-    if (activityTracker) {
-        activityTracker.saveActivities();
-    }
-    connection.console.log('DeepLens Language Server shutting down');
+    return shutdownServer();
 });
 
 connection.onExit(() => {
-    isShuttingDown = true;
-    process.exit(0);
+    void shutdownServer(0);
 });
 
 // Global error handlers to prevent crashes
