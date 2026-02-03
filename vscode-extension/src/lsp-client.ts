@@ -15,6 +15,7 @@ export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | undefined;
     private context: vscode.ExtensionContext;
     private isStopping = false;
+    private isRestarting = false;
     private startPromise: Promise<void> | undefined;
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
@@ -85,9 +86,8 @@ export class DeepLensLspClient implements ISearchProvider {
 
         // Listen for state changes to detect unexpected disconnects
         this.client.onDidChangeState((event) => {
-            if (event.newState === State.Stopped) {
-                // Server stopped unexpectedly - set flag to prevent further errors
-                this.isStopping = true;
+            if (event.newState === State.Stopped && !this.isStopping) {
+                void this.handleUnexpectedStop();
             }
         });
 
@@ -170,6 +170,36 @@ export class DeepLensLspClient implements ISearchProvider {
     private getServerPath(): string {
         // Use the bundled server JS file
         return path.join(this.context.extensionPath, 'dist', 'server.js');
+    }
+
+    private async handleUnexpectedStop(): Promise<void> {
+        if (this.isStopping || this.isRestarting) {
+            return;
+        }
+
+        this.isRestarting = true;
+        vscode.window.showWarningMessage(
+            'DeepLens language server stopped unexpectedly. Attempting to restart...',
+        );
+
+        try {
+            if (this.client) {
+                try {
+                    this.client.dispose();
+                } catch {
+                    // Ignore dispose errors; we'll re-create the client.
+                }
+                this.client = undefined;
+            }
+            await this.start();
+        } catch (error) {
+            console.error('DeepLens language server restart failed:', error);
+            vscode.window.showErrorMessage(
+                'DeepLens language server failed to restart. Please reload the window or check logs.',
+            );
+        } finally {
+            this.isRestarting = false;
+        }
     }
 
     async search(options: SearchOptions, token?: vscode.CancellationToken): Promise<SearchResult[]> {
