@@ -636,12 +636,24 @@ export class SearchEngine implements ISearchProvider {
         const modifiedFiles = await this.gitProvider.getModifiedFiles();
         const indices: number[] = [];
         const count = this.items.length;
+        
+        console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
+        // if (modifiedFiles.size > 0) {
+        //     console.error(`[SearchEngine] Sample modified: ${Array.from(modifiedFiles)[0]}`);
+        // }
+        // if (count > 0) {
+        //     console.error(`[SearchEngine] Sample item path: ${path.normalize(this.items[0].filePath)}`);
+        // }
+
+        let matchesFound = 0;
         for (let i = 0; i < count; i++) {
             // Normalize path for comparison just in case
             if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
                 indices.push(i);
+                matchesFound++;
             }
         }
+        console.error(`[SearchEngine] Found ${matchesFound} matching indices`);
         return indices;
     }
 
@@ -990,17 +1002,36 @@ export class SearchEngine implements ISearchProvider {
     }
 
     public async performSymbolSearch(context: SearchContext): Promise<SearchResult[]> {
-        const indices =
-            context.scope === SearchScope.EVERYTHING
-                ? this.scopedIndices
-                      .get(SearchScope.SYMBOLS)
-                      ?.concat(
-                          this.scopedIndices.get(SearchScope.TYPES) || [],
-                          this.scopedIndices.get(SearchScope.PROPERTIES) || [],
-                          this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
-                          this.scopedIndices.get(SearchScope.COMMANDS) || [],
-                      )
-                : this.scopedIndices.get(context.scope);
+        let indices: number[] | undefined;
+        // console.error(`[SearchEngine] performSymbolSearch scope: ${context.scope}, query: ${context.query}`);
+
+        if (context.scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+        } else if (context.scope === SearchScope.MODIFIED) {
+            indices = await this.getIndicesForModifiedFiles();
+            // console.error(`[SearchEngine] Modified indices found: ${indices.length}`);
+            
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            // console.error(`[SearchEngine] Modified indices after symbol filter: ${indices.length}`);
+            // if (indices.length > 0) {
+            //    console.error(`[SearchEngine] First modified item: ${JSON.stringify(this.items[indices[0]])}`);
+            // }
+        } else {
+            indices =
+                context.scope === SearchScope.EVERYTHING
+                    ? this.scopedIndices
+                          .get(SearchScope.SYMBOLS)
+                          ?.concat(
+                              this.scopedIndices.get(SearchScope.TYPES) || [],
+                              this.scopedIndices.get(SearchScope.PROPERTIES) || [],
+                              this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
+                              this.scopedIndices.get(SearchScope.COMMANDS) || [],
+                          )
+                    : this.scopedIndices.get(context.scope);
+        }
 
         return this.performUnifiedSearch(
             indices,
@@ -1055,10 +1086,7 @@ export class SearchEngine implements ISearchProvider {
         const preparedCapitals = this.preparedCapitals;
 
         // Local helper for CamelHumps
-        const computeCamelHumpsScoreLocal = (
-            i: number,
-            typeId: number,
-        ): number => {
+        const computeCamelHumpsScoreLocal = (i: number, typeId: number): number => {
             const capitals = preparedCapitals[i];
             if (capitals) {
                 const matchIndex = capitals.indexOf(queryUpper);
