@@ -29,6 +29,9 @@ export class SearchProvider {
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
     private streamingResults: Map<number, SearchResult[]> = new Map();
     private searchCts: vscode.CancellationTokenSource | undefined;
+    private lastResultCount = 0;
+    private lastDuration: number | undefined;
+    private feedbackTimeout: NodeJS.Timeout | undefined;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -136,6 +139,32 @@ export class SearchProvider {
      */
     private showFeedback(message: string): void {
         vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
+    }
+
+    /**
+     * Show transient feedback in the QuickPick title
+     */
+    private showTransientTitle(message: string): void {
+        if (!this.currentQuickPick) {
+            return;
+        }
+
+        // Clear any existing restoration timer
+        if (this.feedbackTimeout) {
+            clearTimeout(this.feedbackTimeout);
+        }
+
+        // Show feedback
+        this.currentQuickPick.title = message;
+
+        // Restore after delay
+        this.feedbackTimeout = setTimeout(() => {
+            if (this.currentQuickPick) {
+                // Restore original title using stored state
+                this.updateTitle(this.currentQuickPick, this.lastResultCount, this.lastDuration);
+            }
+            this.feedbackTimeout = undefined;
+        }, 1500);
     }
 
     /**
@@ -272,6 +301,15 @@ export class SearchProvider {
      * Update title to show filter and result count
      */
     private updateTitle(quickPick: vscode.QuickPick<SearchResultItem>, resultCount: number, durationMs?: number): void {
+        // Clear any pending feedback restoration to avoid overwriting new state
+        if (this.feedbackTimeout) {
+            clearTimeout(this.feedbackTimeout);
+            this.feedbackTimeout = undefined;
+        }
+
+        this.lastResultCount = resultCount;
+        this.lastDuration = durationMs;
+
         let filterName: string;
 
         switch (this.currentScope) {
@@ -505,16 +543,19 @@ export class SearchProvider {
             } else if (e.button.tooltip === this.TOOLTIP_COPY_PATH) {
                 await vscode.env.clipboard.writeText(result.item.filePath);
                 this.showFeedback('Path copied to clipboard');
+                this.showTransientTitle('$(check) Path copied!');
             } else if (e.button.tooltip === this.TOOLTIP_COPY_REF) {
                 const ref = result.item.containerName
                     ? `${result.item.containerName}.${result.item.name}`
                     : result.item.name;
                 await vscode.env.clipboard.writeText(ref);
                 this.showFeedback('Reference copied to clipboard');
+                this.showTransientTitle('$(check) Reference copied!');
             } else if (e.button.tooltip === this.TOOLTIP_COPY_REL) {
                 const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
                 await vscode.env.clipboard.writeText(relativePath);
                 this.showFeedback('Relative path copied to clipboard');
+                this.showTransientTitle('$(check) Relative path copied!');
             } else if (e.button.tooltip === this.TOOLTIP_OPEN_SIDE) {
                 accepted = true;
                 this.navigateToItem(result, vscode.ViewColumn.Beside);
