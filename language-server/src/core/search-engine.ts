@@ -6,7 +6,7 @@ import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
-import { RouteMatcher } from './route-matcher';
+import { PreparedPath, RouteMatcher } from './route-matcher';
 import {
     ISearchProvider,
     SearchableItem,
@@ -638,12 +638,6 @@ export class SearchEngine implements ISearchProvider {
         const count = this.items.length;
 
         console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
-        // if (modifiedFiles.size > 0) {
-        //     console.error(`[SearchEngine] Sample modified: ${Array.from(modifiedFiles)[0]}`);
-        // }
-        // if (count > 0) {
-        //     console.error(`[SearchEngine] Sample item path: ${path.normalize(this.items[0].filePath)}`);
-        // }
 
         let matchesFound = 0;
         for (let i = 0; i < count; i++) {
@@ -1003,7 +997,6 @@ export class SearchEngine implements ISearchProvider {
 
     public async performSymbolSearch(context: SearchContext): Promise<SearchResult[]> {
         let indices: number[] | undefined;
-        // console.error(`[SearchEngine] performSymbolSearch scope: ${context.scope}, query: ${context.query}`);
 
         if (context.scope === SearchScope.OPEN) {
             indices = this.getIndicesForOpenFiles();
@@ -1011,14 +1004,9 @@ export class SearchEngine implements ISearchProvider {
             indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
         } else if (context.scope === SearchScope.MODIFIED) {
             indices = await this.getIndicesForModifiedFiles();
-            // console.error(`[SearchEngine] Modified indices found: ${indices.length}`);
 
             // Filter out files, keep only symbols
             indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
-            // console.error(`[SearchEngine] Modified indices after symbol filter: ${indices.length}`);
-            // if (indices.length > 0) {
-            //    console.error(`[SearchEngine] First modified item: ${JSON.stringify(this.items[indices[0]])}`);
-            // }
         } else {
             indices =
                 context.scope === SearchScope.EVERYTHING
@@ -1077,6 +1065,9 @@ export class SearchEngine implements ISearchProvider {
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
 
+        // Optimization: Pre-calculate path segments to avoid repeated splitting in the loop
+        const queryForUrlMatch = isPotentialUrl ? RouteMatcher.prepare(query) : query;
+
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
@@ -1100,6 +1091,7 @@ export class SearchEngine implements ISearchProvider {
         };
 
         // Local helper for Fuzzy Score
+        // eslint-disable-next-line sonarjs/cognitive-complexity
         const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
             let bestScore = -Infinity;
 
@@ -1164,7 +1156,7 @@ export class SearchEngine implements ISearchProvider {
             if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
                 const name = preparedNames[i]?.target;
                 if (name) {
-                    if (RouteMatcher.isMatch(name, query)) {
+                    if (RouteMatcher.isMatch(name, queryForUrlMatch)) {
                         const urlScore = 1.5;
                         if (urlScore > score) {
                             score = urlScore;
@@ -1461,6 +1453,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+        const queryLower = normalizedQuery.toLowerCase();
 
         // Pass indices for burst match
         let indices: number[] | undefined;
@@ -1474,16 +1467,17 @@ export class SearchEngine implements ISearchProvider {
 
         let results: SearchResult[] = this.findBurstMatches(
             indices,
-            normalizedQuery.toLowerCase(),
+            queryLower,
             maxResults,
             onResult,
         );
 
         if (
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
-            RouteMatcher.isPotentialUrl(normalizedQuery.toLowerCase())
+            RouteMatcher.isPotentialUrl(queryLower)
         ) {
-            this.addUrlMatches(results, indices, normalizedQuery.toLowerCase(), maxResults);
+            const preparedQuery = RouteMatcher.prepare(queryLower);
+            this.addUrlMatches(results, indices, preparedQuery, maxResults);
         }
 
         if (this.getActivityScore) {
@@ -1582,7 +1576,7 @@ export class SearchEngine implements ISearchProvider {
     private addUrlMatches(
         results: SearchResult[],
         indices: number[] | undefined,
-        queryLower: string,
+        queryOrPrepared: string | PreparedPath,
         maxResults?: number,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
@@ -1592,7 +1586,7 @@ export class SearchEngine implements ISearchProvider {
 
             const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, queryLower)) {
+                if (RouteMatcher.isMatch(item.name, queryOrPrepared)) {
                     results.push({
                         item,
                         score: 2.0,
