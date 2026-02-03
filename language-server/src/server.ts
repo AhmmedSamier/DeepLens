@@ -14,6 +14,7 @@ import {
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
 import { FileProvider } from './core/providers/file-provider';
@@ -349,7 +350,7 @@ connection.onWorkspaceSymbol(async (params) => {
         name: r.item.name,
         kind: mapItemTypeToSymbolKind(r.item.type),
         location: {
-            uri: `file://${r.item.filePath.replace(/\\/g, '/')}`,
+            uri: pathToFileURL(r.item.filePath).href,
             range: {
                 start: { line: r.item.line || 0, character: r.item.column || 0 },
                 end: { line: r.item.line || 0, character: (r.item.column || 0) + r.item.name.length },
