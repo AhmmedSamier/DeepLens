@@ -1,8 +1,7 @@
-
-import { describe, test, expect, spyOn } from 'bun:test';
-import { RipgrepService } from './ripgrep-service';
+import { describe, expect, spyOn, test } from 'bun:test';
 import * as fs from 'fs';
 import * as path from 'path';
+import { RipgrepService } from './ripgrep-service';
 
 describe('RipgrepService', () => {
     test('should only call chmodSync once during initialization', async () => {
@@ -36,7 +35,6 @@ describe('RipgrepService', () => {
 
             // Calls should not increase
             expect(chmodSpy.mock.calls.length).toBe(initialCalls);
-
         } finally {
             if (fs.existsSync(dummyFile)) {
                 fs.unlinkSync(dummyFile);
