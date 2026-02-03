@@ -70,6 +70,7 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 let hasConfigurationCapability = false;
+let hasWorkDoneProgressCapability = false;
 
 let searchEngine: SearchEngine;
 let workspaceIndexer: WorkspaceIndexer;
@@ -85,6 +86,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
 
     hasConfigurationCapability = !!(capabilities.workspace && !!capabilities.workspace.configuration);
+    hasWorkDoneProgressCapability = !!capabilities.window?.workDoneProgress;
 
     // Monitor parent process
     if (params.processId) {
@@ -284,10 +286,12 @@ async function runIndexingWithProgress(): Promise<void> {
 
     // We need to wait a small bit for the client to be ready for requests immediately after initialized
     // but creating the progress token handles the handshake
-    try {
-        await connection.sendRequest('window/workDoneProgress/create', { token });
-    } catch (e) {
-        connection.console.error(`Failed to create progress token: ${e}`);
+    if (hasWorkDoneProgressCapability) {
+        try {
+            await connection.sendRequest('window/workDoneProgress/create', { token });
+        } catch (e) {
+            connection.console.error(`Failed to create progress token: ${e}`);
+        }
     }
 
     const indexingTask = async () => {

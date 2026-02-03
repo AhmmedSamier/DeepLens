@@ -17,6 +17,9 @@ export class DeepLensLspClient implements ISearchProvider {
     private isStopping = false;
     private isRestarting = false;
     private startPromise: Promise<void> | undefined;
+    private knownProgressTokens = new Set<string>();
+    private activeProgressTokens = new Set<string>();
+    private fallbackProgressState = new Map<string, { started: boolean }>();
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
         message?: string;
@@ -93,6 +96,13 @@ export class DeepLensLspClient implements ISearchProvider {
 
         await this.client.start();
 
+        this.client.onNotification(
+            'deeplens/progress',
+            (value: { token: string | number; message?: string; percentage?: number }) => {
+                this.handleProgressNotification(value);
+            },
+        );
+
         // Handle server progress reporting
         this.client.onRequest('window/workDoneProgress/create', async (params: { token: string | number }) => {
             this.handleProgressCreation(params);
@@ -105,20 +115,27 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     private handleProgressCreation(params: { token: string | number }) {
+        const token = String(params.token);
+        this.knownProgressTokens.add(token);
+        this.fallbackProgressState.set(token, { started: true });
         this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
 
-        vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: 'DeepLens Indexing',
-                cancellable: false,
-            },
-            (progress) => {
-                return new Promise<void>((resolve) => {
-                    this.createProgressHandler(params.token.toString(), progress, resolve);
-                });
-            },
-        );
+        vscode.window
+            .withProgress(
+                {
+                    location: vscode.ProgressLocation.Notification,
+                    title: 'DeepLens Indexing',
+                    cancellable: false,
+                },
+                (progress) => {
+                    return new Promise<void>((resolve) => {
+                        this.createProgressHandler(token, progress, resolve);
+                    });
+                },
+            )
+            .catch(() => {
+                this.activeProgressTokens.delete(token);
+            });
     }
 
     private createProgressHandler(
@@ -126,6 +143,7 @@ export class DeepLensLspClient implements ISearchProvider {
         progress: vscode.Progress<{ message?: string; increment?: number }>,
         resolve: () => void,
     ) {
+        this.activeProgressTokens.add(token);
         let lastPercentage = 0;
         const disposable = this.client!.onNotification(
             'deeplens/progress',
@@ -151,6 +169,9 @@ export class DeepLensLspClient implements ISearchProvider {
                     setTimeout(() => {
                         resolve();
                         disposable.dispose();
+                        this.activeProgressTokens.delete(token);
+                        this.knownProgressTokens.delete(token);
+                        this.fallbackProgressState.delete(token);
                     }, timeout);
                     return;
                 }
@@ -165,6 +186,47 @@ export class DeepLensLspClient implements ISearchProvider {
                 this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
             },
         );
+    }
+
+    private handleProgressNotification(value: { token: string | number; message?: string; percentage?: number }) {
+        const token = String(value.token);
+        if (!this.knownProgressTokens.has(token)) {
+            if (this.knownProgressTokens.size > 0) {
+                return;
+            }
+            this.knownProgressTokens.add(token);
+            this.fallbackProgressState.set(token, { started: false });
+        }
+
+        if (this.activeProgressTokens.has(token)) {
+            return;
+        }
+
+        const fallbackState = this.fallbackProgressState.get(token);
+        if (!fallbackState) {
+            return;
+        }
+
+        if (!fallbackState.started) {
+            this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
+            fallbackState.started = true;
+        }
+
+        const isFinished =
+            value.percentage === 100 ||
+            value.message?.startsWith('Done') ||
+            value.message === 'Cancelled' ||
+            value.message === 'Failed';
+
+        if (isFinished) {
+            const message = value.message || 'Done';
+            this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
+            this.knownProgressTokens.delete(token);
+            this.fallbackProgressState.delete(token);
+            return;
+        }
+
+        this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
     }
 
     private getServerPath(): string {
