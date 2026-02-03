@@ -105,14 +105,14 @@ export class GitProvider {
      * which need to be converted to Windows-style paths like D:\source-code\...
      */
     private normalizeGitPath(root: string, relativePath: string): string {
-        const joinedPath = path.join(root, relativePath);
-        const normalized = path.normalize(joinedPath);
+        const rootIsWindows = this.isWindowsPath(root) || path.win32.isAbsolute(root);
+        const normalizedRoot = rootIsWindows ? this.convertWindowsPath(root) : root;
+        const joinedPath = rootIsWindows
+            ? path.win32.join(normalizedRoot, relativePath)
+            : path.join(normalizedRoot, relativePath);
+        const normalized = rootIsWindows ? path.win32.normalize(joinedPath) : path.normalize(joinedPath);
 
-        if (process.platform === 'win32') {
-            return this.convertWindowsPath(normalized);
-        }
-
-        return normalized;
+        return rootIsWindows ? this.convertWindowsPath(normalized) : normalized;
     }
 
     /**
@@ -128,7 +128,11 @@ export class GitProvider {
             const restPath = match[2].replace(/\//g, '\\');
             return `${drive}:\\${restPath}`;
         }
-        return path.normalize(filePath);
+        return path.win32.normalize(filePath);
+    }
+
+    private isWindowsPath(filePath: string): boolean {
+        return /^[a-zA-Z]:/.test(filePath) || /^[\\/][a-zA-Z][\\/]/.test(filePath);
     }
 
     private async execGit(args: string[], cwd: string): Promise<string> {

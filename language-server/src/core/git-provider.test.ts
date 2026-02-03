@@ -84,7 +84,9 @@ describe('GitProvider', () => {
         it('should correctly match Git output with indexed file paths', () => {
             const workspaceRoot = 'D:\\source-code\\enozom\\dayoff-dotnet';
             const gitOutput = 'Code/admin/src/app/pages/customers/customers-list/customers-list.component.ts';
-            const indexedFilePath = path.normalize('D:\\source-code\\enozom\\dayoff-dotnet\\Code\\admin\\src\\app\\pages\\customers\\customers-list\\customers-list.component.ts');
+            const indexedFilePath = path.win32.normalize(
+                'D:\\source-code\\enozom\\dayoff-dotnet\\Code\\admin\\src\\app\\pages\\customers\\customers-list\\customers-list.component.ts',
+            );
 
             const modifiedSet = new Set<string>();
             provider['addFilesToSet'](modifiedSet, workspaceRoot, gitOutput);
@@ -104,9 +106,9 @@ src/components/component.ts`;
             provider['addFilesToSet'](modifiedFiles, workspaceRoot, gitOutput);
 
             expect(modifiedFiles.size).toBe(3);
-            const expectedPath1 = path.normalize('D:\\\\source-code\\\\project\\\\src\\\\file1.ts');
-            const expectedPath2 = path.normalize('D:\\\\source-code\\\\project\\\\src\\\\file2.ts');
-            const expectedPath3 = path.normalize('D:\\\\source-code\\\\project\\\\src\\\\components\\\\component.ts');
+            const expectedPath1 = path.win32.normalize('D:\\source-code\\project\\src\\file1.ts');
+            const expectedPath2 = path.win32.normalize('D:\\source-code\\project\\src\\file2.ts');
+            const expectedPath3 = path.win32.normalize('D:\\source-code\\project\\src\\components\\component.ts');
             expect(modifiedFiles.has(expectedPath1)).toBe(true);
             expect(modifiedFiles.has(expectedPath2)).toBe(true);
             expect(modifiedFiles.has(expectedPath3)).toBe(true);
@@ -115,7 +117,7 @@ src/components/component.ts`;
         it('should normalize paths consistently for Set lookup', () => {
             const workspaceRoot = 'D:\\source-code\\project';
             const gitPath = 'src/file.ts';
-            const indexedPath = path.normalize('D:\\source-code\\project\\src\\file.ts');
+            const indexedPath = path.win32.normalize('D:\\source-code\\project\\src\\file.ts');
 
             const modifiedSet = new Set<string>();
             provider['addFilesToSet'](modifiedSet, workspaceRoot, gitPath);
