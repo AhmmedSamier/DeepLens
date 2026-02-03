@@ -110,6 +110,33 @@ export class WorkspaceIndexer {
         this.excludeMatchers = patterns.map((p) => new Minimatch(p, { dot: true }));
     }
 
+    private getFileExtensionSet(): Set<string> {
+        const extensions = this.config.getFileExtensions().map((extension) => {
+            const normalized = extension.startsWith('.') ? extension : `.${extension}`;
+            return normalized.toLowerCase();
+        });
+        return new Set(extensions);
+    }
+
+    private shouldIndexFileExtension(filePath: string): boolean {
+        const extensions = this.getFileExtensionSet();
+        if (extensions.size === 0) {
+            return true;
+        }
+        return extensions.has(path.extname(filePath).toLowerCase());
+    }
+
+    private filterFilesByExtension(files: string[]): string[] {
+        if (files.length === 0) {
+            return files;
+        }
+        const extensions = this.getFileExtensionSet();
+        if (extensions.size === 0) {
+            return files;
+        }
+        return files.filter((filePath) => extensions.has(path.extname(filePath).toLowerCase()));
+    }
+
     public onItemsAdded(listener: (items: SearchableItem[]) => void) {
         this.onItemsAddedListeners.push(listener);
         return {
@@ -234,7 +261,8 @@ export class WorkspaceIndexer {
         const gitFiles = await this.listGitFiles();
         if (gitFiles.length > 0) {
             this.log('Using git for indexing: true');
-            await this.processFileList(gitFiles, collector);
+            const filteredGitFiles = this.filterFilesByExtension(gitFiles);
+            await this.processFileList(filteredGitFiles, collector);
             return;
         }
 
@@ -248,7 +276,8 @@ export class WorkspaceIndexer {
         const excludePattern = `{${excludePatterns.join(',')}}`;
         const files = await this.env.findFiles(includePattern, excludePattern);
 
-        await this.processFileList(files, collector);
+        const filteredFiles = this.filterFilesByExtension(files);
+        await this.processFileList(filteredFiles, collector);
     }
 
     /**
@@ -835,6 +864,10 @@ export class WorkspaceIndexer {
             return;
         }
 
+        if (!this.shouldIndexFileExtension(filePath)) {
+            return;
+        }
+
         if (await this.isGitIgnored(filePath)) {
             return;
         }
@@ -871,6 +904,10 @@ export class WorkspaceIndexer {
         }
 
         if (this.shouldExcludeFile(filePath)) {
+            return;
+        }
+
+        if (!this.shouldIndexFileExtension(filePath)) {
             return;
         }
 
