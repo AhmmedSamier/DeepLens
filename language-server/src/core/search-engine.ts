@@ -419,6 +419,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
+        this.filePaths = [];
         this.itemsMap.clear();
         this.scopedIndices.clear();
         this.preparedCache.clear();
