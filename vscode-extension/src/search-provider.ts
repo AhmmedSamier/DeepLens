@@ -684,7 +684,9 @@ export class SearchProvider {
 
     private resultToSlashCommandQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
-        const slashCmd = this.slashCommandService.getCommand(item.name.slice('slash-cmd:'.length));
+        const slashCmdId = item.id;
+        const alias = slashCmdId.startsWith('slash-cmd:') ? slashCmdId.slice('slash-cmd:'.length) : item.name;
+        const slashCmd = this.slashCommandService.getCommand(alias);
         const iconColor = new vscode.ThemeColor('textLink.foreground');
 
         // Show primary alias (short form) as label
