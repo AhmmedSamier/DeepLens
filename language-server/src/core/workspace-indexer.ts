@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import { Minimatch } from 'minimatch';
 import * as os from 'os';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { Worker } from 'worker_threads';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
@@ -639,13 +640,14 @@ export class WorkspaceIndexer {
                 continue;
             }
 
-            const id = `symbol:${symbol.location.uri}:${symbol.name}:${symbol.location.range.start.line}`;
+            const filePath = this.normalizeUriToPath(symbol.location.uri);
+            const id = `symbol:${filePath}:${symbol.name}:${symbol.location.range.start.line}`;
             const item: SearchableItem = {
                 id,
                 name: symbol.name,
                 type: itemType,
-                filePath: symbol.location.uri,
-                relativeFilePath: this.env.asRelativePath(symbol.location.uri),
+                filePath,
+                relativeFilePath: this.env.asRelativePath(filePath),
                 line: symbol.location.range.start.line,
                 column: symbol.location.range.start.character,
                 containerName: symbol.containerName,
@@ -660,6 +662,17 @@ export class WorkspaceIndexer {
 
     private async populateFileHashes(): Promise<void> {
         // Redundant - can be removed entirely if desired, keeping only if needed elsewhere
+    }
+
+    private normalizeUriToPath(uriOrPath: string): string {
+        if (uriOrPath.startsWith('file://')) {
+            try {
+                return fileURLToPath(uriOrPath);
+            } catch {
+                return uriOrPath;
+            }
+        }
+        return uriOrPath;
     }
 
     /**
