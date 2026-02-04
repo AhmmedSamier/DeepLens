@@ -623,7 +623,8 @@ export class SearchEngine implements ISearchProvider {
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            if (this.activeFiles.has(this.items[i].filePath)) {
+            const filePath = path.normalize(this.items[i].filePath);
+            if (this.activeFiles.has(filePath)) {
                 indices.push(i);
             }
         }

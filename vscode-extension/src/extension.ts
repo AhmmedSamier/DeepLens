@@ -37,6 +37,24 @@ export async function activate(context: vscode.ExtensionContext) {
     // UI remains local
     searchProvider = new SearchProvider(lspClient, config, activityTracker, commandIndexer);
 
+    const updateActiveFiles = () => {
+        const activeFiles = vscode.workspace.textDocuments
+            .filter((doc) => doc.uri.scheme === 'file')
+            .map((doc) => doc.uri.fsPath);
+        const activeEditorPath = vscode.window.activeTextEditor?.document.uri;
+        if (activeEditorPath?.scheme === 'file' && !activeFiles.includes(activeEditorPath.fsPath)) {
+            activeFiles.push(activeEditorPath.fsPath);
+        }
+        lspClient.setActiveFiles(activeFiles);
+    };
+
+    updateActiveFiles();
+    context.subscriptions.push(
+        vscode.workspace.onDidOpenTextDocument(updateActiveFiles),
+        vscode.workspace.onDidCloseTextDocument(updateActiveFiles),
+        vscode.window.onDidChangeActiveTextEditor(updateActiveFiles),
+    );
+
     // Register search command
     const searchCommand = vscode.commands.registerCommand('deeplens.search', async () => {
         const editor = vscode.window.activeTextEditor;

@@ -62,6 +62,7 @@ export const RecordActivityRequest = new RequestType<{ itemId: string }, void, v
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
 export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
+export const SetActiveFilesRequest = new RequestType<{ files: string[] }, void, void>('deeplens/setActiveFiles');
 
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
@@ -441,6 +442,11 @@ connection.onRequest(IndexStatsRequest, async () => {
         indexing: workspaceIndexer.isIndexing(),
         cacheSize: searchEngine.getCacheSize(),
     };
+});
+
+connection.onRequest(SetActiveFilesRequest, (params) => {
+    if (!isInitialized || isShuttingDown) return;
+    searchEngine.setActiveFiles(params.files || []);
 });
 
 // Handle shutdown gracefully

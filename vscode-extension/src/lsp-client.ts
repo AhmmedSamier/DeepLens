@@ -198,6 +198,17 @@ export class DeepLensLspClient implements ISearchProvider {
         }
     }
 
+    async setActiveFiles(files: string[]): Promise<void> {
+        if (!this.isReady()) return;
+        try {
+            await this.client!.sendRequest('deeplens/setActiveFiles', { files });
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens setActiveFiles error:', error);
+            }
+        }
+    }
+
     async rebuildIndex(force: boolean = false): Promise<void> {
         if (!this.isReady()) return;
         try {

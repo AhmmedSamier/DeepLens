@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'path';
 import { SearchEngine } from './search-engine';
+import { SymbolProvider } from './providers/symbol-provider';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
 describe('SearchEngine', () => {
@@ -199,6 +200,47 @@ describe('SearchEngine', () => {
 
         expect(results.length).toBe(1);
         expect(results[0].item.name).toBe('File1.ts');
+    });
+
+    it('should match OPEN scope when file paths need normalization', async () => {
+        const engine = new SearchEngine();
+        const item: SearchableItem = {
+            id: '1',
+            name: 'File1.ts',
+            type: SearchItemType.FILE,
+            filePath: '/src/dir/../File1.ts',
+            relativeFilePath: 'src/File1.ts',
+            fullName: 'File1.ts',
+        };
+        engine.setItems([item]);
+        engine.setActiveFiles([path.normalize('/src/File1.ts')]);
+
+        const results = await engine.search({
+            query: 'File1',
+            scope: SearchScope.OPEN,
+        });
+
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('File1.ts');
+    });
+
+    it('should return symbols for OPEN scope when providers are registered', async () => {
+        const engine = new SearchEngine();
+        engine.registerProvider(new SymbolProvider(engine));
+        const items: SearchableItem[] = [
+            createTestItem('1', 'ClassOne', SearchItemType.CLASS, 'src/File1.ts'),
+            createTestItem('2', 'ClassTwo', SearchItemType.CLASS, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+        engine.setActiveFiles([path.normalize('/src/File1.ts')]);
+
+        const results = await engine.search({
+            query: 'Class',
+            scope: SearchScope.OPEN,
+        });
+
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('ClassOne');
     });
 
     it('should filter by MODIFIED scope', async () => {
