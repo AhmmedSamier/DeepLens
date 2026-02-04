@@ -14,6 +14,7 @@ import {
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { pathToFileURL } from 'url';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
 import { FileProvider } from './core/providers/file-provider';
@@ -227,7 +228,7 @@ let currentIndexingPromise: Promise<void> | undefined;
 /**
  * Run indexing with progress reporting
  */
-async function runIndexingWithProgress(): Promise<void> {
+async function runIndexingWithProgress(force: boolean = false): Promise<void> {
     // If indexing is already running, cancel it and wait for it to stop
     if (currentIndexingPromise) {
         workspaceIndexer.cancel();
@@ -251,6 +252,9 @@ async function runIndexingWithProgress(): Promise<void> {
     const indexingTask = async () => {
         // Clear existing items to prevent duplicates on rebuild
         searchEngine.clear();
+        if (force) {
+            workspaceIndexer.resetCaches();
+        }
 
         try {
             const startTime = Date.now();
@@ -349,7 +353,7 @@ connection.onWorkspaceSymbol(async (params) => {
         name: r.item.name,
         kind: mapItemTypeToSymbolKind(r.item.type),
         location: {
-            uri: `file://${r.item.filePath.replace(/\\/g, '/')}`,
+            uri: pathToFileURL(r.item.filePath).toString(),
             range: {
                 start: { line: r.item.line || 0, character: r.item.column || 0 },
                 end: { line: r.item.line || 0, character: (r.item.column || 0) + r.item.name.length },
@@ -414,9 +418,9 @@ connection.onRequest(RecordActivityRequest, (params) => {
     }
 });
 
-connection.onRequest(RebuildIndexRequest, async () => {
+connection.onRequest(RebuildIndexRequest, async (params) => {
     if (isShuttingDown) return;
-    await runIndexingWithProgress();
+    await runIndexingWithProgress(params?.force ?? false);
 });
 
 connection.onRequest(ClearCacheRequest, async () => {

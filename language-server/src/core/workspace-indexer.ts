@@ -940,6 +940,14 @@ export class WorkspaceIndexer {
     }
 
     /**
+     * Reset internal caches for a forced full rebuild.
+     */
+    public resetCaches(): void {
+        this.stringCache.clear();
+        this.fileHashes.clear();
+    }
+
+    /**
      * Intern a string to save memory
      */
     private intern(str: string): string {
