@@ -29,6 +29,8 @@ export class SearchProvider {
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
     private streamingResults: Map<number, SearchResult[]> = new Map();
     private searchCts: vscode.CancellationTokenSource | undefined;
+    private lastTitle = '';
+    private feedbackTimeout: NodeJS.Timeout | undefined;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -40,6 +42,7 @@ export class SearchProvider {
     private readonly TOOLTIP_CLEAR_CACHE = 'Clear Index Cache (Fix corruption)';
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
+    private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
 
     // Tooltips for item buttons
     private readonly TOOLTIP_COPY_PATH = 'Copy Path';
@@ -132,9 +135,23 @@ export class SearchProvider {
     }
 
     /**
-     * Show transient feedback in status bar
+     * Show transient feedback in status bar and as title flash
      */
     private showFeedback(message: string): void {
+        if (this.currentQuickPick) {
+            if (this.feedbackTimeout) {
+                clearTimeout(this.feedbackTimeout);
+            }
+
+            this.currentQuickPick.title = `DeepLens - ${message}`;
+
+            this.feedbackTimeout = setTimeout(() => {
+                if (this.currentQuickPick) {
+                    this.currentQuickPick.title = this.lastTitle;
+                }
+                this.feedbackTimeout = undefined;
+            }, 2000);
+        }
         vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
     }
 
@@ -314,7 +331,16 @@ export class SearchProvider {
             durationSuffix = ` — Search took ${durationText}`;
         }
 
-        quickPick.title = `DeepLens - ${filterName}${countSuffix}${durationSuffix}`;
+        this.lastTitle = `DeepLens - ${filterName}${countSuffix}${durationSuffix}`;
+
+        // If a feedback flash is active, we don't overwrite it immediately unless it's stale?
+        // Actually, if new results arrive, they are more important. Cancel flash.
+        if (this.feedbackTimeout) {
+            clearTimeout(this.feedbackTimeout);
+            this.feedbackTimeout = undefined;
+        }
+
+        quickPick.title = this.lastTitle;
     }
 
     /**
@@ -387,6 +413,18 @@ export class SearchProvider {
     }
 
     /**
+     * Clear recent history
+     */
+    private async clearHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
+        if (this.activityTracker) {
+            await this.activityTracker.clearAll();
+            this.showFeedback('Recent history cleared');
+            // Refresh history (which should now be empty and show welcome items)
+            await this.showRecentHistory(quickPick);
+        }
+    }
+
+    /**
      * Show recent history items
      */
     private async showRecentHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
@@ -402,7 +440,14 @@ export class SearchProvider {
             }
 
             // Map results to QuickPick items
-            quickPick.items = results.map((r) => this.resultToQuickPickItem(r));
+            const items = results.map((r) => this.resultToQuickPickItem(r));
+
+            // Add Clear History item if we have tracking enabled
+            if (this.activityTracker) {
+                items.push(this.getClearHistoryItem());
+            }
+
+            quickPick.items = items;
 
             // Update title with scope reference even in history
             this.updateTitle(quickPick, 0);
@@ -536,6 +581,12 @@ export class SearchProvider {
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
+                // Handle Clear History
+                if (selected.result.item.id === 'command:clear-history') {
+                    this.clearHistory(quickPick);
+                    return;
+                }
+
                 const isSlashCommand = selected.result.item.id.startsWith('slash-cmd:');
                 if (!isSlashCommand) {
                     accepted = true;
@@ -984,6 +1035,29 @@ export class SearchProvider {
             }
             this.streamingResults.delete(queryId); // Done with streaming for this query
         }
+    }
+
+    /**
+     * Get item for clearing history
+     */
+    private getClearHistoryItem(): SearchResultItem {
+        return {
+            label: this.LABEL_CLEAR_HISTORY,
+            description: 'Remove all locally tracked history items',
+            iconPath: new vscode.ThemeIcon('trash', new vscode.ThemeColor('descriptionForeground')),
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:clear-history',
+                    name: this.LABEL_CLEAR_HISTORY,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
     }
 
     /**
