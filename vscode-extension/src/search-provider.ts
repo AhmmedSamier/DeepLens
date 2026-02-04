@@ -982,6 +982,8 @@ export class SearchProvider {
             requestId: queryId,
         };
 
+        // Clear stale results from previous queries
+        this.streamingResults.clear();
         this.streamingResults.set(queryId, []);
 
         const startTime = Date.now();
@@ -1154,6 +1156,7 @@ export class SearchProvider {
 
         // Don't add icon to label - iconPath will render it
         const label = item.name;
+
         let description = '';
         let detail = '';
 
@@ -1210,8 +1213,7 @@ export class SearchProvider {
         }
 
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: label as any,
+            label,
             description,
             detail,
             iconPath: coloredIcon,
