@@ -1067,13 +1067,15 @@ export class SearchEngine implements ISearchProvider {
                 if (enableCamelHumps) {
                     const capitals = preparedCapitals[i];
                     if (capitals) {
-                        const matchIndex = capitals.indexOf(queryUpper);
-                        if (matchIndex !== -1) {
-                            const lengthRatio = queryLen / capitals.length;
-                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                            const camelScore = lengthRatio * positionBoost * 0.8 * boost;
-                            if (camelScore > score) {
-                                score = camelScore;
+                        if (queryLen <= capitals.length) {
+                            const matchIndex = capitals.indexOf(queryUpper);
+                            if (matchIndex !== -1) {
+                                const lengthRatio = queryLen / capitals.length;
+                                const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                                const camelScore = lengthRatio * positionBoost * 0.8 * boost;
+                                if (camelScore > score) {
+                                    score = camelScore;
+                                }
                             }
                         }
                     }
@@ -1174,13 +1176,15 @@ export class SearchEngine implements ISearchProvider {
                 if (enableCamelHumps) {
                     const capitals = preparedCapitals[i];
                     if (capitals) {
-                        const matchIndex = capitals.indexOf(queryUpper);
-                        if (matchIndex !== -1) {
-                            const lengthRatio = queryLen / capitals.length;
-                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                            const camelScore = lengthRatio * positionBoost * 0.8 * boost;
-                            if (camelScore > score) {
-                                score = camelScore;
+                        if (queryLen <= capitals.length) {
+                            const matchIndex = capitals.indexOf(queryUpper);
+                            if (matchIndex !== -1) {
+                                const lengthRatio = queryLen / capitals.length;
+                                const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                                const camelScore = lengthRatio * positionBoost * 0.8 * boost;
+                                if (camelScore > score) {
+                                    score = camelScore;
+                                }
                             }
                         }
                     }

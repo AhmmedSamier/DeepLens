@@ -4,7 +4,7 @@
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
-        "build": "bun run scripts/setup-parsers.ts && bun build src/server.ts --outfile dist/server.js --target node --format cjs && bun build src/core/indexer-worker.ts --outfile dist/indexer-worker.js --target node --format cjs && bun run scripts/copy-ripgrep.ts",
+        "build": "bun run scripts/setup-parsers.ts && bun build src/server.ts --outdir dist --target node --format cjs && bun build src/core/indexer-worker.ts --outdir dist --target node --format cjs && bun run scripts/copy-ripgrep.ts",
         "test": "bun run scripts/setup-parsers.ts && bun test",
         "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts",
         "benchmark:memory": "bun run scripts/memory-benchmark.ts",

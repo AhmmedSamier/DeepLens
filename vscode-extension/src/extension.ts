@@ -122,11 +122,22 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(showStatsCommand);
 
+    const formatProgressText = (percentage?: number) => {
+        const rounded = percentage !== undefined ? Math.round(percentage) : undefined;
+        const percentText = rounded !== undefined ? ` ${rounded}%` : '';
+        return `$(sync~spin) Indexing${percentText}`;
+    };
+
     // Listen to progress to update status bar
     lspClient.onProgress.event((e) => {
         if (e.state === 'start') {
-            statusItem.text = '$(sync~spin) Indexing...';
+            statusItem.text = formatProgressText(0);
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
+        } else if (e.state === 'report') {
+            statusItem.text = formatProgressText(e.percentage);
+            if (e.message) {
+                statusItem.tooltip = e.message;
+            }
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
             statusItem.tooltip = 'DeepLens Index Status';
@@ -158,12 +169,16 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
                 if (editor) {
-                    const itemId = `file:${editor.document.uri.fsPath}`;
+                    const { uri } = editor.document;
+                    if (uri.scheme !== 'file' || !uri.fsPath) {
+                        return;
+                    }
+                    const itemId = `file:${uri.fsPath}`;
                     const item: SearchableItem = {
                         id: itemId,
-                        name: path.basename(editor.document.uri.fsPath),
+                        name: path.basename(uri.fsPath),
                         type: SearchItemType.FILE,
-                        filePath: editor.document.uri.fsPath,
+                        filePath: uri.fsPath,
                         detail: 'Recently opened',
                     };
                     activityTracker.recordAccess(item);

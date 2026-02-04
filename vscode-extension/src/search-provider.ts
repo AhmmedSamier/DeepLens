@@ -11,7 +11,7 @@ import {
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
-import { SlashCommandService } from './slash-command-service';
+import { SlashCommand, SlashCommandService } from './slash-command-service';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -29,6 +29,10 @@ export class SearchProvider {
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
     private streamingResults: Map<number, SearchResult[]> = new Map();
     private searchCts: vscode.CancellationTokenSource | undefined;
+    private lastResultCount = 0;
+    private lastDuration: number | undefined;
+    private feedbackTimeout: NodeJS.Timeout | undefined;
+    private readonly TRANSIENT_TITLE_DURATION = 1500;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -136,6 +140,33 @@ export class SearchProvider {
      */
     private showFeedback(message: string): void {
         vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
+    }
+
+    /**
+     * Shows a temporary message in the QuickPick title that automatically reverts after a short delay.
+     * This provides immediate feedback without permanently displacing the status information.
+     */
+    private showTransientTitle(message: string): void {
+        if (!this.currentQuickPick) {
+            return;
+        }
+
+        // Clear any existing restoration timer
+        if (this.feedbackTimeout) {
+            clearTimeout(this.feedbackTimeout);
+        }
+
+        // Show feedback
+        this.currentQuickPick.title = message;
+
+        // Restore after delay
+        this.feedbackTimeout = setTimeout(() => {
+            if (this.currentQuickPick) {
+                // Restore original title using stored state
+                this.updateTitle(this.currentQuickPick, this.lastResultCount, this.lastDuration);
+            }
+            this.feedbackTimeout = undefined;
+        }, this.TRANSIENT_TITLE_DURATION);
     }
 
     /**
@@ -272,6 +303,15 @@ export class SearchProvider {
      * Update title to show filter and result count
      */
     private updateTitle(quickPick: vscode.QuickPick<SearchResultItem>, resultCount: number, durationMs?: number): void {
+        // Clear any pending feedback restoration to avoid overwriting new state
+        if (this.feedbackTimeout) {
+            clearTimeout(this.feedbackTimeout);
+            this.feedbackTimeout = undefined;
+        }
+
+        this.lastResultCount = resultCount;
+        this.lastDuration = durationMs;
+
         let filterName: string;
 
         switch (this.currentScope) {
@@ -505,16 +545,19 @@ export class SearchProvider {
             } else if (e.button.tooltip === this.TOOLTIP_COPY_PATH) {
                 await vscode.env.clipboard.writeText(result.item.filePath);
                 this.showFeedback('Path copied to clipboard');
+                this.showTransientTitle('$(check) Path copied!');
             } else if (e.button.tooltip === this.TOOLTIP_COPY_REF) {
                 const ref = result.item.containerName
                     ? `${result.item.containerName}.${result.item.name}`
                     : result.item.name;
                 await vscode.env.clipboard.writeText(ref);
                 this.showFeedback('Reference copied to clipboard');
+                this.showTransientTitle('$(check) Reference copied!');
             } else if (e.button.tooltip === this.TOOLTIP_COPY_REL) {
                 const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
                 await vscode.env.clipboard.writeText(relativePath);
                 this.showFeedback('Relative path copied to clipboard');
+                this.showTransientTitle('$(check) Relative path copied!');
             } else if (e.button.tooltip === this.TOOLTIP_OPEN_SIDE) {
                 accepted = true;
                 this.navigateToItem(result, vscode.ViewColumn.Beside);
@@ -555,6 +598,11 @@ export class SearchProvider {
         quickPick.onDidHide(() => {
             cleanupTimeouts();
             this.cancelSearch();
+            if (this.feedbackTimeout) {
+                clearTimeout(this.feedbackTimeout);
+                this.feedbackTimeout = undefined;
+            }
+            this.currentQuickPick = undefined;
 
             // Restore original editor if cancelled
             if (!accepted && originalEditor) {
@@ -617,7 +665,9 @@ export class SearchProvider {
                 !cmd.aliases.some(a => a.toLowerCase().startsWith(query.toLowerCase()))) continue;
 
             const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const description = cmd.keyboardShortcut ? `${cmd.description} • ${cmd.keyboardShortcut}` : cmd.description;
+            const aliasText = this.formatAliasText(cmd);
+            const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
+            const description = `${cmd.description}${aliasText}${shortcutText}`;
 
             commandSuggestions.push({
                 item: {
@@ -639,9 +689,9 @@ export class SearchProvider {
             if (seen.has(cmd.name)) continue;
 
             const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const aliasText = cmd.aliases.length > 1 ? ` (${cmd.aliases.slice(1).slice(0, 2).join(', ')})` : '';
+            const aliasText = this.formatAliasText(cmd);
             const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
-            const description = cmd.description + aliasText + shortcutText;
+            const description = `${cmd.description}${aliasText}${shortcutText}`;
 
             commandSuggestions.push({
                 item: {
@@ -682,9 +732,21 @@ export class SearchProvider {
         }
     }
 
+    private formatAliasText(cmd: SlashCommand): string {
+        const aliases = this.slashCommandService.getAliasesForDisplay(cmd);
+
+        if (aliases.length <= 1) {
+            return '';
+        }
+
+        return ` • Aliases: ${aliases.join(', ')}`;
+    }
+
     private resultToSlashCommandQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
-        const slashCmd = this.slashCommandService.getCommand(item.name.slice('slash-cmd:'.length));
+        const slashCmdId = item.id;
+        const alias = slashCmdId.startsWith('slash-cmd:') ? slashCmdId.slice('slash-cmd:'.length) : item.name;
+        const slashCmd = this.slashCommandService.getCommand(alias);
         const iconColor = new vscode.ThemeColor('textLink.foreground');
 
         // Show primary alias (short form) as label
@@ -920,6 +982,8 @@ export class SearchProvider {
             requestId: queryId,
         };
 
+        // Clear stale results from previous queries
+        this.streamingResults.clear();
         this.streamingResults.set(queryId, []);
 
         const startTime = Date.now();
@@ -1092,6 +1156,7 @@ export class SearchProvider {
 
         // Don't add icon to label - iconPath will render it
         const label = item.name;
+
         let description = '';
         let detail = '';
 
@@ -1148,8 +1213,7 @@ export class SearchProvider {
         }
 
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: label as any,
+            label,
             description,
             detail,
             iconPath: coloredIcon,
