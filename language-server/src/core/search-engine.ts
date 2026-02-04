@@ -635,6 +635,10 @@ export class SearchEngine implements ISearchProvider {
         const modifiedFiles = await this.gitProvider.getModifiedFiles();
         const indices: number[] = [];
         const count = this.items.length;
+
+        console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
+
+        let matchesFound = 0;
         for (let i = 0; i < count; i++) {
             const filePath = this.items[i].filePath;
             // Check both raw and normalized path for robustness
@@ -990,6 +994,63 @@ export class SearchEngine implements ISearchProvider {
     }
 
     public async performSymbolSearch(context: SearchContext): Promise<SearchResult[]> {
+<<<<<<< HEAD
+        let indices: number[] | undefined;
+
+        if (context.scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+        } else if (context.scope === SearchScope.MODIFIED) {
+            indices = await this.getIndicesForModifiedFiles();
+
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+        } else {
+            indices =
+                context.scope === SearchScope.EVERYTHING
+                    ? this.scopedIndices
+                          .get(SearchScope.SYMBOLS)
+                          ?.concat(
+                              this.scopedIndices.get(SearchScope.TYPES) || [],
+                              this.scopedIndices.get(SearchScope.PROPERTIES) || [],
+                              this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
+                              this.scopedIndices.get(SearchScope.COMMANDS) || [],
+                          )
+                    : this.scopedIndices.get(context.scope);
+        }
+||||||| 511e30e
+        let indices: number[] | undefined;
+        // console.error(`[SearchEngine] performSymbolSearch scope: ${context.scope}, query: ${context.query}`);
+
+        if (context.scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+        } else if (context.scope === SearchScope.MODIFIED) {
+            indices = await this.getIndicesForModifiedFiles();
+            // console.error(`[SearchEngine] Modified indices found: ${indices.length}`);
+
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            // console.error(`[SearchEngine] Modified indices after symbol filter: ${indices.length}`);
+            // if (indices.length > 0) {
+            //    console.error(`[SearchEngine] First modified item: ${JSON.stringify(this.items[indices[0]])}`);
+            // }
+        } else {
+            indices =
+                context.scope === SearchScope.EVERYTHING
+                    ? this.scopedIndices
+                          .get(SearchScope.SYMBOLS)
+                          ?.concat(
+                              this.scopedIndices.get(SearchScope.TYPES) || [],
+                              this.scopedIndices.get(SearchScope.PROPERTIES) || [],
+                              this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
+                              this.scopedIndices.get(SearchScope.COMMANDS) || [],
+                          )
+                    : this.scopedIndices.get(context.scope);
+        }
+=======
         const indices =
             context.scope === SearchScope.EVERYTHING
                 ? this.scopedIndices
@@ -1001,6 +1062,7 @@ export class SearchEngine implements ISearchProvider {
                           this.scopedIndices.get(SearchScope.COMMANDS) || [],
                       )
                 : this.scopedIndices.get(context.scope);
+>>>>>>> master
 
         return this.performUnifiedSearch(
             indices,
@@ -1047,6 +1109,9 @@ export class SearchEngine implements ISearchProvider {
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
         const preparedQuery = isPotentialUrl ? RouteMatcher.prepare(query) : null;
 
+        // Optimization: Pre-calculate path segments to avoid repeated splitting in the loop
+        const queryForUrlMatch = isPotentialUrl ? RouteMatcher.prepare(query) : query;
+
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
@@ -1058,10 +1123,107 @@ export class SearchEngine implements ISearchProvider {
         const getActivityScore = this.getActivityScore;
         const activityWeight = this.activityWeight;
 
+<<<<<<< HEAD
+        // Local helper for Fuzzy Score
+        // eslint-disable-next-line sonarjs/cognitive-complexity
+        const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
+            let bestScore = -Infinity;
+
+            // Name (1.0)
+            const pName = preparedNames[i];
+            if (pName && queryLen <= pName.target.length) {
+                const res = Fuzzysort.single(query, pName);
+                if (res) {
+                    const score = res.score;
+                    if (score > MIN_SCORE) bestScore = score;
+                }
+            }
+
+            // Optimization: Defer boost lookup until match is confirmed
+            if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+
+            // Full Name (0.9)
+            const pFull = preparedFullNames[i];
+            if (pFull && queryLen <= pFull.target.length) {
+                const res = Fuzzysort.single(query, pFull);
+                if (res) {
+                    const score = res.score;
+                    if (score * 0.9 > bestScore) bestScore = score * 0.9;
+                }
+            }
+
+            if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+
+            // Path (0.8)
+            const pPath = preparedPaths[i];
+            if (pPath && queryLen <= pPath.target.length) {
+                const res = Fuzzysort.single(query, pPath);
+                if (res) {
+                    const score = res.score;
+                    if (score * 0.8 > bestScore) bestScore = score * 0.8;
+                }
+            }
+
+            if (bestScore > MIN_SCORE) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+            return -Infinity;
+        };
+
+        // Helper to process a single item index
+        // eslint-disable-next-line sonarjs/cognitive-complexity
+        const processIndex = (i: number) => {
+||||||| 511e30e
+        // Local helper for Fuzzy Score
+        const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
+            let bestScore = -Infinity;
+
+            // Name (1.0)
+            const pName = preparedNames[i];
+            if (pName && queryLen <= pName.target.length) {
+                const res = Fuzzysort.single(query, pName);
+                if (res) {
+                    const score = res.score;
+                    if (score > MIN_SCORE) bestScore = score;
+                }
+            }
+
+            // Optimization: Defer boost lookup until match is confirmed
+            if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+
+            // Full Name (0.9)
+            const pFull = preparedFullNames[i];
+            if (pFull && queryLen <= pFull.target.length) {
+                const res = Fuzzysort.single(query, pFull);
+                if (res) {
+                    const score = res.score;
+                    if (score * 0.9 > bestScore) bestScore = score * 0.9;
+                }
+            }
+
+            if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+
+            // Path (0.8)
+            const pPath = preparedPaths[i];
+            if (pPath && queryLen <= pPath.target.length) {
+                const res = Fuzzysort.single(query, pPath);
+                if (res) {
+                    const score = res.score;
+                    if (score * 0.8 > bestScore) bestScore = score * 0.8;
+                }
+            }
+
+            if (bestScore > MIN_SCORE) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+            return -Infinity;
+        };
+
+        // Helper to process a single item index
+        // eslint-disable-next-line sonarjs/cognitive-complexity
+        const processIndex = (i: number) => {
+=======
         // Merged loop to avoid code duplication and closure overhead
         const count = indices ? indices.length : items.length;
         for (let k = 0; k < count; k++) {
             const i = indices ? indices[k] : k;
+>>>>>>> master
             const typeId = itemTypeIds[i];
             const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;
@@ -1141,7 +1303,13 @@ export class SearchEngine implements ISearchProvider {
             if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                 const name = preparedNames[i]?.target;
                 if (name) {
+<<<<<<< HEAD
+                    if (RouteMatcher.isMatch(name, queryForUrlMatch)) {
+||||||| 511e30e
+                    if (RouteMatcher.isMatch(name, query)) {
+=======
                     if (RouteMatcher.isMatch(name, preparedQuery)) {
+>>>>>>> master
                         const urlScore = 1.5;
                         if (urlScore > score) {
                             score = urlScore;
@@ -1443,6 +1611,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+        const queryLower = normalizedQuery.toLowerCase();
 
         // Pass indices for burst match
         let indices: number[] | undefined;
@@ -1456,7 +1625,7 @@ export class SearchEngine implements ISearchProvider {
 
         let results: SearchResult[] = this.findBurstMatches(
             indices,
-            normalizedQuery.toLowerCase(),
+            queryLower,
             maxResults,
             onResult,
         );
@@ -1566,7 +1735,13 @@ export class SearchEngine implements ISearchProvider {
     private addUrlMatches(
         results: SearchResult[],
         indices: number[] | undefined,
+<<<<<<< HEAD
+        queryOrPrepared: string | PreparedPath,
+||||||| 511e30e
+        queryLower: string,
+=======
         queryLower: string | PreparedPath,
+>>>>>>> master
         maxResults?: number,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
@@ -1576,7 +1751,7 @@ export class SearchEngine implements ISearchProvider {
 
             const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, queryLower)) {
+                if (RouteMatcher.isMatch(item.name, queryOrPrepared)) {
                     results.push({
                         item,
                         score: 2.0,
