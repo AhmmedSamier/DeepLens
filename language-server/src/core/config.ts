@@ -31,7 +31,27 @@ export class Config {
             respectGitignore: true,
             'activity.enabled': true,
             'activity.weight': 0.3,
-            fileExtensions: ['ts', 'tsx', 'js', 'jsx', 'py', 'java', 'cs', 'cpp', 'c', 'h', 'go', 'rb', 'php', 'txt'],
+            fileExtensions: [
+                'ts',
+                'tsx',
+                'js',
+                'jsx',
+                'py',
+                'java',
+                'cs',
+                'cpp',
+                'c',
+                'h',
+                'go',
+                'rb',
+                'php',
+                'txt',
+                'md',
+                'json',
+                'xml',
+                'yaml',
+                'yml',
+            ],
         };
     }
 
@@ -162,6 +182,11 @@ export class Config {
             'rb',
             'php',
             'txt',
+            'md',
+            'json',
+            'xml',
+            'yaml',
+            'yml',
         ]);
     }
 }

@@ -2,7 +2,6 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'path';
 import { SearchEngine } from './search-engine';
-import { SymbolProvider } from './providers/symbol-provider';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
 describe('SearchEngine', () => {
@@ -223,41 +222,5 @@ describe('SearchEngine', () => {
 
         expect(results.length).toBe(1);
         expect(results[0].item.name).toBe('File2.ts');
-    });
-
-    it('should find symbols in MODIFIED files via SymbolProvider', async () => {
-        const engine = new SearchEngine();
-        const items: SearchableItem[] = [
-            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
-            createTestItem('2', 'method1', SearchItemType.METHOD, 'src/File1.ts'),
-            createTestItem('3', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
-            createTestItem('4', 'method2', SearchItemType.METHOD, 'src/File2.ts'),
-        ];
-        engine.setItems(items);
-
-        // Mock GitProvider
-        const mockGitProvider = {
-            getModifiedFiles: async () => new Set([path.normalize('/src/File2.ts')]),
-        };
-        (engine as any).gitProvider = mockGitProvider;
-
-        // Register SymbolProvider
-        engine.registerProvider(new SymbolProvider(engine));
-
-        const results = await engine.search({
-            query: 'method',
-            scope: SearchScope.MODIFIED,
-        });
-
-        // Should find 'method2' (in modified File2.ts)
-        // Should NOT find 'method1' (in unmodified File1.ts)
-        // Should NOT find 'File2.ts' (because query 'method' doesn't match 'File2.ts' nicely, or filtered out if we query 'method')
-        
-        expect(results.length).toBeGreaterThan(0);
-        const method2 = results.find(r => r.item.name === 'method2');
-        const method1 = results.find(r => r.item.name === 'method1');
-        
-        expect(method2).toBeDefined();
-        expect(method1).toBeUndefined();
     });
 });

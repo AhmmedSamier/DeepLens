@@ -67,11 +67,12 @@ export class TreeSitterParser {
             }
 
             this.log('Initializing web-tree-sitter WASM...');
-            const wasmPath = await this.resolveWebTreeSitterWasmPath();
+            const wasmPath = path.normalize(
+                path.resolve(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm'),
+            );
 
-            if (!wasmPath) {
-                this.log('ERROR: web-tree-sitter.wasm not found in dist or node_modules.');
-                throw new Error('web-tree-sitter.wasm not found');
+            if (!(await this.fileExists(wasmPath))) {
+                this.log(`ERROR: WASM file MISSING at: ${wasmPath}`);
             }
 
             // Standard initialization for web-tree-sitter in Node context
@@ -108,27 +109,12 @@ export class TreeSitterParser {
         php: 'tree-sitter-php.wasm',
     };
 
-    private static LANGUAGE_PACKAGE_MAP: Record<string, string> = {
-        typescript: 'tree-sitter-typescript',
-        typescriptreact: 'tree-sitter-typescript',
-        javascript: 'tree-sitter-javascript',
-        javascriptreact: 'tree-sitter-typescript',
-        csharp: 'tree-sitter-c-sharp',
-        python: 'tree-sitter-python',
-        java: 'tree-sitter-java',
-        go: 'tree-sitter-go',
-        cpp: 'tree-sitter-cpp',
-        c: 'tree-sitter-c',
-        ruby: 'tree-sitter-ruby',
-        php: 'tree-sitter-php',
-    };
-
     private async loadLanguage(langId: string, wasmFile: string): Promise<boolean> {
         try {
-            const wasmPath = await this.resolveLanguageWasmPath(langId, wasmFile);
+            const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
 
-            if (wasmPath) {
-                this.log(`Loading language ${langId} from ${wasmPath}...`);
+            if (await this.fileExists(wasmPath)) {
+                this.log(`Loading language ${langId} from ${wasmFile}...`);
                 // Ensure this.lib is not null before using it
                 if (!this.lib) {
                     this.log(`ERROR: TreeSitter library not initialized when trying to load ${langId}`);
@@ -140,9 +126,10 @@ export class TreeSitterParser {
                 this.languages.set(langId, lang);
                 this.log(`Successfully loaded ${langId}`);
                 return true;
+            } else {
+                this.log(`WARNING: WASM file not found for ${langId} at ${wasmPath}`);
+                return false;
             }
-            this.log(`WARNING: WASM file not found for ${langId}`);
-            return false;
         } catch (error) {
             this.log(`ERROR: Failed to load ${langId}: ${error}`);
             return false;
@@ -631,49 +618,6 @@ export class TreeSitterParser {
             const child = node.child(i);
             if (child && child.type === 'identifier') return child;
         }
-        return null;
-    }
-
-    private async resolveWebTreeSitterWasmPath(): Promise<string | null> {
-        const distPath = path.resolve(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm');
-        if (await this.fileExists(distPath)) {
-            return distPath;
-        }
-
-        try {
-            const resolved = require.resolve('web-tree-sitter/web-tree-sitter.wasm');
-            if (await this.fileExists(resolved)) {
-                return resolved;
-            }
-        } catch {
-            return null;
-        }
-
-        return null;
-    }
-
-    private async resolveLanguageWasmPath(langId: string, wasmFile: string): Promise<string | null> {
-        const distPath = path.resolve(this.extensionPath, 'dist', 'parsers', wasmFile);
-        if (await this.fileExists(distPath)) {
-            return distPath;
-        }
-
-        const pkgName = TreeSitterParser.LANGUAGE_PACKAGE_MAP[langId];
-        if (!pkgName) {
-            return null;
-        }
-
-        try {
-            const pkgJsonPath = require.resolve(`${pkgName}/package.json`);
-            const pkgRoot = path.dirname(pkgJsonPath);
-            const candidatePath = path.join(pkgRoot, wasmFile);
-            if (await this.fileExists(candidatePath)) {
-                return candidatePath;
-            }
-        } catch {
-            return null;
-        }
-
         return null;
     }
 

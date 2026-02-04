@@ -1,9 +1,9 @@
 import * as path from 'path';
 import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { runActivityBenchmarks } from './activity.bench';
+import { runEndpointBenchmarks } from './endpoint_search.bench';
 import { runIndexingBenchmark } from './indexing.bench';
 import { runParserBenchmarks } from './parser.bench';
-import { runEndpointBenchmarks } from './endpoint_search.bench';
 import { runSearchBenchmarks } from './search.bench';
 import { runTextSearchBenchmarks } from './text-search.bench';
 import { saveBenchmarks } from './utils';

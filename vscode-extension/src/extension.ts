@@ -158,16 +158,12 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
                 if (editor) {
-                    const { uri } = editor.document;
-                    if (uri.scheme !== 'file' || !uri.fsPath) {
-                        return;
-                    }
-                    const itemId = `file:${uri.fsPath}`;
+                    const itemId = `file:${editor.document.uri.fsPath}`;
                     const item: SearchableItem = {
                         id: itemId,
-                        name: path.basename(uri.fsPath),
+                        name: path.basename(editor.document.uri.fsPath),
                         type: SearchItemType.FILE,
-                        filePath: uri.fsPath,
+                        filePath: editor.document.uri.fsPath,
                         detail: 'Recently opened',
                     };
                     activityTracker.recordAccess(item);

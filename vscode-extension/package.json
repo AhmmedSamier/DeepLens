@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "1.3.0",
+    "version": "1.5.0",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
@@ -125,8 +125,7 @@
                         "h",
                         "go",
                         "rb",
-                        "php",
-                        "txt"
+                        "php"
                     ],
                     "description": "File extensions to index for search"
                 },
