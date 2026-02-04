@@ -419,6 +419,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
+        this.filePaths = [];
         this.itemsMap.clear();
         this.scopedIndices.clear();
         this.preparedCache.clear();
@@ -635,12 +636,18 @@ export class SearchEngine implements ISearchProvider {
         const modifiedFiles = await this.gitProvider.getModifiedFiles();
         const indices: number[] = [];
         const count = this.items.length;
+
+        console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
+
+        let matchesFound = 0;
         for (let i = 0; i < count; i++) {
             // Normalize path for comparison just in case
             if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
                 indices.push(i);
+                matchesFound++;
             }
         }
+        console.error(`[SearchEngine] Found ${matchesFound} matching indices`);
         return indices;
     }
 
@@ -771,8 +778,14 @@ export class SearchEngine implements ISearchProvider {
                     if (results.length >= maxResults) return;
 
                     try {
-                        const stats = await fs.promises.stat(fileItem.filePath);
-                        if (stats.size > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
+                        // Optimization: Use cached size if available to avoid fs.stat calls
+                        let fileSize = fileItem.size;
+                        if (fileSize === undefined) {
+                            const stats = await fs.promises.stat(fileItem.filePath);
+                            fileSize = stats.size;
+                        }
+
+                        if (fileSize > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
 
                         processedFiles++;
 
@@ -983,17 +996,30 @@ export class SearchEngine implements ISearchProvider {
     }
 
     public async performSymbolSearch(context: SearchContext): Promise<SearchResult[]> {
-        const indices =
-            context.scope === SearchScope.EVERYTHING
-                ? this.scopedIndices
-                      .get(SearchScope.SYMBOLS)
-                      ?.concat(
-                          this.scopedIndices.get(SearchScope.TYPES) || [],
-                          this.scopedIndices.get(SearchScope.PROPERTIES) || [],
-                          this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
-                          this.scopedIndices.get(SearchScope.COMMANDS) || [],
-                      )
-                : this.scopedIndices.get(context.scope);
+        let indices: number[] | undefined;
+
+        if (context.scope === SearchScope.OPEN) {
+            indices = this.getIndicesForOpenFiles();
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+        } else if (context.scope === SearchScope.MODIFIED) {
+            indices = await this.getIndicesForModifiedFiles();
+
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+        } else {
+            indices =
+                context.scope === SearchScope.EVERYTHING
+                    ? this.scopedIndices
+                          .get(SearchScope.SYMBOLS)
+                          ?.concat(
+                              this.scopedIndices.get(SearchScope.TYPES) || [],
+                              this.scopedIndices.get(SearchScope.PROPERTIES) || [],
+                              this.scopedIndices.get(SearchScope.ENDPOINTS) || [],
+                              this.scopedIndices.get(SearchScope.COMMANDS) || [],
+                          )
+                    : this.scopedIndices.get(context.scope);
+        }
 
         return this.performUnifiedSearch(
             indices,
@@ -1048,24 +1074,25 @@ export class SearchEngine implements ISearchProvider {
         const preparedCapitals = this.preparedCapitals;
 
         // Local helper for CamelHumps
-        const computeCamelHumpsScoreLocal = (
-            i: number,
-            typeId: number,
-        ): number => {
+        const computeCamelHumpsScoreLocal = (i: number, boost: number): number => {
             const capitals = preparedCapitals[i];
             if (capitals) {
+                // Optimization: Query cannot be a substring if it's longer than capitals
+                if (queryLen > capitals.length) return -Infinity;
+
                 const matchIndex = capitals.indexOf(queryUpper);
                 if (matchIndex !== -1) {
                     const lengthRatio = queryLen / capitals.length;
                     const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                    return lengthRatio * positionBoost * 0.8 * (ID_TO_BOOST[typeId] || 1.0);
+                    return lengthRatio * positionBoost * 0.8 * boost;
                 }
             }
             return -Infinity;
         };
 
         // Local helper for Fuzzy Score
-        const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
+        // eslint-disable-next-line sonarjs/cognitive-complexity
+        const computeFuzzyScoreLocal = (i: number, boost: number): number => {
             let bestScore = -Infinity;
 
             // Name (1.0)
@@ -1079,7 +1106,7 @@ export class SearchEngine implements ISearchProvider {
             }
 
             // Optimization: Defer boost lookup until match is confirmed
-            if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+            if (bestScore >= 0.9) return bestScore * boost;
 
             // Full Name (0.9)
             const pFull = preparedFullNames[i];
@@ -1091,7 +1118,7 @@ export class SearchEngine implements ISearchProvider {
                 }
             }
 
-            if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+            if (bestScore >= 0.8) return bestScore * boost;
 
             // Path (0.8)
             const pPath = preparedPaths[i];
@@ -1103,7 +1130,7 @@ export class SearchEngine implements ISearchProvider {
                 }
             }
 
-            if (bestScore > MIN_SCORE) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
+            if (bestScore > MIN_SCORE) return bestScore * boost;
             return -Infinity;
         };
 
@@ -1111,16 +1138,23 @@ export class SearchEngine implements ISearchProvider {
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
             const typeId = itemTypeIds[i];
+            const boost = ID_TO_BOOST[typeId] || 1.0;
+            let score = -Infinity;
 
-            // 1. Fuzzy Score
-            let score = computeFuzzyScoreLocal(i, typeId);
+            // 1. CamelHumps Score (Optimized: Check first)
+            if (enableCamelHumps) {
+                score = computeCamelHumpsScoreLocal(i, boost);
 
-            // 2. CamelHumps Score
-            if (score < 0.9 && enableCamelHumps) {
-                const camelScore = computeCamelHumpsScoreLocal(i, typeId);
-                if (camelScore > score) {
-                    score = camelScore;
+                // Optimization: If CamelHumps is a strong abbreviation match (score > 1.0 * boost),
+                // it beats any possible fuzzy score (max 1.0 * boost).
+                // We use 1.01 as threshold to be safe against floating point properties
+                if (score <= 1.01 * boost) {
+                    // Not a strong enough match to skip fuzzy search
+                    const fuzzy = computeFuzzyScoreLocal(i, boost);
+                    if (fuzzy > score) score = fuzzy;
                 }
+            } else {
+                score = computeFuzzyScoreLocal(i, boost);
             }
 
             let resultScope: SearchScope | undefined;

@@ -1,0 +1,10 @@
+{
+    "deeplens.fileExtensions": [
+        "ts",
+        "tsx",
+        "js",
+        "jsx",
+        "cs",
+        "txt"
+    ]
+}

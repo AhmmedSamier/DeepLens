@@ -29,3 +29,11 @@
 ## 2025-05-23 - [Action Button Clutter]
 **Learning:** Universal action buttons (like 'Copy Path') cause confusion on abstract items like Commands. Users hesitate when UI affordances (like 'Reveal in Explorer') contradict the item's nature.
 **Action:** Conditionally render action buttons based on `SearchItemType`. Only show file-related actions for file-backed items.
+
+## 2025-05-27 - [Context-Aware Empty States]
+**Learning:** Suggesting actions the user has already taken (e.g., "Try /all" when already in Global scope) frustrates users and erodes trust.
+**Action:** Ensure empty state messages are context-aware. If the scope is already global, suggest deeper debugging steps like checking exclusions or rebuilding the index.
+
+## 2026-02-03 - [Transient Feedback in Input Titles]
+**Learning:** Using `vscode.window.setStatusBarMessage` is often too subtle for immediate feedback on quick actions like copying, as it's outside the user's focus. Temporarily updating the `QuickPick` title provides a "toast-like" experience directly in the locus of attention without disrupting the workflow.
+**Action:** For actions triggered within a QuickPick, use a transient title update (e.g., "✅ Copied!") that reverts automatically, but ensure proper state management to handle race conditions if the user continues typing.
