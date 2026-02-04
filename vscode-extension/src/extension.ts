@@ -122,11 +122,22 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(showStatsCommand);
 
+    const formatProgressText = (percentage?: number) => {
+        const rounded = percentage !== undefined ? Math.round(percentage) : undefined;
+        const percentText = rounded !== undefined ? ` ${rounded}%` : '';
+        return `$(sync~spin) Indexing${percentText}`;
+    };
+
     // Listen to progress to update status bar
     lspClient.onProgress.event((e) => {
         if (e.state === 'start') {
-            statusItem.text = '$(sync~spin) Indexing...';
+            statusItem.text = formatProgressText(0);
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
+        } else if (e.state === 'report') {
+            statusItem.text = formatProgressText(e.percentage);
+            if (e.message) {
+                statusItem.tooltip = e.message;
+            }
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
             statusItem.tooltip = 'DeepLens Index Status';

@@ -18,7 +18,6 @@ export class DeepLensLspClient implements ISearchProvider {
     private isRestarting = false;
     private startPromise: Promise<void> | undefined;
     private knownProgressTokens = new Set<string>();
-    private activeProgressTokens = new Set<string>();
     private fallbackProgressState = new Map<string, { started: boolean }>();
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
@@ -119,73 +118,6 @@ export class DeepLensLspClient implements ISearchProvider {
         this.knownProgressTokens.add(token);
         this.fallbackProgressState.set(token, { started: true });
         this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
-
-        Promise.resolve(
-            vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Notification,
-                    title: 'DeepLens Indexing',
-                    cancellable: false,
-                },
-                (progress) => {
-                    return new Promise<void>((resolve) => {
-                        this.createProgressHandler(token, progress, resolve);
-                    });
-                },
-            ),
-        ).catch(() => {
-            this.activeProgressTokens.delete(token);
-        });
-    }
-
-    private createProgressHandler(
-        token: string,
-        progress: vscode.Progress<{ message?: string; increment?: number }>,
-        resolve: () => void,
-    ) {
-        this.activeProgressTokens.add(token);
-        let lastPercentage = 0;
-        const disposable = this.client!.onNotification(
-            'deeplens/progress',
-            (value: { token: string | number; message?: string; percentage?: number }) => {
-                if (String(value.token) !== token) {
-                    return;
-                }
-
-                const isFinished =
-                    value.percentage === 100 ||
-                    value.message?.startsWith('Done') ||
-                    value.message === 'Cancelled' ||
-                    value.message === 'Failed';
-
-                if (isFinished) {
-                    const message = value.message || 'Done';
-                    progress.report({ message: message, increment: 100 - lastPercentage });
-                    this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
-
-                    // Use a shorter timeout for cancellation so it doesn't linger unnecessarily
-                    const timeout = message === 'Cancelled' ? 2000 : 3000;
-
-                    setTimeout(() => {
-                        resolve();
-                        disposable.dispose();
-                        this.activeProgressTokens.delete(token);
-                        this.knownProgressTokens.delete(token);
-                        this.fallbackProgressState.delete(token);
-                    }, timeout);
-                    return;
-                }
-
-                let increment: number | undefined;
-                if (value.percentage !== undefined) {
-                    increment = value.percentage - lastPercentage;
-                    lastPercentage = value.percentage;
-                }
-
-                progress.report({ message: value.message, increment });
-                this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
-            },
-        );
     }
 
     private handleProgressNotification(value: { token: string | number; message?: string; percentage?: number }) {
@@ -196,10 +128,6 @@ export class DeepLensLspClient implements ISearchProvider {
             }
             this.knownProgressTokens.add(token);
             this.fallbackProgressState.set(token, { started: false });
-        }
-
-        if (this.activeProgressTokens.has(token)) {
-            return;
         }
 
         const fallbackState = this.fallbackProgressState.get(token);
