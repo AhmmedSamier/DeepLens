@@ -83,6 +83,16 @@ export class DeepLensLspClient implements ISearchProvider {
 
         this.client = new LanguageClient('deeplensLS', 'DeepLens Language Server', serverOptions, clientOptions);
 
+        // Handle server progress reporting early to avoid missing initial requests
+        this.client.onRequest('window/workDoneProgress/create', async (params: { token: string | number }) => {
+            this.handleProgressCreation(params);
+        });
+
+        // Handle streamed search results
+        this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
+            this.onStreamResult.fire(params);
+        });
+
         // Listen for state changes to detect unexpected disconnects
         this.client.onDidChangeState((event) => {
             if (event.newState === State.Stopped) {
@@ -92,16 +102,6 @@ export class DeepLensLspClient implements ISearchProvider {
         });
 
         await this.client.start();
-
-        // Handle server progress reporting
-        this.client.onRequest('window/workDoneProgress/create', async (params: { token: string | number }) => {
-            this.handleProgressCreation(params);
-        });
-
-        // Handle streamed search results
-        this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
-            this.onStreamResult.fire(params);
-        });
     }
 
     private handleProgressCreation(params: { token: string | number }) {

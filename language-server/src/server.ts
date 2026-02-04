@@ -228,7 +228,7 @@ let currentIndexingPromise: Promise<void> | undefined;
 /**
  * Run indexing with progress reporting
  */
-async function runIndexingWithProgress(): Promise<void> {
+async function runIndexingWithProgress(force: boolean = false): Promise<void> {
     // If indexing is already running, cancel it and wait for it to stop
     if (currentIndexingPromise) {
         workspaceIndexer.cancel();
@@ -252,6 +252,9 @@ async function runIndexingWithProgress(): Promise<void> {
     const indexingTask = async () => {
         // Clear existing items to prevent duplicates on rebuild
         searchEngine.clear();
+        if (force) {
+            workspaceIndexer.resetCaches();
+        }
 
         try {
             const startTime = Date.now();
@@ -415,9 +418,9 @@ connection.onRequest(RecordActivityRequest, (params) => {
     }
 });
 
-connection.onRequest(RebuildIndexRequest, async () => {
+connection.onRequest(RebuildIndexRequest, async (params) => {
     if (isShuttingDown) return;
-    await runIndexingWithProgress();
+    await runIndexingWithProgress(params?.force ?? false);
 });
 
 connection.onRequest(ClearCacheRequest, async () => {
