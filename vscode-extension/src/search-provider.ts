@@ -29,6 +29,8 @@ export class SearchProvider {
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
     private streamingResults: Map<number, SearchResult[]> = new Map();
     private searchCts: vscode.CancellationTokenSource | undefined;
+    private lastTitle = '';
+    private feedbackTimeout: NodeJS.Timeout | undefined;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -133,9 +135,23 @@ export class SearchProvider {
     }
 
     /**
-     * Show transient feedback in status bar
+     * Show transient feedback in status bar and as title flash
      */
     private showFeedback(message: string): void {
+        if (this.currentQuickPick) {
+            if (this.feedbackTimeout) {
+                clearTimeout(this.feedbackTimeout);
+            }
+
+            this.currentQuickPick.title = `DeepLens - ${message}`;
+
+            this.feedbackTimeout = setTimeout(() => {
+                if (this.currentQuickPick) {
+                    this.currentQuickPick.title = this.lastTitle;
+                }
+                this.feedbackTimeout = undefined;
+            }, 2000);
+        }
         vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
     }
 
@@ -315,7 +331,16 @@ export class SearchProvider {
             durationSuffix = ` — Search took ${durationText}`;
         }
 
-        quickPick.title = `DeepLens - ${filterName}${countSuffix}${durationSuffix}`;
+        this.lastTitle = `DeepLens - ${filterName}${countSuffix}${durationSuffix}`;
+
+        // If a feedback flash is active, we don't overwrite it immediately unless it's stale?
+        // Actually, if new results arrive, they are more important. Cancel flash.
+        if (this.feedbackTimeout) {
+            clearTimeout(this.feedbackTimeout);
+            this.feedbackTimeout = undefined;
+        }
+
+        quickPick.title = this.lastTitle;
     }
 
     /**
