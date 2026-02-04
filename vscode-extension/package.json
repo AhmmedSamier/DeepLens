@@ -125,8 +125,7 @@
                         "h",
                         "go",
                         "rb",
-                        "php",
-                        "txt"
+                        "php"
                     ],
                     "description": "File extensions to index for search"
                 },

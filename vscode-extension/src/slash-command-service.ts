@@ -296,21 +296,6 @@ export class SlashCommandService {
         return cmd.aliases[0] || cmd.name;
     }
 
-    getAliasesForDisplay(cmd: SlashCommand): string[] {
-        const primaryAlias = this.getPrimaryAlias(cmd);
-        const aliases = [primaryAlias, cmd.name, ...cmd.aliases];
-        const seen = new Set<string>();
-
-        return aliases.filter((alias) => {
-            const normalized = alias.toLowerCase();
-            if (seen.has(normalized)) {
-                return false;
-            }
-            seen.add(normalized);
-            return true;
-        });
-    }
-
     getCategoryIcon(category: SlashCommandCategory): string {
         switch (category) {
             case SlashCommandCategory.SEARCH: return 'search';

@@ -636,8 +636,9 @@ export class SearchEngine implements ISearchProvider {
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            // Normalize path for comparison just in case
-            if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
+            const filePath = this.items[i].filePath;
+            // Check both raw and normalized path for robustness
+            if (modifiedFiles.has(filePath) || modifiedFiles.has(path.normalize(filePath))) {
                 indices.push(i);
             }
         }
@@ -1067,15 +1068,13 @@ export class SearchEngine implements ISearchProvider {
                 if (enableCamelHumps) {
                     const capitals = preparedCapitals[i];
                     if (capitals) {
-                        if (queryLen <= capitals.length) {
-                            const matchIndex = capitals.indexOf(queryUpper);
-                            if (matchIndex !== -1) {
-                                const lengthRatio = queryLen / capitals.length;
-                                const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                                const camelScore = lengthRatio * positionBoost * 0.8 * boost;
-                                if (camelScore > score) {
-                                    score = camelScore;
-                                }
+                        const matchIndex = capitals.indexOf(queryUpper);
+                        if (matchIndex !== -1) {
+                            const lengthRatio = queryLen / capitals.length;
+                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                            const camelScore = lengthRatio * positionBoost * 0.8 * boost;
+                            if (camelScore > score) {
+                                score = camelScore;
                             }
                         }
                     }
@@ -1176,15 +1175,13 @@ export class SearchEngine implements ISearchProvider {
                 if (enableCamelHumps) {
                     const capitals = preparedCapitals[i];
                     if (capitals) {
-                        if (queryLen <= capitals.length) {
-                            const matchIndex = capitals.indexOf(queryUpper);
-                            if (matchIndex !== -1) {
-                                const lengthRatio = queryLen / capitals.length;
-                                const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                                const camelScore = lengthRatio * positionBoost * 0.8 * boost;
-                                if (camelScore > score) {
-                                    score = camelScore;
-                                }
+                        const matchIndex = capitals.indexOf(queryUpper);
+                        if (matchIndex !== -1) {
+                            const lengthRatio = queryLen / capitals.length;
+                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                            const camelScore = lengthRatio * positionBoost * 0.8 * boost;
+                            if (camelScore > score) {
+                                score = camelScore;
                             }
                         }
                     }

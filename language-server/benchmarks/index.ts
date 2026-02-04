@@ -4,14 +4,12 @@ import { runActivityBenchmarks } from './activity.bench';
 import { runIndexingBenchmark } from './indexing.bench';
 import { runParserBenchmarks } from './parser.bench';
 import { runSearchBenchmarks } from './search.bench';
-import { runSearchOptBenchmarks } from './search-opt.bench';
 import { runTextSearchBenchmarks } from './text-search.bench';
 import { saveBenchmarks } from './utils';
 
 async function main() {
     console.log('Starting DeepLens Benchmarks...\n');
 
-    await runSearchOptBenchmarks();
     await runSearchBenchmarks();
     await runParserBenchmarks();
     await runTextSearchBenchmarks();

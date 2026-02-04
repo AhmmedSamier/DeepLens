@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeEach } from 'bun:test';
 import { ActivityTracker } from './activity-tracker';
 import { SearchItemType } from './types';
 
