@@ -636,8 +636,9 @@ export class SearchEngine implements ISearchProvider {
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            // Normalize path for comparison just in case
-            if (modifiedFiles.has(path.normalize(this.items[i].filePath))) {
+            const filePath = this.items[i].filePath;
+            // Check both raw and normalized path for robustness
+            if (modifiedFiles.has(filePath) || modifiedFiles.has(path.normalize(filePath))) {
                 indices.push(i);
             }
         }
