@@ -106,27 +106,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     private handleProgressCreation(params: { token: string | number }) {
         this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
-
-        vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                title: 'DeepLens Indexing',
-                cancellable: false,
-            },
-            (progress) => {
-                return new Promise<void>((resolve) => {
-                    this.createProgressHandler(params.token.toString(), progress, resolve);
-                });
-            },
-        );
+        this.createProgressHandler(params.token.toString());
     }
 
-    private createProgressHandler(
-        token: string,
-        progress: vscode.Progress<{ message?: string; increment?: number }>,
-        resolve: () => void,
-    ) {
-        let lastPercentage = 0;
+    private createProgressHandler(token: string) {
         const disposable = this.client!.onNotification(
             'deeplens/progress',
             (value: { token: string | number; message?: string; percentage?: number }) => {
@@ -142,26 +125,11 @@ export class DeepLensLspClient implements ISearchProvider {
 
                 if (isFinished) {
                     const message = value.message || 'Done';
-                    progress.report({ message: message, increment: 100 - lastPercentage });
                     this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
-
-                    // Use a shorter timeout for cancellation so it doesn't linger unnecessarily
-                    const timeout = message === 'Cancelled' ? 2000 : 3000;
-
-                    setTimeout(() => {
-                        resolve();
-                        disposable.dispose();
-                    }, timeout);
+                    disposable.dispose();
                     return;
                 }
 
-                let increment: number | undefined;
-                if (value.percentage !== undefined) {
-                    increment = value.percentage - lastPercentage;
-                    lastPercentage = value.percentage;
-                }
-
-                progress.report({ message: value.message, increment });
                 this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
             },
         );

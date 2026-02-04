@@ -127,6 +127,12 @@ export async function activate(context: vscode.ExtensionContext) {
         if (e.state === 'start') {
             statusItem.text = '$(sync~spin) Indexing...';
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
+        } else if (e.state === 'report') {
+            const percentageText = e.percentage !== undefined ? ` (${e.percentage}%)` : '';
+            statusItem.text = `$(sync~spin) Indexing${percentageText}...`;
+            if (e.message) {
+                statusItem.tooltip = e.message;
+            }
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
             statusItem.tooltip = 'DeepLens Index Status';

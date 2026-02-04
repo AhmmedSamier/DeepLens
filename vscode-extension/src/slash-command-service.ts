@@ -192,7 +192,7 @@ export class SlashCommandService {
 
     private recordUsage(commandName: string): void {
         const normalized = commandName.toLowerCase();
-        this.recentlyUsed = this.recentlyUsed.filter(cmd => cmd !== normalized);
+        this.recentlyUsed = this.recentlyUsed.filter((cmd) => cmd !== normalized);
         this.recentlyUsed.unshift(normalized);
         this.recentlyUsed = this.recentlyUsed.slice(0, 10);
         this.saveRecentCommands();
@@ -200,8 +200,9 @@ export class SlashCommandService {
 
     getCommands(query?: string): SlashCommand[] {
         if (!query) {
-            return Array.from(new Set(Array.from(this.commands.values()).map(c => c.name)))
-                .map(name => this.commands.get(name)!);
+            return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name))).map(
+                (name) => this.commands.get(name)!,
+            );
         }
 
         const lowerQuery = query.toLowerCase();
@@ -214,7 +215,9 @@ export class SlashCommandService {
 
             const exactMatch = cmd.name === lowerQuery;
             const startsWithMatch = cmd.name.startsWith(lowerQuery);
-            const aliasMatch = cmd.aliases.some(alias => alias.toLowerCase() === lowerQuery || alias.toLowerCase().startsWith(lowerQuery));
+            const aliasMatch = cmd.aliases.some(
+                (alias) => alias.toLowerCase() === lowerQuery || alias.toLowerCase().startsWith(lowerQuery),
+            );
             const descriptionMatch = cmd.description.toLowerCase().includes(trimmedQuery);
             const shortNameMatch = cmd.shortName.toLowerCase().startsWith(trimmedQuery);
 
@@ -293,17 +296,38 @@ export class SlashCommandService {
     }
 
     getPrimaryAlias(cmd: SlashCommand): string {
-        return cmd.aliases[0] || cmd.name;
+        return cmd.name;
+    }
+
+    getAliasesForDisplay(cmd: SlashCommand): string[] {
+        const primaryAlias = this.getPrimaryAlias(cmd);
+        const aliases = [primaryAlias, cmd.name, ...cmd.aliases];
+        const seen = new Set<string>();
+
+        return aliases.filter((alias) => {
+            const normalized = alias.toLowerCase();
+            if (seen.has(normalized)) {
+                return false;
+            }
+            seen.add(normalized);
+            return true;
+        });
     }
 
     getCategoryIcon(category: SlashCommandCategory): string {
         switch (category) {
-            case SlashCommandCategory.SEARCH: return 'search';
-            case SlashCommandCategory.NAVIGATION: return 'arrow-right';
-            case SlashCommandCategory.FILES: return 'file';
-            case SlashCommandCategory.REFACTORING: return 'wand';
-            case SlashCommandCategory.ACTIONS: return 'run';
-            default: return 'circle-outline';
+            case SlashCommandCategory.SEARCH:
+                return 'search';
+            case SlashCommandCategory.NAVIGATION:
+                return 'arrow-right';
+            case SlashCommandCategory.FILES:
+                return 'file';
+            case SlashCommandCategory.REFACTORING:
+                return 'wand';
+            case SlashCommandCategory.ACTIONS:
+                return 'run';
+            default:
+                return 'circle-outline';
         }
     }
 }

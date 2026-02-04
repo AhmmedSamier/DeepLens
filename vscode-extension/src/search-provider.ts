@@ -11,7 +11,7 @@ import {
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
-import { SlashCommandService } from './slash-command-service';
+import { SlashCommand, SlashCommandService } from './slash-command-service';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -657,18 +657,24 @@ export class SearchProvider {
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
-        
+
         const commandSuggestions: SearchResult[] = [];
         const seen = new Set<string>();
 
         // Add recent commands first with a visual indicator
         for (const cmd of recentCommands) {
             if (seen.has(cmd.name)) continue;
-            if (query && !cmd.name.toLowerCase().startsWith(query.toLowerCase()) &&
-                !cmd.aliases.some(a => a.toLowerCase().startsWith(query.toLowerCase()))) continue;
+            if (
+                query &&
+                !cmd.name.toLowerCase().startsWith(query.toLowerCase()) &&
+                !cmd.aliases.some((a) => a.toLowerCase().startsWith(query.toLowerCase()))
+            )
+                continue;
 
             const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const description = cmd.keyboardShortcut ? `${cmd.description} • ${cmd.keyboardShortcut}` : cmd.description;
+            const aliasText = this.formatAliasText(cmd);
+            const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
+            const description = `${cmd.description}${aliasText}${shortcutText}`;
 
             commandSuggestions.push({
                 item: {
@@ -690,9 +696,9 @@ export class SearchProvider {
             if (seen.has(cmd.name)) continue;
 
             const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const aliasText = cmd.aliases.length > 1 ? ` (${cmd.aliases.slice(1).slice(0, 2).join(', ')})` : '';
+            const aliasText = this.formatAliasText(cmd);
             const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
-            const description = cmd.description + aliasText + shortcutText;
+            const description = `${cmd.description}${aliasText}${shortcutText}`;
 
             commandSuggestions.push({
                 item: {
@@ -731,6 +737,19 @@ export class SearchProvider {
             default:
                 return category;
         }
+    }
+
+    private formatAliasText(cmd: SlashCommand): string {
+        const aliases = this.slashCommandService.getAliasesForDisplay(cmd);
+        const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
+
+        const otherAliases = aliases.filter((a) => a !== primaryAlias);
+
+        if (otherAliases.length === 0) {
+            return '';
+        }
+
+        return ` • Aliases: ${otherAliases.join(', ')}`;
     }
 
     private resultToSlashCommandQuickPickItem(result: SearchResult): SearchResultItem {
@@ -810,33 +829,40 @@ export class SearchProvider {
         quickPick.busy = true;
 
         // PHASE 0: Absolute Instant (Immediate exact-name hits)
-        try {
-            const instantResults = await this.searchEngine.burstSearch(
-                {
-                    query: trimmedQuery,
-                    scope: this.currentScope,
-                    maxResults: 5,
-                },
-                undefined,
-            ); // No token for burst search as it should be instant
+        // PHASE 0: Absolute Instant (Immediate exact-name hits)
+        if (this.currentScope !== SearchScope.COMMANDS) {
+            try {
+                const instantResults = await this.searchEngine.burstSearch(
+                    {
+                        query: trimmedQuery,
+                        scope: this.currentScope,
+                        maxResults: 5,
+                    },
+                    undefined,
+                ); // No token for burst search as it should be instant
 
-            if (queryId !== this.lastQueryId) {
-                return;
-            }
+                if (queryId !== this.lastQueryId) {
+                    return;
+                }
 
-            if (instantResults.length > 0) {
-                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
-                this.updateTitle(quickPick, instantResults.length);
+                if (instantResults.length > 0) {
+                    quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+                    this.updateTitle(quickPick, instantResults.length);
+                }
+                // Don't clear items here - let history stay until we have real results (avoid flicker)
+            } catch (error) {
+                console.error(`Phase 0 search error: ${error}`);
             }
-            // Don't clear items here - let history stay until we have real results (avoid flicker)
-        } catch (error) {
-            console.error(`Phase 0 search error: ${error}`);
         }
 
         // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
         setBurstTimeout(
             setTimeout(async () => {
                 if (queryId !== this.lastQueryId) {
+                    return;
+                }
+
+                if (this.currentScope === SearchScope.COMMANDS) {
                     return;
                 }
 
@@ -977,7 +1003,10 @@ export class SearchProvider {
         let results: SearchResult[] = [];
 
         try {
-            results = await this.searchEngine.search(options, this.searchCts.token);
+            // Optimization: Skip LSP search for commands (handled purely by local indexer)
+            if (this.currentScope !== SearchScope.COMMANDS) {
+                results = await this.searchEngine.search(options, this.searchCts.token);
+            }
         } catch (error) {
             if (error instanceof vscode.CancellationError) {
                 return [];
