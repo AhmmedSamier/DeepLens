@@ -598,6 +598,11 @@ export class SearchProvider {
         quickPick.onDidHide(() => {
             cleanupTimeouts();
             this.cancelSearch();
+            if (this.feedbackTimeout) {
+                clearTimeout(this.feedbackTimeout);
+                this.feedbackTimeout = undefined;
+            }
+            this.currentQuickPick = undefined;
 
             // Restore original editor if cancelled
             if (!accepted && originalEditor) {
