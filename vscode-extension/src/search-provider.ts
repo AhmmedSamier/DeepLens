@@ -43,6 +43,8 @@ export class SearchProvider {
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
+    private readonly LABEL_CONFIRM_CLEAR = 'Confirm Clear History';
+    private readonly LABEL_CANCEL_CLEAR = 'Cancel';
 
     // Tooltips for item buttons
     private readonly TOOLTIP_COPY_PATH = 'Copy Path';
@@ -413,9 +415,53 @@ export class SearchProvider {
     }
 
     /**
+     * Prompt for confirmation before clearing history
+     */
+    private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        const confirmItem: SearchResultItem = {
+            label: this.LABEL_CONFIRM_CLEAR,
+            detail: 'This cannot be undone',
+            iconPath: new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground')),
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:confirm-clear-history',
+                    name: this.LABEL_CONFIRM_CLEAR,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+
+        const cancelItem: SearchResultItem = {
+            label: this.LABEL_CANCEL_CLEAR,
+            description: 'Go back to history',
+            iconPath: new vscode.ThemeIcon('close'),
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:cancel-clear-history',
+                    name: this.LABEL_CANCEL_CLEAR,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+
+        quickPick.items = [confirmItem, cancelItem];
+        quickPick.title = 'Are you sure you want to clear recent history?';
+    }
+
+    /**
      * Clear recent history
      */
-    private async clearHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
+    private async performClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
         if (this.activityTracker) {
             await this.activityTracker.clearAll();
             this.showFeedback('Recent history cleared');
@@ -583,7 +629,17 @@ export class SearchProvider {
             if (selected) {
                 // Handle Clear History
                 if (selected.result.item.id === 'command:clear-history') {
-                    this.clearHistory(quickPick);
+                    this.promptClearHistory(quickPick);
+                    return;
+                }
+
+                if (selected.result.item.id === 'command:confirm-clear-history') {
+                    this.performClearHistory(quickPick);
+                    return;
+                }
+
+                if (selected.result.item.id === 'command:cancel-clear-history') {
+                    this.showRecentHistory(quickPick);
                     return;
                 }
 
