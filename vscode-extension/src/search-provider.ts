@@ -11,7 +11,7 @@ import {
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
-import { SlashCommandService } from './slash-command-service';
+import { SlashCommand, SlashCommandService } from './slash-command-service';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -617,7 +617,9 @@ export class SearchProvider {
                 !cmd.aliases.some(a => a.toLowerCase().startsWith(query.toLowerCase()))) continue;
 
             const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const description = cmd.keyboardShortcut ? `${cmd.description} • ${cmd.keyboardShortcut}` : cmd.description;
+            const aliasText = this.formatAliasText(cmd);
+            const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
+            const description = `${cmd.description}${aliasText}${shortcutText}`;
 
             commandSuggestions.push({
                 item: {
@@ -639,9 +641,9 @@ export class SearchProvider {
             if (seen.has(cmd.name)) continue;
 
             const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const aliasText = cmd.aliases.length > 1 ? ` (${cmd.aliases.slice(1).slice(0, 2).join(', ')})` : '';
+            const aliasText = this.formatAliasText(cmd);
             const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
-            const description = cmd.description + aliasText + shortcutText;
+            const description = `${cmd.description}${aliasText}${shortcutText}`;
 
             commandSuggestions.push({
                 item: {
@@ -680,6 +682,16 @@ export class SearchProvider {
             default:
                 return category;
         }
+    }
+
+    private formatAliasText(cmd: SlashCommand): string {
+        const aliases = this.slashCommandService.getAliasesForDisplay(cmd);
+
+        if (aliases.length <= 1) {
+            return '';
+        }
+
+        return ` • Aliases: ${aliases.join(', ')}`;
     }
 
     private resultToSlashCommandQuickPickItem(result: SearchResult): SearchResultItem {
