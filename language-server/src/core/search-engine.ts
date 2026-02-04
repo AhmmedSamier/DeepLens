@@ -6,7 +6,7 @@ import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
-import { RouteMatcher } from './route-matcher';
+import { PreparedPath, RouteMatcher } from './route-matcher';
 import {
     ISearchProvider,
     SearchableItem,
@@ -1045,6 +1045,7 @@ export class SearchEngine implements ISearchProvider {
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
+        const preparedQuery = isPotentialUrl ? RouteMatcher.prepare(query) : null;
 
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
@@ -1137,10 +1138,10 @@ export class SearchEngine implements ISearchProvider {
             let resultScope: SearchScope | undefined;
 
             // 3. URL/Endpoint Match
-            if (isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+            if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                 const name = preparedNames[i]?.target;
                 if (name) {
-                    if (RouteMatcher.isMatch(name, query)) {
+                    if (RouteMatcher.isMatch(name, preparedQuery)) {
                         const urlScore = 1.5;
                         if (urlScore > score) {
                             score = urlScore;
@@ -1460,11 +1461,13 @@ export class SearchEngine implements ISearchProvider {
             onResult,
         );
 
+        const queryLower = normalizedQuery.toLowerCase();
         if (
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
-            RouteMatcher.isPotentialUrl(normalizedQuery.toLowerCase())
+            RouteMatcher.isPotentialUrl(queryLower)
         ) {
-            this.addUrlMatches(results, indices, normalizedQuery.toLowerCase(), maxResults);
+            const preparedQuery = RouteMatcher.prepare(queryLower);
+            this.addUrlMatches(results, indices, preparedQuery, maxResults);
         }
 
         if (this.getActivityScore) {
@@ -1563,7 +1566,7 @@ export class SearchEngine implements ISearchProvider {
     private addUrlMatches(
         results: SearchResult[],
         indices: number[] | undefined,
-        queryLower: string,
+        queryLower: string | PreparedPath,
         maxResults?: number,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
