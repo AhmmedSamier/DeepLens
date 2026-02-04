@@ -142,7 +142,8 @@ export class SearchProvider {
     }
 
     /**
-     * Show transient feedback in the QuickPick title
+     * Shows a temporary message in the QuickPick title that automatically reverts after a short delay.
+     * This provides immediate feedback without permanently displacing the status information.
      */
     private showTransientTitle(message: string): void {
         if (!this.currentQuickPick) {
