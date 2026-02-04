@@ -1,5 +1,6 @@
 import { glob } from 'glob';
 import * as path from 'path';
+import { fileURLToPath } from 'url';
 import { Connection, FileChangeType } from 'vscode-languageserver/node';
 import { IndexerEnvironment } from './core/indexer-interfaces';
 
@@ -77,10 +78,12 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
 
                 const uri = change.uri;
                 let filePath = uri;
-                if (uri.startsWith('file:///')) {
-                    filePath = decodeURIComponent(uri.slice(8));
-                } else if (uri.startsWith('file://')) {
-                    filePath = decodeURIComponent(uri.slice(7));
+                if (uri.startsWith('file://')) {
+                    try {
+                        filePath = fileURLToPath(uri);
+                    } catch {
+                        filePath = decodeURIComponent(uri.slice(7));
+                    }
                 }
                 filePath = path.normalize(filePath);
 

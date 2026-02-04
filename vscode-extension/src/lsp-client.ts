@@ -53,7 +53,7 @@ export class DeepLensLspClient implements ISearchProvider {
         };
 
         const clientOptions: LanguageClientOptions = {
-            documentSelector: [{ scheme: 'file', language: '*' }],
+            documentSelector: [{ scheme: 'file' }],
             synchronize: {
                 fileEvents: vscode.workspace.createFileSystemWatcher('**/*'),
             },
