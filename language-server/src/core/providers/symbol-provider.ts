@@ -18,7 +18,9 @@ export class SymbolProvider implements ISearchProvider {
             scope !== SearchScope.TYPES &&
             scope !== SearchScope.PROPERTIES &&
             scope !== SearchScope.ENDPOINTS &&
-            scope !== SearchScope.COMMANDS
+            scope !== SearchScope.COMMANDS &&
+            scope !== SearchScope.OPEN &&
+            scope !== SearchScope.MODIFIED
         ) {
             return [];
         }
