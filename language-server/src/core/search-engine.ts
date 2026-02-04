@@ -1061,7 +1061,6 @@ export class SearchEngine implements ISearchProvider {
         const count = indices ? indices.length : items.length;
         for (let k = 0; k < count; k++) {
             const i = indices ? indices[k] : k;
-
             const typeId = itemTypeIds[i];
             const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;
