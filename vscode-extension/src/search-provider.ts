@@ -32,6 +32,7 @@ export class SearchProvider {
     private lastResultCount = 0;
     private lastDuration: number | undefined;
     private feedbackTimeout: NodeJS.Timeout | undefined;
+    private readonly TRANSIENT_TITLE_DURATION = 1500;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = '● ';
@@ -165,7 +166,7 @@ export class SearchProvider {
                 this.updateTitle(this.currentQuickPick, this.lastResultCount, this.lastDuration);
             }
             this.feedbackTimeout = undefined;
-        }, 1500);
+        }, this.TRANSIENT_TITLE_DURATION);
     }
 
     /**
