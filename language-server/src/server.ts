@@ -14,7 +14,6 @@ import {
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { pathToFileURL } from 'url';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
 import { FileProvider } from './core/providers/file-provider';
@@ -70,7 +69,6 @@ const connection = createConnection(ProposedFeatures.all);
 const documents: TextDocuments<TextDocument> = new TextDocuments(TextDocument);
 
 let hasConfigurationCapability = false;
-let hasWorkDoneProgressCapability = false;
 
 let searchEngine: SearchEngine;
 let workspaceIndexer: WorkspaceIndexer;
@@ -86,7 +84,6 @@ connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
 
     hasConfigurationCapability = !!(capabilities.workspace && !!capabilities.workspace.configuration);
-    hasWorkDoneProgressCapability = !!capabilities.window?.workDoneProgress;
 
     // Monitor parent process
     if (params.processId) {
@@ -227,47 +224,10 @@ connection.onDidChangeConfiguration(async () => {
 
 let currentIndexingPromise: Promise<void> | undefined;
 
-async function shutdownServer(exitCode?: number): Promise<void> {
-    if (isShuttingDown) {
-        if (exitCode !== undefined) {
-            process.exit(exitCode);
-        }
-        return;
-    }
-
-    isShuttingDown = true;
-
-    try {
-        workspaceIndexer?.cancel();
-        if (currentIndexingPromise) {
-            try {
-                await currentIndexingPromise;
-            } catch {
-                // Ignore errors from the cancelled process
-            }
-        }
-        workspaceIndexer?.dispose();
-        if (treeSitterParser && typeof (treeSitterParser as any).dispose === 'function') {
-            (treeSitterParser as any).dispose();
-        }
-    } finally {
-        if (activityTracker) {
-            activityTracker.saveActivities();
-        }
-        connection.console.log('DeepLens Language Server shutting down');
-        if (exitCode !== undefined) {
-            process.exit(exitCode);
-        }
-    }
-}
-
 /**
  * Run indexing with progress reporting
  */
 async function runIndexingWithProgress(): Promise<void> {
-    if (isShuttingDown) {
-        return;
-    }
     // If indexing is already running, cancel it and wait for it to stop
     if (currentIndexingPromise) {
         workspaceIndexer.cancel();
@@ -280,18 +240,12 @@ async function runIndexingWithProgress(): Promise<void> {
 
     const token = 'indexing-' + Date.now();
 
-    if (isShuttingDown) {
-        return;
-    }
-
     // We need to wait a small bit for the client to be ready for requests immediately after initialized
     // but creating the progress token handles the handshake
-    if (hasWorkDoneProgressCapability) {
-        try {
-            await connection.sendRequest('window/workDoneProgress/create', { token });
-        } catch (e) {
-            connection.console.error(`Failed to create progress token: ${e}`);
-        }
+    try {
+        await connection.sendRequest('window/workDoneProgress/create', { token });
+    } catch (e) {
+        connection.console.error(`Failed to create progress token: ${e}`);
     }
 
     const indexingTask = async () => {
@@ -395,7 +349,7 @@ connection.onWorkspaceSymbol(async (params) => {
         name: r.item.name,
         kind: mapItemTypeToSymbolKind(r.item.type),
         location: {
-            uri: pathToFileURL(r.item.filePath).href,
+            uri: `file://${r.item.filePath.replace(/\\/g, '/')}`,
             range: {
                 start: { line: r.item.line || 0, character: r.item.column || 0 },
                 end: { line: r.item.line || 0, character: (r.item.column || 0) + r.item.name.length },
@@ -487,11 +441,16 @@ connection.onRequest(IndexStatsRequest, async () => {
 
 // Handle shutdown gracefully
 connection.onShutdown(() => {
-    return shutdownServer();
+    isShuttingDown = true;
+    if (activityTracker) {
+        activityTracker.saveActivities();
+    }
+    connection.console.log('DeepLens Language Server shutting down');
 });
 
 connection.onExit(() => {
-    void shutdownServer(0);
+    isShuttingDown = true;
+    process.exit(0);
 });
 
 // Global error handlers to prevent crashes
