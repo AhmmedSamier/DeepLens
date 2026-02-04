@@ -161,15 +161,8 @@ connection.onInitialize(async (params: InitializeParams) => {
         error: (msg) => connection.console.error(msg),
     });
 
-    // Sync active files for prioritization
-    const updateActiveFiles = () => {
-        const openFiles = documents.all().map((doc) => uriToPath(doc.uri));
-        searchEngine.setActiveFiles(openFiles);
-    };
-
-    documents.onDidOpen(updateActiveFiles);
-    documents.onDidClose(updateActiveFiles);
     documents.listen(connection);
+
 
     // Wire up search engine to indexer
     workspaceIndexer.onItemsAdded((items) => searchEngine.addItems(items));

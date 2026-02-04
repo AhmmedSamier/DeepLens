@@ -45,15 +45,22 @@ export class GitProvider {
         return modifiedFiles;
     }
 
+    private isWindows = process.platform === 'win32';
+
     private addFilesToSet(set: Set<string>, root: string, output: string): void {
         const lines = output.split('\n');
         for (const line of lines) {
             const trimmed = line.trim();
             if (trimmed) {
-                set.add(path.normalize(path.join(root, trimmed)));
+                let filePath = path.normalize(path.join(root, trimmed));
+                if (this.isWindows) {
+                    filePath = filePath.toLowerCase();
+                }
+                set.add(filePath);
             }
         }
     }
+
 
     private async execGit(args: string[], cwd: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {

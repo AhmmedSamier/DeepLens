@@ -253,8 +253,12 @@ describe('SearchEngine', () => {
 
         // Mock GitProvider
         const mockGitProvider = {
-            getModifiedFiles: async () => new Set([path.normalize('/src/File2.ts')]),
+            getModifiedFiles: async () => {
+                const filePath = path.normalize('/src/File2.ts');
+                return new Set([process.platform === 'win32' ? filePath.toLowerCase() : filePath]);
+            },
         };
+
         (engine as any).gitProvider = mockGitProvider;
 
         const results = await engine.search({

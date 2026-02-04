@@ -38,15 +38,35 @@ export async function activate(context: vscode.ExtensionContext) {
     searchProvider = new SearchProvider(lspClient, config, activityTracker, commandIndexer);
 
     const updateActiveFiles = () => {
-        const activeFiles = vscode.workspace.textDocuments
-            .filter((doc) => doc.uri.scheme === 'file')
-            .map((doc) => doc.uri.fsPath);
+        const activeFiles: string[] = [];
+
+        // Use tabGroups to get files actually open in tabs (more accurate than textDocuments)
+        if (typeof vscode.window.tabGroups !== 'undefined') {
+            for (const group of vscode.window.tabGroups.all) {
+                for (const tab of group.tabs) {
+                    if (tab.input instanceof vscode.TabInputText) {
+                        activeFiles.push(tab.input.uri.fsPath);
+                    }
+                }
+            }
+        } else {
+            // Fallback for older VS Code versions
+            const docs = vscode.workspace.textDocuments
+                .filter((doc) => doc.uri.scheme === 'file')
+                .map((doc) => doc.uri.fsPath);
+            activeFiles.push(...docs);
+        }
+
         const activeEditorPath = vscode.window.activeTextEditor?.document.uri;
         if (activeEditorPath?.scheme === 'file' && !activeFiles.includes(activeEditorPath.fsPath)) {
             activeFiles.push(activeEditorPath.fsPath);
         }
-        lspClient.setActiveFiles(activeFiles);
+
+        // Deduplicate
+        const uniqueFiles = Array.from(new Set(activeFiles));
+        lspClient.setActiveFiles(uniqueFiles);
     };
+
 
     updateActiveFiles();
     context.subscriptions.push(
@@ -54,6 +74,11 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.workspace.onDidCloseTextDocument(updateActiveFiles),
         vscode.window.onDidChangeActiveTextEditor(updateActiveFiles),
     );
+
+    if (typeof vscode.window.tabGroups !== 'undefined') {
+        context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(updateActiveFiles));
+    }
+
 
     // Register search command
     const searchCommand = vscode.commands.registerCommand('deeplens.search', async () => {

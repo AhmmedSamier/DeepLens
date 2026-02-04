@@ -401,12 +401,20 @@ export class SearchEngine implements ISearchProvider {
         this.activityWeight = weight;
     }
 
+    private isWindows = process.platform === 'win32';
+
     /**
      * Set the list of currently active or open files to prioritize them
      */
     setActiveFiles(files: string[]): void {
-        this.activeFiles = new Set(files.map((f) => path.normalize(f)));
+        this.activeFiles = new Set(
+            files.map((f) => {
+                const normalized = path.normalize(f);
+                return this.isWindows ? normalized.toLowerCase() : normalized;
+            }),
+        );
     }
+
 
     /**
      * Clear all items
@@ -537,24 +545,36 @@ export class SearchEngine implements ISearchProvider {
         });
 
         // Use providers if any are registered, otherwise fallback to internal logic
-        if (this.providers.length > 0) {
+        // EXCEPT for scopes that require filtering indexed items directly (OPEN, MODIFIED)
+        if (this.providers.length > 0 && scope !== SearchScope.OPEN && scope !== SearchScope.MODIFIED) {
             return this.executeProviderSearch(context, maxResults, targetLine, onResult);
         }
 
         return this.executeInternalSearch(effectiveQuery, scope, enableCamelHumps, maxResults, targetLine);
     }
 
+
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
-        const results: SearchResult[] = [];
+        let results: SearchResult[] = [];
         for (const provider of this.providers) {
             const providerResults = await provider.search(context);
             results.push(...providerResults);
             if (results.length >= maxResults) break;
         }
+
+        // Apply scope filtering to empty query results (e.g., for /o or /m history)
+        if (options.scope === SearchScope.OPEN) {
+            results = results.filter((r) => this.isActive(r.item.filePath));
+        } else if (options.scope === SearchScope.MODIFIED && this.gitProvider) {
+            const modifiedFiles = await this.gitProvider.getModifiedFiles();
+            results = results.filter((r) => modifiedFiles.has(this.normalizePath(r.item.filePath)));
+        }
+
         return results;
     }
+
 
     private async executeProviderSearch(
         context: SearchContext,
@@ -619,12 +639,20 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
+    private normalizePath(filePath: string): string {
+        const normalized = path.normalize(filePath);
+        return this.isWindows ? normalized.toLowerCase() : normalized;
+    }
+
+    private isActive(filePath: string): boolean {
+        return this.activeFiles.has(this.normalizePath(filePath));
+    }
+
     private getIndicesForOpenFiles(): number[] {
         const indices: number[] = [];
         const count = this.items.length;
         for (let i = 0; i < count; i++) {
-            const filePath = path.normalize(this.items[i].filePath);
-            if (this.activeFiles.has(filePath)) {
+            if (this.isActive(this.items[i].filePath)) {
                 indices.push(i);
             }
         }
@@ -639,16 +667,15 @@ export class SearchEngine implements ISearchProvider {
 
         console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
 
-        let matchesFound = 0;
         for (let i = 0; i < count; i++) {
-            const filePath = this.items[i].filePath;
-            // Check both raw and normalized path for robustness
-            if (modifiedFiles.has(filePath) || modifiedFiles.has(path.normalize(filePath))) {
+            const filePath = this.normalizePath(this.items[i].filePath);
+            if (modifiedFiles.has(filePath)) {
                 indices.push(i);
             }
         }
         return indices;
     }
+
 
     private applyTargetLine(results: SearchResult[], targetLine: number): SearchResult[] {
         return results.map((r) => ({
@@ -741,10 +768,11 @@ export class SearchEngine implements ISearchProvider {
 
         // Zed Optimization: Prioritize active/open files
         const prioritizedFiles = fileItems.sort((a, b) => {
-            const aActive = this.activeFiles.has(path.normalize(a.filePath)) ? 1 : 0;
-            const bActive = this.activeFiles.has(path.normalize(b.filePath)) ? 1 : 0;
+            const aActive = this.isActive(a.filePath) ? 1 : 0;
+            const bActive = this.isActive(b.filePath) ? 1 : 0;
             return bActive - aActive;
         });
+
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
