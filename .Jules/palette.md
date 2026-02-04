@@ -33,3 +33,7 @@
 ## 2025-05-27 - [Context-Aware Empty States]
 **Learning:** Suggesting actions the user has already taken (e.g., "Try /all" when already in Global scope) frustrates users and erodes trust.
 **Action:** Ensure empty state messages are context-aware. If the scope is already global, suggest deeper debugging steps like checking exclusions or rebuilding the index.
+
+## 2026-02-05 - [In-Context Feedback]
+**Learning:** Status bar messages (`window.setStatusBarMessage`) are often missed by users when their attention is focused on a specific UI element like a QuickPick item.
+**Action:** Use the `QuickPick.title` or placeholder to flash temporary feedback (e.g., "Copied! ✅") directly within the component the user is interacting with, then revert to the original state.
