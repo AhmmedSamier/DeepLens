@@ -53,3 +53,9 @@
 ## 2024-06-03 - Strategy Reordering with Inlining
 **Learning:** Combining manual loop inlining with strategy reordering (CamelHumps > Fuzzy) yielded a ~8% speedup in unified search. Inlining avoids closure overhead in the hot loop, and checking the cheap CamelHumps match first allows skipping the expensive fuzzy match for abbreviations.
 **Action:** For critical search loops, inline helper functions and prioritize cheap/exact match checks to short-circuit expensive logic.
+
+## 2026-05-24 - Bun/JSC Text Search & Fuzzysort Bitflags
+**Learning:**
+1. In Bun (JSC), replacing `slice` + `toLowerCase` + `indexOf` with `RegExp` scanning for stream search caused a regression (~2x slower). Simple string methods seem highly optimized in JSC or have lower setup overhead.
+2. `fuzzysort` uses an internal bloom filter (bitflags) to reject non-matches. Manually accessing this private bitmask (`_bitflags`) and checking it before calling `fuzzysort.single` avoids significant overhead (function calls, Map lookups) in hot loops, yielding 10-15x speedup for non-matching items.
+**Action:** When using `fuzzysort` in tight loops, consider pre-checking `_bitflags` (if safe) to short-circuit expensive calls. Avoid premature Regex optimization in Bun without benchmarking.

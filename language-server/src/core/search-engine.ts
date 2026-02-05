@@ -1096,6 +1096,13 @@ export class SearchEngine implements ISearchProvider {
         // Optimization: Pre-calculate path segments to avoid repeated splitting in the loop
         const queryForUrlMatch = isPotentialUrl ? RouteMatcher.prepare(query) : query;
 
+        // Optimization: Pre-calculate bitflags for Bloom filter check
+        // Accessing private _bitflags from Fuzzysort.Prepared to skip non-matching items early
+        const queryPrepared = Fuzzysort.prepare(query);
+        const queryBitflags = (queryPrepared as any)._bitflags;
+        // Safety: Ensure _bitflags exists (private API might change in future library updates)
+        const canUseBitflags = typeof queryBitflags === 'number';
+
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
@@ -1154,6 +1161,14 @@ export class SearchEngine implements ISearchProvider {
         // Helper to process a single item index
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
+            // Optimization: Bloom filter check
+            // If the query needs bits that the target doesn't have, it can't match.
+            // This avoids expensive scoring logic for the vast majority of items.
+            const pName = preparedNames[i];
+            if (!pName) return;
+
+            if (canUseBitflags && (queryBitflags & (pName as any)._bitflags) !== queryBitflags) return;
+
             const typeId = itemTypeIds[i];
             const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;
