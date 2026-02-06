@@ -823,6 +823,7 @@ export class SearchEngine implements ISearchProvider {
                             maxResults,
                             results,
                             pendingResults,
+                            fileSize,
                         );
                     } catch {
                         // Ignore read/stat errors
@@ -858,7 +859,50 @@ export class SearchEngine implements ISearchProvider {
         maxResults: number,
         results: SearchResult[],
         pendingResults: SearchResult[],
+        fileSize?: number,
     ): Promise<void> {
+        // Optimization: For small files, readFile is significantly faster than createReadStream (Journal 2026-01-28)
+        if (fileSize !== undefined && fileSize < 50 * 1024) {
+            try {
+                const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
+                if (results.length >= maxResults) return;
+
+                const { newBuffer, newLineIndex } = this.processBufferLines(
+                    content,
+                    queryLower,
+                    queryLength,
+                    maxResults,
+                    results,
+                    pendingResults,
+                    fileItem,
+                    0,
+                );
+
+                if (newBuffer.length > 0) {
+                    const matchIndex = newBuffer.toLowerCase().indexOf(queryLower);
+                    if (matchIndex >= 0) {
+                        const trimmedLine = newBuffer.trim();
+                        if (trimmedLine.length > 0) {
+                            const indentation = newBuffer.search(/\S|$/);
+                            const result = this.createSearchResult(
+                                fileItem,
+                                trimmedLine,
+                                newLineIndex,
+                                matchIndex,
+                                queryLength,
+                                indentation,
+                            );
+                            results.push(result);
+                            pendingResults.push(result);
+                        }
+                    }
+                }
+                return;
+            } catch {
+                // Fallback to stream if readFile fails (unlikely if stat succeeded, but safe)
+            }
+        }
+
         return new Promise<void>((resolve) => {
             const stream = fs.createReadStream(fileItem.filePath, {
                 encoding: 'utf8',
@@ -1106,50 +1150,6 @@ export class SearchEngine implements ISearchProvider {
 
         const getActivityScore = this.getActivityScore;
         const activityWeight = this.activityWeight;
-
-        // Local helper for Fuzzy Score
-        // eslint-disable-next-line sonarjs/cognitive-complexity
-        const computeFuzzyScoreLocal = (i: number, typeId: number): number => {
-            let bestScore = -Infinity;
-
-            // Name (1.0)
-            const pName = preparedNames[i];
-            if (pName && queryLen <= pName.target.length) {
-                const res = Fuzzysort.single(query, pName);
-                if (res) {
-                    const score = res.score;
-                    if (score > MIN_SCORE) bestScore = score;
-                }
-            }
-
-            // Optimization: Defer boost lookup until match is confirmed
-            if (bestScore >= 0.9) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
-
-            // Full Name (0.9)
-            const pFull = preparedFullNames[i];
-            if (pFull && queryLen <= pFull.target.length) {
-                const res = Fuzzysort.single(query, pFull);
-                if (res) {
-                    const score = res.score;
-                    if (score * 0.9 > bestScore) bestScore = score * 0.9;
-                }
-            }
-
-            if (bestScore >= 0.8) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
-
-            // Path (0.8)
-            const pPath = preparedPaths[i];
-            if (pPath && queryLen <= pPath.target.length) {
-                const res = Fuzzysort.single(query, pPath);
-                if (res) {
-                    const score = res.score;
-                    if (score * 0.8 > bestScore) bestScore = score * 0.8;
-                }
-            }
-
-            if (bestScore > MIN_SCORE) return bestScore * (ID_TO_BOOST[typeId] || 1.0);
-            return -Infinity;
-        };
 
         // Helper to process a single item index
         // eslint-disable-next-line sonarjs/cognitive-complexity
