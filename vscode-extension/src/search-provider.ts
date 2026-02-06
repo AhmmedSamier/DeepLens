@@ -1386,8 +1386,7 @@ export class SearchProvider {
     ): Promise<void> {
         const { item } = result;
 
-        // Palette: Ignore empty state item
-        if (item.id === 'empty-state') {
+        if (await this.handleEmptyStateClick(item)) {
             return;
         }
 
@@ -1403,6 +1402,44 @@ export class SearchProvider {
 
         // Handle file/symbol navigation
         await this.navigateToFile(item, viewColumn, preview, result.highlights);
+    }
+
+    private async handleEmptyStateClick(item: SearchableItem): Promise<boolean> {
+        // Palette: Handle empty state item click
+        if (item.id === 'empty-state') {
+            if (this.currentScope !== SearchScope.EVERYTHING && this.currentQuickPick) {
+                // Switch to Global
+                this.userSelectedScope = SearchScope.EVERYTHING;
+                this.currentScope = SearchScope.EVERYTHING;
+
+                const currentQuery = this.currentQuickPick.value;
+                let newQuery = currentQuery;
+
+                // Check if current query has ANY known prefix and remove it
+                for (const [prefix] of this.PREFIX_MAP.entries()) {
+                    if (currentQuery.toLowerCase().startsWith(prefix)) {
+                        newQuery = currentQuery.slice(prefix.length);
+                        break;
+                    }
+                }
+
+                // If query changed, updating value will trigger search via listener
+                if (currentQuery !== newQuery) {
+                    this.currentQuickPick.value = newQuery;
+                } else {
+                    // If query didn't change (no prefix), manual update needed
+                    this.updateFilterButtons(this.currentQuickPick);
+                    this.currentQuickPick.placeholder = this.getPlaceholder();
+                    const { text } = this.parseQuery(newQuery);
+                    const queryId = ++this.lastQueryId;
+                    await this.performSearch(this.currentQuickPick, text, queryId);
+                }
+
+                this.showFeedback('Switched to Global Search');
+            }
+            return true;
+        }
+        return false;
     }
 
     private handleSlashCommandNavigation(item: SearchableItem, preview: boolean): boolean {
