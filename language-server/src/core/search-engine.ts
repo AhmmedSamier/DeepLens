@@ -1155,7 +1155,8 @@ export class SearchEngine implements ISearchProvider {
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
             const typeId = itemTypeIds[i];
-            const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+            // Defer lookup until needed to save overhead on non-matches
+            // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;
 
             // 1. CamelHumps Score (Inlined) - Checked First
@@ -1168,6 +1169,7 @@ export class SearchEngine implements ISearchProvider {
                     if (matchIndex !== -1) {
                         const lengthRatio = queryLen / capitals.length;
                         const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
                         const camelScore = lengthRatio * positionBoost * 0.8 * typeBoost;
                         if (camelScore > score) {
                             score = camelScore;
@@ -1220,6 +1222,7 @@ export class SearchEngine implements ISearchProvider {
 
                 // Apply type boost to fuzzy score
                 if (fuzzyScore > MIN_SCORE) {
+                    const typeBoost = ID_TO_BOOST[typeId] || 1.0;
                     fuzzyScore *= typeBoost;
                     if (fuzzyScore > score) {
                         score = fuzzyScore;
