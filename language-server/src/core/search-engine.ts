@@ -1187,12 +1187,14 @@ export class SearchEngine implements ISearchProvider {
 
         const getActivityScore = this.getActivityScore;
         const activityWeight = this.activityWeight;
+        const invActivityWeight = 1.0 - activityWeight;
 
         // Helper to process a single item index
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
             const typeId = itemTypeIds[i];
-            const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+            // Optimization: Defer typeBoost lookup until needed (Journal 2025-01-29)
+            // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;
 
             // 1. CamelHumps Score (Inlined) - Checked First
@@ -1205,6 +1207,7 @@ export class SearchEngine implements ISearchProvider {
                     if (matchIndex !== -1) {
                         const lengthRatio = queryLen / capitals.length;
                         const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
                         const camelScore = lengthRatio * positionBoost * 0.8 * typeBoost;
                         if (camelScore > score) {
                             score = camelScore;
@@ -1234,14 +1237,13 @@ export class SearchEngine implements ISearchProvider {
                 // Apply boost only if valid score, but also consider other fields if score is low
                 if (fuzzyScore < 0.9) {
                     // Full Name (0.9)
-                    if (fuzzyScore < 0.9) {
-                        const pFull = preparedFullNames[i];
-                        if (pFull && queryLen <= pFull.target.length) {
-                            const res = Fuzzysort.single(query, pFull);
-                            if (res) {
-                                const s = res.score * 0.9;
-                                if (s > fuzzyScore) fuzzyScore = s;
-                            }
+                    // Optimization: Removed redundant nested check (Journal 2025-01-29)
+                    const pFull = preparedFullNames[i];
+                    if (pFull && queryLen <= pFull.target.length) {
+                        const res = Fuzzysort.single(query, pFull);
+                        if (res) {
+                            const s = res.score * 0.9;
+                            if (s > fuzzyScore) fuzzyScore = s;
                         }
                     }
 
@@ -1260,6 +1262,7 @@ export class SearchEngine implements ISearchProvider {
 
                 // Apply type boost to fuzzy score
                 if (fuzzyScore > MIN_SCORE) {
+                    const typeBoost = ID_TO_BOOST[typeId] || 1.0;
                     fuzzyScore *= typeBoost;
                     if (fuzzyScore > score) {
                         score = fuzzyScore;
@@ -1295,7 +1298,7 @@ export class SearchEngine implements ISearchProvider {
                     if (getActivityScore) {
                         const activityScore = getActivityScore(item.id);
                         if (activityScore > 0 && score > 0.05) {
-                            score = score * (1 - activityWeight) + activityScore * activityWeight;
+                            score = score * invActivityWeight + activityScore * activityWeight;
                         }
                     }
 
