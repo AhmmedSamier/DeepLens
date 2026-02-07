@@ -53,3 +53,11 @@
 ## 2024-06-03 - Strategy Reordering with Inlining
 **Learning:** Combining manual loop inlining with strategy reordering (CamelHumps > Fuzzy) yielded a ~8% speedup in unified search. Inlining avoids closure overhead in the hot loop, and checking the cheap CamelHumps match first allows skipping the expensive fuzzy match for abbreviations.
 **Action:** For critical search loops, inline helper functions and prioritize cheap/exact match checks to short-circuit expensive logic.
+
+## 2026-01-28 - Manual Inlining in Bun (JSC)
+**Learning:** Manually inlining a large closure body (with nested logic) into a hot loop in Bun (JavaScriptCore) caused a performance regression (~2x slowdown) compared to keeping it as a closure. This contrasts with V8 behavior where eliminating closure overhead is often beneficial.
+**Action:** In Bun/JSC environments, verify manual inlining impact carefully; the engine might optimize small closures better than large monolithic functions.
+
+## 2026-01-28 - Small File Reading in Bun
+**Learning:** For small files (< 50KB), `fs.promises.readFile` is significantly faster (~3x) than `fs.createReadStream` with manual chunk processing in Bun. Stream overhead (events, buffer concatenation) dominates for tiny payloads.
+**Action:** Use `readFile` for small files in text search hot paths.

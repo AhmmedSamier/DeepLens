@@ -823,6 +823,7 @@ export class SearchEngine implements ISearchProvider {
                             maxResults,
                             results,
                             pendingResults,
+                            fileSize,
                         );
                     } catch {
                         // Ignore read/stat errors
@@ -858,7 +859,50 @@ export class SearchEngine implements ISearchProvider {
         maxResults: number,
         results: SearchResult[],
         pendingResults: SearchResult[],
+        fileSize?: number,
     ): Promise<void> {
+        // Optimization: For small files, readFile is significantly faster than createReadStream (Journal 2026-01-28)
+        if (fileSize !== undefined && fileSize < 50 * 1024) {
+            try {
+                const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
+                if (results.length >= maxResults) return;
+
+                const { newBuffer, newLineIndex } = this.processBufferLines(
+                    content,
+                    queryLower,
+                    queryLength,
+                    maxResults,
+                    results,
+                    pendingResults,
+                    fileItem,
+                    0,
+                );
+
+                if (newBuffer.length > 0) {
+                    const matchIndex = newBuffer.toLowerCase().indexOf(queryLower);
+                    if (matchIndex >= 0) {
+                        const trimmedLine = newBuffer.trim();
+                        if (trimmedLine.length > 0) {
+                            const indentation = newBuffer.search(/\S|$/);
+                            const result = this.createSearchResult(
+                                fileItem,
+                                trimmedLine,
+                                newLineIndex,
+                                matchIndex,
+                                queryLength,
+                                indentation,
+                            );
+                            results.push(result);
+                            pendingResults.push(result);
+                        }
+                    }
+                }
+                return;
+            } catch {
+                // Fallback to stream if readFile fails (unlikely if stat succeeded, but safe)
+            }
+        }
+
         return new Promise<void>((resolve) => {
             const stream = fs.createReadStream(fileItem.filePath, {
                 encoding: 'utf8',
@@ -1296,14 +1340,14 @@ export class SearchEngine implements ISearchProvider {
                         }
                     }
 
-                    // Apply type boost to fuzzy score
-                    if (fuzzyScore > MIN_SCORE) {
-                        fuzzyScore *= typeBoost;
-                        if (fuzzyScore > score) {
-                            score = fuzzyScore;
-                        }
+                // Apply type boost to fuzzy score
+                if (fuzzyScore > MIN_SCORE) {
+                    fuzzyScore *= typeBoost;
+                    if (fuzzyScore > score) {
+                        score = fuzzyScore;
                     }
                 }
+            }
 
                 let resultScope: SearchScope | undefined;
 
