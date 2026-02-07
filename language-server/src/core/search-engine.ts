@@ -6,7 +6,7 @@ import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
-import { PreparedPath, RouteMatcher } from './route-matcher';
+import { MatchStrength, PreparedPath, RouteMatcher } from './route-matcher';
 import {
     ISearchProvider,
     SearchableItem,
@@ -439,7 +439,7 @@ export class SearchEngine implements ISearchProvider {
         return this.items.length;
     }
 
-    private createSearchContext(options: SearchOptions): SearchContext {
+    private createSearchContext(options: SearchOptions, maxResults?: number): SearchContext {
         const query = options.query || '';
         return {
             query,
@@ -1169,7 +1169,12 @@ export class SearchEngine implements ISearchProvider {
                 const pName = preparedNames[i];
                 if (!pName) continue;
 
-                if (canUseBitflags && (queryBitflags & (pName as any)._bitflags) !== queryBitflags) continue;
+                // Optimization: Bloom filter check
+                // Skip for Endpoints during URL search because the query contains parameter values
+                // that are not present in the template string (e.g. "{id}" vs "123")
+                if (!((isPotentialUrl && typeId === 11) /* ENDPOINT */)) {
+                    if (canUseBitflags && (queryBitflags & (pName as any)._bitflags) !== queryBitflags) continue;
+                }
 
                 // 1. CamelHumps Score (Inlined) - Checked First
                 if (enableCamelHumps) {
@@ -1242,8 +1247,9 @@ export class SearchEngine implements ISearchProvider {
                 if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                     const name = preparedNames[i]?.target;
                     if (name) {
-                        if (RouteMatcher.isMatch(name, queryForUrlMatch)) {
-                            const urlScore = 1.5;
+                        const matchStrength = RouteMatcher.isMatch(name, queryForUrlMatch);
+                        if (matchStrength !== MatchStrength.None) {
+                            const urlScore = matchStrength === MatchStrength.Exact ? 1.5 : 1.25;
                             if (urlScore > score) {
                                 score = urlScore;
                                 resultScope = SearchScope.ENDPOINTS;
@@ -1364,8 +1370,9 @@ export class SearchEngine implements ISearchProvider {
                 if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                     const name = preparedNames[i]?.target;
                     if (name) {
-                        if (RouteMatcher.isMatch(name, queryForUrlMatch)) {
-                            const urlScore = 1.5;
+                        const matchStrength = RouteMatcher.isMatch(name, queryForUrlMatch);
+                        if (matchStrength !== MatchStrength.None) {
+                            const urlScore = matchStrength === MatchStrength.Exact ? 1.5 : 1.25;
                             if (urlScore > score) {
                                 score = urlScore;
                                 resultScope = SearchScope.ENDPOINTS;
@@ -1413,8 +1420,11 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private computeUrlScore(name: string, query: string): number {
-        if (RouteMatcher.isMatch(name, query)) {
+        const matchStrength = RouteMatcher.isMatch(name, query);
+        if (matchStrength === MatchStrength.Exact) {
             return 1.5;
+        } else if (matchStrength === MatchStrength.FuzzySuffix) {
+            return 1.25;
         }
         return -Infinity;
     }
@@ -1513,8 +1523,9 @@ export class SearchEngine implements ISearchProvider {
         currentScore: number,
         currentScope: SearchScope,
     ): { newScore: number; newScope: SearchScope } {
-        if (RouteMatcher.isMatch(item.name, query)) {
-            const urlScore = 1.5;
+        const matchStrength = RouteMatcher.isMatch(item.name, query);
+        if (matchStrength !== MatchStrength.None) {
+            const urlScore = matchStrength === MatchStrength.Exact ? 1.5 : 1.25;
             if (urlScore > currentScore) {
                 return { newScore: urlScore, newScope: SearchScope.ENDPOINTS };
             }
