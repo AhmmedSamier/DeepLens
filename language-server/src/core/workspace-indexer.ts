@@ -280,11 +280,9 @@ export class WorkspaceIndexer {
                     const fullPath = path.join(folderPath, line);
                     results.push(fullPath);
                 }
-            } catch (error: any) {
-                // Not a git repo or git not installed (128 = fatal: not a git repository)
-                if (error.code !== 128) {
-                    console.debug(`Git file listing failed for ${folderPath}:`, error);
-                }
+            } catch (error) {
+                // Not a git repo or git not installed
+                console.debug(`Git file listing failed for ${folderPath}:`, error);
             }
         }
         return results;
@@ -1001,10 +999,7 @@ export class WorkspaceIndexer {
                 if (code === 0) {
                     resolve(stdout);
                 } else {
-                    // Code 128 usually means "not a git repository"
-                    const error = new Error(`Git exited with code ${code}: ${stderr}`);
-                    (error as any).code = code;
-                    reject(error);
+                    reject(new Error(`Git exited with code ${code}: ${stderr}`));
                 }
             });
         });

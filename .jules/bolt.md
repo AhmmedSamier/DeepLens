@@ -61,9 +61,3 @@
 ## 2026-01-28 - Small File Reading in Bun
 **Learning:** For small files (< 50KB), `fs.promises.readFile` is significantly faster (~3x) than `fs.createReadStream` with manual chunk processing in Bun. Stream overhead (events, buffer concatenation) dominates for tiny payloads.
 **Action:** Use `readFile` for small files in text search hot paths.
-
-## 2026-05-24 - Bun/JSC Text Search & Fuzzysort Bitflags
-**Learning:**
-1. In Bun (JSC), replacing `slice` + `toLowerCase` + `indexOf` with `RegExp` scanning for stream search caused a regression (~2x slower). Simple string methods seem highly optimized in JSC or have lower setup overhead.
-2. `fuzzysort` uses an internal bloom filter (bitflags) to reject non-matches. Manually accessing this private bitmask (`_bitflags`) and checking it before calling `fuzzysort.single` avoids significant overhead (function calls, Map lookups) in hot loops, yielding 10-15x speedup for non-matching items.
-**Action:** When using `fuzzysort` in tight loops, consider pre-checking `_bitflags` (if safe) to short-circuit expensive calls. Avoid premature Regex optimization in Bun without benchmarking.
