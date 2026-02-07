@@ -9,12 +9,6 @@ export interface PreparedPath {
 /**
  * Utility to match concrete URL paths against ASP.NET route templates.
  */
-export enum MatchStrength {
-    None = 0,
-    FuzzySuffix = 1,
-    Exact = 2,
-}
-
 export class RouteMatcher {
     private static cache = new Map<string, { regex: RegExp; cleanTemplate: string; templateSegments: string[] }>();
     private static readonly CACHE_LIMIT = 1000;
@@ -23,10 +17,7 @@ export class RouteMatcher {
      * Pre-process a concrete path for efficient matching against multiple templates.
      */
     static prepare(concretePath: string): PreparedPath {
-        // Remove method prefix (e.g. "GET api/..." -> "api/...")
-        let cleanPath = concretePath.trim().replace(/^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+/i, '');
-        cleanPath = cleanPath.replace(/(^\/|\/$)/g, '');
-
+        const cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
         const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
         return { cleanPath, segments };
@@ -37,28 +28,25 @@ export class RouteMatcher {
      * @param template e.g., "api/AdminDashboard/customers/{customerId}"
      * @param concretePath e.g., "api/AdminDashboard/customers/5" or a PreparedPath object
      */
-    static isMatch(template: string, concretePath: string | PreparedPath): MatchStrength {
+    static isMatch(template: string, concretePath: string | PreparedPath): boolean {
         let cleanPath: string;
         let pathSegments: string[] | undefined;
 
         if (typeof concretePath === 'string') {
-            cleanPath = concretePath
-                .trim()
-                .replace(/^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+/i, '')
-                .replace(/(^\/|\/$)/g, '');
+            cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
         } else {
             cleanPath = concretePath.cleanPath;
             pathSegments = concretePath.segments;
         }
 
-        if (!cleanPath) return MatchStrength.None;
+        if (!cleanPath) return false;
 
         const cached = this.getOrCompileCache(template);
-        if (!cached) return MatchStrength.None;
+        if (!cached) return false;
 
         try {
             // 1. Try exact match first (Fastest)
-            if (cached.regex.test(cleanPath)) return MatchStrength.Exact;
+            if (cached.regex.test(cleanPath)) return true;
 
             // 2. Try segment-based suffix matching
             // Lazy load segments if not provided
@@ -66,12 +54,9 @@ export class RouteMatcher {
                 pathSegments = cleanPath.split('/');
             }
 
-            if (this.segmentsMatch(cached.templateSegments, pathSegments)) {
-                return MatchStrength.FuzzySuffix;
-            }
-            return MatchStrength.None;
+            return this.segmentsMatch(cached.templateSegments, pathSegments);
         } catch {
-            return MatchStrength.None;
+            return false;
         }
     }
 
@@ -166,14 +151,7 @@ export class RouteMatcher {
      * Check if a query string looks like a concrete URL path
      */
     static isPotentialUrl(query: string): boolean {
-        const trimmed = query.trim();
-        // Allow method prefix followed by space
-        const hasMethodPrefix = /^(?:GET|POST|PUT|DELETE|PATCH|HEAD|OPTIONS)\s+/i.test(trimmed);
-
-        if (!hasMethodPrefix && trimmed.includes(' ')) {
-            return false;
-        }
-
-        return trimmed.includes('/') && trimmed.length > 2;
+        // If it contains slashes and no spaces, it's likely a URL
+        return query.includes('/') && !query.includes(' ') && query.length > 2;
     }
 }
