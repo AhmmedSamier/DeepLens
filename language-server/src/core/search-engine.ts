@@ -1292,6 +1292,7 @@ export class SearchEngine implements ISearchProvider {
                 }
             }
         } else {
+            // eslint-disable-next-line sonarjs/cognitive-complexity
             const count = items.length;
             for (let i = 0; i < count; i++) {
                 const typeId = itemTypeIds[i];

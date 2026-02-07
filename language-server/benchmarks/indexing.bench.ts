@@ -1,3 +1,4 @@
+import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -13,6 +14,15 @@ export async function runIndexingBenchmark() {
     const extensionPath = path.resolve(__dirname, '..');
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deeplens-bench-'));
     console.log(`Using temp dir: ${tempDir}`);
+
+    // Initialize git repo to prevent WorkspaceIndexer errors
+    try {
+        cp.execSync('git init', { cwd: tempDir, stdio: 'ignore' });
+        cp.execSync('git config user.email "bench@test.com"', { cwd: tempDir, stdio: 'ignore' });
+        cp.execSync('git config user.name "Bench"', { cwd: tempDir, stdio: 'ignore' });
+    } catch (e) {
+        console.warn('Failed to init git repo for benchmark:', e);
+    }
 
     // Generate files
     const FILE_COUNT = 1000;
