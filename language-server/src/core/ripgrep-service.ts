@@ -1,6 +1,7 @@
 import * as cp from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { CancellationToken } from 'vscode-languageserver';
 
 export interface RgMatch {
     path: string;
@@ -65,7 +66,12 @@ export class RipgrepService {
         return !!this.rgPath && fs.existsSync(this.rgPath);
     }
 
-    async search(query: string, files: string[], maxResults: number = 100): Promise<RgMatch[]> {
+    async search(
+        query: string,
+        files: string[],
+        maxResults: number = 100,
+        token?: CancellationToken,
+    ): Promise<RgMatch[]> {
         if (!this.isAvailable()) {
             throw new Error('Ripgrep binary not found');
         }
@@ -108,10 +114,10 @@ export class RipgrepService {
 
         // Process batches sequentially to respect maxResults
         for (const batch of batches) {
-            if (allResults.length >= maxResults) break;
+            if (allResults.length >= maxResults || token?.isCancellationRequested) break;
 
             try {
-                const batchResults = await this.runRgBatch(baseArgs, batch, maxResults - allResults.length);
+                const batchResults = await this.runRgBatch(baseArgs, batch, maxResults - allResults.length, token);
                 allResults.push(...batchResults);
             } catch {
                 // Ignore batch failure
@@ -121,13 +127,29 @@ export class RipgrepService {
         return allResults;
     }
 
-    private runRgBatch(baseArgs: string[], files: string[], limit: number): Promise<RgMatch[]> {
+    private runRgBatch(
+        baseArgs: string[],
+        files: string[],
+        limit: number,
+        token?: CancellationToken,
+    ): Promise<RgMatch[]> {
         return new Promise((resolve, reject) => {
+            if (token?.isCancellationRequested) {
+                resolve([]);
+                return;
+            }
+
             // Append files to args
             const args = [...baseArgs, ...files];
 
             const child = cp.spawn(this.rgPath, args, {
                 stdio: ['ignore', 'pipe', 'pipe'], // No stdin needed
+            });
+
+            // Handle immediate cancellation
+            const cancellationListener = token?.onCancellationRequested(() => {
+                child.kill();
+                resolve(results);
             });
 
             const results: RgMatch[] = [];
@@ -136,7 +158,7 @@ export class RipgrepService {
             let hitLimit = false;
 
             child.stdout.on('data', (chunk: Buffer) => {
-                if (hitLimit) return;
+                if (hitLimit || token?.isCancellationRequested) return;
 
                 buffer += chunk.toString();
                 const lines = buffer.split('\n');
@@ -193,7 +215,8 @@ export class RipgrepService {
             });
 
             child.on('close', (code) => {
-                if (hitLimit || code === 0 || code === 1) {
+                if (cancellationListener) cancellationListener.dispose();
+                if (hitLimit || token?.isCancellationRequested || code === 0 || code === 1) {
                     resolve(results);
                 } else {
                     reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
@@ -201,6 +224,7 @@ export class RipgrepService {
             });
 
             child.on('error', (err) => {
+                if (cancellationListener) cancellationListener.dispose();
                 reject(err);
             });
         });

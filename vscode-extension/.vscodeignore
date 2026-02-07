@@ -16,3 +16,6 @@ out/**
 dist/**/*.map
 vs-extension
 dist/deeplens-lsp.exe
+scripts/**
+test-workspace/**
+.vscode-test/**

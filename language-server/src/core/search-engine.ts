@@ -528,6 +528,7 @@ export class SearchEngine implements ISearchProvider {
     async search(
         options: SearchOptions,
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
+        token?: CancellationToken,
     ): Promise<SearchResult[]> {
         const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
 
@@ -536,7 +537,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
-        // Note: CancellationToken is not currently used in this implementation but is accepted for interface compatibility
+        // If the second arg is the token, use it. Otherwise use the third arg.
+        const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -546,7 +548,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Special handling for text search
         if (scope === SearchScope.TEXT && this.config?.isTextSearchEnabled()) {
-            return this.performTextSearch(effectiveQuery, maxResults, onResult);
+            return this.performTextSearch(effectiveQuery, maxResults, onResult, cancellationToken);
         }
 
         const context = this.createSearchContext({
@@ -558,10 +560,17 @@ export class SearchEngine implements ISearchProvider {
         // Use providers if any are registered, otherwise fallback to internal logic
         // EXCEPT for scopes that require filtering indexed items directly (OPEN, MODIFIED)
         if (this.providers.length > 0 && scope !== SearchScope.OPEN && scope !== SearchScope.MODIFIED) {
-            return this.executeProviderSearch(context, maxResults, targetLine, onResult);
+            return this.executeProviderSearch(context, maxResults, targetLine, onResult, cancellationToken);
         }
 
-        return this.executeInternalSearch(effectiveQuery, scope, enableCamelHumps, maxResults, targetLine);
+        return this.executeInternalSearch(
+            effectiveQuery,
+            scope,
+            enableCamelHumps,
+            maxResults,
+            targetLine,
+            cancellationToken,
+        );
     }
 
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
@@ -590,14 +599,18 @@ export class SearchEngine implements ISearchProvider {
         maxResults: number,
         targetLine: number | undefined,
         onResult?: (result: SearchResult) => void,
+        token?: CancellationToken,
     ): Promise<SearchResult[]> {
         let allResults: SearchResult[] = [];
         for (const provider of this.providers) {
+            if (token?.isCancellationRequested) break;
             try {
                 const providerResults = await provider.search(context);
                 allResults.push(...providerResults);
                 if (onResult) {
-                    providerResults.forEach((r) => onResult(r));
+                    providerResults.forEach((r) => {
+                        if (!token?.isCancellationRequested) onResult(r);
+                    });
                 }
             } catch (error) {
                 this.logger?.error(`Provider ${provider.id} failed: ${error}`);
@@ -622,6 +635,7 @@ export class SearchEngine implements ISearchProvider {
         enableCamelHumps: boolean,
         maxResults: number,
         targetLine: number | undefined,
+        token?: CancellationToken,
     ): Promise<SearchResult[]> {
         const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
 
@@ -638,7 +652,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Unified search (Fuzzy + CamelHumps in single pass)
-        let results = this.performUnifiedSearch(indices, normalizedQuery, enableCamelHumps, maxResults, scope);
+        let results = this.performUnifiedSearch(indices, normalizedQuery, enableCamelHumps, maxResults, scope, token);
 
         // Apply target line if found
         if (targetLine !== undefined) {
@@ -702,26 +716,29 @@ export class SearchEngine implements ISearchProvider {
         query: string,
         maxResults: number,
         onResult?: (result: SearchResult) => void,
+        token?: CancellationToken,
     ): Promise<SearchResult[]> {
         // Try Ripgrep first
         if (this.ripgrep && this.ripgrep.isAvailable()) {
-            const results = await this.performRipgrepSearch(query, maxResults, onResult);
+            const results = await this.performRipgrepSearch(query, maxResults, onResult, token);
             if (results) return results;
         }
 
-        return this.performStreamSearch(query, maxResults, onResult);
+        return this.performStreamSearch(query, maxResults, onResult, token);
     }
 
     private async performRipgrepSearch(
         query: string,
         maxResults: number,
         onResult?: (result: SearchResult) => void,
+        token?: CancellationToken,
     ): Promise<SearchResult[] | null> {
         this.logger?.log(`--- Starting LSP Text Search (Ripgrep): "${query}" ---`);
         const startTime = Date.now();
         try {
+            if (token?.isCancellationRequested) return [];
             // Pass cached file paths to ripgrep (No mapping/filtering needed)
-            const matches = await this.ripgrep!.search(query, this.filePaths, maxResults);
+            const matches = await this.ripgrep!.search(query, this.filePaths, maxResults, token);
 
             const results: SearchResult[] = [];
             for (const match of matches) {
@@ -764,6 +781,7 @@ export class SearchEngine implements ISearchProvider {
         query: string,
         maxResults: number,
         onResult?: (result: SearchResult) => void,
+        token?: CancellationToken,
     ): Promise<SearchResult[]> {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const startTime = Date.now();
@@ -805,11 +823,11 @@ export class SearchEngine implements ISearchProvider {
         };
 
         for (const chunk of chunks) {
-            if (results.length >= maxResults) break;
+            if (results.length >= maxResults || token?.isCancellationRequested) break;
 
             await Promise.all(
                 chunk.map(async (fileItem) => {
-                    if (results.length >= maxResults) return;
+                    if (results.length >= maxResults || token?.isCancellationRequested) return;
 
                     try {
                         // Optimization: Use cached size if available to avoid fs.stat calls
@@ -831,6 +849,7 @@ export class SearchEngine implements ISearchProvider {
                             results,
                             pendingResults,
                             fileSize,
+                            token,
                         );
                     } catch {
                         // Ignore read/stat errors
@@ -867,6 +886,7 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         pendingResults: SearchResult[],
         fileSize?: number,
+        token?: CancellationToken,
     ): Promise<void> {
         // Optimization: For small files, readFile is significantly faster than createReadStream (Journal 2026-01-28)
         if (fileSize !== undefined && fileSize < 50 * 1024) {
@@ -920,7 +940,7 @@ export class SearchEngine implements ISearchProvider {
             let lineIndex = 0;
 
             stream.on('data', (chunk: string) => {
-                if (results.length >= maxResults) {
+                if (results.length >= maxResults || token?.isCancellationRequested) {
                     stream.destroy();
                     resolve();
                     return;
@@ -1136,6 +1156,7 @@ export class SearchEngine implements ISearchProvider {
         enableCamelHumps: boolean,
         maxResults: number,
         scope: SearchScope,
+        token?: CancellationToken,
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const MIN_SCORE = 0.01;
@@ -1294,13 +1315,15 @@ export class SearchEngine implements ISearchProvider {
         };
 
         if (indices) {
-            for (const i of indices) {
-                processIndex(i);
+            for (let j = 0; j < indices.length; j++) {
+                if (j % 500 === 0 && token?.isCancellationRequested) break;
+                processIndex(indices[j]);
             }
         } else {
             // eslint-disable-next-line sonarjs/cognitive-complexity
             const count = items.length;
             for (let i = 0; i < count; i++) {
+                if (i % 500 === 0 && token?.isCancellationRequested) break;
                 processIndex(i);
             }
         }
@@ -1612,6 +1635,7 @@ export class SearchEngine implements ISearchProvider {
     burstSearch(
         options: SearchOptions,
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
+        token?: CancellationToken,
     ): SearchResult[] {
         const { query, scope, maxResults = 10 } = options;
         if (!query || query.trim().length === 0) {
@@ -1619,6 +1643,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+        const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -1639,7 +1664,13 @@ export class SearchEngine implements ISearchProvider {
             indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
         }
 
-        let results: SearchResult[] = this.findBurstMatches(indices, queryLower, maxResults, onResult);
+        let results: SearchResult[] = this.findBurstMatches(
+            indices,
+            queryLower,
+            maxResults,
+            onResult,
+            cancellationToken,
+        );
 
         if (
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
@@ -1671,6 +1702,7 @@ export class SearchEngine implements ISearchProvider {
         queryLower: string,
         maxResults: number,
         onResult?: (result: SearchResult) => void,
+        token?: CancellationToken,
     ): SearchResult[] {
         const results: SearchResult[] = [];
 
@@ -1681,7 +1713,7 @@ export class SearchEngine implements ISearchProvider {
                 scope: ID_TO_SCOPE[typeId],
             };
             results.push(result);
-            if (onResult) {
+            if (onResult && !token?.isCancellationRequested) {
                 onResult(result);
             }
         };
@@ -1714,13 +1746,13 @@ export class SearchEngine implements ISearchProvider {
 
         if (indices) {
             for (let k = 0; k < indices.length; k++) {
-                if (results.length >= maxResults) break;
+                if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(indices[k]);
             }
         } else {
             const count = this.items.length;
             for (let i = 0; i < count; i++) {
-                if (results.length >= maxResults) break;
+                if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(i);
             }
         }

@@ -858,6 +858,7 @@ export class SearchProvider {
                         query: trimmedQuery,
                         scope: this.currentScope,
                         maxResults: 5,
+                        requestId: queryId,
                     },
                     undefined,
                 ); // No token for burst search as it should be instant
@@ -893,6 +894,7 @@ export class SearchProvider {
                             query: trimmedQuery,
                             scope: this.currentScope,
                             maxResults: 15,
+                            requestId: queryId,
                         },
                         undefined,
                     );
