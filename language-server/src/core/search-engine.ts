@@ -415,7 +415,6 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
-
     /**
      * Clear all items
      */
@@ -553,7 +552,6 @@ export class SearchEngine implements ISearchProvider {
         return this.executeInternalSearch(effectiveQuery, scope, enableCamelHumps, maxResults, targetLine);
     }
 
-
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
@@ -574,7 +572,6 @@ export class SearchEngine implements ISearchProvider {
 
         return results;
     }
-
 
     private async executeProviderSearch(
         context: SearchContext,
@@ -676,7 +673,6 @@ export class SearchEngine implements ISearchProvider {
         return indices;
     }
 
-
     private applyTargetLine(results: SearchResult[], targetLine: number): SearchResult[] {
         return results.map((r) => ({
             ...r,
@@ -772,7 +768,6 @@ export class SearchEngine implements ISearchProvider {
             const bActive = this.isActive(b.filePath) ? 1 : 0;
             return bActive - aActive;
         });
-
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -1141,6 +1136,13 @@ export class SearchEngine implements ISearchProvider {
         // Optimization: Pre-calculate path segments to avoid repeated splitting in the loop
         const queryForUrlMatch = isPotentialUrl ? RouteMatcher.prepare(query) : query;
 
+        // Optimization: Pre-calculate bitflags for Bloom filter check
+        // Accessing private _bitflags from Fuzzysort.Prepared to skip non-matching items early
+        const queryPrepared = Fuzzysort.prepare(query);
+        const queryBitflags = (queryPrepared as any)._bitflags;
+        // Safety: Ensure _bitflags exists (private API might change in future library updates)
+        const canUseBitflags = typeof queryBitflags === 'number';
+
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
@@ -1160,6 +1162,14 @@ export class SearchEngine implements ISearchProvider {
                 const typeId = itemTypeIds[i];
                 const typeBoost = ID_TO_BOOST[typeId] || 1.0;
                 let score = -Infinity;
+
+                // Optimization: Bloom filter check
+                // If the query needs bits that the target doesn't have, it can't match.
+                // This avoids expensive scoring logic for the vast majority of items.
+                const pName = preparedNames[i];
+                if (!pName) continue;
+
+                if (canUseBitflags && (queryBitflags & (pName as any)._bitflags) !== queryBitflags) continue;
 
                 // 1. CamelHumps Score (Inlined) - Checked First
                 if (enableCamelHumps) {
@@ -1182,7 +1192,6 @@ export class SearchEngine implements ISearchProvider {
                     let fuzzyScore = -Infinity;
 
                     // Name (1.0)
-                    const pName = preparedNames[i];
                     if (pName && queryLen <= pName.target.length) {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
@@ -1340,14 +1349,14 @@ export class SearchEngine implements ISearchProvider {
                         }
                     }
 
-                // Apply type boost to fuzzy score
-                if (fuzzyScore > MIN_SCORE) {
-                    fuzzyScore *= typeBoost;
-                    if (fuzzyScore > score) {
-                        score = fuzzyScore;
+                    // Apply type boost to fuzzy score
+                    if (fuzzyScore > MIN_SCORE) {
+                        fuzzyScore *= typeBoost;
+                        if (fuzzyScore > score) {
+                            score = fuzzyScore;
+                        }
                     }
                 }
-            }
 
                 let resultScope: SearchScope | undefined;
 
