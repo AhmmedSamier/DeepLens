@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from 'bun:test';
 import * as path from 'path';
-import { SearchEngine } from './search-engine';
 import { SymbolProvider } from './providers/symbol-provider';
+import { SearchEngine } from './search-engine';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
 describe('SearchEngine', () => {

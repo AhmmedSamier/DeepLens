@@ -61,7 +61,6 @@ export class GitProvider {
         }
     }
 
-
     private async execGit(args: string[], cwd: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             const child = cp.spawn('git', args, { cwd });
