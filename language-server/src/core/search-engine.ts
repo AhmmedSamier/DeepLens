@@ -6,7 +6,7 @@ import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
-import { PreparedPath, RouteMatcher } from './route-matcher';
+import { MatchStrength, PreparedPath, RouteMatcher } from './route-matcher';
 import {
     ISearchProvider,
     SearchableItem,
@@ -425,7 +425,6 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
-
     /**
      * Clear all items
      */
@@ -451,7 +450,7 @@ export class SearchEngine implements ISearchProvider {
         return this.items.length;
     }
 
-    private createSearchContext(options: SearchOptions): SearchContext {
+    private createSearchContext(options: SearchOptions, maxResults?: number): SearchContext {
         const query = options.query || '';
         return {
             query,
@@ -565,7 +564,6 @@ export class SearchEngine implements ISearchProvider {
         return this.executeInternalSearch(effectiveQuery, scope, enableCamelHumps, maxResults, targetLine);
     }
 
-
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
@@ -586,7 +584,6 @@ export class SearchEngine implements ISearchProvider {
 
         return results;
     }
-
 
     private async executeProviderSearch(
         context: SearchContext,
@@ -688,7 +685,6 @@ export class SearchEngine implements ISearchProvider {
         return indices;
     }
 
-
     private applyTargetLine(results: SearchResult[], targetLine: number): SearchResult[] {
         return results.map((r) => ({
             ...r,
@@ -784,7 +780,6 @@ export class SearchEngine implements ISearchProvider {
             const bActive = this.isActive(b.filePath) ? 1 : 0;
             return bActive - aActive;
         });
-
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -1134,6 +1129,7 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1252,8 +1248,9 @@ export class SearchEngine implements ISearchProvider {
             if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                 const name = preparedNames[i]?.target;
                 if (name) {
-                    if (RouteMatcher.isMatch(name, queryForUrlMatch)) {
-                        const urlScore = 1.5;
+                    const matchStrength = RouteMatcher.isMatch(name, queryForUrlMatch);
+                    if (matchStrength !== MatchStrength.None) {
+                        const urlScore = matchStrength === MatchStrength.Exact ? 1.5 : 1.25;
                         if (urlScore > score) {
                             score = urlScore;
                             resultScope = SearchScope.ENDPOINTS;
@@ -1301,6 +1298,7 @@ export class SearchEngine implements ISearchProvider {
                 processIndex(i);
             }
         } else {
+            // eslint-disable-next-line sonarjs/cognitive-complexity
             const count = items.length;
             for (let i = 0; i < count; i++) {
                 processIndex(i);
@@ -1311,8 +1309,11 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private computeUrlScore(name: string, query: string): number {
-        if (RouteMatcher.isMatch(name, query)) {
+        const matchStrength = RouteMatcher.isMatch(name, query);
+        if (matchStrength === MatchStrength.Exact) {
             return 1.5;
+        } else if (matchStrength === MatchStrength.FuzzySuffix) {
+            return 1.25;
         }
         return -Infinity;
     }
@@ -1411,8 +1412,9 @@ export class SearchEngine implements ISearchProvider {
         currentScore: number,
         currentScope: SearchScope,
     ): { newScore: number; newScope: SearchScope } {
-        if (RouteMatcher.isMatch(item.name, query)) {
-            const urlScore = 1.5;
+        const matchStrength = RouteMatcher.isMatch(item.name, query);
+        if (matchStrength !== MatchStrength.None) {
+            const urlScore = matchStrength === MatchStrength.Exact ? 1.5 : 1.25;
             if (urlScore > currentScore) {
                 return { newScore: urlScore, newScope: SearchScope.ENDPOINTS };
             }
@@ -1508,7 +1510,10 @@ export class SearchEngine implements ISearchProvider {
 
     private calculateBitflagsSlow(str: string): number {
         let bitflags = 0;
-        const normalized = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const normalized = str
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
         for (let i = 0; i < normalized.length; i++) {
             const code = normalized.charCodeAt(i);
             if (code === 32) continue; // Space ignored

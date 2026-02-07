@@ -41,3 +41,11 @@
 ## 2026-02-05 - [In-Context Feedback]
 **Learning:** Status bar messages (`window.setStatusBarMessage`) are often missed by users when their attention is focused on a specific UI element like a QuickPick item.
 **Action:** Use the `QuickPick.title` or placeholder to flash temporary feedback (e.g., "Copied! ✅") directly within the component the user is interacting with, then revert to the original state.
+
+## 2026-02-06 - [Actionable Empty States - Clickable Rows]
+**Learning:** Users instinctively click list items, even "No results found" rows, expecting interaction. A static empty state is a dead end, whereas a clickable empty state that triggers the suggested action (like "Search Everywhere") turns failure into flow.
+**Action:** In `QuickPick` interfaces, treat the empty state item as a command that executes the primary suggested recovery action (e.g., clearing filters), rather than just displaying text.
+
+## 2025-02-05 - In-Place Confirmation in QuickPick
+**Learning:** When adding destructive actions to a VS Code QuickPick (like "Clear History"), replacing the items with a "Confirm/Cancel" set is a smoother pattern than popping a modal dialog, which breaks the keyboard flow.
+**Action:** Use `quickPick.items` replacement for simple confirmations within the search interface.

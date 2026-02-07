@@ -58,10 +58,20 @@ This command will:
 
 ### Running Tests
 
+**From Root Directory:**
+```bash
+# Run only language-server tests (recommended)
+bun test language-server/
+
+# Or use the convenience script
+./run_tests.ps1  # Windows PowerShell
+./run_tests.sh   # Linux/Mac
+```
+
 **Language Server:**
 ```bash
 cd language-server
-bun run test
+bun test
 ```
 
 **VS Code Extension:**
@@ -69,7 +79,9 @@ bun run test
 cd vscode-extension
 bun run test
 ```
-*Note: VS Code tests run in a headless VS Code instance.*
+*Note: VS Code tests use Mocha and run in a headless VS Code instance. They cannot be run with `bun test` from the root directory.*
+
+**Important:** Running `bun test` from the root directory without specifying `language-server/` will attempt to run VS Code extension tests with bun's test runner, which will fail because they require Mocha and the VS Code test environment.
 
 ### Benchmarks
 
