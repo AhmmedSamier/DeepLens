@@ -90,6 +90,7 @@ export class SearchEngine implements ISearchProvider {
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
+    private itemBitflags: Uint32Array = new Uint32Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
@@ -153,6 +154,7 @@ export class SearchEngine implements ISearchProvider {
     setItems(items: SearchableItem[]): void {
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
+        this.itemBitflags = new Uint32Array(items.length);
         this.itemsMap.clear();
         this.preparedCache.clear();
         this.preparedLowCache.clear();
@@ -170,11 +172,15 @@ export class SearchEngine implements ISearchProvider {
         // Pre-calculate start index for new items
         const startIndex = this.items.length;
 
-        // Resize itemTypeIds
+        // Resize itemTypeIds and itemBitflags
         if (this.itemTypeIds.length < startIndex + items.length) {
             const newTypeIds = new Uint8Array(startIndex + items.length);
             newTypeIds.set(this.itemTypeIds);
             this.itemTypeIds = newTypeIds;
+
+            const newBitflags = new Uint32Array(startIndex + items.length);
+            newBitflags.set(this.itemBitflags);
+            this.itemBitflags = newBitflags;
         }
 
         // Append items
@@ -188,6 +194,7 @@ export class SearchEngine implements ISearchProvider {
     private processAddedItem(item: SearchableItem, globalIndex: number): void {
         this.itemsMap.set(item.id, item);
         this.itemTypeIds[globalIndex] = TYPE_TO_ID[item.type];
+        this.itemBitflags[globalIndex] = this.calculateBitflags(item.name);
 
         // Update file paths cache
         if (item.type === SearchItemType.FILE) {
@@ -245,6 +252,7 @@ export class SearchEngine implements ISearchProvider {
     private moveItem(read: number, write: number): void {
         this.items[write] = this.items[read];
         this.itemTypeIds[write] = this.itemTypeIds[read];
+        this.itemBitflags[write] = this.itemBitflags[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedNamesLow[write] = this.preparedNamesLow[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
@@ -257,6 +265,7 @@ export class SearchEngine implements ISearchProvider {
         if (write < count) {
             this.items.length = write;
             this.itemTypeIds = this.itemTypeIds.slice(0, write);
+            this.itemBitflags = this.itemBitflags.slice(0, write);
             this.preparedNames.length = write;
             this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
@@ -335,6 +344,7 @@ export class SearchEngine implements ISearchProvider {
         for (let i = 0; i < count; i++) {
             const item = this.items[i];
             this.itemTypeIds[i] = TYPE_TO_ID[item.type];
+            this.itemBitflags[i] = this.calculateBitflags(item.name);
 
             if (item.type === SearchItemType.FILE) {
                 this.filePaths.push(item.filePath);
@@ -422,6 +432,7 @@ export class SearchEngine implements ISearchProvider {
     clear(): void {
         this.items = [];
         this.itemTypeIds = new Uint8Array(0);
+        this.itemBitflags = new Uint32Array(0);
         this.preparedNames = [];
         this.preparedNamesLow = [];
         this.preparedFullNames = [];
@@ -464,6 +475,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Parallel arrays
         size += this.itemTypeIds.byteLength;
+        size += this.itemBitflags.byteLength;
         size += this.preparedNames.length * 8;
         size += this.preparedNamesLow.length * 8;
         size += this.preparedFullNames.length * 8;
@@ -1140,9 +1152,13 @@ export class SearchEngine implements ISearchProvider {
         // Optimization: Pre-calculate path segments to avoid repeated splitting in the loop
         const queryForUrlMatch = isPotentialUrl ? RouteMatcher.prepare(query) : query;
 
+        // Optimization: Pre-calculate query bitflags to short-circuit non-matching items
+        const queryBitflags = this.calculateBitflags(query);
+
         // Cache parallel arrays locally to avoid `this` lookups in the hot loop
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
+        const itemBitflags = this.itemBitflags;
         const preparedNames = this.preparedNames;
         const preparedFullNames = this.preparedFullNames;
         const preparedPaths = this.preparedPaths;
@@ -1184,10 +1200,13 @@ export class SearchEngine implements ISearchProvider {
                 // Name (1.0)
                 const pName = preparedNames[i];
                 if (pName && queryLen <= pName.target.length) {
-                    const res = Fuzzysort.single(query, pName);
-                    if (res) {
-                        const s = res.score;
-                        if (s > MIN_SCORE) fuzzyScore = s;
+                    // Optimization: Check bitflags match
+                    if ((queryBitflags & itemBitflags[i]) === queryBitflags) {
+                        const res = Fuzzysort.single(query, pName);
+                        if (res) {
+                            const s = res.score;
+                            if (s > MIN_SCORE) fuzzyScore = s;
+                        }
                     }
                 }
 
@@ -1450,6 +1469,63 @@ export class SearchEngine implements ISearchProvider {
             }
         }
         return -Infinity;
+    }
+
+    private calculateBitflags(str: string): number {
+        // Optimization: Fast path for ASCII strings to avoid allocation
+        let isAscii = true;
+        for (let i = 0; i < str.length; i++) {
+            if (str.charCodeAt(i) > 127) {
+                isAscii = false;
+                break;
+            }
+        }
+
+        if (isAscii) {
+            let bitflags = 0;
+            for (let i = 0; i < str.length; i++) {
+                let code = str.charCodeAt(i);
+                if (code === 32) continue; // Space ignored
+
+                // toLowerCase for A-Z
+                if (code >= 65 && code <= 90) code += 32;
+
+                let bit = 0;
+                if (code >= 97 && code <= 122) {
+                    bit = code - 97; // a-z
+                } else if (code >= 48 && code <= 57) {
+                    bit = 26; // 0-9
+                } else {
+                    bit = 30; // other ascii
+                }
+                bitflags |= 1 << bit;
+            }
+            return bitflags;
+        }
+
+        return this.calculateBitflagsSlow(str);
+    }
+
+    private calculateBitflagsSlow(str: string): number {
+        let bitflags = 0;
+        const normalized = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        for (let i = 0; i < normalized.length; i++) {
+            const code = normalized.charCodeAt(i);
+            if (code === 32) continue; // Space ignored
+
+            let bit = 0;
+            if (code >= 97 && code <= 122) {
+                bit = code - 97; // a-z
+            } else if (code >= 48 && code <= 57) {
+                bit = 26; // 0-9
+            } else if (code <= 127) {
+                bit = 30; // other ascii
+            } else {
+                bit = 31; // other utf8
+            }
+            bitflags |= 1 << bit;
+        }
+        return bitflags;
     }
 
     /**
