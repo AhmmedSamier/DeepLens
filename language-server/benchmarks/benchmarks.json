@@ -1,52 +1,57 @@
 [
     {
         "name": "Endpoint Search (Unified)",
-        "avgMs": 75.08090784,
-        "totalMs": 3754.045392
+        "avgMs": 32.098890000000004,
+        "totalMs": 1604.9445
     },
     {
         "name": "Endpoint Search (Burst)",
-        "avgMs": 72.48901004,
-        "totalMs": 3624.4505019999997
+        "avgMs": 28.61019,
+        "totalMs": 1430.5095
     },
     {
         "name": "Fuzzy Search 'File100'",
-        "avgMs": 4.501264599999995,
-        "totalMs": 450.1264599999995
+        "avgMs": 1.5992399999999998,
+        "totalMs": 159.92399999999998
     },
     {
         "name": "CamelHumps Search 'FCC'",
-        "avgMs": 4.640332870000002,
-        "totalMs": 464.0332870000002
+        "avgMs": 1.7476639999999997,
+        "totalMs": 174.76639999999998
     },
     {
         "name": "Burst Search 'calc'",
-        "avgMs": 0.012124280000007275,
-        "totalMs": 1.2124280000007275
+        "avgMs": 0.004935999999997875,
+        "totalMs": 0.49359999999978754
     },
     {
         "name": "Parse 500-method TS Class",
-        "avgMs": 88.79438140000002,
-        "totalMs": 887.9438140000002
+        "avgMs": 48.05882000000006,
+        "totalMs": 480.5882000000006
     },
     {
         "name": "Text Search 100 files",
-        "avgMs": 5.274591300000066,
-        "totalMs": 52.745913000000655
+        "avgMs": 15.928520000000026,
+        "totalMs": 159.28520000000026
     },
     {
         "name": "Index 1000 files",
-        "avgMs": 265.3530743333334,
-        "totalMs": 796.0592230000002
+        "avgMs": 260.0787,
+        "totalMs": 780.2361000000001
+    },
+    {
+        "name": "Index 1000 files (Git)",
+        "avgMs": 129.52846666666665,
+        "totalMs": 388.58539999999994
     },
     {
         "name": "Record Access (N=5000)",
-        "avgMs": 0.9796626199999809,
-        "totalMs": 48.98313099999905
+        "avgMs": 0.4637359999999899,
+        "totalMs": 23.186799999999494
     },
     {
         "name": "recalculateAllScores (N=5000)",
-        "avgMs": 0.6979956500000298,
-        "totalMs": 13.959913000000597
+        "avgMs": 0.580370000000039,
+        "totalMs": 11.60740000000078
     }
 ]
