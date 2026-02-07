@@ -363,7 +363,7 @@ connection.onRequest(BurstSearchRequest, (options, token) => {
         return searchEngine.burstSearch(
             options,
             (result) => {
-                if (!isShuttingDown && !token.isCancellationRequested) {
+                if (!isShuttingDown && !token?.isCancellationRequested) {
                     connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
                 }
             },
@@ -395,7 +395,7 @@ connection.onRequest(DeepLensSearchRequest, async (options, token) => {
         const results = await searchEngine.search(
             options,
             (result) => {
-                if (!isShuttingDown && !token.isCancellationRequested) {
+                if (!isShuttingDown && !token?.isCancellationRequested) {
                     connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
                 }
             },

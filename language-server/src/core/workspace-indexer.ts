@@ -272,13 +272,15 @@ export class WorkspaceIndexer {
 
                 const lines = output.split('\n');
 
-                for (const line of lines) {
-                    if (!line || line.trim() === '') {
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) {
                         continue;
                     }
 
-                    const fullPath = path.join(folderPath, line);
-                    results.push(fullPath);
+                    // Ensure we have a proper absolute path
+                    const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
+                    results.push(this.intern(fullPath));
                 }
             } catch (error) {
                 // Not a git repo or git not installed

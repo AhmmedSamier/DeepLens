@@ -161,11 +161,12 @@ export class RipgrepService {
                 if (hitLimit || token?.isCancellationRequested) return;
 
                 buffer += chunk.toString();
-                const lines = buffer.split('\n');
+                const lines = buffer.split(/\r?\n/);
                 buffer = lines.pop() || '';
 
-                for (const line of lines) {
-                    if (!line.trim()) continue;
+                for (let line of lines) {
+                    line = line.trim();
+                    if (!line) continue;
                     try {
                         const msg = JSON.parse(line);
                         if (msg.type === 'match') {

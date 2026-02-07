@@ -107,6 +107,7 @@ export class SearchEngine implements ISearchProvider {
     private scopedIndices: Map<SearchScope, number[]> = new Map();
 
     public itemsMap: Map<string, SearchableItem> = new Map();
+    private fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
     private config?: Config;
@@ -156,6 +157,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
         this.itemsMap.clear();
+        this.fileItemByNormalizedPath.clear();
         this.preparedCache.clear();
         this.preparedLowCache.clear();
         this.filePaths = [];
@@ -199,6 +201,7 @@ export class SearchEngine implements ISearchProvider {
         // Update file paths cache
         if (item.type === SearchItemType.FILE) {
             this.filePaths.push(item.filePath);
+            this.fileItemByNormalizedPath.set(this.normalizePath(item.filePath), item);
         }
 
         const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
@@ -244,6 +247,9 @@ export class SearchEngine implements ISearchProvider {
                 write++;
             } else {
                 this.itemsMap.delete(item.id);
+                if (item.type === SearchItemType.FILE) {
+                    this.fileItemByNormalizedPath.delete(this.normalizePath(item.filePath));
+                }
             }
         }
         return write;
@@ -348,6 +354,7 @@ export class SearchEngine implements ISearchProvider {
 
             if (item.type === SearchItemType.FILE) {
                 this.filePaths.push(item.filePath);
+                this.fileItemByNormalizedPath.set(this.normalizePath(item.filePath), item);
             }
 
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
@@ -425,7 +432,6 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
-
     /**
      * Clear all items
      */
@@ -439,6 +445,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedPaths = [];
         this.preparedCapitals = [];
         this.itemsMap.clear();
+        this.fileItemByNormalizedPath.clear();
         this.scopedIndices.clear();
         this.preparedCache.clear();
         this.preparedLowCache.clear();
@@ -574,7 +581,6 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
-
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
@@ -595,7 +601,6 @@ export class SearchEngine implements ISearchProvider {
 
         return results;
     }
-
 
     private async executeProviderSearch(
         context: SearchContext,
@@ -702,7 +707,6 @@ export class SearchEngine implements ISearchProvider {
         return indices;
     }
 
-
     private applyTargetLine(results: SearchResult[], targetLine: number): SearchResult[] {
         return results.map((r) => ({
             ...r,
@@ -725,7 +729,9 @@ export class SearchEngine implements ISearchProvider {
         // Try Ripgrep first
         if (this.ripgrep && this.ripgrep.isAvailable()) {
             const results = await this.performRipgrepSearch(query, maxResults, onResult, token);
-            if (results) return results;
+            // Fallback to stream search ONLY if ripgrep failed (null) or found nothing ([])
+            // We want to be extra robust in tests and edge cases
+            if (results && results.length > 0) return results;
         }
 
         return this.performStreamSearch(query, maxResults, onResult, token);
@@ -746,9 +752,16 @@ export class SearchEngine implements ISearchProvider {
 
             const results: SearchResult[] = [];
             for (const match of matches) {
-                // Find original item
-                const fileItem = this.itemsMap.get(`file:${match.path}`);
-                if (!fileItem) continue;
+                // Find original item (with path normalization fallback)
+                let fileItem = this.itemsMap.get(`file:${match.path}`);
+                if (!fileItem) {
+                    fileItem = this.fileItemByNormalizedPath.get(this.normalizePath(match.path));
+                }
+
+                if (!fileItem) {
+                    this.logger?.error(`Ripgrep result path not found in index: ${match.path}`);
+                    continue;
+                }
 
                 const result: SearchResult = {
                     item: {
@@ -802,7 +815,6 @@ export class SearchEngine implements ISearchProvider {
             const bActive = this.isActive(b.filePath) ? 1 : 0;
             return bActive - aActive;
         });
-
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -1531,7 +1543,10 @@ export class SearchEngine implements ISearchProvider {
 
     private calculateBitflagsSlow(str: string): number {
         let bitflags = 0;
-        const normalized = str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        const normalized = str
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
         for (let i = 0; i < normalized.length; i++) {
             const code = normalized.charCodeAt(i);
             if (code === 32) continue; // Space ignored
