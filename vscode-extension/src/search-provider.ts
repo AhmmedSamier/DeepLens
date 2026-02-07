@@ -43,10 +43,6 @@ export class SearchProvider {
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
-    private readonly LABEL_CONFIRM_CLEAR = 'Confirm Clear History';
-    private readonly LABEL_CANCEL_CLEAR = 'Cancel';
-    private readonly LABEL_CONFIRM_CLEAR = 'Confirm Clear History';
-    private readonly LABEL_CANCEL_CLEAR = 'Cancel';
 
     // Tooltips for item buttons
     private readonly TOOLTIP_COPY_PATH = 'Copy Path';
@@ -417,15 +413,51 @@ export class SearchProvider {
     }
 
     /**
-     * Show confirmation before clearing history
+     * Prompt for confirmation before clearing history
      */
-    private showClearHistoryConfirmation(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        quickPick.items = [this.getConfirmClearItem(), this.getCancelClearItem()];
-        quickPick.title = 'DeepLens - Are you sure?';
+    private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        const confirmItem: SearchResultItem = {
+            label: 'Confirm Clear History',
+            detail: 'This cannot be undone',
+            iconPath: new vscode.ThemeIcon('warning', new vscode.ThemeColor('list.warningForeground')),
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:confirm-clear-history',
+                    name: 'Confirm Clear History',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+
+        const cancelItem: SearchResultItem = {
+            label: 'Cancel',
+            description: 'Go back to history',
+            iconPath: new vscode.ThemeIcon('close'),
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:cancel-clear-history',
+                    name: 'Cancel',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+
+        quickPick.items = [confirmItem, cancelItem];
+        quickPick.title = 'Are you sure you want to clear recent history?';
     }
 
     /**
-     * Perform the actual history clear
+     * Clear recent history
      */
     private async performClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
         if (this.activityTracker) {
@@ -593,13 +625,12 @@ export class SearchProvider {
         quickPick.onDidAccept(() => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
-                // Handle Clear History (Show Confirmation)
+                // Handle Clear History
                 if (selected.result.item.id === 'command:clear-history') {
-                    this.showClearHistoryConfirmation(quickPick);
+                    this.promptClearHistory(quickPick);
                     return;
                 }
 
-                // Handle Confirmation Actions
                 if (selected.result.item.id === 'command:confirm-clear-history') {
                     this.performClearHistory(quickPick);
                     return;
@@ -676,7 +707,7 @@ export class SearchProvider {
     /**
      * Suggest slash commands based on query
      */
-
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
@@ -860,6 +891,7 @@ export class SearchProvider {
                         query: trimmedQuery,
                         scope: this.currentScope,
                         maxResults: 5,
+                        requestId: queryId,
                     },
                     undefined,
                 ); // No token for burst search as it should be instant
@@ -895,6 +927,7 @@ export class SearchProvider {
                             query: trimmedQuery,
                             scope: this.currentScope,
                             maxResults: 15,
+                            requestId: queryId,
                         },
                         undefined,
                     );
@@ -1102,52 +1135,6 @@ export class SearchProvider {
                 item: {
                     id: 'command:clear-history',
                     name: this.LABEL_CLEAR_HISTORY,
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        };
-    }
-
-    /**
-     * Get item for confirming history clear
-     */
-    private getConfirmClearItem(): SearchResultItem {
-        return {
-            label: this.LABEL_CONFIRM_CLEAR,
-            description: 'This cannot be undone',
-            iconPath: new vscode.ThemeIcon('trash', new vscode.ThemeColor('errorForeground')),
-            alwaysShow: true,
-            result: {
-                item: {
-                    id: 'command:confirm-clear-history',
-                    name: this.LABEL_CONFIRM_CLEAR,
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        };
-    }
-
-    /**
-     * Get item for cancelling history clear
-     */
-    private getCancelClearItem(): SearchResultItem {
-        return {
-            label: this.LABEL_CANCEL_CLEAR,
-            description: 'Go back to history',
-            iconPath: new vscode.ThemeIcon('reply', new vscode.ThemeColor('descriptionForeground')),
-            alwaysShow: true,
-            result: {
-                item: {
-                    id: 'command:cancel-clear-history',
-                    name: this.LABEL_CANCEL_CLEAR,
                     type: SearchItemType.COMMAND,
                     filePath: '',
                     detail: '',
@@ -1399,7 +1386,8 @@ export class SearchProvider {
     ): Promise<void> {
         const { item } = result;
 
-        if (await this.handleEmptyStateClick(item)) {
+        // Palette: Ignore empty state item
+        if (item.id === 'empty-state') {
             return;
         }
 
@@ -1415,44 +1403,6 @@ export class SearchProvider {
 
         // Handle file/symbol navigation
         await this.navigateToFile(item, viewColumn, preview, result.highlights);
-    }
-
-    private async handleEmptyStateClick(item: SearchableItem): Promise<boolean> {
-        // Palette: Handle empty state item click
-        if (item.id === 'empty-state') {
-            if (this.currentScope !== SearchScope.EVERYTHING && this.currentQuickPick) {
-                // Switch to Global
-                this.userSelectedScope = SearchScope.EVERYTHING;
-                this.currentScope = SearchScope.EVERYTHING;
-
-                const currentQuery = this.currentQuickPick.value;
-                let newQuery = currentQuery;
-
-                // Check if current query has ANY known prefix and remove it
-                for (const [prefix] of this.PREFIX_MAP.entries()) {
-                    if (currentQuery.toLowerCase().startsWith(prefix)) {
-                        newQuery = currentQuery.slice(prefix.length);
-                        break;
-                    }
-                }
-
-                // If query changed, updating value will trigger search via listener
-                if (currentQuery !== newQuery) {
-                    this.currentQuickPick.value = newQuery;
-                } else {
-                    // If query didn't change (no prefix), manual update needed
-                    this.updateFilterButtons(this.currentQuickPick);
-                    this.currentQuickPick.placeholder = this.getPlaceholder();
-                    const { text } = this.parseQuery(newQuery);
-                    const queryId = ++this.lastQueryId;
-                    await this.performSearch(this.currentQuickPick, text, queryId);
-                }
-
-                this.showFeedback('Switched to Global Search');
-            }
-            return true;
-        }
-        return false;
     }
 
     private handleSlashCommandNavigation(item: SearchableItem, preview: boolean): boolean {

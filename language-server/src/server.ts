@@ -163,7 +163,6 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     documents.listen(connection);
 
-
     // Wire up search engine to indexer
     workspaceIndexer.onItemsAdded((items) => searchEngine.addItems(items));
     workspaceIndexer.onItemsRemoved((filePath) => searchEngine.removeItemsByFile(filePath));
@@ -358,14 +357,18 @@ connection.onWorkspaceSymbol(async (params) => {
 });
 
 // Custom handlers
-connection.onRequest(BurstSearchRequest, (options) => {
+connection.onRequest(BurstSearchRequest, (options, token) => {
     if (!isInitialized || isShuttingDown) return [];
     try {
-        return searchEngine.burstSearch(options, (result) => {
-            if (!isShuttingDown) {
-                connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
-            }
-        });
+        return searchEngine.burstSearch(
+            options,
+            (result) => {
+                if (!isShuttingDown && !token.isCancellationRequested) {
+                    connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+                }
+            },
+            token,
+        );
     } catch (err: unknown) {
         const error = err as Error;
         fileLogger(`BurstSearch Error: ${error.message}\n${error.stack}`);
@@ -385,15 +388,19 @@ connection.onRequest(GetRecentItemsRequest, (params) => {
 
 // We can also override the main search with a custom request that supports Scopes
 export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
-connection.onRequest(DeepLensSearchRequest, async (options) => {
+connection.onRequest(DeepLensSearchRequest, async (options, token) => {
     if (!isInitialized || isShuttingDown) return [];
     fileLogger(`Search Request: "${options.query}" in scope ${options.scope}`);
     try {
-        const results = await searchEngine.search(options, (result) => {
-            if (!isShuttingDown) {
-                connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
-            }
-        });
+        const results = await searchEngine.search(
+            options,
+            (result) => {
+                if (!isShuttingDown && !token.isCancellationRequested) {
+                    connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+                }
+            },
+            token,
+        );
         fileLogger(`Search completed with ${results.length} results`);
         return results;
     } catch (err: unknown) {
