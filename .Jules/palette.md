@@ -34,15 +34,13 @@
 **Learning:** Suggesting actions the user has already taken (e.g., "Try /all" when already in Global scope) frustrates users and erodes trust.
 **Action:** Ensure empty state messages are context-aware. If the scope is already global, suggest deeper debugging steps like checking exclusions or rebuilding the index.
 
-<<<<<<< palette-clear-history-8215570654435959424
 ## 2026-05-28 - [In-List History Management]
 **Learning:** Users hesitate to leave a workflow (like search) to manage its settings (like clearing history). Placing management actions directly within the list content (e.g., as the last item) maintains flow.
 **Action:** When displaying history or recent items, append a "Clear History" action item directly to the list, allowing immediate maintenance without context switching.
-=======
+
 ## 2026-02-05 - [In-Context Feedback]
 **Learning:** Status bar messages (`window.setStatusBarMessage`) are often missed by users when their attention is focused on a specific UI element like a QuickPick item.
 **Action:** Use the `QuickPick.title` or placeholder to flash temporary feedback (e.g., "Copied! ✅") directly within the component the user is interacting with, then revert to the original state.
->>>>>>> master
 
 ## 2025-02-05 - In-Place Confirmation in QuickPick
 **Learning:** When adding destructive actions to a VS Code QuickPick (like "Clear History"), replacing the items with a "Confirm/Cancel" set is a smoother pattern than popping a modal dialog, which breaks the keyboard flow.

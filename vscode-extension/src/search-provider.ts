@@ -45,6 +45,8 @@ export class SearchProvider {
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
     private readonly LABEL_CONFIRM_CLEAR = 'Confirm Clear History';
     private readonly LABEL_CANCEL_CLEAR = 'Cancel';
+    private readonly LABEL_CONFIRM_CLEAR = 'Confirm Clear History';
+    private readonly LABEL_CANCEL_CLEAR = 'Cancel';
 
     // Tooltips for item buttons
     private readonly TOOLTIP_COPY_PATH = 'Copy Path';
