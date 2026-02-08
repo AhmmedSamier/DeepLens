@@ -1235,14 +1235,12 @@ export class SearchEngine implements ISearchProvider {
 
                 // Name (1.0)
                 const pName = preparedNames[i];
-                if (pName && queryLen <= pName.target.length) {
-                    // Optimization: Check bitflags match
-                    if ((queryBitflags & itemBitflags[i]) === queryBitflags) {
-                        const res = Fuzzysort.single(query, pName);
-                        if (res) {
-                            const s = res.score;
-                            if (s > MIN_SCORE) fuzzyScore = s;
-                        }
+                // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
+                if (pName && (queryBitflags & itemBitflags[i]) === queryBitflags && queryLen <= pName.target.length) {
+                    const res = Fuzzysort.single(query, pName);
+                    if (res) {
+                        const s = res.score;
+                        if (s > MIN_SCORE) fuzzyScore = s;
                     }
                 }
 
