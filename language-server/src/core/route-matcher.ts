@@ -4,13 +4,21 @@
 export interface PreparedPath {
     cleanPath: string;
     segments: string[];
+    segmentsLower: string[];
+}
+
+export interface RoutePattern {
+    regex: RegExp;
+    cleanTemplate: string;
+    templateSegments: string[];
+    templateSegmentsLower: string[];
 }
 
 /**
  * Utility to match concrete URL paths against ASP.NET route templates.
  */
 export class RouteMatcher {
-    private static cache = new Map<string, { regex: RegExp; cleanTemplate: string; templateSegments: string[] }>();
+    private static cache = new Map<string, RoutePattern>();
     private static readonly CACHE_LIMIT = 1000;
 
     /**
@@ -20,7 +28,57 @@ export class RouteMatcher {
         const cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
         const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
-        return { cleanPath, segments };
+        const segmentsLower = segments.map((s) => s.toLowerCase());
+        return { cleanPath, segments, segmentsLower };
+    }
+
+    /**
+     * Pre-compute the route pattern for a template.
+     */
+    static precompute(template: string): RoutePattern | null {
+        return this.getOrCompileCache(template);
+    }
+
+    /**
+     * Matches a concrete URL path against a pre-computed route pattern.
+     */
+    static isMatchPattern(pattern: RoutePattern, concretePath: string | PreparedPath): boolean {
+        let cleanPath: string;
+        let pathSegments: string[] | undefined;
+        let pathSegmentsLower: string[] | undefined;
+
+        if (typeof concretePath === 'string') {
+            cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
+        } else {
+            cleanPath = concretePath.cleanPath;
+            pathSegments = concretePath.segments;
+            pathSegmentsLower = concretePath.segmentsLower;
+        }
+
+        if (!cleanPath) return false;
+
+        try {
+            // 1. Try exact match first (Fastest)
+            if (pattern.regex.test(cleanPath)) return true;
+
+            // 2. Try segment-based suffix matching
+            // Lazy load segments if not provided
+            if (!pathSegments) {
+                pathSegments = cleanPath.split('/');
+            }
+            if (!pathSegmentsLower) {
+                pathSegmentsLower = pathSegments.map((s) => s.toLowerCase());
+            }
+
+            return this.segmentsMatch(
+                pattern.templateSegments,
+                pattern.templateSegmentsLower,
+                pathSegments,
+                pathSegmentsLower,
+            );
+        } catch {
+            return false;
+        }
     }
 
     /**
@@ -29,42 +87,12 @@ export class RouteMatcher {
      * @param concretePath e.g., "api/AdminDashboard/customers/5" or a PreparedPath object
      */
     static isMatch(template: string, concretePath: string | PreparedPath): boolean {
-        let cleanPath: string;
-        let pathSegments: string[] | undefined;
-
-        if (typeof concretePath === 'string') {
-            cleanPath = concretePath.trim().replace(/(^\/|\/$)/g, '');
-        } else {
-            cleanPath = concretePath.cleanPath;
-            pathSegments = concretePath.segments;
-        }
-
-        if (!cleanPath) return false;
-
         const cached = this.getOrCompileCache(template);
         if (!cached) return false;
-
-        try {
-            // 1. Try exact match first (Fastest)
-            if (cached.regex.test(cleanPath)) return true;
-
-            // 2. Try segment-based suffix matching
-            // Lazy load segments if not provided
-            if (!pathSegments) {
-                pathSegments = cleanPath.split('/');
-            }
-
-            return this.segmentsMatch(cached.templateSegments, pathSegments);
-        } catch {
-            return false;
-        }
+        return this.isMatchPattern(cached, concretePath);
     }
 
-    private static getOrCompileCache(template: string): {
-        regex: RegExp;
-        cleanTemplate: string;
-        templateSegments: string[];
-    } | null {
+    private static getOrCompileCache(template: string): RoutePattern | null {
         let cached = this.cache.get(template);
         if (cached) return cached;
 
@@ -96,8 +124,9 @@ export class RouteMatcher {
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
+            const templateSegmentsLower = templateSegments.map((s) => s.toLowerCase());
 
-            cached = { regex: exactRegex, cleanTemplate, templateSegments };
+            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower };
 
             if (this.cache.size >= this.CACHE_LIMIT) {
                 // Simple LRU-like: remove the first inserted item
@@ -114,24 +143,37 @@ export class RouteMatcher {
     /**
      * Check if segments match from the right (supporting parameters)
      */
-    private static segmentsMatch(tSegs: string[], pSegs: string[]): boolean {
+    private static segmentsMatch(
+        tSegs: string[],
+        tSegsLower: string[],
+        pSegs: string[],
+        pSegsLower: string[],
+    ): boolean {
         if (pSegs.length > tSegs.length) {
             return false;
         }
 
         for (let i = 1; i <= pSegs.length; i++) {
             const tSeg = tSegs[tSegs.length - i];
+            const tSegLower = tSegsLower[tSegs.length - i];
             const pSeg = pSegs[pSegs.length - i];
+            const pSegLower = pSegsLower[pSegs.length - i];
             const isLast = i === 1;
 
-            if (!this.segmentMatches(tSeg, pSeg, isLast)) {
+            if (!this.segmentMatches(tSeg, tSegLower, pSeg, pSegLower, isLast)) {
                 return false;
             }
         }
         return true;
     }
 
-    private static segmentMatches(tSeg: string, pSeg: string, allowPrefix: boolean): boolean {
+    private static segmentMatches(
+        tSeg: string,
+        tSegLower: string,
+        pSeg: string,
+        pSegLower: string,
+        allowPrefix: boolean,
+    ): boolean {
         // If template segment is a parameter, it matches any non-empty path segment
         if (tSeg.startsWith('{') && tSeg.endsWith('}')) {
             return !!pSeg;
@@ -140,11 +182,11 @@ export class RouteMatcher {
         if (allowPrefix) {
             // For the VERY LAST segment specifically, allow prefix matching
             // This enables "usern" to match "username"
-            return tSeg.toLowerCase().startsWith(pSeg.toLowerCase());
+            return tSegLower.startsWith(pSegLower);
         }
 
         // Middle segments must match exactly
-        return tSeg.toLowerCase() === pSeg.toLowerCase();
+        return tSegLower === pSegLower;
     }
 
     /**
