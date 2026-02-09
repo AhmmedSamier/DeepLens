@@ -6,7 +6,7 @@ import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
 import { RipgrepService } from './ripgrep-service';
-import { PreparedPath, RouteMatcher } from './route-matcher';
+import { PreparedPath, RouteMatcher, RoutePattern } from './route-matcher';
 import {
     ISearchProvider,
     SearchableItem,
@@ -96,6 +96,7 @@ export class SearchEngine implements ISearchProvider {
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
     private preparedCapitals: (string | null)[] = [];
+    private preparedPatterns: (RoutePattern | null)[] = [];
     private filePaths: string[] = [];
 
     // Deduplication cache for prepared strings
@@ -214,6 +215,9 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames.push(shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null);
         this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
         this.preparedCapitals.push(this.extractCapitals(item.name));
+        this.preparedPatterns.push(
+            item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null,
+        );
 
         // Update scopes
         const scope = this.getScopeForItemType(item.type);
@@ -264,6 +268,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames[write] = this.preparedFullNames[read];
         this.preparedPaths[write] = this.preparedPaths[read];
         this.preparedCapitals[write] = this.preparedCapitals[read];
+        this.preparedPatterns[write] = this.preparedPatterns[read];
     }
 
     private truncateArrays(write: number, count: number, filePath: string): void {
@@ -277,6 +282,7 @@ export class SearchEngine implements ISearchProvider {
             this.preparedFullNames.length = write;
             this.preparedPaths.length = write;
             this.preparedCapitals.length = write;
+            this.preparedPatterns.length = write;
 
             // Update file paths cache (filter out the removed file)
             this.filePaths = this.filePaths.filter((p) => p !== filePath);
@@ -344,6 +350,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
+        this.preparedPatterns = [];
 
         // Prepare items
         const count = this.items.length;
@@ -368,6 +375,9 @@ export class SearchEngine implements ISearchProvider {
             );
             this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
             this.preparedCapitals.push(this.extractCapitals(item.name));
+            this.preparedPatterns.push(
+                item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null,
+            );
         }
 
         this.rebuildScopeIndices();
@@ -444,6 +454,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
+        this.preparedPatterns = [];
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.scopedIndices.clear();
@@ -1196,6 +1207,7 @@ export class SearchEngine implements ISearchProvider {
         const preparedFullNames = this.preparedFullNames;
         const preparedPaths = this.preparedPaths;
         const preparedCapitals = this.preparedCapitals;
+        const preparedPatterns = this.preparedPatterns;
 
         const getActivityScore = this.getActivityScore;
         const activityWeight = this.activityWeight;
@@ -1286,9 +1298,9 @@ export class SearchEngine implements ISearchProvider {
 
             // 3. URL/Endpoint Match
             if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
-                const name = preparedNames[i]?.target;
-                if (name) {
-                    if (RouteMatcher.isMatch(name, queryForUrlMatch)) {
+                const pattern = preparedPatterns[i];
+                if (pattern) {
+                    if (RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)) {
                         const urlScore = 1.5;
                         if (urlScore > score) {
                             score = urlScore;
@@ -1800,7 +1812,12 @@ export class SearchEngine implements ISearchProvider {
 
             const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                if (RouteMatcher.isMatch(item.name, queryOrPrepared)) {
+                const pattern = this.preparedPatterns[i];
+                const matches = pattern
+                    ? RouteMatcher.isMatchPattern(pattern, queryOrPrepared)
+                    : RouteMatcher.isMatch(item.name, queryOrPrepared);
+
+                if (matches) {
                     results.push({
                         item,
                         score: 2.0,
