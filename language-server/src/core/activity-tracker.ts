@@ -137,11 +137,44 @@ export class ActivityTracker {
             .sort((a, b) => b.lastAccessed - a.lastAccessed)
             .slice(0, count);
 
-        return sorted.map((a) => ({
-            item: a.item!,
-            score: 2.0,
-            scope: SearchScope.EVERYTHING,
-        }));
+        return sorted.map((a) => {
+            const item = { ...a.item! };
+            const relativeTime = this.getRelativeTime(a.lastAccessed);
+
+            // Append relative time to detail
+            if (item.detail) {
+                item.detail = `${item.detail} • Accessed ${relativeTime}`;
+            } else {
+                item.detail = `Accessed ${relativeTime}`;
+            }
+
+            return {
+                item,
+                score: 2.0,
+                scope: SearchScope.EVERYTHING,
+            };
+        });
+    }
+
+    private getRelativeTime(timestamp: number): string {
+        const now = Date.now();
+        const diff = now - timestamp;
+        const seconds = Math.floor(diff / 1000);
+        const minutes = Math.floor(seconds / 60);
+        const hours = Math.floor(minutes / 60);
+        const days = Math.floor(hours / 24);
+
+        if (seconds < 60) {
+            return 'just now';
+        } else if (minutes < 60) {
+            return `${minutes}m ago`;
+        } else if (hours < 24) {
+            return `${hours}h ago`;
+        } else if (days === 1) {
+            return 'yesterday';
+        } else {
+            return `${days}d ago`;
+        }
     }
 
     /**
