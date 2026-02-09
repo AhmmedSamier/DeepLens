@@ -1177,6 +1177,7 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1217,6 +1218,11 @@ export class SearchEngine implements ISearchProvider {
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
             const typeId = itemTypeIds[i];
+
+            // Optimization: Check bitflags FIRST (fastest check, TypedArray) to short-circuit both CamelHumps and Fuzzy
+            // This avoids pointer chasing (preparedNames/preparedCapitals) for non-matching items
+            const isNameMatch = (queryBitflags & itemBitflags[i]) === queryBitflags;
+
             // Optimization: Defer typeBoost lookup until needed (Journal 2025-01-29)
             // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;
@@ -1224,7 +1230,7 @@ export class SearchEngine implements ISearchProvider {
             // 1. CamelHumps Score (Inlined) - Checked First
             // Running cheaper CamelHumps check first allows skipping expensive fuzzy search
             // for strong abbreviation matches (Journal 2024-05-23)
-            if (enableCamelHumps) {
+            if (enableCamelHumps && isNameMatch) {
                 const capitals = preparedCapitals[i];
                 if (capitals) {
                     const matchIndex = capitals.indexOf(queryUpper);
@@ -1246,13 +1252,15 @@ export class SearchEngine implements ISearchProvider {
                 let fuzzyScore = -Infinity;
 
                 // Name (1.0)
-                const pName = preparedNames[i];
-                // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
-                if (pName && (queryBitflags & itemBitflags[i]) === queryBitflags && queryLen <= pName.target.length) {
-                    const res = Fuzzysort.single(query, pName);
-                    if (res) {
-                        const s = res.score;
-                        if (s > MIN_SCORE) fuzzyScore = s;
+                // Optimization: Only access preparedNames (Array of Objects) if bitflags match (isNameMatch)
+                if (isNameMatch) {
+                    const pName = preparedNames[i];
+                    if (pName && queryLen <= pName.target.length) {
+                        const res = Fuzzysort.single(query, pName);
+                        if (res) {
+                            const s = res.score;
+                            if (s > MIN_SCORE) fuzzyScore = s;
+                        }
                     }
                 }
 
