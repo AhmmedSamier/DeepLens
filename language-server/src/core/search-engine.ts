@@ -1510,38 +1510,36 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private calculateBitflags(str: string): number {
-        // Optimization: Fast path for ASCII strings to avoid allocation
-        let isAscii = true;
-        for (let i = 0; i < str.length; i++) {
-            if (str.charCodeAt(i) > 127) {
-                isAscii = false;
-                break;
+        // Optimization: Single pass for ASCII strings
+        const len = str.length;
+        let bitflags = 0;
+
+        for (let i = 0; i < len; i++) {
+            let code = str.charCodeAt(i);
+
+            // Check for non-ASCII
+            if (code > 127) {
+                return this.calculateBitflagsSlow(str);
             }
-        }
 
-        if (isAscii) {
-            let bitflags = 0;
-            for (let i = 0; i < str.length; i++) {
-                let code = str.charCodeAt(i);
-                if (code === 32) continue; // Space ignored
+            if (code === 32) continue; // Space ignored
 
-                // toLowerCase for A-Z
-                if (code >= 65 && code <= 90) code += 32;
-
-                let bit = 0;
-                if (code >= 97 && code <= 122) {
-                    bit = code - 97; // a-z
-                } else if (code >= 48 && code <= 57) {
-                    bit = 26; // 0-9
-                } else {
-                    bit = 30; // other ascii
-                }
-                bitflags |= 1 << bit;
+            // Normalize A-Z to a-z
+            if (code >= 65 && code <= 90) {
+                code |= 32;
             }
-            return bitflags;
-        }
 
-        return this.calculateBitflagsSlow(str);
+            let bit = 0;
+            if (code >= 97 && code <= 122) {
+                bit = code - 97; // a-z
+            } else if (code >= 48 && code <= 57) {
+                bit = 26; // 0-9
+            } else {
+                bit = 30; // other ascii
+            }
+            bitflags |= 1 << bit;
+        }
+        return bitflags;
     }
 
     private calculateBitflagsSlow(str: string): number {
