@@ -42,6 +42,7 @@ export class SearchProvider {
     private readonly TOOLTIP_CLEAR_CACHE = 'Clear Index Cache (Fix corruption)';
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
+    private readonly TOOLTIP_NATIVE_SEARCH = 'Search in Files (Native)';
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
 
     // Tooltips for item buttons
@@ -591,6 +592,12 @@ export class SearchProvider {
                 const { text } = this.parseQuery(quickPick.value);
                 const queryId = ++this.lastQueryId;
                 this.performSearch(quickPick, text, queryId);
+            } else if (e.button.tooltip === this.TOOLTIP_NATIVE_SEARCH) {
+                await vscode.commands.executeCommand('workbench.action.findInFiles', {
+                    query: quickPick.value,
+                    triggerSearch: true,
+                });
+                quickPick.hide();
             } else if (e.button.tooltip === this.TOOLTIP_COPY_PATH) {
                 await vscode.env.clipboard.writeText(result.item.filePath);
                 this.showFeedback('Path copied to clipboard');
@@ -1162,6 +1169,11 @@ export class SearchProvider {
                 tooltip: this.TOOLTIP_SEARCH_EVERYWHERE,
             });
         }
+
+        buttons.push({
+            iconPath: new vscode.ThemeIcon('search-fuzzy'),
+            tooltip: this.TOOLTIP_NATIVE_SEARCH,
+        });
 
         buttons.push(
             {

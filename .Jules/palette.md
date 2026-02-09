@@ -41,3 +41,7 @@
 ## 2026-02-05 - [In-Context Feedback]
 **Learning:** Status bar messages (`window.setStatusBarMessage`) are often missed by users when their attention is focused on a specific UI element like a QuickPick item.
 **Action:** Use the `QuickPick.title` or placeholder to flash temporary feedback (e.g., "Copied! ✅") directly within the component the user is interacting with, then revert to the original state.
+
+## 2026-02-06 - [Seamless Fallback Pattern]
+**Learning:** When a custom search tool yields no results, users feel stranded. Providing a direct "escape hatch" to the native platform's search (e.g., `workbench.action.findInFiles`) reduces friction and builds trust.
+**Action:** In empty states, always include a button to trigger the equivalent native functionality with the current context (e.g., search query) pre-filled.
