@@ -91,6 +91,7 @@ export class SearchEngine implements ISearchProvider {
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
     private itemBitflags: Uint32Array = new Uint32Array(0);
+    private itemAggregateBitflags: Uint32Array = new Uint32Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
@@ -157,6 +158,7 @@ export class SearchEngine implements ISearchProvider {
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
+        this.itemAggregateBitflags = new Uint32Array(items.length);
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.preparedCache.clear();
@@ -184,6 +186,10 @@ export class SearchEngine implements ISearchProvider {
             const newBitflags = new Uint32Array(startIndex + items.length);
             newBitflags.set(this.itemBitflags);
             this.itemBitflags = newBitflags;
+
+            const newAggregateBitflags = new Uint32Array(startIndex + items.length);
+            newAggregateBitflags.set(this.itemAggregateBitflags);
+            this.itemAggregateBitflags = newAggregateBitflags;
         }
 
         // Append items
@@ -197,7 +203,8 @@ export class SearchEngine implements ISearchProvider {
     private processAddedItem(item: SearchableItem, globalIndex: number): void {
         this.itemsMap.set(item.id, item);
         this.itemTypeIds[globalIndex] = TYPE_TO_ID[item.type];
-        this.itemBitflags[globalIndex] = this.calculateBitflags(item.name);
+        const nameBitflags = this.calculateBitflags(item.name);
+        this.itemBitflags[globalIndex] = nameBitflags;
 
         // Update file paths cache
         if (item.type === SearchItemType.FILE) {
@@ -208,6 +215,16 @@ export class SearchEngine implements ISearchProvider {
         const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
         const shouldPrepareFullName =
             item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
+
+        // Calculate aggregate bitflags
+        let aggregateBitflags = nameBitflags;
+        if (shouldPrepareFullName && item.fullName) {
+            aggregateBitflags |= this.calculateBitflags(item.fullName);
+        }
+        if (normalizedPath) {
+            aggregateBitflags |= this.calculateBitflags(normalizedPath);
+        }
+        this.itemAggregateBitflags[globalIndex] = aggregateBitflags;
 
         // Push to parallel arrays
         this.preparedNames.push(this.getPrepared(item.name));
@@ -263,6 +280,7 @@ export class SearchEngine implements ISearchProvider {
         this.items[write] = this.items[read];
         this.itemTypeIds[write] = this.itemTypeIds[read];
         this.itemBitflags[write] = this.itemBitflags[read];
+        this.itemAggregateBitflags[write] = this.itemAggregateBitflags[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedNamesLow[write] = this.preparedNamesLow[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
@@ -277,6 +295,7 @@ export class SearchEngine implements ISearchProvider {
             this.items.length = write;
             this.itemTypeIds = this.itemTypeIds.slice(0, write);
             this.itemBitflags = this.itemBitflags.slice(0, write);
+            this.itemAggregateBitflags = this.itemAggregateBitflags.slice(0, write);
             this.preparedNames.length = write;
             this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
@@ -343,6 +362,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private rebuildHotArrays(): void {
         // Clear parallel arrays
         this.preparedNames = [];
@@ -357,7 +377,8 @@ export class SearchEngine implements ISearchProvider {
         for (let i = 0; i < count; i++) {
             const item = this.items[i];
             this.itemTypeIds[i] = TYPE_TO_ID[item.type];
-            this.itemBitflags[i] = this.calculateBitflags(item.name);
+            const nameBitflags = this.calculateBitflags(item.name);
+            this.itemBitflags[i] = nameBitflags;
 
             if (item.type === SearchItemType.FILE) {
                 this.filePaths.push(item.filePath);
@@ -367,6 +388,15 @@ export class SearchEngine implements ISearchProvider {
             const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
             const shouldPrepareFullName =
                 item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
+
+            let aggregateBitflags = nameBitflags;
+            if (shouldPrepareFullName && item.fullName) {
+                aggregateBitflags |= this.calculateBitflags(item.fullName);
+            }
+            if (normalizedPath) {
+                aggregateBitflags |= this.calculateBitflags(normalizedPath);
+            }
+            this.itemAggregateBitflags[i] = aggregateBitflags;
 
             this.preparedNames.push(this.getPrepared(item.name));
             this.preparedNamesLow.push(this.getPreparedLow(item.name));
@@ -449,6 +479,7 @@ export class SearchEngine implements ISearchProvider {
         this.items = [];
         this.itemTypeIds = new Uint8Array(0);
         this.itemBitflags = new Uint32Array(0);
+        this.itemAggregateBitflags = new Uint32Array(0);
         this.preparedNames = [];
         this.preparedNamesLow = [];
         this.preparedFullNames = [];
@@ -494,6 +525,7 @@ export class SearchEngine implements ISearchProvider {
         // Parallel arrays
         size += this.itemTypeIds.byteLength;
         size += this.itemBitflags.byteLength;
+        size += this.itemAggregateBitflags.byteLength;
         size += this.preparedNames.length * 8;
         size += this.preparedNamesLow.length * 8;
         size += this.preparedFullNames.length * 8;
@@ -1177,6 +1209,7 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1203,6 +1236,7 @@ export class SearchEngine implements ISearchProvider {
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
         const itemBitflags = this.itemBitflags;
+        const itemAggregateBitflags = this.itemAggregateBitflags;
         const preparedNames = this.preparedNames;
         const preparedFullNames = this.preparedFullNames;
         const preparedPaths = this.preparedPaths;
@@ -1216,6 +1250,12 @@ export class SearchEngine implements ISearchProvider {
         // Helper to process a single item index
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
+            // Optimization: Check aggregate bitflags first to skip items that don't contain the query characters at all
+            // This allows us to skip CamelHumps, Name, FullName, Path, and URL checks for non-matching items.
+            if ((queryBitflags & itemAggregateBitflags[i]) !== queryBitflags) {
+                return;
+            }
+
             const typeId = itemTypeIds[i];
             // Optimization: Defer typeBoost lookup until needed (Journal 2025-01-29)
             // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
