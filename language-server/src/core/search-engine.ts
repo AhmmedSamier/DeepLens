@@ -197,7 +197,17 @@ export class SearchEngine implements ISearchProvider {
     private processAddedItem(item: SearchableItem, globalIndex: number): void {
         this.itemsMap.set(item.id, item);
         this.itemTypeIds[globalIndex] = TYPE_TO_ID[item.type];
-        this.itemBitflags[globalIndex] = this.calculateBitflags(item.name);
+
+        // Optimization: Compute aggregate bitflags for Name, FullName, and Path
+        let flags = this.calculateBitflags(item.name);
+        if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
+            flags |= this.calculateBitflags(item.fullName);
+        }
+        if (item.relativeFilePath) {
+            const normalized = item.relativeFilePath.replace(/\\/g, '/');
+            flags |= this.calculateBitflags(normalized);
+        }
+        this.itemBitflags[globalIndex] = flags;
 
         // Update file paths cache
         if (item.type === SearchItemType.FILE) {
@@ -357,7 +367,17 @@ export class SearchEngine implements ISearchProvider {
         for (let i = 0; i < count; i++) {
             const item = this.items[i];
             this.itemTypeIds[i] = TYPE_TO_ID[item.type];
-            this.itemBitflags[i] = this.calculateBitflags(item.name);
+
+            // Optimization: Compute aggregate bitflags for Name, FullName, and Path
+            let flags = this.calculateBitflags(item.name);
+            if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
+                flags |= this.calculateBitflags(item.fullName);
+            }
+            if (item.relativeFilePath) {
+                const normalized = item.relativeFilePath.replace(/\\/g, '/');
+                flags |= this.calculateBitflags(normalized);
+            }
+            this.itemBitflags[i] = flags;
 
             if (item.type === SearchItemType.FILE) {
                 this.filePaths.push(item.filePath);
@@ -1216,6 +1236,11 @@ export class SearchEngine implements ISearchProvider {
         // Helper to process a single item index
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
+            // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
+            if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
+                return;
+            }
+
             const typeId = itemTypeIds[i];
             // Optimization: Defer typeBoost lookup until needed (Journal 2025-01-29)
             // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
@@ -1248,7 +1273,8 @@ export class SearchEngine implements ISearchProvider {
                 // Name (1.0)
                 const pName = preparedNames[i];
                 // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
-                if (pName && (queryBitflags & itemBitflags[i]) === queryBitflags && queryLen <= pName.target.length) {
+                // Note: itemBitflags is now aggregate, so this check is looser but still valid
+                if (pName && queryLen <= pName.target.length) {
                     const res = Fuzzysort.single(query, pName);
                     if (res) {
                         const s = res.score;
