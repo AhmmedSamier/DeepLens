@@ -1216,14 +1216,38 @@ export class SearchProvider {
      */
     private getWelcomeItems(): SearchResultItem[] {
         const items = [
-            ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
-            ['/t', 'Search Classes', 'Find classes, interfaces, and enums (/t)', SearchScope.TYPES],
-            ['/f', 'Search Files', 'Find files by name or path (/f)', SearchScope.FILES],
-            ['/s', 'Search Symbols', 'Find methods, functions, and variables (/s)', SearchScope.SYMBOLS],
-            ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
+            [
+                '/all',
+                'Search Everything',
+                'Type to search classes, files, symbols, and more',
+                SearchScope.EVERYTHING,
+                'search',
+            ],
+            [
+                '/t',
+                'Search Classes',
+                'Find classes, interfaces, and enums (/t)',
+                SearchScope.TYPES,
+                'symbol-class',
+            ],
+            ['/f', 'Search Files', 'Find files by name or path (/f)', SearchScope.FILES, 'file'],
+            [
+                '/s',
+                'Search Symbols',
+                'Find methods, functions, and variables (/s)',
+                SearchScope.SYMBOLS,
+                'symbol-method',
+            ],
+            [
+                '/txt',
+                'Search Text',
+                'Find text content across all files (/txt)',
+                SearchScope.TEXT,
+                'whole-word',
+            ],
         ] as const;
 
-        return items.map(([cmd, name, detail, scope]) => {
+        return items.map(([cmd, name, detail, scope, icon]) => {
             const item = this.resultToQuickPickItem({
                 item: {
                     id: `slash-cmd:${cmd}`,
@@ -1235,7 +1259,7 @@ export class SearchProvider {
                 score: 1,
                 scope,
             });
-            item.iconPath = new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground'));
+            item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
             return item;
         });
