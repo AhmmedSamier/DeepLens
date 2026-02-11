@@ -31,6 +31,7 @@ export class ActivityTracker {
     private readonly STORAGE_KEY = 'deeplens.activity';
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
+    private maxAccessCount = 1;
 
     // Coalescing save operations
     private needsSave = false;
@@ -99,23 +100,30 @@ export class ActivityTracker {
     recordAccess(item: SearchableItem): void {
         const now = Date.now();
         const existing = this.activities.get(item.id);
+        let record: ActivityRecord;
 
         if (existing) {
             existing.lastAccessed = now;
             existing.accessCount += 1;
             existing.item = item; // Update item metadata
+            record = existing;
         } else {
-            this.activities.set(item.id, {
+            record = {
                 itemId: item.id,
                 lastAccessed: now,
                 accessCount: 1,
                 item: item,
-                score: 0, // Will be calculated in recalculateAllScores
-            });
+                score: 0,
+            };
+            this.activities.set(item.id, record);
         }
 
-        // Recalculate all scores to maintain relative rankings
-        this.recalculateAllScores();
+        if (record.accessCount > this.maxAccessCount) {
+            this.maxAccessCount = record.accessCount;
+        }
+
+        // Update score only for this item
+        record.score = this.calculateScore(record, this.maxAccessCount);
     }
 
     /**
@@ -123,13 +131,17 @@ export class ActivityTracker {
      */
     getActivityScore(itemId: string): number {
         const activity = this.activities.get(itemId);
-        return activity ? activity.score : 0;
+        // Calculate on-the-fly to ensure accuracy against current maxAccessCount
+        return activity ? this.calculateScore(activity, this.maxAccessCount) : 0;
     }
 
     /**
      * Get the most recent item IDs sorted by score
      */
     getRecentItemIds(count: number): string[] {
+        // Refresh scores before sorting to ensure relative order is correct
+        this.recalculateAllScores();
+
         const sorted = Array.from(this.activities.values())
             .sort((a, b) => b.score - a.score)
             .slice(0, count);
@@ -198,7 +210,7 @@ export class ActivityTracker {
         const recencyScore = 1 / (1 + daysSinceLastAccess);
 
         // Frequency score: normalized by max access count
-        const max = maxAccessCount ?? this.getMaxAccessCount();
+        const max = maxAccessCount ?? this.maxAccessCount;
         const frequencyScore = max > 0 ? record.accessCount / max : 0;
 
         // Weighted combination: recency matters more than frequency
@@ -206,25 +218,19 @@ export class ActivityTracker {
     }
 
     /**
-     * Get maximum access count across all records
+     * Recalculate all activity scores
      */
-    private getMaxAccessCount(): number {
-        let max = 1; // Minimum 1 to avoid division by zero
+    private recalculateAllScores(): void {
+        let max = 1;
         for (const record of this.activities.values()) {
             if (record.accessCount > max) {
                 max = record.accessCount;
             }
         }
-        return max;
-    }
+        this.maxAccessCount = max;
 
-    /**
-     * Recalculate all activity scores
-     */
-    private recalculateAllScores(): void {
-        const maxAccessCount = this.getMaxAccessCount();
         for (const record of this.activities.values()) {
-            record.score = this.calculateScore(record, maxAccessCount);
+            record.score = this.calculateScore(record, max);
         }
     }
 
@@ -290,6 +296,9 @@ export class ActivityTracker {
         try {
             while (this.needsSave) {
                 this.needsSave = false;
+                // Periodic recalculation to apply decay
+                this.recalculateAllScores();
+
                 const data: Record<string, ActivityRecord> = {};
                 for (const [key, value] of this.activities.entries()) {
                     data[key] = value;
