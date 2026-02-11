@@ -225,9 +225,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames.push(shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null);
         this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
         this.preparedCapitals.push(this.extractCapitals(item.name));
-        this.preparedPatterns.push(
-            item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null,
-        );
+        this.preparedPatterns.push(item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null);
 
         // Update scopes
         const scope = this.getScopeForItemType(item.type);

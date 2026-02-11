@@ -17,7 +17,7 @@ export interface ActivityRecord {
  * Interface for activity persistence
  */
 export interface ActivityStorage {
-    load(): Record<string, ActivityRecord> | undefined;
+    load(): Promise<Record<string, ActivityRecord> | undefined>;
     save(data: Record<string, ActivityRecord>): Promise<void>;
 }
 
@@ -35,6 +35,7 @@ export class ActivityTracker {
     // Coalescing save operations
     private needsSave = false;
     private savePromise: Promise<void> | null = null;
+    private initPromise: Promise<void> | null = null;
 
     constructor(
         storageOrContext:
@@ -49,16 +50,15 @@ export class ActivityTracker {
         if (typeof storageOrContext === 'string') {
             const storagePath = storageOrContext;
             this.storage = {
-                load: () => {
+                load: async () => {
                     const file = path.join(storagePath, 'activity.json');
-                    if (fs.existsSync(file)) {
-                        try {
-                            return JSON.parse(fs.readFileSync(file, 'utf8'));
-                        } catch {
-                            // Fallback to no logger if not available yet, but avoid console.error
-                        }
+                    try {
+                        const content = await fs.promises.readFile(file, 'utf8');
+                        return JSON.parse(content);
+                    } catch {
+                        // Fallback to no logger if not available yet
+                        return undefined;
                     }
-                    return undefined;
                 },
                 save: async (data) => {
                     const file = path.join(storagePath, 'activity.json');
@@ -73,15 +73,24 @@ export class ActivityTracker {
         } else {
             const context = storageOrContext;
             this.storage = {
-                load: () => context.workspaceState.get(this.STORAGE_KEY),
+                load: async () => context.workspaceState.get(this.STORAGE_KEY),
                 save: async (data) => {
                     await context.workspaceState.update(this.STORAGE_KEY, data);
                 },
             };
         }
 
-        this.loadActivities();
+        this.initPromise = this.loadActivities();
         this.startPeriodicSave();
+    }
+
+    /**
+     * Wait for activities to be loaded (mainly for testing/benchmarking)
+     */
+    async waitForLoaded(): Promise<void> {
+        if (this.initPromise) {
+            await this.initPromise;
+        }
     }
 
     /**
@@ -236,12 +245,26 @@ export class ActivityTracker {
     /**
      * Load activities from storage
      */
-    private loadActivities(): void {
+    private async loadActivities(): Promise<void> {
         try {
-            const stored = this.storage.load();
+            const stored = await this.storage.load();
 
             if (stored && typeof stored === 'object') {
-                this.activities = new Map(Object.entries(stored));
+                const loadedActivities = new Map(Object.entries(stored));
+
+                // Merge loaded data into current activities to handle race conditions
+                // where items were accessed before loading completed
+                for (const [id, loadedRecord] of loadedActivities) {
+                    const currentRecord = this.activities.get(id);
+                    if (currentRecord) {
+                        // Merge: add historical access count to current session count
+                        currentRecord.accessCount += loadedRecord.accessCount;
+                        // lastAccessed in currentRecord is guaranteed to be newer or equal
+                    } else {
+                        this.activities.set(id, loadedRecord);
+                    }
+                }
+
                 this.cleanupOldActivity();
                 this.recalculateAllScores();
             }
