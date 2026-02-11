@@ -1223,6 +1223,14 @@ export class SearchProvider {
             ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
         ] as const;
 
+        const iconMap = new Map<SearchScope, string>([
+            [SearchScope.EVERYTHING, 'search'],
+            [SearchScope.TYPES, this.ICON_CLASS],
+            [SearchScope.FILES, 'file'],
+            [SearchScope.SYMBOLS, 'symbol-method'],
+            [SearchScope.TEXT, 'whole-word'],
+        ]);
+
         return items.map(([cmd, name, detail, scope]) => {
             const item = this.resultToQuickPickItem({
                 item: {
@@ -1235,7 +1243,9 @@ export class SearchProvider {
                 score: 1,
                 scope,
             });
-            item.iconPath = new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground'));
+
+            const icon = iconMap.get(scope) || 'lightbulb';
+            item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
             return item;
         });
