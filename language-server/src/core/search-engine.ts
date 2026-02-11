@@ -881,6 +881,7 @@ export class SearchEngine implements ISearchProvider {
                         if (fileSize === undefined) {
                             const stats = await fs.promises.stat(fileItem.filePath);
                             fileSize = stats.size;
+                            fileItem.size = fileSize;
                         }
 
                         if (fileSize > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
