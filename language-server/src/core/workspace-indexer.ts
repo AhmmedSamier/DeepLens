@@ -294,7 +294,7 @@ export class WorkspaceIndexer {
      * Process a list of file paths into searchable items in parallel
      */
     private async processFileList(files: string[], collector: (items: SearchableItem[]) => void): Promise<void> {
-        const CONCURRENCY = 100; // Higher concurrency for metadata checks
+        const CONCURRENCY = 50; // Reduced to 50 to avoid EMFILE on some systems
         const chunks: string[][] = [];
 
         for (let i = 0; i < files.length; i += CONCURRENCY) {
@@ -342,12 +342,30 @@ export class WorkspaceIndexer {
     }
 
     private async getFileSize(filePath: string): Promise<number | undefined> {
-        try {
-            const stats = await fs.promises.stat(filePath);
-            return stats.size;
-        } catch {
-            return undefined;
+        let attempts = 0;
+        while (attempts < 3) {
+            try {
+                const stats = await fs.promises.stat(filePath);
+                return stats.size;
+            } catch (error) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const err = error as any;
+                // Retry only on file descriptor exhaustion or busy errors
+                if (err.code === 'EMFILE' || err.code === 'ENFILE' || err.code === 'EBUSY') {
+                    attempts++;
+                    if (attempts >= 3) {
+                        this.log(`Failed to get file size for ${filePath} after 3 attempts: ${err.message}`);
+                        return undefined;
+                    }
+                    // Exponential backoff: 20ms, 80ms
+                    await new Promise((resolve) => setTimeout(resolve, 20 * Math.pow(4, attempts - 1)));
+                } else {
+                    // Non-retriable error (e.g., file not found)
+                    return undefined;
+                }
+            }
         }
+        return undefined;
     }
 
     /**
