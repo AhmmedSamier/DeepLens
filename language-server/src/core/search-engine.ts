@@ -1196,6 +1196,7 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1250,7 +1251,7 @@ export class SearchEngine implements ISearchProvider {
             // for strong abbreviation matches (Journal 2024-05-23)
             if (enableCamelHumps) {
                 const capitals = preparedCapitals[i];
-                if (capitals) {
+                if (capitals && queryLen <= capitals.length) {
                     const matchIndex = capitals.indexOf(queryUpper);
                     if (matchIndex !== -1) {
                         const lengthRatio = queryLen / capitals.length;
