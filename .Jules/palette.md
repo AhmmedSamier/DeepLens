@@ -45,3 +45,7 @@
 ## 2026-02-06 - [Seamless Fallback Pattern]
 **Learning:** When a custom search tool yields no results, users feel stranded. Providing a direct "escape hatch" to the native platform's search (e.g., `workbench.action.findInFiles`) reduces friction and builds trust.
 **Action:** In empty states, always include a button to trigger the equivalent native functionality with the current context (e.g., search query) pre-filled.
+
+## 2026-05-29 - [Icon Accessibility]
+**Learning:** Purely visual indicators like `$(circle-filled)` for dirty files are invisible to screen readers and ambiguous to some users.
+**Action:** Always append descriptive text (e.g., `(Unsaved)`) to the `description` or `detail` of `QuickPickItem`s when using icon-based status indicators to ensure accessibility.
