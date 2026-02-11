@@ -37,12 +37,25 @@ export async function runSearchBenchmarks() {
     engine.setItems(items);
     console.log(`Initialized engine with ${items.length} items.`);
 
+    // Warmup
+    await engine.search({ query: "warmup", scope: SearchScope.EVERYTHING });
+
     await benchmark("Fuzzy Search 'File100'", async () => {
         await engine.search({ query: "File100", scope: SearchScope.EVERYTHING });
     }, 100);
 
     await benchmark("CamelHumps Search 'FCC'", async () => {
         await engine.search({ query: "FCC", scope: SearchScope.EVERYTHING });
+    }, 100);
+
+    // New benchmark: Non-matching query
+    await benchmark("Non-matching Search 'Zebra'", async () => {
+        await engine.search({ query: "Zebra", scope: SearchScope.EVERYTHING });
+    }, 100);
+
+    // New benchmark: Query matching path but not name
+    await benchmark("Path-only Match 'src'", async () => {
+        await engine.search({ query: "src", scope: SearchScope.EVERYTHING });
     }, 100);
 
     await benchmark("Burst Search 'calc'", async () => {
