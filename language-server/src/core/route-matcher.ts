@@ -12,6 +12,7 @@ export interface RoutePattern {
     cleanTemplate: string;
     templateSegments: string[];
     templateSegmentsLower: string[];
+    // Optimization: Pre-calculated boolean array to avoid repeated string checks (startsWith/endsWith) in the hot loop
     isParameter: boolean[];
 }
 
@@ -71,7 +72,13 @@ export class RouteMatcher {
                 pathSegmentsLower = pathSegments.map((s) => s.toLowerCase());
             }
 
-            return this.segmentsMatch(pattern, pathSegments, pathSegmentsLower);
+            return this.segmentsMatch(
+                pattern.templateSegments,
+                pattern.templateSegmentsLower,
+                pathSegments,
+                pathSegmentsLower,
+                pattern.isParameter,
+            );
         } catch {
             return false;
         }
@@ -140,24 +147,27 @@ export class RouteMatcher {
     /**
      * Check if segments match from the right (supporting parameters)
      */
-    private static segmentsMatch(pattern: RoutePattern, pSegs: string[], pSegsLower: string[]): boolean {
-        const tSegs = pattern.templateSegments;
-        const tSegsLower = pattern.templateSegmentsLower;
-        const isParams = pattern.isParameter;
-
+    private static segmentsMatch(
+        tSegs: string[],
+        tSegsLower: string[],
+        pSegs: string[],
+        pSegsLower: string[],
+        isParams: boolean[],
+    ): boolean {
         if (pSegs.length > tSegs.length) {
             return false;
         }
 
         for (let i = 1; i <= pSegs.length; i++) {
             const index = tSegs.length - i;
+            const tSeg = tSegs[index];
             const tSegLower = tSegsLower[index];
             const pSeg = pSegs[pSegs.length - i];
             const pSegLower = pSegsLower[pSegs.length - i];
             const isParam = isParams[index];
             const isLast = i === 1;
 
-            if (!this.segmentMatches(tSegLower, pSeg, pSegLower, isLast, isParam)) {
+            if (!this.segmentMatches(tSeg, tSegLower, pSeg, pSegLower, isLast, isParam)) {
                 return false;
             }
         }
@@ -165,6 +175,7 @@ export class RouteMatcher {
     }
 
     private static segmentMatches(
+        tSeg: string,
         tSegLower: string,
         pSeg: string,
         pSegLower: string,
