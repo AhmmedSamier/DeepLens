@@ -14,7 +14,8 @@ async function main() {
         // Path to the test workspace
         const workspacePath = path.resolve(__dirname, '../../../../test-workspace');
 
-        // Download VS Code, unzip it and run the integration test
+        // Download VS Code (if needed), unzip it and run the integration test.
+        // Use a longer timeout so version resolution and download don't fail on slow networks.
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
@@ -24,6 +25,7 @@ async function main() {
                 '--disable-gpu',
                 '--headless'
             ],
+            timeout: 120_000, // 2 minutes for version fetch / download
         });
     } catch (err) {
         console.error('Failed to run tests', err);
