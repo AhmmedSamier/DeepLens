@@ -52,6 +52,14 @@ export class SearchProvider {
     private readonly TOOLTIP_OPEN_SIDE = 'Open to the Side';
     private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
+    // Command IDs for empty state actions
+    private readonly CMD_NATIVE_SEARCH = 'command:native-search';
+    private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
+    private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
+    private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
+    private readonly CMD_SETTINGS = 'command:open-settings';
+    private readonly ID_EMPTY_STATE = 'empty-state';
+
     private matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
@@ -629,7 +637,7 @@ export class SearchProvider {
             }
         });
 
-        quickPick.onDidAccept(() => {
+        quickPick.onDidAccept(async () => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
                 // Handle Clear History
@@ -645,6 +653,11 @@ export class SearchProvider {
 
                 if (selected.result.item.id === 'command:cancel-clear-history') {
                     this.showRecentHistory(quickPick);
+                    return;
+                }
+
+                // Handle Empty State Actions
+                if (await this.handleEmptyStateAction(selected, quickPick)) {
                     return;
                 }
 
@@ -1118,7 +1131,7 @@ export class SearchProvider {
 
             // If we still have NO results at the end of Phase 2, then we clear the stale items (history)
             if (results.length === 0) {
-                quickPick.items = [this.getEmptyStateItem(query)];
+                quickPick.items = this.getEmptyStateItems(query);
                 this.updateTitle(quickPick, 0, duration);
             } else {
                 quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
@@ -1151,63 +1164,191 @@ export class SearchProvider {
         };
     }
 
-    /**
-     * Get empty state item when no results are found
-     */
-    private getEmptyStateItem(query: string): SearchResultItem {
-        const detail =
-            this.currentScope !== SearchScope.EVERYTHING
-                ? 'Try switching to Global search (/all) or check for typos'
-                : `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`;
-
-        const buttons: vscode.QuickInputButton[] = [];
-
-        if (this.currentScope !== SearchScope.EVERYTHING) {
-            buttons.push({
-                iconPath: new vscode.ThemeIcon('search'),
-                tooltip: this.TOOLTIP_SEARCH_EVERYWHERE,
+    private async handleEmptyStateAction(
+        selected: SearchResultItem,
+        quickPick: vscode.QuickPick<SearchResultItem>,
+    ): Promise<boolean> {
+        if (selected.result.item.id === this.CMD_NATIVE_SEARCH) {
+            await vscode.commands.executeCommand('workbench.action.findInFiles', {
+                query: quickPick.value,
+                triggerSearch: true,
             });
+            quickPick.hide();
+            return true;
         }
 
-        buttons.push({
-            iconPath: new vscode.ThemeIcon('search-fuzzy'),
-            tooltip: this.TOOLTIP_NATIVE_SEARCH,
-        });
+        if (selected.result.item.id === this.CMD_SWITCH_SCOPE) {
+            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = SearchScope.EVERYTHING;
 
-        buttons.push(
-            {
-                iconPath: new vscode.ThemeIcon('refresh'),
-                tooltip: this.TOOLTIP_REBUILD_INDEX,
-            },
-            {
-                iconPath: new vscode.ThemeIcon('trash'),
-                tooltip: this.TOOLTIP_CLEAR_CACHE,
-            },
-            {
-                iconPath: new vscode.ThemeIcon('settings-gear'),
-                tooltip: this.TOOLTIP_SETTINGS,
-            },
-        );
+            const currentQuery = quickPick.value;
+            let text = currentQuery;
 
-        return {
-            label: 'No results found',
-            description: `No matching items found for '${query}'`,
+            // Check if current query has ANY known prefix
+            for (const [prefix] of this.PREFIX_MAP.entries()) {
+                if (currentQuery.toLowerCase().startsWith(prefix)) {
+                    text = currentQuery.slice(prefix.length);
+                    quickPick.value = text;
+                    break;
+                }
+            }
+
+            this.updateFilterButtons(quickPick);
+            quickPick.placeholder = this.getPlaceholder();
+            const queryId = ++this.lastQueryId;
+            this.performSearch(quickPick, text, queryId);
+            return true;
+        }
+
+        if (selected.result.item.id === this.CMD_REBUILD_INDEX) {
+            vscode.commands.executeCommand('deeplens.rebuildIndex');
+            quickPick.hide();
+            return true;
+        }
+
+        if (selected.result.item.id === this.CMD_CLEAR_CACHE) {
+            vscode.commands.executeCommand('deeplens.clearIndexCache');
+            quickPick.hide();
+            return true;
+        }
+
+        if (selected.result.item.id === this.CMD_SETTINGS) {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+            return true;
+        }
+
+        return selected.result.item.id === this.ID_EMPTY_STATE;
+    }
+
+    /**
+     * Get empty state items when no results are found
+     */
+    private getEmptyStateItems(query: string): SearchResultItem[] {
+        const detail =
+            this.currentScope !== SearchScope.EVERYTHING
+                ? 'Try switching to Global search or check for typos'
+                : `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`;
+
+        const items: SearchResultItem[] = [];
+
+        // 1. Header Item (Informational)
+        items.push({
+            label: `No results found for '${query}'`,
+            description: '',
             detail: detail,
             alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('search', new vscode.ThemeColor('descriptionForeground')),
-            buttons: buttons,
+            iconPath: new vscode.ThemeIcon('info', new vscode.ThemeColor('descriptionForeground')),
             result: {
                 item: {
-                    id: 'empty-state',
+                    id: this.ID_EMPTY_STATE,
                     name: 'No results found',
-                    type: SearchItemType.TEXT, // Dummy type
+                    type: SearchItemType.TEXT,
                     filePath: '',
                     detail: '',
                 },
                 score: 0,
                 scope: this.currentScope,
             },
-        };
+        });
+
+        // 2. Switch Scope Action (if not already global)
+        if (this.currentScope !== SearchScope.EVERYTHING) {
+            items.push({
+                label: 'Switch to Global Search',
+                description: 'Search everywhere (/all)',
+                alwaysShow: true,
+                iconPath: new vscode.ThemeIcon('search'),
+                result: {
+                    item: {
+                        id: this.CMD_SWITCH_SCOPE,
+                        name: 'Switch to Global Search',
+                        type: SearchItemType.COMMAND,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: SearchScope.COMMANDS,
+                },
+            });
+        }
+
+        // 3. Native Search Action
+        items.push({
+            label: 'Search in Files (Native)',
+            description: "Use VS Code's native search",
+            alwaysShow: true,
+            iconPath: new vscode.ThemeIcon('search-fuzzy'),
+            result: {
+                item: {
+                    id: this.CMD_NATIVE_SEARCH,
+                    name: 'Search in Files',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        });
+
+        // 4. Rebuild Index Action
+        items.push({
+            label: 'Rebuild Index',
+            description: 'Fix missing files',
+            alwaysShow: true,
+            iconPath: new vscode.ThemeIcon('refresh'),
+            result: {
+                item: {
+                    id: this.CMD_REBUILD_INDEX,
+                    name: 'Rebuild Index',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        });
+
+        // 5. Clear Cache Action
+        items.push({
+            label: 'Clear Index Cache',
+            description: 'Fix corruption',
+            alwaysShow: true,
+            iconPath: new vscode.ThemeIcon('trash'),
+            result: {
+                item: {
+                    id: this.CMD_CLEAR_CACHE,
+                    name: 'Clear Index Cache',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        });
+
+        // 6. Settings Action
+        items.push({
+            label: 'Configure Settings',
+            description: 'Check exclusion rules',
+            alwaysShow: true,
+            iconPath: new vscode.ThemeIcon('settings-gear'),
+            result: {
+                item: {
+                    id: this.CMD_SETTINGS,
+                    name: 'Configure Settings',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        });
+
+        return items;
     }
 
     /**
