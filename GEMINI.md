@@ -6,17 +6,32 @@ DeepLens is a high-performance "Search Everywhere" tool for VS Code and Visual S
 
 The repository is a monorepo containing:
 
-- **`language-server/`**: The core logic implemented as a Language Server Protocol (LSP) server. It uses `tree-sitter` for parsing and provides indexing and search capabilities.
+- **`language-server/`**: The core logic implemented as a Language Server Protocol (LSP) server. It uses `tree-sitter` for parsing and provides indexing and search capabilities. Integrates `ripgrep` for fast text search.
 - **`vscode-extension/`**: The Visual Studio Code client that consumes the language server and integrates with VS Code's UI (QuickPick, CodeLens).
 - **`visual-studio-extension/`**: The Visual Studio (Classic) extension (C#) integration.
+- **`.Jules/`**: Knowledge base containing performance optimizations (`bolt.md`) and UX/UI design patterns (`palette.md`).
+- **`.specify/`**: Core templates, scripts, and project "constitution" for the spec-driven development workflow.
+- **`.gemini/commands/`**: Custom Gemini CLI commands for the `Speckit` workflow (plan, tasks, checklist, etc.).
 
 ## Technologies
 
 - **Runtime/Package Manager:** [Bun](https://bun.sh) (for TS/JS parts)
 - **Languages:** TypeScript (Core & VS Code), C# (Visual Studio)
 - **Parsing:** `web-tree-sitter` and various `tree-sitter-*` grammars.
+- **Search Engine:** Custom fuzzy matching + `fuzzysort`, `ripgrep` for text search, and CamelHumps matching.
 - **Protocol:** VS Code Language Server Protocol.
 - **Testing:** `bun test` (Server), `mocha` + `@vscode/test-electron` (VS Code).
+
+## Specialized Workflows
+
+### Speckit (Spec-based Implementation)
+DeepLens follows a rigorous spec-driven development process:
+1.  **Specify**: Define feature requirements and edge cases.
+2.  **Plan**: Technical design, research, and compliance check against the project constitution.
+3.  **Implement**: Break down into atomic tasks and execute.
+4.  **Verify**: Use automated checklists to ensure all requirements and quality gates are met.
+
+Access these via Gemini CLI commands: `/speckit.plan`, `/speckit.tasks`, `/speckit.checklist`, etc.
 
 ## Getting Started
 
@@ -54,7 +69,7 @@ This command will:
 1.  Clean previous builds.
 2.  Bundle the VS Code extension code.
 3.  Build the Language Server (`dist/server.js`, `dist/indexer-worker.js`).
-4.  Copy necessary artifacts (parsers, binaries) to the extension's output directory.
+4.  Copy necessary artifacts (parsers, binaries, ripgrep) to the extension's output directory.
 
 ### Running Tests
 
@@ -98,7 +113,8 @@ bun run vsix
 -   **Code Style:** Adhere to `eslint` and `prettier` configurations.
     -   Lint: `bun run lint`
     -   Format: `bun run format`
--   **Commits:** Follow standard git commit conventions.
+-   **Commits:** Follow standard git commit conventions (Conventional Commits).
+-   **Performance & UX:** Reference `.Jules/bolt.md` for performance patterns and `.Jules/palette.md` for UI/UX standards before making changes.
 -   **CI:** Check `.github/workflows/ci.yml` for the continuous integration pipeline details.
 
 # Git & Commit Standards
