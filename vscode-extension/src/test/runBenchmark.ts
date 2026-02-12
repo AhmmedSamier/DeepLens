@@ -17,12 +17,13 @@ async function main() {
             Tests Path: ${extensionTestsPath}
         `);
 
-        // Download VS Code, unzip it and run the integration test
+        // Download VS Code (if needed), unzip it and run the integration test.
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
             launchArgs: ['--no-sandbox', '--disable-gpu', '--headless', '--js-flags=--expose-gc'],
             extensionTestsEnv: process.env as Record<string, string>,
+            timeout: 120_000, // 2 minutes for version fetch / download
         });
     } catch (err) {
         console.error('Failed to run benchmarks', err);
