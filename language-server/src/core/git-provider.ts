@@ -36,8 +36,11 @@ export class GitProvider {
                     const untrackedOutput = await this.execGit(['ls-files', '--others', '--exclude-standard'], root);
                     this.addFilesToSet(modifiedFiles, root, untrackedOutput);
                 } catch (error) {
-                    // Ignore errors (e.g., not a git repo)
-                    // console.debug(`Git check failed for ${root}:`, error);
+                    if (this.isExpectedNonRepoError(error)) {
+                        return;
+                    }
+                    const reason = this.toErrorMessage(error);
+                    console.warn(`[DeepLens][GitProvider] Failed to query git status for ${root}: ${reason}`);
                 }
             }),
         );
@@ -61,14 +64,31 @@ export class GitProvider {
         }
     }
 
+    private isExpectedNonRepoError(error: unknown): boolean {
+        const message = this.toErrorMessage(error).toLowerCase();
+        return message.includes('not a git repository');
+    }
+
+    private toErrorMessage(error: unknown): string {
+        if (error instanceof Error) {
+            return error.message;
+        }
+        return String(error);
+    }
+
     private async execGit(args: string[], cwd: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             const child = cp.spawn('git', args, { cwd });
 
             let stdout = '';
+            let stderr = '';
 
             child.stdout.on('data', (chunk) => {
                 stdout += chunk.toString();
+            });
+
+            child.stderr.on('data', (chunk) => {
+                stderr += chunk.toString();
             });
 
             child.on('error', (err) => {
@@ -79,7 +99,9 @@ export class GitProvider {
                 if (code === 0) {
                     resolve(stdout);
                 } else {
-                    reject(new Error(`Git exited with code ${code}`));
+                    const output = stderr.trim();
+                    const suffix = output ? `: ${output}` : '';
+                    reject(new Error(`Git exited with code ${code}${suffix}`));
                 }
             });
         });

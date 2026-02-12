@@ -24,7 +24,7 @@ export class RipgrepService {
         } else if (process.platform === 'linux') {
             binPatterns = ['rg-linux-x64', 'rg-linux', 'rg'];
         } else if (process.platform === 'darwin') {
-            binPatterns = ['rg-darwin-x64', 'rg-darwin', 'rg'];
+            binPatterns = ['rg-darwin-arm64', 'rg-darwin-x64', 'rg-darwin', 'rg'];
         } else {
             binPatterns = ['rg'];
         }
