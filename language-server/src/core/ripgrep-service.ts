@@ -50,16 +50,6 @@ export class RipgrepService {
             if (this.rgPath) break;
         }
 
-        // Ensure executable permissions (hack for VSIXs built on Windows)
-        if (this.rgPath && process.platform !== 'win32') {
-            try {
-                // 0o755 is rwxr-xr-x, necessary for the binary to execute
-                // eslint-disable-next-line sonarjs/file-permissions
-                fs.chmodSync(this.rgPath, 0o755);
-            } catch {
-                // Ignore
-            }
-        }
     }
 
     isAvailable(): boolean {

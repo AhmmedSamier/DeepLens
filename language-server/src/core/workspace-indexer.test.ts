@@ -10,7 +10,7 @@ import { WorkspaceIndexer } from './workspace-indexer';
 class TestWorkspaceIndexer extends WorkspaceIndexer {
     public gitResults: Record<string, { stdout?: string; error?: any }> = {};
 
-    protected async execGit(args: string[], cwd: string): Promise<string> {
+    protected async execGit(args: string[], cwd: string, input?: string): Promise<string> {
         const fullCommand = args.join(' ');
         // Find a matching result
         for (const key in this.gitResults) {
@@ -57,7 +57,11 @@ describe('WorkspaceIndexer', () => {
         const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
         // Mock git behavior: success = ignored
-        indexer.gitResults['check-ignore'] = { stdout: '/root/ignored.txt' };
+        // Format: source \0 line \0 pattern \0 path \0
+        // We simulate that 'check-ignore' was called and returned this output
+        indexer.gitResults['check-ignore'] = {
+            stdout: '.gitignore\0' + '1\0*\0/root/ignored.txt\0',
+        };
 
         const result = await indexer.checkIsGitIgnored('/root/ignored.txt');
         expect(result).toBe(true);
@@ -66,7 +70,8 @@ describe('WorkspaceIndexer', () => {
     it('should return false if git check-ignore fails (exit code 1)', async () => {
         const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
-        // Mock git behavior: failure with code 1 = not ignored
+        // Mock git behavior: failure with code 1 = none ignored
+        // This triggers the catch block which resolves false
         indexer.gitResults['check-ignore'] = { error: { code: 1 } };
 
         const result = await indexer.checkIsGitIgnored('/root/tracked.txt');

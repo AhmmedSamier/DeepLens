@@ -17,7 +17,7 @@ export interface ActivityRecord {
  * Interface for activity persistence
  */
 export interface ActivityStorage {
-    load(): Record<string, ActivityRecord> | undefined;
+    load(): Promise<Record<string, ActivityRecord> | undefined>;
     save(data: Record<string, ActivityRecord>): Promise<void>;
 }
 
@@ -31,10 +31,12 @@ export class ActivityTracker {
     private readonly STORAGE_KEY = 'deeplens.activity';
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
+    private maxAccessCount = 1;
 
     // Coalescing save operations
     private needsSave = false;
     private savePromise: Promise<void> | null = null;
+    private initPromise: Promise<void> | null = null;
 
     constructor(
         storageOrContext:
@@ -49,16 +51,15 @@ export class ActivityTracker {
         if (typeof storageOrContext === 'string') {
             const storagePath = storageOrContext;
             this.storage = {
-                load: () => {
+                load: async () => {
                     const file = path.join(storagePath, 'activity.json');
-                    if (fs.existsSync(file)) {
-                        try {
-                            return JSON.parse(fs.readFileSync(file, 'utf8'));
-                        } catch {
-                            // Fallback to no logger if not available yet, but avoid console.error
-                        }
+                    try {
+                        const content = await fs.promises.readFile(file, 'utf8');
+                        return JSON.parse(content);
+                    } catch {
+                        // Fallback to no logger if not available yet
+                        return undefined;
                     }
-                    return undefined;
                 },
                 save: async (data) => {
                     const file = path.join(storagePath, 'activity.json');
@@ -73,15 +74,24 @@ export class ActivityTracker {
         } else {
             const context = storageOrContext;
             this.storage = {
-                load: () => context.workspaceState.get(this.STORAGE_KEY),
+                load: async () => context.workspaceState.get(this.STORAGE_KEY),
                 save: async (data) => {
                     await context.workspaceState.update(this.STORAGE_KEY, data);
                 },
             };
         }
 
-        this.loadActivities();
+        this.initPromise = this.loadActivities();
         this.startPeriodicSave();
+    }
+
+    /**
+     * Wait for activities to be loaded (mainly for testing/benchmarking)
+     */
+    async waitForLoaded(): Promise<void> {
+        if (this.initPromise) {
+            await this.initPromise;
+        }
     }
 
     /**
@@ -90,23 +100,30 @@ export class ActivityTracker {
     recordAccess(item: SearchableItem): void {
         const now = Date.now();
         const existing = this.activities.get(item.id);
+        let record: ActivityRecord;
 
         if (existing) {
             existing.lastAccessed = now;
             existing.accessCount += 1;
             existing.item = item; // Update item metadata
+            record = existing;
         } else {
-            this.activities.set(item.id, {
+            record = {
                 itemId: item.id,
                 lastAccessed: now,
                 accessCount: 1,
                 item: item,
-                score: 0, // Will be calculated in recalculateAllScores
-            });
+                score: 0,
+            };
+            this.activities.set(item.id, record);
         }
 
-        // Recalculate all scores to maintain relative rankings
-        this.recalculateAllScores();
+        if (record.accessCount > this.maxAccessCount) {
+            this.maxAccessCount = record.accessCount;
+        }
+
+        // Update score only for this item
+        record.score = this.calculateScore(record, this.maxAccessCount);
     }
 
     /**
@@ -114,13 +131,17 @@ export class ActivityTracker {
      */
     getActivityScore(itemId: string): number {
         const activity = this.activities.get(itemId);
-        return activity ? activity.score : 0;
+        // Calculate on-the-fly to ensure accuracy against current maxAccessCount
+        return activity ? this.calculateScore(activity, this.maxAccessCount) : 0;
     }
 
     /**
      * Get the most recent item IDs sorted by score
      */
     getRecentItemIds(count: number): string[] {
+        // Refresh scores before sorting to ensure relative order is correct
+        this.recalculateAllScores();
+
         const sorted = Array.from(this.activities.values())
             .sort((a, b) => b.score - a.score)
             .slice(0, count);
@@ -189,7 +210,7 @@ export class ActivityTracker {
         const recencyScore = 1 / (1 + daysSinceLastAccess);
 
         // Frequency score: normalized by max access count
-        const max = maxAccessCount ?? this.getMaxAccessCount();
+        const max = maxAccessCount ?? this.maxAccessCount;
         const frequencyScore = max > 0 ? record.accessCount / max : 0;
 
         // Weighted combination: recency matters more than frequency
@@ -197,25 +218,19 @@ export class ActivityTracker {
     }
 
     /**
-     * Get maximum access count across all records
+     * Recalculate all activity scores
      */
-    private getMaxAccessCount(): number {
-        let max = 1; // Minimum 1 to avoid division by zero
+    private recalculateAllScores(): void {
+        let max = 1;
         for (const record of this.activities.values()) {
             if (record.accessCount > max) {
                 max = record.accessCount;
             }
         }
-        return max;
-    }
+        this.maxAccessCount = max;
 
-    /**
-     * Recalculate all activity scores
-     */
-    private recalculateAllScores(): void {
-        const maxAccessCount = this.getMaxAccessCount();
         for (const record of this.activities.values()) {
-            record.score = this.calculateScore(record, maxAccessCount);
+            record.score = this.calculateScore(record, max);
         }
     }
 
@@ -236,12 +251,26 @@ export class ActivityTracker {
     /**
      * Load activities from storage
      */
-    private loadActivities(): void {
+    private async loadActivities(): Promise<void> {
         try {
-            const stored = this.storage.load();
+            const stored = await this.storage.load();
 
             if (stored && typeof stored === 'object') {
-                this.activities = new Map(Object.entries(stored));
+                const loadedActivities = new Map(Object.entries(stored));
+
+                // Merge loaded data into current activities to handle race conditions
+                // where items were accessed before loading completed
+                for (const [id, loadedRecord] of loadedActivities) {
+                    const currentRecord = this.activities.get(id);
+                    if (currentRecord) {
+                        // Merge: add historical access count to current session count
+                        currentRecord.accessCount += loadedRecord.accessCount;
+                        // lastAccessed in currentRecord is guaranteed to be newer or equal
+                    } else {
+                        this.activities.set(id, loadedRecord);
+                    }
+                }
+
                 this.cleanupOldActivity();
                 this.recalculateAllScores();
             }
@@ -267,6 +296,9 @@ export class ActivityTracker {
         try {
             while (this.needsSave) {
                 this.needsSave = false;
+                // Periodic recalculation to apply decay
+                this.recalculateAllScores();
+
                 const data: Record<string, ActivityRecord> = {};
                 for (const [key, value] of this.activities.entries()) {
                     data[key] = value;

@@ -38,6 +38,11 @@ export class WorkspaceIndexer {
     private workersInitialized: boolean = false;
     private fileHashes: Map<string, string> = new Map();
 
+    // Batched git check queue
+    private gitCheckQueue: Map<string, Set<string>> = new Map();
+    private gitCheckResolvers: Map<string, ((ignored: boolean) => void)[]> = new Map();
+    private gitCheckTimer: NodeJS.Timeout | undefined;
+
     constructor(
         config: Config,
         treeSitter: import('./tree-sitter-parser').TreeSitterParser,
@@ -294,7 +299,7 @@ export class WorkspaceIndexer {
      * Process a list of file paths into searchable items in parallel
      */
     private async processFileList(files: string[], collector: (items: SearchableItem[]) => void): Promise<void> {
-        const CONCURRENCY = 100; // Higher concurrency for metadata checks
+        const CONCURRENCY = 50; // Reduced to 50 to avoid EMFILE on some systems
         const limit = pLimit(CONCURRENCY);
 
         let batch: SearchableItem[] = [];
@@ -349,12 +354,30 @@ export class WorkspaceIndexer {
     }
 
     private async getFileSize(filePath: string): Promise<number | undefined> {
-        try {
-            const stats = await fs.promises.stat(filePath);
-            return stats.size;
-        } catch {
-            return undefined;
+        let attempts = 0;
+        while (attempts < 3) {
+            try {
+                const stats = await fs.promises.stat(filePath);
+                return stats.size;
+            } catch (error) {
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const err = error as any;
+                // Retry only on file descriptor exhaustion or busy errors
+                if (err.code === 'EMFILE' || err.code === 'ENFILE' || err.code === 'EBUSY') {
+                    attempts++;
+                    if (attempts >= 3) {
+                        this.log(`Failed to get file size for ${filePath} after 3 attempts: ${err.message}`);
+                        return undefined;
+                    }
+                    // Exponential backoff: 20ms, 80ms
+                    await new Promise((resolve) => setTimeout(resolve, 20 * Math.pow(4, attempts - 1)));
+                } else {
+                    // Non-retriable error (e.g., file not found)
+                    return undefined;
+                }
+            }
         }
+        return undefined;
     }
 
     /**
@@ -823,25 +846,125 @@ export class WorkspaceIndexer {
     /**
      * Check if a file is ignored by git
      */
-    private async isGitIgnored(filePath: string): Promise<boolean> {
+    private isGitIgnored(filePath: string): Promise<boolean> {
         if (!this.config.shouldRespectGitignore()) {
-            return false;
+            return Promise.resolve(false);
         }
 
         const workspaceFolders = this.env.getWorkspaceFolders();
         const folder = workspaceFolders.find((f) => filePath.startsWith(f));
         if (!folder) {
-            return false;
+            return Promise.resolve(false);
         }
 
-        try {
-            await this.execGit(['check-ignore', '-q', filePath], folder);
-            // If exec succeeds (exit code 0), it is ignored
-            return true;
-        } catch {
-            // If exit code is 1, it is NOT ignored.
-            // If code is anything else (e.g. 128), git failed (not a repo?), so assume NOT ignored.
-            return false;
+        // Add to queue for batch processing
+        let folderQueue = this.gitCheckQueue.get(folder);
+        if (!folderQueue) {
+            folderQueue = new Set();
+            this.gitCheckQueue.set(folder, folderQueue);
+        }
+        folderQueue.add(filePath);
+
+        // Create promise
+        return new Promise<boolean>((resolve) => {
+            let resolvers = this.gitCheckResolvers.get(filePath);
+            if (!resolvers) {
+                resolvers = [];
+                this.gitCheckResolvers.set(filePath, resolvers);
+            }
+            resolvers.push(resolve);
+
+            this.scheduleGitCheck();
+        });
+    }
+
+    private scheduleGitCheck() {
+        if (this.gitCheckTimer) {
+            return;
+        }
+        // Debounce for 50ms to collect file events
+        this.gitCheckTimer = setTimeout(() => this.processGitChecks(), 50);
+    }
+
+    private async processGitChecks() {
+        this.gitCheckTimer = undefined;
+
+        // Capture current state and clear queues immediately to allow new items to queue up
+        const queue = new Map(this.gitCheckQueue);
+        this.gitCheckQueue.clear();
+
+        // Process each workspace folder
+        for (const [folder, files] of queue) {
+            if (files.size === 0) continue;
+
+            const filesArray = Array.from(files);
+
+            try {
+                // Use -z for null-terminated output to handle spaces/special chars safely
+                // Use -v -n to get status for all files (ignored or tracked)
+                // Use --stdin to pass many files at once
+                const input = filesArray.join('\0');
+                const output = await this.execGit(['check-ignore', '-v', '-n', '-z', '--stdin'], folder, input);
+
+                // Parse null-terminated output
+                // Format: source \0 line \0 pattern \0 path \0
+                // For tracked files: "" \0 "" \0 "" \0 path \0
+                const parts = output.split('\0');
+                const ignoredFiles = new Set<string>();
+
+                // Each entry has 4 parts. The last one might be empty string due to trailing null
+                for (let i = 0; i < parts.length - 1; i += 4) {
+                    const source = parts[i];
+                    // const line = parts[i+1];
+                    // const pattern = parts[i+2];
+                    const pathName = parts[i + 3];
+
+                    if (source && source.length > 0) {
+                        // If source is not empty, it matched a pattern -> ignored
+                        // Note: pathName from git output might be relative or absolute depending on input
+                        // But since we passed absolute paths (mostly), git usually echoes them back or relative to cwd
+                        // We need to match it back to our filesArray.
+                        // However, since we are processing a batch, and we know what we sent...
+
+                        // The pathName returned by check-ignore might be relative if we are inside the repo.
+                        // We should normalize it to check against our requested files.
+                        const absolutePath = path.isAbsolute(pathName) ? pathName : path.join(folder, pathName);
+                        ignoredFiles.add(absolutePath);
+                    }
+                }
+
+                // Resolve promises
+                for (const filePath of filesArray) {
+                    // We need to check if the file matches any of the ignored files.
+                    // Git might return paths slightly differently (e.g. forward/backslashes).
+                    // Best to check if 'filePath' is in 'ignoredFiles'.
+                    // To be safe, we could use relative paths for everything.
+                    // But let's assume normalization works.
+
+                    // Since we passed absolute paths, let's see what git returns.
+                    // In my test with absolute input, git returned absolute path.
+
+                    const isIgnored = ignoredFiles.has(filePath);
+                    this.resolveGitCheck(filePath, isIgnored);
+                }
+            } catch (error) {
+                console.error(`Git check-ignore batch failed for ${folder}:`, error);
+                // Fallback: resolve all as not ignored (safe default) or retry individually?
+                // For now, resolve as false to unblock.
+                for (const filePath of filesArray) {
+                    this.resolveGitCheck(filePath, false);
+                }
+            }
+        }
+    }
+
+    private resolveGitCheck(filePath: string, isIgnored: boolean) {
+        const resolvers = this.gitCheckResolvers.get(filePath);
+        if (resolvers) {
+            for (const resolve of resolvers) {
+                resolve(isIgnored);
+            }
+            this.gitCheckResolvers.delete(filePath);
         }
     }
 
@@ -985,9 +1108,14 @@ export class WorkspaceIndexer {
      * Execute a git command (abstracted for testing and reuse)
      * Uses execFile to avoid shell injection vulnerabilities
      */
-    protected async execGit(args: string[], cwd: string): Promise<string> {
+    protected async execGit(args: string[], cwd: string, input?: string): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             const child = cp.spawn('git', args, { cwd });
+
+            if (input) {
+                child.stdin.write(input);
+                child.stdin.end();
+            }
 
             let stdout = '';
             let stderr = '';

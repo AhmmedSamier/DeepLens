@@ -225,9 +225,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames.push(shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null);
         this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
         this.preparedCapitals.push(this.extractCapitals(item.name));
-        this.preparedPatterns.push(
-            item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null,
-        );
+        this.preparedPatterns.push(item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null);
 
         // Update scopes
         const scope = this.getScopeForItemType(item.type);
@@ -883,6 +881,7 @@ export class SearchEngine implements ISearchProvider {
                         if (fileSize === undefined) {
                             const stats = await fs.promises.stat(fileItem.filePath);
                             fileSize = stats.size;
+                            fileItem.size = fileSize;
                         }
 
                         if (fileSize > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
@@ -1197,6 +1196,7 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1251,7 +1251,7 @@ export class SearchEngine implements ISearchProvider {
             // for strong abbreviation matches (Journal 2024-05-23)
             if (enableCamelHumps) {
                 const capitals = preparedCapitals[i];
-                if (capitals) {
+                if (capitals && queryLen <= capitals.length) {
                     const matchIndex = capitals.indexOf(queryUpper);
                     if (matchIndex !== -1) {
                         const lengthRatio = queryLen / capitals.length;
