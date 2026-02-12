@@ -91,6 +91,7 @@ export class SearchEngine implements ISearchProvider {
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
     private itemBitflags: Uint32Array = new Uint32Array(0);
+    private itemNameBitflags: Uint32Array = new Uint32Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
@@ -157,6 +158,7 @@ export class SearchEngine implements ISearchProvider {
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
+        this.itemNameBitflags = new Uint32Array(items.length);
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.preparedCache.clear();
@@ -184,6 +186,10 @@ export class SearchEngine implements ISearchProvider {
             const newBitflags = new Uint32Array(startIndex + items.length);
             newBitflags.set(this.itemBitflags);
             this.itemBitflags = newBitflags;
+
+            const newNameBitflags = new Uint32Array(startIndex + items.length);
+            newNameBitflags.set(this.itemNameBitflags);
+            this.itemNameBitflags = newNameBitflags;
         }
 
         // Append items
@@ -199,7 +205,10 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds[globalIndex] = TYPE_TO_ID[item.type];
 
         // Optimization: Compute aggregate bitflags for Name, FullName, and Path
-        let flags = this.calculateBitflags(item.name);
+        const nameFlags = this.calculateBitflags(item.name);
+        this.itemNameBitflags[globalIndex] = nameFlags;
+
+        let flags = nameFlags;
         if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
             flags |= this.calculateBitflags(item.fullName);
         }
@@ -271,6 +280,7 @@ export class SearchEngine implements ISearchProvider {
         this.items[write] = this.items[read];
         this.itemTypeIds[write] = this.itemTypeIds[read];
         this.itemBitflags[write] = this.itemBitflags[read];
+        this.itemNameBitflags[write] = this.itemNameBitflags[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedNamesLow[write] = this.preparedNamesLow[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
@@ -285,6 +295,7 @@ export class SearchEngine implements ISearchProvider {
             this.items.length = write;
             this.itemTypeIds = this.itemTypeIds.slice(0, write);
             this.itemBitflags = this.itemBitflags.slice(0, write);
+            this.itemNameBitflags = this.itemNameBitflags.slice(0, write);
             this.preparedNames.length = write;
             this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
@@ -351,6 +362,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private rebuildHotArrays(): void {
         // Clear parallel arrays
         this.preparedNames = [];
@@ -367,7 +379,10 @@ export class SearchEngine implements ISearchProvider {
             this.itemTypeIds[i] = TYPE_TO_ID[item.type];
 
             // Optimization: Compute aggregate bitflags for Name, FullName, and Path
-            let flags = this.calculateBitflags(item.name);
+            const nameFlags = this.calculateBitflags(item.name);
+            this.itemNameBitflags[i] = nameFlags;
+
+            let flags = nameFlags;
             if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
                 flags |= this.calculateBitflags(item.fullName);
             }
@@ -467,6 +482,7 @@ export class SearchEngine implements ISearchProvider {
         this.items = [];
         this.itemTypeIds = new Uint8Array(0);
         this.itemBitflags = new Uint32Array(0);
+        this.itemNameBitflags = new Uint32Array(0);
         this.preparedNames = [];
         this.preparedNamesLow = [];
         this.preparedFullNames = [];
@@ -512,6 +528,7 @@ export class SearchEngine implements ISearchProvider {
         // Parallel arrays
         size += this.itemTypeIds.byteLength;
         size += this.itemBitflags.byteLength;
+        size += this.itemNameBitflags.byteLength;
         size += this.preparedNames.length * 8;
         size += this.preparedNamesLow.length * 8;
         size += this.preparedFullNames.length * 8;
@@ -1223,6 +1240,7 @@ export class SearchEngine implements ISearchProvider {
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
         const itemBitflags = this.itemBitflags;
+        const itemNameBitflags = this.itemNameBitflags;
         const preparedNames = this.preparedNames;
         const preparedFullNames = this.preparedFullNames;
         const preparedPaths = this.preparedPaths;
@@ -1234,162 +1252,269 @@ export class SearchEngine implements ISearchProvider {
         const invActivityWeight = 1.0 - activityWeight;
 
         // Helper to process a single item index
-        // eslint-disable-next-line sonarjs/cognitive-complexity
-        const processIndex = (i: number) => {
-            const typeId = itemTypeIds[i];
-            // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
-            // Exception: when query is a URL (e.g. api/AdminDashboard/customers/50), endpoint templates
-            // (e.g. api/AdminDashboard/customers/{id}) don't contain the concrete segment chars (5,0), so
-            // allow URL match to run first for endpoints.
-            if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
-                if (
-                    !(
-                        isPotentialUrl &&
-                        typeId === 11 /* ENDPOINT */ &&
-                        preparedPatterns[i] &&
-                        RouteMatcher.isMatchPattern(preparedPatterns[i], queryForUrlMatch)
-                    )
-                ) {
-                    return;
-                }
-            }
-
-            // Optimization: Defer typeBoost lookup until needed (Journal 2025-01-29)
-            // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
-            let score = -Infinity;
-
-            // 1. CamelHumps Score (Inlined) - Checked First
-            // Running cheaper CamelHumps check first allows skipping expensive fuzzy search
-            // for strong abbreviation matches (Journal 2024-05-23)
-            if (enableCamelHumps) {
-                const capitals = preparedCapitals[i];
-                if (capitals && queryLen <= capitals.length) {
-                    const matchIndex = capitals.indexOf(queryUpper);
-                    if (matchIndex !== -1) {
-                        const lengthRatio = queryLen / capitals.length;
-                        const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-                        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
-                        const camelScore = lengthRatio * positionBoost * 0.8 * typeBoost;
-                        if (camelScore > score) {
-                            score = camelScore;
-                        }
-                    }
-                }
-            }
-
-            // 2. Fuzzy Score (Inlined)
-            // Optimization: Skip expensive fuzzy search if we already have a strong match
-            if (score < 1.1) {
-                let fuzzyScore = -Infinity;
-
-                // Name (1.0)
-                const pName = preparedNames[i];
-                // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
-                // Note: itemBitflags is now aggregate, so this check is looser but still valid
-                if (pName && queryLen <= pName.target.length) {
-                    const res = Fuzzysort.single(query, pName);
-                    if (res) {
-                        const s = res.score;
-                        if (s > MIN_SCORE) fuzzyScore = s;
-                    }
-                }
-
-                // Apply boost only if valid score, but also consider other fields if score is low
-                if (fuzzyScore < 0.9) {
-                    // Full Name (0.9)
-                    // Optimization: Removed redundant nested check (Journal 2025-01-29)
-                    const pFull = preparedFullNames[i];
-                    if (pFull && queryLen <= pFull.target.length) {
-                        const res = Fuzzysort.single(query, pFull);
-                        if (res) {
-                            const s = res.score * 0.9;
-                            if (s > fuzzyScore) fuzzyScore = s;
-                        }
-                    }
-
-                    // Path (0.8)
-                    if (fuzzyScore < 0.8) {
-                        const pPath = preparedPaths[i];
-                        if (pPath && queryLen <= pPath.target.length) {
-                            const res = Fuzzysort.single(query, pPath);
-                            if (res) {
-                                const s = res.score * 0.8;
-                                if (s > fuzzyScore) fuzzyScore = s;
-                            }
-                        }
-                    }
-                }
-
-                // Apply type boost to fuzzy score
-                if (fuzzyScore > MIN_SCORE) {
-                    const typeBoost = ID_TO_BOOST[typeId] || 1.0;
-                    fuzzyScore *= typeBoost;
-                    if (fuzzyScore > score) {
-                        score = fuzzyScore;
-                    }
-                }
-            }
-
-            let resultScope: SearchScope | undefined;
-
-            // 3. URL/Endpoint Match
-            if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
-                const pattern = preparedPatterns[i];
-                if (pattern) {
-                    if (RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)) {
-                        const urlScore = 1.5;
-                        if (urlScore > score) {
-                            score = urlScore;
-                            resultScope = SearchScope.ENDPOINTS;
-                        }
-                    }
-                }
-            }
-
-            if (score > MIN_SCORE) {
-                if (resultScope === undefined) {
-                    resultScope = ID_TO_SCOPE[typeId];
-                }
-
-                // Now access the full item object
-                const item = items[i];
-                if (item) {
-                    // 4. Activity Boosting (Inlined)
-                    if (getActivityScore) {
-                        const activityScore = getActivityScore(item.id);
-                        if (activityScore > 0 && score > 0.05) {
-                            score = score * invActivityWeight + activityScore * activityWeight;
-                        }
-                    }
-
-                    if (score > MIN_SCORE) {
-                        // Inline tryPushToHeap
-                        if (heap.isFull()) {
-                            const minItem = heap.peek();
-                            if (minItem && score <= minItem.score) {
-                                return;
-                            }
-                        }
-                        heap.push({
-                            item,
-                            score,
-                            scope: resultScope,
-                        });
-                    }
-                }
-            }
-        };
+        // Closure removed and inlined below to avoid capture overhead
 
         if (indices) {
             for (let j = 0; j < indices.length; j++) {
                 if (j % 500 === 0 && token?.isCancellationRequested) break;
-                processIndex(indices[j]);
+                const i = indices[j];
+
+                const typeId = itemTypeIds[i];
+                // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
+                if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
+                    if (
+                        !(
+                            isPotentialUrl &&
+                            typeId === 11 /* ENDPOINT */ &&
+                            preparedPatterns[i] &&
+                            RouteMatcher.isMatchPattern(preparedPatterns[i], queryForUrlMatch)
+                        )
+                    ) {
+                        continue;
+                    }
+                }
+
+                let score = -Infinity;
+
+                // 1. CamelHumps Score (Inlined)
+                if (enableCamelHumps) {
+                    const capitals = preparedCapitals[i];
+                    if (capitals && queryLen <= capitals.length) {
+                        const matchIndex = capitals.indexOf(queryUpper);
+                        if (matchIndex !== -1) {
+                            const lengthRatio = queryLen / capitals.length;
+                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                            const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+                            const camelScore = lengthRatio * positionBoost * 0.8 * typeBoost;
+                            if (camelScore > score) {
+                                score = camelScore;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Fuzzy Score (Inlined)
+                if (score < 1.1) {
+                    let fuzzyScore = -Infinity;
+
+                    // Name (1.0)
+                    const pName = preparedNames[i];
+                    // Update: Use itemNameBitflags for strict name check
+                    if (pName && ((queryBitflags & itemNameBitflags[i]) === queryBitflags) && queryLen <= pName.target.length) {
+                        const res = Fuzzysort.single(query, pName);
+                        if (res) {
+                            const s = res.score;
+                            if (s > MIN_SCORE) fuzzyScore = s;
+                        }
+                    }
+
+                    if (fuzzyScore < 0.9) {
+                        const pFull = preparedFullNames[i];
+                        if (pFull && queryLen <= pFull.target.length) {
+                            const res = Fuzzysort.single(query, pFull);
+                            if (res) {
+                                const s = res.score * 0.9;
+                                if (s > fuzzyScore) fuzzyScore = s;
+                            }
+                        }
+
+                        if (fuzzyScore < 0.8) {
+                            const pPath = preparedPaths[i];
+                            if (pPath && queryLen <= pPath.target.length) {
+                                const res = Fuzzysort.single(query, pPath);
+                                if (res) {
+                                    const s = res.score * 0.8;
+                                    if (s > fuzzyScore) fuzzyScore = s;
+                                }
+                            }
+                        }
+                    }
+
+                    if (fuzzyScore > MIN_SCORE) {
+                        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+                        fuzzyScore *= typeBoost;
+                        if (fuzzyScore > score) {
+                            score = fuzzyScore;
+                        }
+                    }
+                }
+
+                let resultScope: SearchScope | undefined;
+
+                // 3. URL/Endpoint Match
+                if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
+                    const pattern = preparedPatterns[i];
+                    if (pattern) {
+                        if (RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)) {
+                            const urlScore = 1.5;
+                            if (urlScore > score) {
+                                score = urlScore;
+                                resultScope = SearchScope.ENDPOINTS;
+                            }
+                        }
+                    }
+                }
+
+                if (score > MIN_SCORE) {
+                    if (resultScope === undefined) {
+                        resultScope = ID_TO_SCOPE[typeId];
+                    }
+
+                    const item = items[i];
+                    if (item) {
+                        if (getActivityScore) {
+                            const activityScore = getActivityScore(item.id);
+                            if (activityScore > 0 && score > 0.05) {
+                                score = score * invActivityWeight + activityScore * activityWeight;
+                            }
+                        }
+
+                        if (score > MIN_SCORE) {
+                            if (heap.isFull()) {
+                                const minItem = heap.peek();
+                                if (minItem && score <= minItem.score) {
+                                    continue;
+                                }
+                            }
+                            heap.push({
+                                item,
+                                score,
+                                scope: resultScope,
+                            });
+                        }
+                    }
+                }
             }
         } else {
             const count = items.length;
             for (let i = 0; i < count; i++) {
                 if (i % 500 === 0 && token?.isCancellationRequested) break;
-                processIndex(i);
+
+                const typeId = itemTypeIds[i];
+                // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
+                if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
+                    if (
+                        !(
+                            isPotentialUrl &&
+                            typeId === 11 /* ENDPOINT */ &&
+                            preparedPatterns[i] &&
+                            RouteMatcher.isMatchPattern(preparedPatterns[i], queryForUrlMatch)
+                        )
+                    ) {
+                        continue;
+                    }
+                }
+
+                let score = -Infinity;
+
+                // 1. CamelHumps Score (Inlined)
+                if (enableCamelHumps) {
+                    const capitals = preparedCapitals[i];
+                    if (capitals && queryLen <= capitals.length) {
+                        const matchIndex = capitals.indexOf(queryUpper);
+                        if (matchIndex !== -1) {
+                            const lengthRatio = queryLen / capitals.length;
+                            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+                            const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+                            const camelScore = lengthRatio * positionBoost * 0.8 * typeBoost;
+                            if (camelScore > score) {
+                                score = camelScore;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Fuzzy Score (Inlined)
+                if (score < 1.1) {
+                    let fuzzyScore = -Infinity;
+
+                    // Name (1.0)
+                    const pName = preparedNames[i];
+                    // Update: Use itemNameBitflags for strict name check
+                    if (pName && ((queryBitflags & itemNameBitflags[i]) === queryBitflags) && queryLen <= pName.target.length) {
+                        const res = Fuzzysort.single(query, pName);
+                        if (res) {
+                            const s = res.score;
+                            if (s > MIN_SCORE) fuzzyScore = s;
+                        }
+                    }
+
+                    if (fuzzyScore < 0.9) {
+                        const pFull = preparedFullNames[i];
+                        if (pFull && queryLen <= pFull.target.length) {
+                            const res = Fuzzysort.single(query, pFull);
+                            if (res) {
+                                const s = res.score * 0.9;
+                                if (s > fuzzyScore) fuzzyScore = s;
+                            }
+                        }
+
+                        if (fuzzyScore < 0.8) {
+                            const pPath = preparedPaths[i];
+                            if (pPath && queryLen <= pPath.target.length) {
+                                const res = Fuzzysort.single(query, pPath);
+                                if (res) {
+                                    const s = res.score * 0.8;
+                                    if (s > fuzzyScore) fuzzyScore = s;
+                                }
+                            }
+                        }
+                    }
+
+                    if (fuzzyScore > MIN_SCORE) {
+                        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+                        fuzzyScore *= typeBoost;
+                        if (fuzzyScore > score) {
+                            score = fuzzyScore;
+                        }
+                    }
+                }
+
+                let resultScope: SearchScope | undefined;
+
+                // 3. URL/Endpoint Match
+                if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
+                    const pattern = preparedPatterns[i];
+                    if (pattern) {
+                        if (RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)) {
+                            const urlScore = 1.5;
+                            if (urlScore > score) {
+                                score = urlScore;
+                                resultScope = SearchScope.ENDPOINTS;
+                            }
+                        }
+                    }
+                }
+
+                if (score > MIN_SCORE) {
+                    if (resultScope === undefined) {
+                        resultScope = ID_TO_SCOPE[typeId];
+                    }
+
+                    const item = items[i];
+                    if (item) {
+                        if (getActivityScore) {
+                            const activityScore = getActivityScore(item.id);
+                            if (activityScore > 0 && score > 0.05) {
+                                score = score * invActivityWeight + activityScore * activityWeight;
+                            }
+                        }
+
+                        if (score > MIN_SCORE) {
+                            if (heap.isFull()) {
+                                const minItem = heap.peek();
+                                if (minItem && score <= minItem.score) {
+                                    continue;
+                                }
+                            }
+                            heap.push({
+                                item,
+                                score,
+                                scope: resultScope,
+                            });
+                        }
+                    }
+                }
             }
         }
 
