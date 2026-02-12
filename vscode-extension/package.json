@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "1.5.2",
+    "version": "1.5.3",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
@@ -38,6 +38,10 @@
             {
                 "command": "deeplens.clearIndexCache",
                 "title": "DeepLens: Clear Index Cache"
+            },
+            {
+                "command": "deeplens.showIndexStats",
+                "title": "DeepLens: Show Index Statistics"
             }
         ],
         "keybindings": [

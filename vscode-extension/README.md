@@ -19,13 +19,21 @@ The ultimate navigation tool. Access everything in your workspace from a single 
 - **Commands**: Execute VS Code commands directly from the search bar.
 - **API Endpoints**: Specialized search for ASP.NET and web API endpoints.
 
-### 💎 **Rider-style CodeLens**
+### ⌨️ **Slash Commands & History**
+
+DeepLens features an intuitive command-line style interface within the search bar.
+- **Filter with ease**: Type `/t ` for types, `/f ` for files, or `/txt ` for text search.
+- **Quick History**: DeepLens remembers your recent searches and frequently visited files, making it easy to jump back into context.
+- **History Management**: Easily clear your search history directly from the search interface.
+
+### 💎 **Rider-style CodeVision**
 
 DeepLens brings professional IDE features to VS Code with integrated CodeLens counts.
 
-- **Reference Counting**: See exactly how many times a class, method, or property is used directly above its definition.
-- **Implementation Tracking**: Quickly see how many classes implement an interface or override a virtual method.
+- **Reference Counting**: See exactly how many times a class, method, or property is used directly above its definition (`Shift+F12`).
+- **Implementation Tracking**: Quickly see how many classes implement an interface or override a virtual method (`Ctrl+F12`).
 - **Quick Navigation**: Click the counts to peek or jump to references/implementations.
+- **Smart Filtering**: Configurable to hide counts for simple items to reduce noise.
 
 ### 🌐 **Specialized Endpoint Search**
 
@@ -40,7 +48,7 @@ DeepLens automatically extracts and indexes API endpoints (like `GET /api/users`
 ### 🎯 **Premium UI/UX**
 
 - **Integrated Filters**: Toggle between search scopes (All, Types, Symbols, Files, Endpoints, Text) with a single click or keyboard shortcut.
-- **Live Statistics**: See real-time counts of files and symbols as they are indexed.
+- **Live Statistics**: See real-time counts of files and symbols as they are indexed via the status bar.
 - **Activity Ranking**: DeepLens learns which files you work on most and boosts them in search results.
 
 ### 🚀 **Performance First**
@@ -62,11 +70,12 @@ DeepLens automatically extracts and indexes API endpoints (like `GET /api/users`
 
 Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for:
 
-| Command                       | Description                                       |
-| ----------------------------- | ------------------------------------------------- |
-| `DeepLens: Search Everywhere` | Main search interface with all filters            |
-| `DeepLens: Rebuild Index`     | Manually trigger a full re-index of the workspace |
-| `DeepLens: Clear Index Cache` | Clear the local index cache and rebuild           |
+| Command                         | Description                                       |
+| ------------------------------- | ------------------------------------------------- |
+| `DeepLens: Search Everywhere`   | Main search interface with all filters            |
+| `DeepLens: Rebuild Index`       | Manually trigger a full re-index of the workspace |
+| `DeepLens: Clear Index Cache`   | Clear the local index cache and rebuild           |
+| `DeepLens: Show Index Statistics` | View detailed stats and manage the search index |
 
 ## ⚙️ Configuration
 
@@ -86,8 +95,14 @@ Customize DeepLens to fit your workflow in VS Code Settings:
     // Show reference/implementation counts above definitions (Rider-style)
     "deeplens.codeLens.enabled": true,
 
+    // Show implementation counts above classes, interfaces and methods
+    "deeplens.codeLens.showImplementations": true,
+
+    // Minimum number of references to display code lens (0 = show all)
+    "deeplens.codeLens.minRefsToShow": 0,
+
     // Number of files to scan in parallel during text search
-    "deeplens.searchConcurrency": 64,
+    "deeplens.searchConcurrency": 60,
 
     // Enable CamelHumps matching (e.g., 'RFC' -> 'React.FC')
     "deeplens.enableCamelHumps": true,
@@ -98,6 +113,9 @@ Customize DeepLens to fit your workflow in VS Code Settings:
     // File extensions to index for search
     "deeplens.fileExtensions": ["ts", "tsx", "js", "jsx", "py", "java", "cs", "cpp", "c", "h", "go", "rb", "php"],
 
+    // Enable personalized results based on your usage activity
+    "deeplens.activity.enabled": true,
+
     // Personalization: How much your usage affects results (0-1)
     "deeplens.activity.weight": 0.3
 }
@@ -105,7 +123,7 @@ Customize DeepLens to fit your workflow in VS Code Settings:
 
 ## 📂 Supported Languages
 
-DeepLens features native high-performance indexing for:
+DeepLens features native high-performance indexing via Tree-sitter for:
 
 - ✅ **C#** (.cs)
 - ✅ **TypeScript / JavaScript** (.ts, .tsx, .js, .jsx)
@@ -116,7 +134,7 @@ DeepLens features native high-performance indexing for:
 - ✅ **Ruby** (.rb)
 - ✅ **PHP** (.php)
 
-_Other languages are supported via VS Code's built-in symbol providers._
+_For **CodeVision (References/Implementations)**, DeepLens leverages VS Code's built-in language providers, supporting nearly all languages with installed extensions._
 
 ## 📜 License
 
