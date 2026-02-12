@@ -41,7 +41,7 @@ export class SearchProvider {
     private readonly TOOLTIP_REBUILD_INDEX = 'Rebuild Index (Fix missing files)';
     private readonly TOOLTIP_CLEAR_CACHE = 'Clear Index Cache (Fix corruption)';
     private readonly TOOLTIP_SETTINGS = 'Configure Settings';
-    private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Search Everywhere';
+    private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Switch to Global Search (/all)';
     private readonly TOOLTIP_NATIVE_SEARCH = 'Search in Files (Native)';
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
 
@@ -714,7 +714,6 @@ export class SearchProvider {
     /**
      * Suggest slash commands based on query
      */
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
@@ -1223,6 +1222,14 @@ export class SearchProvider {
             ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
         ] as const;
 
+        const iconMap = new Map<SearchScope, string>([
+            [SearchScope.EVERYTHING, 'search'],
+            [SearchScope.TYPES, this.ICON_CLASS],
+            [SearchScope.FILES, 'file'],
+            [SearchScope.SYMBOLS, 'symbol-method'],
+            [SearchScope.TEXT, 'whole-word'],
+        ]);
+
         return items.map(([cmd, name, detail, scope]) => {
             const item = this.resultToQuickPickItem({
                 item: {
@@ -1235,7 +1242,9 @@ export class SearchProvider {
                 score: 1,
                 scope,
             });
-            item.iconPath = new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground'));
+
+            const icon = iconMap.get(scope) || 'lightbulb';
+            item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
             return item;
         });
@@ -1274,7 +1283,10 @@ export class SearchProvider {
         // Add unsaved indicator for dirty files
         if (item.type === SearchItemType.FILE && this.isFileDirty(item.filePath)) {
             const indicator = '$(circle-filled)'; // VS Code unsaved indicator style
-            description = description ? `${indicator} ${description}` : indicator;
+            // Add (Unsaved) text for accessibility and clarity
+            description = description
+                ? `${indicator} ${description} (Unsaved)`
+                : `${indicator} Unsaved`;
         }
 
         // Add file path and line number
