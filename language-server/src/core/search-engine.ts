@@ -1236,12 +1236,24 @@ export class SearchEngine implements ISearchProvider {
         // Helper to process a single item index
         // eslint-disable-next-line sonarjs/cognitive-complexity
         const processIndex = (i: number) => {
+            const typeId = itemTypeIds[i];
             // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
+            // Exception: when query is a URL (e.g. api/AdminDashboard/customers/50), endpoint templates
+            // (e.g. api/AdminDashboard/customers/{id}) don't contain the concrete segment chars (5,0), so
+            // allow URL match to run first for endpoints.
             if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
-                return;
+                if (
+                    !(
+                        isPotentialUrl &&
+                        typeId === 11 /* ENDPOINT */ &&
+                        preparedPatterns[i] &&
+                        RouteMatcher.isMatchPattern(preparedPatterns[i], queryForUrlMatch)
+                    )
+                ) {
+                    return;
+                }
             }
 
-            const typeId = itemTypeIds[i];
             // Optimization: Defer typeBoost lookup until needed (Journal 2025-01-29)
             // const typeBoost = ID_TO_BOOST[typeId] || 1.0;
             let score = -Infinity;

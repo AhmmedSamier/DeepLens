@@ -13,6 +13,9 @@ describe('RouteMatcher', () => {
         expect(
             RouteMatcher.isMatch('api/AdminDashboard/customers/{customerId}', 'api/AdminDashboard/customers/5'),
         ).toBe(true);
+        expect(
+            RouteMatcher.isMatch('api/AdminDashboard/customers/{id}', 'api/AdminDashboard/customers/50'),
+        ).toBe(true);
         // Partial match (no api/ prefix)
         expect(RouteMatcher.isMatch('api/AdminDashboard/customers/{customerId}', 'AdminDashboard/customers/5')).toBe(
             true,
