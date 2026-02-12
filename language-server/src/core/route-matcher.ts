@@ -12,6 +12,8 @@ export interface RoutePattern {
     cleanTemplate: string;
     templateSegments: string[];
     templateSegmentsLower: string[];
+    // Optimization: Pre-calculated boolean array to avoid repeated string checks (startsWith/endsWith) in the hot loop
+    isParameter: boolean[];
 }
 
 /**
@@ -71,7 +73,7 @@ export class RouteMatcher {
             }
 
             return this.segmentsMatch(
-                pattern.templateSegments,
+                pattern.isParameter,
                 pattern.templateSegmentsLower,
                 pathSegments,
                 pathSegmentsLower,
@@ -125,8 +127,15 @@ export class RouteMatcher {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = templateSegments.map((s) => s.toLowerCase());
+            const isParameter = templateSegments.map((s) => s.startsWith('{') && s.endsWith('}'));
 
-            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower };
+            cached = {
+                regex: exactRegex,
+                cleanTemplate,
+                templateSegments,
+                templateSegmentsLower,
+                isParameter,
+            };
 
             if (this.cache.size >= this.CACHE_LIMIT) {
                 // Simple LRU-like: remove the first inserted item
@@ -144,23 +153,23 @@ export class RouteMatcher {
      * Check if segments match from the right (supporting parameters)
      */
     private static segmentsMatch(
-        tSegs: string[],
+        isParameter: boolean[],
         tSegsLower: string[],
         pSegs: string[],
         pSegsLower: string[],
     ): boolean {
-        if (pSegs.length > tSegs.length) {
+        if (pSegs.length > tSegsLower.length) {
             return false;
         }
 
         for (let i = 1; i <= pSegs.length; i++) {
-            const tSeg = tSegs[tSegs.length - i];
-            const tSegLower = tSegsLower[tSegs.length - i];
+            const isParam = isParameter[isParameter.length - i];
+            const tSegLower = tSegsLower[tSegsLower.length - i];
             const pSeg = pSegs[pSegs.length - i];
             const pSegLower = pSegsLower[pSegs.length - i];
             const isLast = i === 1;
 
-            if (!this.segmentMatches(tSeg, tSegLower, pSeg, pSegLower, isLast)) {
+            if (!this.segmentMatches(isParam, tSegLower, pSeg, pSegLower, isLast)) {
                 return false;
             }
         }
@@ -168,14 +177,14 @@ export class RouteMatcher {
     }
 
     private static segmentMatches(
-        tSeg: string,
+        isParam: boolean,
         tSegLower: string,
         pSeg: string,
         pSegLower: string,
         allowPrefix: boolean,
     ): boolean {
         // If template segment is a parameter, it matches any non-empty path segment
-        if (tSeg.startsWith('{') && tSeg.endsWith('}')) {
+        if (isParam) {
             return !!pSeg;
         }
 
