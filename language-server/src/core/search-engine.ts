@@ -91,6 +91,7 @@ export class SearchEngine implements ISearchProvider {
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
     private itemBitflags: Uint32Array = new Uint32Array(0);
+    private itemNameBitflags: Uint32Array = new Uint32Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
@@ -157,6 +158,7 @@ export class SearchEngine implements ISearchProvider {
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
+        this.itemNameBitflags = new Uint32Array(items.length);
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.preparedCache.clear();
@@ -184,6 +186,10 @@ export class SearchEngine implements ISearchProvider {
             const newBitflags = new Uint32Array(startIndex + items.length);
             newBitflags.set(this.itemBitflags);
             this.itemBitflags = newBitflags;
+
+            const newNameBitflags = new Uint32Array(startIndex + items.length);
+            newNameBitflags.set(this.itemNameBitflags);
+            this.itemNameBitflags = newNameBitflags;
         }
 
         // Append items
@@ -199,7 +205,10 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds[globalIndex] = TYPE_TO_ID[item.type];
 
         // Optimization: Compute aggregate bitflags for Name, FullName, and Path
-        let flags = this.calculateBitflags(item.name);
+        const nameFlags = this.calculateBitflags(item.name);
+        this.itemNameBitflags[globalIndex] = nameFlags;
+
+        let flags = nameFlags;
         if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
             flags |= this.calculateBitflags(item.fullName);
         }
@@ -271,6 +280,7 @@ export class SearchEngine implements ISearchProvider {
         this.items[write] = this.items[read];
         this.itemTypeIds[write] = this.itemTypeIds[read];
         this.itemBitflags[write] = this.itemBitflags[read];
+        this.itemNameBitflags[write] = this.itemNameBitflags[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedNamesLow[write] = this.preparedNamesLow[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
@@ -285,6 +295,7 @@ export class SearchEngine implements ISearchProvider {
             this.items.length = write;
             this.itemTypeIds = this.itemTypeIds.slice(0, write);
             this.itemBitflags = this.itemBitflags.slice(0, write);
+            this.itemNameBitflags = this.itemNameBitflags.slice(0, write);
             this.preparedNames.length = write;
             this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
@@ -351,6 +362,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private rebuildHotArrays(): void {
         // Clear parallel arrays
         this.preparedNames = [];
@@ -367,7 +379,10 @@ export class SearchEngine implements ISearchProvider {
             this.itemTypeIds[i] = TYPE_TO_ID[item.type];
 
             // Optimization: Compute aggregate bitflags for Name, FullName, and Path
-            let flags = this.calculateBitflags(item.name);
+            const nameFlags = this.calculateBitflags(item.name);
+            this.itemNameBitflags[i] = nameFlags;
+
+            let flags = nameFlags;
             if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
                 flags |= this.calculateBitflags(item.fullName);
             }
@@ -1223,6 +1238,7 @@ export class SearchEngine implements ISearchProvider {
         const items = this.items;
         const itemTypeIds = this.itemTypeIds;
         const itemBitflags = this.itemBitflags;
+        const itemNameBitflags = this.itemNameBitflags;
         const preparedNames = this.preparedNames;
         const preparedFullNames = this.preparedFullNames;
         const preparedPaths = this.preparedPaths;
@@ -1285,8 +1301,12 @@ export class SearchEngine implements ISearchProvider {
                 // Name (1.0)
                 const pName = preparedNames[i];
                 // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
-                // Note: itemBitflags is now aggregate, so this check is looser but still valid
-                if (pName && queryLen <= pName.target.length) {
+                // Use specific itemNameBitflags to avoid false positives from Path/FullName
+                if (
+                    (queryBitflags & itemNameBitflags[i]) === queryBitflags &&
+                    pName &&
+                    queryLen <= pName.target.length
+                ) {
                     const res = Fuzzysort.single(query, pName);
                     if (res) {
                         const s = res.score;
