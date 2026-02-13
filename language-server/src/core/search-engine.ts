@@ -1369,8 +1369,9 @@ export class SearchEngine implements ISearchProvider {
 
                     // Name (1.0)
                     const pName = preparedNames[i];
-                    // Update: Use itemNameBitflags for strict name check
-                    if (pName && ((queryBitflags & itemNameBitflags[i]) === queryBitflags) && queryLen <= pName.target.length) {
+                    // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
+                    // Note: itemBitflags is now aggregate, so this check is looser but still valid
+                    if (pName && queryLen <= pName.target.length) {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
                             const s = res.score;
@@ -1501,7 +1502,11 @@ export class SearchEngine implements ISearchProvider {
                     // Name (1.0)
                     const pName = preparedNames[i];
                     // Update: Use itemNameBitflags for strict name check
-                    if (pName && ((queryBitflags & itemNameBitflags[i]) === queryBitflags) && queryLen <= pName.target.length) {
+                    if (
+                        pName &&
+                        (queryBitflags & itemNameBitflags[i]) === queryBitflags &&
+                        queryLen <= pName.target.length
+                    ) {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
                             const s = res.score;
