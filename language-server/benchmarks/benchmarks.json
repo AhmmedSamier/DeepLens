@@ -1,72 +1,77 @@
 [
   {
     "name": "Endpoint Search (Unified)",
-    "avgMs": 21.11232174,
-    "totalMs": 1055.6160869999999
+    "avgMs": 10.003629100000001,
+    "totalMs": 500.181455
   },
   {
     "name": "Endpoint Search (Burst)",
-    "avgMs": 6.9498957399999925,
-    "totalMs": 347.49478699999963
+    "avgMs": 5.09930016,
+    "totalMs": 254.965008
   },
   {
     "name": "Fuzzy Search 'File100'",
-    "avgMs": 52.96934890000001,
-    "totalMs": 2648.467445
+    "avgMs": 4.1299334199999995,
+    "totalMs": 412.993342
   },
   {
     "name": "CamelHumps Search 'FCC'",
-    "avgMs": 80.95179466000002,
-    "totalMs": 4047.5897330000007
+    "avgMs": 3.9310998599999993,
+    "totalMs": 393.10998599999994
   },
   {
     "name": "Non-matching Search 'Zebra'",
-    "avgMs": 0.7579000599999927,
-    "totalMs": 37.89500299999963
+    "avgMs": 0.12166444000000183,
+    "totalMs": 12.166444000000183
   },
   {
     "name": "Path-only Match 'src'",
-    "avgMs": 80.07313733999999,
-    "totalMs": 4003.6568669999997
+    "avgMs": 5.977949879999999,
+    "totalMs": 597.7949879999999
   },
   {
     "name": "Burst Search 'calc'",
-    "avgMs": 0.030120160000005853,
-    "totalMs": 1.5060080000002927
+    "avgMs": 0.011743099999998776,
+    "totalMs": 1.1743099999998776
   },
   {
     "name": "Route Match Search 'api/v1/users'",
-    "avgMs": 88.87503688999998,
-    "totalMs": 8887.503688999997
+    "avgMs": 52.900596670000006,
+    "totalMs": 5290.059667
   },
   {
     "name": "Route Match Burst 'api/v1/users'",
-    "avgMs": 0.033643219999976284,
-    "totalMs": 3.364321999997628
+    "avgMs": 0.013951609999985522,
+    "totalMs": 1.3951609999985521
   },
   {
     "name": "Parse 500-method TS Class",
-    "avgMs": 93.91955589999998,
-    "totalMs": 939.1955589999998
+    "avgMs": 83.36583179999998,
+    "totalMs": 833.6583179999998
   },
   {
     "name": "Text Search 100 files",
-    "avgMs": 2.5456115999997566,
-    "totalMs": 25.456115999997564
+    "avgMs": 0.9803305999999793,
+    "totalMs": 9.803305999999793
   },
   {
     "name": "Index 1000 files",
-    "avgMs": 250.57245966666596,
-    "totalMs": 751.7173789999979
+    "avgMs": 250.53662933333302,
+    "totalMs": 751.609887999999
   },
   {
     "name": "Record Access (N=5000)",
-    "avgMs": 0.8688702799999737,
-    "totalMs": 43.443513999998686
+    "avgMs": 0.006379500000002735,
+    "totalMs": 0.3189750000001368
   },
   {
     "name": "recalculateAllScores (N=5000)",
-    "avgMs": 0.7638707500002055,
-    "totalMs": 15.277415000004112
+    "avgMs": 0.6762327999999798,
+    "totalMs": 13.524655999999595
+  },
+  {
+    "name": "GitProvider.getModifiedFiles",
+    "avgMs": 5.4468526000000566,
+    "totalMs": 108.93705200000113
   }
 ]

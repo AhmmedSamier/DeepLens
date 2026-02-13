@@ -24,16 +24,18 @@ export class GitProvider {
         await Promise.all(
             this.workspaceRoots.map(async (root) => {
                 try {
-                    // 1. Get modified tracked files
-                    const modifiedOutput = await this.execGit(['diff', '--name-only'], root);
+                    // Run git commands in parallel
+                    const [modifiedOutput, stagedOutput, untrackedOutput] = await Promise.all([
+                        // 1. Get modified tracked files
+                        this.execGit(['diff', '--name-only'], root),
+                        // 2. Get modified staged files (in case they are staged but not committed)
+                        this.execGit(['diff', '--name-only', '--cached'], root),
+                        // 3. Get untracked files
+                        this.execGit(['ls-files', '--others', '--exclude-standard'], root),
+                    ]);
+
                     this.addFilesToSet(modifiedFiles, root, modifiedOutput);
-
-                    // 2. Get modified staged files (in case they are staged but not committed)
-                    const stagedOutput = await this.execGit(['diff', '--name-only', '--cached'], root);
                     this.addFilesToSet(modifiedFiles, root, stagedOutput);
-
-                    // 3. Get untracked files
-                    const untrackedOutput = await this.execGit(['ls-files', '--others', '--exclude-standard'], root);
                     this.addFilesToSet(modifiedFiles, root, untrackedOutput);
                 } catch (error) {
                     if (this.isExpectedNonRepoError(error)) {
