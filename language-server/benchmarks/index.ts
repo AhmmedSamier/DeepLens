@@ -2,6 +2,7 @@ import * as path from 'path';
 import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { runActivityBenchmarks } from './activity.bench';
 import { runEndpointBenchmarks } from './endpoint_search.bench';
+import { runGitProviderBenchmarks } from './git-provider.bench';
 import { runIndexingBenchmark } from './indexing.bench';
 import { runParserBenchmarks } from './parser.bench';
 import { runRouteMatcherBenchmarks } from './route-matcher.bench';
@@ -20,6 +21,7 @@ async function main() {
     await runIndexingBenchmark();
     await runActivityTrackerBenchmarks();
     await runActivityBenchmarks();
+    await runGitProviderBenchmarks();
 
     console.log('Benchmarks completed.');
 
