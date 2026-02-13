@@ -10,7 +10,8 @@ async function runBurstBenchmark() {
 
     // Generate 50,000 items
     const ITEM_COUNT = 50000;
-    const items = [];
+    const items: any[] = [];
+
 
     // Create diverse items to fill arrays
     for (let i = 0; i < ITEM_COUNT; i++) {
@@ -36,7 +37,8 @@ async function runBurstBenchmark() {
         });
     }
 
-    engine.setItems(items);
+    await engine.setItems(items);
+
     console.log(`Initialized engine with ${items.length} items.`);
 
     // Warmup

@@ -26,7 +26,8 @@ export async function runTextSearchBenchmarks() {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
     const fileCount = 100;
-    const items = [];
+    const items: any[] = [];
+
 
     // Create files
     for(let i=0; i<fileCount; i++) {
@@ -44,7 +45,8 @@ export async function runTextSearchBenchmarks() {
         });
     }
 
-    engine.setItems(items);
+    await engine.setItems(items);
+
 
     try {
         await benchmark("Text Search 100 files", async () => {

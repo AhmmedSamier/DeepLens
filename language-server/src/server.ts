@@ -164,7 +164,14 @@ connection.onInitialize(async (params: InitializeParams) => {
     documents.listen(connection);
 
     // Wire up search engine to indexer
-    workspaceIndexer.onItemsAdded((items) => searchEngine.addItems(items));
+    workspaceIndexer.onItemsAdded(async (items) => {
+        try {
+            await searchEngine.addItems(items);
+        } catch (err) {
+            connection.console.error(`Error adding items to search engine: ${err}`);
+        }
+    });
+
     workspaceIndexer.onItemsRemoved((filePath) => searchEngine.removeItemsByFile(filePath));
 
     if (config.isActivityTrackingEnabled()) {

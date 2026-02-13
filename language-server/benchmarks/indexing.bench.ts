@@ -15,7 +15,8 @@ export async function runIndexingBenchmark() {
     console.log(`Using temp dir: ${tempDir}`);
 
     // Generate files
-    const FILE_COUNT = 1000;
+    const FILE_COUNT = 5000;
+
     console.log(`Generating ${FILE_COUNT} files...`);
     for (let i = 0; i < FILE_COUNT; i++) {
         const content = `
@@ -27,6 +28,19 @@ export async function runIndexingBenchmark() {
         `;
         fs.writeFileSync(path.join(tempDir, `file_${i}.ts`), content);
     }
+
+    // Initialize git repo to avoid benchmark failures
+    const { execSync } = require('child_process');
+    try {
+        execSync('git init', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git add .', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git config user.email "bench@example.com"', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git config user.name "Bench"', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git commit -m "initial"', { cwd: tempDir, stdio: 'ignore' });
+    } catch (e) {
+        console.warn("Failed to initialize git repo in temp dir, falling back to non-git indexing:", e);
+    }
+
 
     // Mock Environment
     const env: IndexerEnvironment = {
@@ -65,8 +79,9 @@ export async function runIndexingBenchmark() {
     try {
         await benchmark(`Index ${FILE_COUNT} files`, async () => {
              // Force re-index
-             await indexer.indexWorkspace((msg, inc) => {}, true);
+             await indexer.indexWorkspace((msg, inc) => {});
         }, 3);
+
     } catch (e) {
         console.error("Benchmark failed:", e);
     } finally {

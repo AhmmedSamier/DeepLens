@@ -26,25 +26,31 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
         }
 
         const { filePaths } = message;
-        const allItems: SearchableItem[] = [];
+        const BATCH_SIZE = 10; // Sub-batching within the worker for more frequent updates
 
-        for (const filePath of filePaths) {
-            try {
-                // parser.parseFile handles internal errors and returns empty array if failed
-                const items = await parser.parseFile(filePath);
-                allItems.push(...items);
-            } catch {
-                // Skip files that can't be read
+        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
+            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+            const chunkItems: SearchableItem[] = [];
+
+            for (const filePath of chunk) {
+                try {
+                    const items = await parser.parseFile(filePath);
+                    chunkItems.push(...items);
+                } catch {
+                    // Skip
+                }
             }
-        }
 
-        // Send back all items and the count of processed files
-        parentPort?.postMessage({
-            type: 'result',
-            items: allItems,
-            count: filePaths.length,
-        });
+            // Send back chunk result immediately to keep main thread unblocked but processing
+            parentPort?.postMessage({
+                type: 'result',
+                items: chunkItems,
+                count: chunk.length,
+                isPartial: i + BATCH_SIZE < filePaths.length,
+            });
+        }
     } catch (error) {
+
         parentPort?.postMessage({
             type: 'error',
             error: error instanceof Error ? error.message : String(error),

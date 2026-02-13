@@ -9,7 +9,8 @@ export async function runRouteMatcherBenchmarks() {
     const itemCount = 50000;
 
     // Setup items with many endpoints
-    const items = [];
+    const items: any[] = [];
+
     for (let i = 0; i < itemCount; i++) {
         // Mix of files and endpoints
         if (i % 2 === 0) {
@@ -33,7 +34,8 @@ export async function runRouteMatcherBenchmarks() {
         }
     }
 
-    engine.setItems(items);
+    await engine.setItems(items);
+
     console.log(`Initialized engine with ${items.length} items.`);
 
     // Query that triggers URL matching (has slashes)

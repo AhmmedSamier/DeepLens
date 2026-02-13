@@ -17,10 +17,12 @@ async function runMemoryBenchmark() {
     console.log("Initial Memory:", getMemoryUsage());
 
     const engine = new SearchEngine();
-    const itemCount = 5000; // Simulate a realistic full-stack app (5k files + symbols -> ~25k items)
-    const items = [];
+    const itemCount = 15000; // Simulate a large repo (15k files + symbols -> ~75k items)
+    const items: any[] = [];
 
-    console.log(`Generating ${itemCount} files (approx 25k items total)...`);
+
+    console.log(`Generating ${itemCount} files (approx 75k items total)...`);
+
 
     for (let i = 0; i < itemCount; i++) {
         const fileName = `File${i}Component.ts`;
@@ -70,8 +72,9 @@ async function runMemoryBenchmark() {
     console.log("Memory before indexing:", getMemoryUsage());
 
     const start = Date.now();
-    engine.setItems(items);
+    await engine.setItems(items);
     const duration = Date.now() - start;
+
 
     console.log(`Indexing took ${duration}ms`);
     console.log("Memory after indexing:", getMemoryUsage());

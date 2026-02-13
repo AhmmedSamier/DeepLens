@@ -23,7 +23,8 @@ export async function runModifiedFilesBenchmark() {
     const modifiedCount = 100;
 
     // Setup items
-    const items = [];
+    const items: any[] = [];
+
     for (let i = 0; i < itemCount; i++) {
         items.push({
             id: `id-${i}`,
@@ -35,7 +36,8 @@ export async function runModifiedFilesBenchmark() {
         });
     }
 
-    engine.setItems(items);
+    await engine.setItems(items);
+
     console.log(`Initialized engine with ${items.length} items.`);
 
     // Setup Mock GitProvider with modified files

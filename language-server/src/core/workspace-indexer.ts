@@ -471,11 +471,12 @@ export class WorkspaceIndexer {
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
         const totalFiles = fileItems.length;
-        const BATCH_SIZE = 50;
+        const BATCH_SIZE = 100; // Increased batch size for better throughput
 
         let processed = 0;
         let nextReportingPercentage = 0;
         let logged100 = false;
+
 
         const workers = this.getWorkers();
         if (workers.length === 0) {
@@ -545,39 +546,59 @@ export class WorkspaceIndexer {
             for (let i = 0; i < workers.length; i++) {
                 const worker = workers[i];
 
-                const onMessage = (message: { type: string; items?: SearchableItem[]; count?: number }) => {
+                const onMessage = (message: {
+                    type: string;
+                    items?: SearchableItem[];
+                    count?: number;
+                    isPartial?: boolean;
+                }) => {
                     if (this.cancellationToken.cancelled && !finished) {
                         // If cancelled, just drain remaining tasks and resolve
                         if (message.type === 'result' || message.type === 'error') {
-                            activeTasks--;
-                            if (activeTasks === 0) {
-                                finished = true;
-                                resolveAll();
+                            if (!message.isPartial) {
+                                activeTasks--;
+                                if (activeTasks === 0) {
+                                    finished = true;
+                                    resolveAll();
+                                }
                             }
                         }
                         return;
                     }
 
                     if (message.type === 'result') {
-                        const { items, count } = message;
+                        const { items, count, isPartial } = message;
 
                         if (items && items.length > 0) {
-                            const internedItems = items.map((item: SearchableItem) => ({
-                                ...item,
-                                name: this.intern(item.name),
-                                fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                                containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                                relativeFilePath: item.relativeFilePath
-                                    ? this.intern(item.relativeFilePath)
-                                    : undefined,
-                                filePath: this.intern(item.filePath),
-                            }));
-                            this.fireItemsAdded(internedItems);
+                            // Interning and firing in a separate tick if the batch is large
+                            // helps keep the main thread responsive for other LSP requests
+                            const processItems = () => {
+                                const internedItems = items.map((item: SearchableItem) => ({
+                                    ...item,
+                                    name: this.intern(item.name),
+                                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                                    relativeFilePath: item.relativeFilePath
+                                        ? this.intern(item.relativeFilePath)
+                                        : undefined,
+                                    filePath: this.intern(item.filePath),
+                                }));
+                                this.fireItemsAdded(internedItems);
+                            };
+
+                            if (items.length > 100) {
+                                setTimeout(processItems, 0);
+                            } else {
+                                processItems();
+                            }
                         }
 
                         const itemsProcessed = count || 1;
                         processed += itemsProcessed;
-                        activeTasks--;
+
+                        if (!isPartial) {
+                            activeTasks--;
+                        }
 
                         this.updateWorkerProgress(
                             totalFiles,
@@ -590,11 +611,13 @@ export class WorkspaceIndexer {
                             progressCallback,
                         );
 
-                        if (pendingItems.length > 0) {
-                            assignTask(worker);
-                        } else if (activeTasks === 0 && !finished) {
-                            finished = true;
-                            resolveAll!();
+                        if (!isPartial) {
+                            if (pendingItems.length > 0) {
+                                assignTask(worker);
+                            } else if (activeTasks === 0 && !finished) {
+                                finished = true;
+                                resolveAll!();
+                            }
                         }
                     } else if (message.type === 'error') {
                         activeTasks--;
@@ -606,6 +629,7 @@ export class WorkspaceIndexer {
                         }
                     }
                 };
+
 
                 worker.on('message', onMessage);
                 cleanupListeners.push(() => worker.removeListener('message', onMessage));

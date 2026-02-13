@@ -6,10 +6,11 @@ export async function runSearchBenchmarks() {
     console.log("=== Search Engine Benchmarks ===");
 
     const engine = new SearchEngine();
-    const itemCount = 5000;
+    const itemCount = 50000;
 
     // Setup items
-    const items = [];
+    const items: any[] = [];
+
     for (let i = 0; i < itemCount; i++) {
         items.push({
             id: `id-${i}`,
@@ -34,7 +35,8 @@ export async function runSearchBenchmarks() {
         }
     }
 
-    engine.setItems(items);
+    await engine.setItems(items);
+
     console.log(`Initialized engine with ${items.length} items.`);
 
     // Warmup
@@ -58,9 +60,11 @@ export async function runSearchBenchmarks() {
         await engine.search({ query: "src", scope: SearchScope.EVERYTHING });
     }, 100);
 
-    await benchmark("Burst Search 'calc'", async () => {
-        engine.burstSearch({ query: "calc", scope: SearchScope.SYMBOLS });
-    }, 100);
+    // New benchmark: Many matches
+    await benchmark("Search 'Component' (Large result set)", async () => {
+        await engine.search({ query: "Component", scope: SearchScope.EVERYTHING });
+    }, 50);
 
     console.log("\n");
 }
+

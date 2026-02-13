@@ -156,7 +156,7 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Set the searchable items and update hot-arrays
      */
-    setItems(items: SearchableItem[]): void {
+    async setItems(items: SearchableItem[]): Promise<void> {
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
@@ -169,13 +169,13 @@ export class SearchEngine implements ISearchProvider {
         for (const item of items) {
             this.itemsMap.set(item.id, item);
         }
-        this.rebuildHotArrays();
+        await this.rebuildHotArrays();
     }
 
     /**
      * Add items to the search index and update hot-arrays incrementally
      */
-    addItems(items: SearchableItem[]): void {
+    async addItems(items: SearchableItem[]): Promise<void> {
         // Pre-calculate start index for new items
         const startIndex = this.items.length;
 
@@ -197,10 +197,20 @@ export class SearchEngine implements ISearchProvider {
         // Append items
         this.items.push(...items);
 
-        for (let i = 0; i < items.length; i++) {
-            this.processAddedItem(items[i], startIndex + i);
+        const CHUNK_SIZE = 500;
+        for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+            const end = Math.min(i + CHUNK_SIZE, items.length);
+            for (let j = i; j < end; j++) {
+                this.processAddedItem(items[j], startIndex + j);
+            }
+
+            // Yield to main thread for responsiveness
+            if (end < items.length) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+            }
         }
     }
+
 
     private processAddedItem(item: SearchableItem, globalIndex: number): void {
         this.itemsMap.set(item.id, item);
@@ -333,7 +343,7 @@ export class SearchEngine implements ISearchProvider {
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
      */
     // eslint-disable-next-line sonarjs/cognitive-complexity
-    private rebuildHotArrays(): void {
+    private async rebuildHotArrays(): Promise<void> {
         // Clear parallel arrays
         this.preparedNames = [];
         this.preparedNamesLow = [];
@@ -344,48 +354,59 @@ export class SearchEngine implements ISearchProvider {
 
         // Prepare items
         const count = this.items.length;
-        for (let i = 0; i < count; i++) {
-            const item = this.items[i];
-            this.itemTypeIds[i] = TYPE_TO_ID[item.type];
+        const CHUNK_SIZE = 1000;
 
-            // Optimization: Compute aggregate bitflags for Name, FullName, and Path
-            const nameFlags = this.calculateBitflags(item.name);
-            this.itemNameBitflags[i] = nameFlags;
+        for (let i = 0; i < count; i += CHUNK_SIZE) {
+            const end = Math.min(i + CHUNK_SIZE, count);
+            for (let j = i; j < end; j++) {
+                const item = this.items[j];
+                this.itemTypeIds[j] = TYPE_TO_ID[item.type];
 
-            let flags = nameFlags;
-            if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
-                flags |= this.calculateBitflags(item.fullName);
+                // Optimization: Compute aggregate bitflags for Name, FullName, and Path
+                const nameFlags = this.calculateBitflags(item.name);
+                this.itemNameBitflags[j] = nameFlags;
+
+                let flags = nameFlags;
+                if (item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath) {
+                    flags |= this.calculateBitflags(item.fullName);
+                }
+                if (item.relativeFilePath) {
+                    const normalized = item.relativeFilePath.replace(/\\/g, '/');
+                    flags |= this.calculateBitflags(normalized);
+                }
+                this.itemBitflags[j] = flags;
+
+                if (item.type === SearchItemType.FILE) {
+                    this.filePaths.push(item.filePath);
+                    this.fileItemByNormalizedPath.set(this.normalizePath(item.filePath), item);
+                }
+
+                const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+                const shouldPrepareFullName =
+                    item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
+
+                this.preparedNames.push(this.getPrepared(item.name));
+                this.preparedNamesLow.push(this.getPreparedLow(item.name));
+                this.preparedFullNames.push(
+                    shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
+                );
+                this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
+                this.preparedCapitals.push(this.extractCapitals(item.name));
+                this.preparedPatterns.push(
+                    item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null,
+                );
             }
-            if (item.relativeFilePath) {
-                const normalized = item.relativeFilePath.replace(/\\/g, '/');
-                flags |= this.calculateBitflags(normalized);
+
+            // Yield to main thread for responsiveness
+            if (end < count) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
             }
-            this.itemBitflags[i] = flags;
-
-            if (item.type === SearchItemType.FILE) {
-                this.filePaths.push(item.filePath);
-                this.fileItemByNormalizedPath.set(this.normalizePath(item.filePath), item);
-            }
-
-            const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
-            const shouldPrepareFullName =
-                item.fullName && item.fullName !== item.name && item.fullName !== item.relativeFilePath;
-
-            this.preparedNames.push(this.getPrepared(item.name));
-            this.preparedNamesLow.push(this.getPreparedLow(item.name));
-            this.preparedFullNames.push(
-                shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null,
-            );
-            this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
-            this.preparedCapitals.push(this.extractCapitals(item.name));
-            this.preparedPatterns.push(
-                item.type === SearchItemType.ENDPOINT ? RouteMatcher.precompute(item.name) : null,
-            );
         }
 
         this.rebuildScopeIndices();
         this.rebuildFileIndices();
     }
+
 
     private rebuildFileIndices(): void {
         this.fileToItemIndices.clear();

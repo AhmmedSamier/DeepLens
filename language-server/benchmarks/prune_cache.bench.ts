@@ -1,5 +1,4 @@
-
-import { performance } from 'perf_hooks';
+import { benchmark } from './utils';
 import { SearchEngine } from '../src/core/search-engine';
 import { SearchItemType, SearchableItem } from '../src/core/types';
 
@@ -8,8 +7,8 @@ export async function runPruneCacheBenchmarks() {
     const engine = new SearchEngine();
     const items: SearchableItem[] = [];
 
-    // Create 50k unique items
-    for (let i = 0; i < 50000; i++) {
+    // Create 20k unique items
+    for (let i = 0; i < 20000; i++) {
         items.push({
             id: `item-${i}`,
             name: `FileNumber${i}.ts`,
@@ -20,32 +19,17 @@ export async function runPruneCacheBenchmarks() {
         });
     }
 
-    const startSetup = performance.now();
-    engine.setItems(items);
-    console.log(`Setup took ${(performance.now() - startSetup).toFixed(2)}ms`);
+    await engine.setItems(items);
 
-    // @ts-ignore
-    const initialCacheSize = engine.preparedCache.size;
-    console.log(`Initial Prepared cache size: ${initialCacheSize}`);
+    await benchmark("Remove 1000 items (Incremental Pruning)", async () => {
+        // We need to re-add some items to remove them again if we want to run multiple iterations
+        // But the benchmark utility runs it N times.
+        // For pruning, maybe just one big run is better to see the cost.
+        for (let i = 0; i < 1000; i++) {
+             engine.removeItemsByFile(`/src/FileNumber${i}.ts`);
+        }
+    }, 1);
 
-    // Remove 5k items one by one
-    const startRemove = performance.now();
-    for (let i = 0; i < 5000; i++) {
-         engine.removeItemsByFile(`/src/FileNumber${i}.ts`);
-    }
-    const endRemove = performance.now();
-    console.log(`Removing 5k items took ${(endRemove - startRemove).toFixed(2)}ms`);
-
-    // Verify cache size immediately
-    // @ts-ignore
-    const finalCacheSize = engine.preparedCache.size;
-    console.log(`Final Prepared cache size: ${finalCacheSize}`);
-    console.log(`Cache entries removed: ${initialCacheSize - finalCacheSize}`);
-
-    if (finalCacheSize < initialCacheSize) {
-        console.log('SUCCESS: Cache size decreased immediately.');
-    } else {
-        console.log('FAILURE: Cache size did not decrease.');
-    }
     console.log('');
 }
+

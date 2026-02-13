@@ -10,7 +10,8 @@ export async function runEndpointBenchmarks() {
     const endpointCount = 10000;
 
     // Setup items
-    const items = [];
+    const items: any[] = [];
+
     for (let i = 0; i < endpointCount; i++) {
         items.push({
             id: `endpoint-${i}`,
@@ -22,7 +23,8 @@ export async function runEndpointBenchmarks() {
         });
     }
 
-    engine.setItems(items);
+    await engine.setItems(items);
+
     console.log(`Initialized engine with ${items.length} endpoints.`);
 
     // Query that looks like a URL
