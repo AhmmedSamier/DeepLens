@@ -4,6 +4,7 @@ import { runActivityBenchmarks } from './activity.bench';
 import { runEndpointBenchmarks } from './endpoint_search.bench';
 import { runIndexingBenchmark } from './indexing.bench';
 import { runParserBenchmarks } from './parser.bench';
+import { runPruneCacheBenchmarks } from './prune_cache.bench';
 import { runRouteMatcherBenchmarks } from './route-matcher.bench';
 import { runSearchBenchmarks } from './search.bench';
 import { runTextSearchBenchmarks } from './text-search.bench';
@@ -20,6 +21,7 @@ async function main() {
     await runIndexingBenchmark();
     await runActivityTrackerBenchmarks();
     await runActivityBenchmarks();
+    await runPruneCacheBenchmarks();
 
     console.log('Benchmarks completed.');
 
