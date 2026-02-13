@@ -631,12 +631,14 @@ namespace DeepLensVisualStudio.ToolWindows
             _searchCts = new CancellationTokenSource();
             var token = _searchCts.Token;
 
-            // Only consider slash command complete if followed by space
-            // This allows typing "/txt" without immediately switching to "/t" (types)
-            if (!string.IsNullOrEmpty(SearchQuery) && SearchQuery.EndsWith(" "))
+            // Only consider slash command complete if followed by space or using immediate triggers (#, >)
+            if (!string.IsNullOrEmpty(SearchQuery))
             {
                 var trimmed = SearchQuery.Trim();
-                if (trimmed.StartsWith("/"))
+                bool isImmediate = trimmed.StartsWith("#") || trimmed.StartsWith(">");
+                bool isSlashComplete = SearchQuery.EndsWith(" ") && trimmed.StartsWith("/");
+
+                if (isSlashComplete || (isImmediate && SearchQuery.Length > 0))
                 {
                     var commands = _slashCommandService.GetCommands(trimmed);
                     var exactMatch = commands.FirstOrDefault(c =>
@@ -654,7 +656,7 @@ namespace DeepLensVisualStudio.ToolWindows
             var query = SearchQuery?.Trim() ?? "";
 
             // Check for slash commands first
-            if (query.StartsWith("/"))
+            if (query.StartsWith("/") || query.StartsWith("#") || query.StartsWith(">"))
             {
                 Results.Clear();
                 var commands = _slashCommandService.GetCommands(query);

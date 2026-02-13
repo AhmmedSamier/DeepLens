@@ -24,7 +24,8 @@ export class Config {
                 '**/obj/**',
                 '**/vendor/**',
             ],
-            maxResults: 50,
+            maxResults: 20,
+
             enableTextSearch: true,
             enableCamelHumps: true,
             searchConcurrency: 60,
@@ -118,8 +119,9 @@ export class Config {
      * Get max results
      */
     getMaxResults(): number {
-        return this.get('maxResults', 50);
+        return this.get('maxResults', 20);
     }
+
 
     /**
      * Check if text search is enabled

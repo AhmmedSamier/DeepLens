@@ -346,8 +346,9 @@ connection.onWorkspaceSymbol(async (params) => {
     const results = await searchEngine.search({
         query: params.query,
         scope: SearchScope.EVERYTHING, // Default for standard LSP request
-        maxResults: 50,
+        maxResults: 20,
     });
+
 
     return results.map((r) => ({
         name: r.item.name,

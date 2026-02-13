@@ -95,6 +95,8 @@ export class SearchProvider {
         ['/m ', SearchScope.MODIFIED],
         ['/modified ', SearchScope.MODIFIED],
         ['/git ', SearchScope.MODIFIED],
+        ['#', SearchScope.SYMBOLS],
+        ['>', SearchScope.COMMANDS],
     ]);
 
     constructor(
@@ -175,10 +177,10 @@ export class SearchProvider {
             { scope: SearchScope.OPEN, icon: 'book', label: 'Open Files', shortcut: '/o' },
             { scope: SearchScope.MODIFIED, icon: 'git-merge', label: 'Modified', shortcut: '/m' },
             { scope: SearchScope.TYPES, icon: this.ICON_CLASS, label: 'Classes', shortcut: '/t' },
-            { scope: SearchScope.SYMBOLS, icon: 'symbol-method', label: 'Symbols', shortcut: '/s' },
+            { scope: SearchScope.SYMBOLS, icon: 'symbol-method', label: 'Symbols', shortcut: '/s or #' },
             { scope: SearchScope.FILES, icon: 'file', label: 'Files', shortcut: '/f' },
             { scope: SearchScope.TEXT, icon: 'whole-word', label: 'Text', shortcut: '/txt' },
-            { scope: SearchScope.COMMANDS, icon: 'run', label: 'Commands', shortcut: '/c' },
+            { scope: SearchScope.COMMANDS, icon: 'run', label: 'Commands', shortcut: '/cmd or >' },
             { scope: SearchScope.PROPERTIES, icon: 'symbol-property', label: 'Properties', shortcut: '/p' },
             { scope: SearchScope.ENDPOINTS, icon: 'globe', label: 'Endpoints', shortcut: '/e' },
         ];
@@ -706,8 +708,9 @@ export class SearchProvider {
         // Check for prefixes with space (completed commands)
         // We only auto-switch scope if the command is followed by space
         // This allows typing "/txt" without immediately switching to "/t" (types)
+        // Single character triggers (#, >) are always immediate
         for (const [prefix, scope] of this.PREFIX_MAP.entries()) {
-            if (query.toLowerCase().startsWith(prefix) && prefix.endsWith(' ')) {
+            if (query.toLowerCase().startsWith(prefix) && (prefix.endsWith(' ') || prefix.length === 1)) {
                 return {
                     scope,
                     text: query.slice(prefix.length),
@@ -879,8 +882,8 @@ export class SearchProvider {
         }
 
         // Check if user is typing a slash command
-        // We show the list if the query starts with / and we haven't matched a full scope yet
-        if (query.startsWith('/')) {
+        // We show the list if the query starts with /, # or > and we haven't matched a full scope yet
+        if (query.startsWith('/') || query.startsWith('#') || query.startsWith('>')) {
             this.suggestSlashCommands(quickPick, query);
             if (quickPick.items.length > 0) {
                 return;

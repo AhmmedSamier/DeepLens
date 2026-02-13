@@ -47,18 +47,19 @@ async function runBurstBenchmark() {
     // Benchmark 1: Match some items (prefix 'App') - Early exit usually
     // But burstSearch continues until maxResults.
     await benchmark('Burst Search "App" (Matches found)', () => {
-        engine.burstSearch({ query: 'app', scope: SearchScope.EVERYTHING, maxResults: 50 });
+        engine.burstSearch({ query: 'app', scope: SearchScope.EVERYTHING, maxResults: 20 });
     }, 100);
 
     // Benchmark 2: Match NO items (Worst case scan)
     await benchmark('Burst Search "Zzz" (No match)', () => {
-        engine.burstSearch({ query: 'zzz', scope: SearchScope.EVERYTHING, maxResults: 50 });
+        engine.burstSearch({ query: 'zzz', scope: SearchScope.EVERYTHING, maxResults: 20 });
     }, 100);
 
     // Benchmark 3: Short prefix "S" (Many matches, fills results quickly)
     await benchmark('Burst Search "S" (Many matches)', () => {
-        engine.burstSearch({ query: 's', scope: SearchScope.EVERYTHING, maxResults: 50 });
+        engine.burstSearch({ query: 's', scope: SearchScope.EVERYTHING, maxResults: 20 });
     }, 100);
+
 
     saveBenchmarks(path.join(__dirname, 'results_burst.json'));
 }

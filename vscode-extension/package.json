@@ -9,6 +9,9 @@
     "version": "1.5.4",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
+    "enabledApiProposals": [
+        "quickPickItemResource"
+    ],
     "engines": {
         "vscode": "^1.85.0"
     },
@@ -77,9 +80,10 @@
                 },
                 "deeplens.maxResults": {
                     "type": "number",
-                    "default": 50,
+                    "default": 20,
                     "description": "Maximum number of results to display"
                 },
+
                 "deeplens.enableTextSearch": {
                     "type": "boolean",
                     "default": true,

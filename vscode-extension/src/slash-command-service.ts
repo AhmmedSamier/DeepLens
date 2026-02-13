@@ -64,7 +64,7 @@ export class SlashCommandService {
                 name: '/s',
                 shortName: 's',
                 description: 'Find methods, functions, and variables',
-                aliases: ['/symbols', '/symbol'],
+                aliases: ['/symbols', '/symbol', '#'],
                 category: SlashCommandCategory.SEARCH,
                 scope: SearchScope.SYMBOLS,
                 icon: 'symbol-method',
@@ -144,7 +144,7 @@ export class SlashCommandService {
                 name: '/cmd',
                 shortName: 'cmd',
                 description: 'Search and execute VS Code commands',
-                aliases: ['/commands', '/action', '/run'],
+                aliases: ['/commands', '/action', '/run', '>'],
                 category: SlashCommandCategory.ACTIONS,
                 scope: SearchScope.COMMANDS,
                 icon: 'run',
@@ -206,7 +206,7 @@ export class SlashCommandService {
         }
 
         const lowerQuery = query.toLowerCase();
-        const trimmedQuery = lowerQuery.replace(/^\//, '');
+        const trimmedQuery = lowerQuery.replace(/^[\/#>]/, '');
         const results: SlashCommand[] = [];
         const seen = new Set<string>();
 

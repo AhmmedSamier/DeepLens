@@ -129,8 +129,9 @@ export class SearchEngine implements ISearchProvider {
 
     public registerProvider(provider: ISearchProvider) {
         this.providers.push(provider);
-        this.providers.sort((a, b) => b.priority - a.priority);
+        this.providers.sort((a, b) => (b.priority || 0) - (a.priority || 0));
     }
+
 
     /**
      * Set configuration
@@ -546,10 +547,11 @@ export class SearchEngine implements ISearchProvider {
             normalizedQuery: query.replace(/\\/g, '/'),
             queryUpper: query.toUpperCase(),
             scope: options.scope || SearchScope.EVERYTHING,
-            maxResults: options.maxResults || 50,
+            maxResults: options.maxResults || 20,
             enableCamelHumps: options.enableCamelHumps !== false,
             isPotentialUrl: RouteMatcher.isPotentialUrl(query),
         };
+
     }
 
     /**
@@ -620,7 +622,8 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-        const { query, scope, maxResults = 50, enableCamelHumps = true } = options;
+        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -1367,17 +1370,19 @@ export class SearchEngine implements ISearchProvider {
                 const typeId = itemTypeIds[i];
                 // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
                 if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
+                    const pattern = preparedPatterns[i];
                     if (
                         !(
                             isPotentialUrl &&
                             typeId === 11 /* ENDPOINT */ &&
-                            preparedPatterns[i] &&
-                            RouteMatcher.isMatchPattern(preparedPatterns[i], queryForUrlMatch)
+                            pattern &&
+                            RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)
                         )
                     ) {
                         continue;
                     }
                 }
+
 
                 let score = -Infinity;
 
@@ -1410,7 +1415,9 @@ export class SearchEngine implements ISearchProvider {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
                             const s = res.score;
-                            if (s > MIN_SCORE) fuzzyScore = s;
+                            if (s > MIN_SCORE) {
+                                fuzzyScore = s;
+                            }
                         }
                     }
 
@@ -1447,19 +1454,50 @@ export class SearchEngine implements ISearchProvider {
 
                 let resultScope: SearchScope | undefined;
 
+
                 // 3. URL/Endpoint Match
                 if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                     const pattern = preparedPatterns[i];
                     if (pattern) {
-                        if (RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)) {
-                            const urlScore = 1.5;
-                            if (urlScore > score) {
-                                score = urlScore;
-                                resultScope = SearchScope.ENDPOINTS;
+                        const item = items[i];
+                        if (item) {
+                            // Check if the query has a method prefix and if it matches the item's method
+                            const qText = typeof queryForUrlMatch === 'string' ? queryForUrlMatch : queryForUrlMatch.cleanPath;
+                            const qTrim = qText.trim();
+                            const methodMatch = qTrim.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
+                            
+                            let finalQueryForMatch = queryForUrlMatch;
+                            let methodScoreBoost = 0;
+                            
+                            if (methodMatch) {
+                                const qMethod = methodMatch[1].toUpperCase();
+                                const itemMethodMatch = item.name.match(/^\[([A-Z]+)\]/);
+                                if (itemMethodMatch) {
+                                    const itemMethod = itemMethodMatch[1];
+                                    if (itemMethod.startsWith(qMethod) || qMethod.startsWith(itemMethod)) {
+                                        finalQueryForMatch = methodMatch[2];
+                                        methodScoreBoost = 0.5;
+                                    } else {
+                                        // Method mismatch, skip specialized route matching
+                                        finalQueryForMatch = "";
+                                    }
+                                }
+                            }
+                            
+                            if (finalQueryForMatch) {
+                                const urlScore = RouteMatcher.scoreMatchPattern(pattern, finalQueryForMatch);
+                                if (urlScore > 0) {
+                                    const totalScore = urlScore + methodScoreBoost;
+                                    if (totalScore > score) {
+                                        score = totalScore;
+                                        resultScope = SearchScope.ENDPOINTS;
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
 
                 if (score > MIN_SCORE) {
                     if (resultScope === undefined) {
@@ -1487,6 +1525,7 @@ export class SearchEngine implements ISearchProvider {
                                 score,
                                 scope: resultScope,
                             });
+
                         }
                     }
                 }
@@ -1499,19 +1538,23 @@ export class SearchEngine implements ISearchProvider {
                 const typeId = itemTypeIds[i];
                 // Optimization: Short-circuit if query characters are not present in Name, FullName, or Path
                 if ((queryBitflags & itemBitflags[i]) !== queryBitflags) {
+                    const pattern = preparedPatterns[i];
                     if (
                         !(
                             isPotentialUrl &&
                             typeId === 11 /* ENDPOINT */ &&
-                            preparedPatterns[i] &&
-                            RouteMatcher.isMatchPattern(preparedPatterns[i], queryForUrlMatch)
+                            pattern &&
+                            RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)
                         )
                     ) {
                         continue;
                     }
                 }
 
+
                 let score = -Infinity;
+                let highlights: number[][] | undefined;
+
 
                 // 1. CamelHumps Score (Inlined)
                 if (enableCamelHumps) {
@@ -1545,8 +1588,11 @@ export class SearchEngine implements ISearchProvider {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
                             const s = res.score;
-                            if (s > MIN_SCORE) fuzzyScore = s;
+                            if (s > MIN_SCORE) {
+                                fuzzyScore = s;
+                            }
                         }
+
                     }
 
                     if (fuzzyScore < 0.9) {
@@ -1586,15 +1632,45 @@ export class SearchEngine implements ISearchProvider {
                 if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                     const pattern = preparedPatterns[i];
                     if (pattern) {
-                        if (RouteMatcher.isMatchPattern(pattern, queryForUrlMatch)) {
-                            const urlScore = 1.5;
-                            if (urlScore > score) {
-                                score = urlScore;
-                                resultScope = SearchScope.ENDPOINTS;
+                        const item = items[i];
+                        if (item) {
+                            // Check if the query has a method prefix and if it matches the item's method
+                            const qText = typeof queryForUrlMatch === 'string' ? queryForUrlMatch : queryForUrlMatch.cleanPath;
+                            const qTrim = qText.trim();
+                            const methodMatch = qTrim.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
+                            
+                            let finalQueryForMatch = queryForUrlMatch;
+                            let methodScoreBoost = 0;
+                            
+                            if (methodMatch) {
+                                const qMethod = methodMatch[1].toUpperCase();
+                                const itemMethodMatch = item.name.match(/^\[([A-Z]+)\]/);
+                                if (itemMethodMatch) {
+                                    const itemMethod = itemMethodMatch[1];
+                                    if (itemMethod.startsWith(qMethod) || qMethod.startsWith(itemMethod)) {
+                                        finalQueryForMatch = methodMatch[2];
+                                        methodScoreBoost = 0.5;
+                                    } else {
+                                        // Method mismatch, skip specialized route matching
+                                        finalQueryForMatch = "";
+                                    }
+                                }
+                            }
+                            
+                            if (finalQueryForMatch) {
+                                const urlScore = RouteMatcher.scoreMatchPattern(pattern, finalQueryForMatch);
+                                if (urlScore > 0) {
+                                    const totalScore = urlScore + methodScoreBoost;
+                                    if (totalScore > score) {
+                                        score = totalScore;
+                                        resultScope = SearchScope.ENDPOINTS;
+                                    }
+                                }
                             }
                         }
                     }
                 }
+
 
                 if (score > MIN_SCORE) {
                     if (resultScope === undefined) {
@@ -1622,6 +1698,7 @@ export class SearchEngine implements ISearchProvider {
                                 score,
                                 scope: resultScope,
                             });
+
                         }
                     }
                 }
@@ -1632,11 +1709,13 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private computeUrlScore(name: string, query: string): number {
-        if (RouteMatcher.isMatch(name, query)) {
-            return 1.5;
+        const score = RouteMatcher.scoreMatch(name, query);
+        if (score > 0) {
+            return score;
         }
         return -Infinity;
     }
+
 
     private computeActivityScore(itemId: string, currentScore: number, minScore: number): number {
         if (currentScore > minScore && this.getActivityScore) {
@@ -1732,14 +1811,15 @@ export class SearchEngine implements ISearchProvider {
         currentScore: number,
         currentScope: SearchScope,
     ): { newScore: number; newScope: SearchScope } {
-        if (RouteMatcher.isMatch(item.name, query)) {
-            const urlScore = 1.5;
+        const urlScore = RouteMatcher.scoreMatch(item.name, query);
+        if (urlScore > 0) {
             if (urlScore > currentScore) {
                 return { newScore: urlScore, newScope: SearchScope.ENDPOINTS };
             }
         }
         return { newScore: currentScore, newScope: currentScope };
     }
+
 
     private applyActivityBoost(item: SearchableItem, currentScore: number): number {
         if (this.getActivityScore) {
@@ -2082,20 +2162,21 @@ export class SearchEngine implements ISearchProvider {
             const item = this.items[i];
             if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
                 const pattern = this.preparedPatterns[i];
-                const matches = pattern
-                    ? RouteMatcher.isMatchPattern(pattern, queryOrPrepared)
-                    : RouteMatcher.isMatch(item.name, queryOrPrepared);
+                const score = pattern
+                    ? RouteMatcher.scoreMatchPattern(pattern, queryOrPrepared)
+                    : RouteMatcher.scoreMatch(item.name, queryOrPrepared);
 
-                if (matches) {
+                if (score > 0) {
                     results.push({
                         item,
-                        score: 2.0,
+                        score,
                         scope: SearchScope.ENDPOINTS,
                     });
                     existingIds.add(item.id);
                 }
             }
         };
+
 
         if (indices) {
             for (const i of indices) {

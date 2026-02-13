@@ -495,9 +495,10 @@ namespace DeepLensVisualStudio.Services
             {
                 ["query"] = query,
                 ["scope"] = scope,
-                ["maxResults"] = 50,
+                ["maxResults"] = 20,
                 ["requestId"] = Environment.TickCount
             };
+
 
             var lspResults =
                 await _rpc.InvokeWithParameterObjectAsync<List<LspSearchResult>>("deeplens/search", searchParams, ct);

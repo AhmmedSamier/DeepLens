@@ -87,7 +87,8 @@ Customize DeepLens to fit your workflow in VS Code Settings:
     "deeplens.excludePatterns": ["**/node_modules/**", "**/dist/**", "**/out/**", "**/.git/**", "**/build/**"],
 
     // Maximum number of search results to display
-    "deeplens.maxResults": 50,
+    "deeplens.maxResults": 20,
+
 
     // Enable full-text search across files
     "deeplens.enableTextSearch": true,
