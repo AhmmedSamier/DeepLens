@@ -121,7 +121,7 @@ describe('SearchEngine', () => {
         expect(preparedNames[0]).toBe(preparedNames[1]);
     });
 
-    it('should prune cache after removing items', () => {
+    it('should prune cache immediately after removing items', () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'UniqueName1', SearchItemType.CLASS, 'src/File1.ts'),
@@ -137,13 +137,7 @@ describe('SearchEngine', () => {
         // Remove item 2
         engine.removeItemsByFile(path.normalize('/src/File2.ts'));
 
-        // Verify cache size hasn't changed yet (lazy pruning)
-        expect(preparedCache.size).toBe(initialCacheSize);
-
-        // Manually trigger prune for testing
-        (engine as any).pruneCache();
-
-        // Verify cache size decreased
+        // Verify cache size decreased immediately (ref counting)
         expect(preparedCache.size).toBeLessThan(initialCacheSize);
 
         // Ensure UniqueName2 is gone
@@ -152,36 +146,29 @@ describe('SearchEngine', () => {
         expect(preparedCache.has('UniqueName1')).toBe(true);
     });
 
-    it('should preserve used items in low cache during pruning even when full', () => {
+    it('should manage low cache via ref counting', () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [];
 
-        // Add enough items to exceed the 20000 limit
-        // We need 20001 unique names
-        for (let i = 0; i < 20005; i++) {
+        // Add items
+        for (let i = 0; i < 100; i++) {
             items.push(createTestItem(`${i}`, `Item${i}`, SearchItemType.CLASS, `src/File${i}.ts`));
         }
 
         engine.setItems(items);
 
-        const preparedLowCache = (engine as any).preparedLowCache as Map<string, string>;
+        const preparedLowCache = (engine as any).preparedLowCache as Map<string, any>;
 
-        // Verify cache is full
-        expect(preparedLowCache.size).toBeGreaterThan(20000);
+        // Verify cache is populated
+        expect(preparedLowCache.size).toBe(100);
 
-        // Trigger prune (simulate conditions)
-        // Force prune even if removals haven't happened, but logic checks removedSinceLastPrune
-        (engine as any).removedSinceLastPrune = 2001;
+        // Remove one item
+        engine.removeItemsByFile(path.normalize('/src/File0.ts'));
 
-        // Trigger prune
-        (engine as any).pruneCache();
-
-        // With current implementation, size should be 0 because it wipes all
-        // With FIX, it should be 20005
-
-        // Expectation for the FIX:
-        expect(preparedLowCache.size).toBeGreaterThan(20000);
-        expect(preparedLowCache.has('Item0')).toBe(true);
+        // Expectation: Size decreases by 1
+        expect(preparedLowCache.size).toBe(99);
+        expect(preparedLowCache.has('Item0')).toBe(false);
+        expect(preparedLowCache.has('Item1')).toBe(true);
     });
 
     it('should filter by OPEN scope', async () => {

@@ -101,9 +101,8 @@ export class SearchEngine implements ISearchProvider {
     private filePaths: string[] = [];
 
     // Deduplication cache for prepared strings
-    private preparedCache: Map<string, Fuzzysort.Prepared> = new Map();
-    private preparedLowCache: Map<string, string> = new Map();
-    private removedSinceLastPrune: number = 0;
+    private preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
+    private preparedLowCache: Map<string, { value: string; refCount: number }> = new Map();
 
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
@@ -279,6 +278,12 @@ export class SearchEngine implements ISearchProvider {
                 }
                 write++;
             } else {
+                // Decrement reference counts for prepared strings
+                this.releasePrepared(this.preparedNames[read]);
+                this.releasePrepared(this.preparedFullNames[read]);
+                this.releasePrepared(this.preparedPaths[read]);
+                this.releasePreparedLow(item.name);
+
                 this.itemsMap.delete(item.id);
                 if (item.type === SearchItemType.FILE) {
                     this.fileItemByNormalizedPath.delete(this.normalizePath(item.filePath));
@@ -321,54 +326,6 @@ export class SearchEngine implements ISearchProvider {
             // Rebuild scope indices
             this.rebuildScopeIndices();
             this.rebuildFileIndices();
-
-            // Periodic cache pruning
-            this.removedSinceLastPrune++;
-            // Optimization: Increased threshold to 50000 to avoid frequent O(N) scans
-            if (this.removedSinceLastPrune > 50000 && this.preparedCache.size > 10000) {
-                this.pruneCache();
-                this.removedSinceLastPrune = 0;
-            }
-        }
-    }
-
-    /**
-     * Remove unused entries from the prepared cache to prevent memory leaks
-     */
-    private pruneCache(): void {
-        this.prunePreparedCache();
-        this.pruneLowCache();
-    }
-
-    private prunePreparedCache(): void {
-        const usedPrepared = new Set<Fuzzysort.Prepared>();
-
-        // Collect used prepared objects
-        for (const p of this.preparedNames) if (p) usedPrepared.add(p);
-        for (const p of this.preparedFullNames) if (p) usedPrepared.add(p);
-        for (const p of this.preparedPaths) if (p) usedPrepared.add(p);
-
-        // Remove unused from cache
-        for (const [key, prepared] of this.preparedCache) {
-            if (!usedPrepared.has(prepared)) {
-                this.preparedCache.delete(key);
-            }
-        }
-    }
-
-    private pruneLowCache(): void {
-        // Prune low string cache if it grows too large (prevent leaks)
-        if (this.preparedLowCache.size > 20000) {
-            const usedNames = new Set<string>();
-            for (const item of this.items) {
-                usedNames.add(item.name);
-            }
-
-            for (const [key] of this.preparedLowCache) {
-                if (!usedNames.has(key)) {
-                    this.preparedLowCache.delete(key);
-                }
-            }
         }
     }
 
@@ -445,21 +402,50 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private getPrepared(text: string): Fuzzysort.Prepared {
-        let prepared = this.preparedCache.get(text);
-        if (!prepared) {
-            prepared = Fuzzysort.prepare(text);
-            this.preparedCache.set(text, prepared);
+        const entry = this.preparedCache.get(text);
+        if (entry) {
+            entry.refCount++;
+            return entry.prepared;
         }
+
+        const prepared = Fuzzysort.prepare(text);
+        this.preparedCache.set(text, { prepared, refCount: 1 });
         return prepared;
     }
 
     private getPreparedLow(text: string): string {
-        let low = this.preparedLowCache.get(text);
-        if (!low) {
-            low = text.toLowerCase();
-            this.preparedLowCache.set(text, low);
+        const entry = this.preparedLowCache.get(text);
+        if (entry) {
+            entry.refCount++;
+            return entry.value;
         }
+
+        const low = text.toLowerCase();
+        this.preparedLowCache.set(text, { value: low, refCount: 1 });
         return low;
+    }
+
+    private releasePrepared(prepared: Fuzzysort.Prepared | null): void {
+        if (!prepared) return;
+        const key = prepared.target;
+        const entry = this.preparedCache.get(key);
+        if (entry) {
+            entry.refCount--;
+            if (entry.refCount <= 0) {
+                this.preparedCache.delete(key);
+            }
+        }
+    }
+
+    private releasePreparedLow(text: string | null): void {
+        if (!text) return;
+        const entry = this.preparedLowCache.get(text);
+        if (entry) {
+            entry.refCount--;
+            if (entry.refCount <= 0) {
+                this.preparedLowCache.delete(text);
+            }
+        }
     }
 
     private rebuildScopeIndices(): void {
