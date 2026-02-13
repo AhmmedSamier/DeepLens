@@ -67,7 +67,6 @@ export async function activate(context: vscode.ExtensionContext) {
         lspClient.setActiveFiles(uniqueFiles);
     };
 
-
     updateActiveFiles();
     context.subscriptions.push(
         vscode.workspace.onDidOpenTextDocument(updateActiveFiles),
@@ -78,7 +77,6 @@ export async function activate(context: vscode.ExtensionContext) {
     if (typeof vscode.window.tabGroups !== 'undefined') {
         context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(updateActiveFiles));
     }
-
 
     // Register search command
     const searchCommand = vscode.commands.registerCommand('deeplens.search', async () => {
@@ -168,17 +166,39 @@ export async function activate(context: vscode.ExtensionContext) {
     // Listen to progress to update status bar
     lspClient.onProgress.event((e) => {
         if (e.state === 'start') {
-            statusItem.text = '$(sync~spin) Indexing...';
+            statusItem.text = '$(sync~spin) DeepLens';
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
+            statusItem.color = '#ff9900'; // Orange for indexing
         } else if (e.state === 'report') {
             const percentageText = e.percentage !== undefined ? ` (${e.percentage}%)` : '';
-            statusItem.text = `$(sync~spin) Indexing${percentageText}...`;
-            if (e.message) {
-                statusItem.tooltip = e.message;
+
+            // Determine icon and color based on message content
+            let icon = '$(sync~spin)';
+            let color = '#ff9900'; // Default orange
+
+            if (e.message?.includes('scanning') || e.message?.includes('Scanning')) {
+                icon = '$(search)';
+                color = '#007acc'; // Blue for scanning
+            } else if (e.message?.includes('parsing') || e.message?.includes('Parsing')) {
+                icon = '$(code)';
+                color = '#7c4dff'; // Purple for parsing
+            } else if (e.message?.includes('indexing') || e.message?.includes('Indexing')) {
+                icon = '$(database)';
+                color = '#00c853'; // Green for indexing
+            } else if (e.message?.includes('symbols') || e.message?.includes('Symbols')) {
+                icon = '$(symbol-parameter)';
+                color = '#aa00ff'; // Dark purple for symbols
             }
+
+            statusItem.text = `${icon} DeepLens${percentageText}`;
+            if (e.message) {
+                statusItem.tooltip = `DeepLens: ${e.message}`;
+            }
+            statusItem.color = color;
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
             statusItem.tooltip = 'DeepLens Index Status';
+            statusItem.color = '#cccccc'; // Gray for normal state
         }
     });
 
@@ -206,7 +226,7 @@ export async function activate(context: vscode.ExtensionContext) {
     if (config.isActivityTrackingEnabled()) {
         context.subscriptions.push(
             vscode.window.onDidChangeActiveTextEditor((editor) => {
-                if (editor) {
+                if (editor && activityTracker) {
                     const itemId = `file:${editor.document.uri.fsPath}`;
                     const item: SearchableItem = {
                         id: itemId,
@@ -279,12 +299,12 @@ async function indexWorkspace(force: boolean = false): Promise<void> {
 /**
  * Extension deactivation
  */
-export function deactivate() {
+export async function deactivate() {
     if (lspClient) {
-        lspClient.stop();
+        await lspClient.stop();
     }
     if (activityTracker) {
-        activityTracker.dispose();
+        await activityTracker.dispose();
     }
     if (gitService) {
         gitService.dispose();

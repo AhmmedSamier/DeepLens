@@ -13,6 +13,7 @@ import {
 } from 'vscode-languageserver/node';
 
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { pathToFileURL } from 'url';
 import { ActivityTracker } from './core/activity-tracker';
@@ -81,6 +82,7 @@ let activityTracker: ActivityTracker;
 let isInitialized = false;
 let isShuttingDown = false;
 let fileLogger: (msg: string) => void = () => {};
+let parentProcessMonitor: NodeJS.Timeout | undefined;
 
 connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
@@ -89,21 +91,44 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     // Monitor parent process
     if (params.processId) {
-        setInterval(() => {
+        parentProcessMonitor = setInterval(() => {
             try {
-                // kill(pid, 0) checks if process exists without killing it
-                process.kill(params.processId, 0);
+// kill(pid, 0) checks if process exists without killing it
+                process.kill(params.processId as number, 0);
             } catch {
-                // Parent process is gone
+                // Parent process is gone - clean up interval before exit
+                if (parentProcessMonitor) {
+                    clearInterval(parentProcessMonitor);
+                    parentProcessMonitor = undefined;
+                }
                 process.exit(1);
             }
         }, 5000);
     }
 
     // Get storage path from initialization options or fall back to a temp dir
-    const storagePath = params.initializationOptions?.storagePath || path.join(process.cwd(), '.deeplens');
-    if (!fs.existsSync(storagePath)) {
-        fs.mkdirSync(storagePath, { recursive: true });
+    let storagePath = params.initializationOptions?.storagePath || path.join(process.cwd(), '.deeplens');
+
+    // Try to create storage directory with error handling
+    try {
+        if (!fs.existsSync(storagePath)) {
+            fs.mkdirSync(storagePath, { recursive: true });
+        }
+    } catch (error) {
+        connection.console.error(`Failed to create storage directory at ${storagePath}: ${error}`);
+
+        // Fall back to temp directory
+        const tempPath = path.join(os.tmpdir(), 'deeplens-' + process.pid);
+        try {
+            if (!fs.existsSync(tempPath)) {
+                fs.mkdirSync(tempPath, { recursive: true });
+            }
+            storagePath = tempPath;
+            connection.console.log(`Using temporary storage at ${tempPath}`);
+        } catch (tempError) {
+            connection.console.error(`Failed to create temp storage directory: ${tempError}`);
+            // Continue without persistent storage - activity tracking will be disabled
+        }
     }
 
     const logFile = path.join(storagePath, 'debug.log');
@@ -256,9 +281,11 @@ async function runIndexingWithProgress(force: boolean = false): Promise<void> {
             workspaceIndexer.resetCaches();
         }
 
-        try {
+try {
             const startTime = Date.now();
             let currentPercentage = 0;
+            
+            // Enhanced progress callback with phase-specific messages
             await workspaceIndexer.indexWorkspace((message, increment) => {
                 if (increment) {
                     currentPercentage += increment;
@@ -266,7 +293,35 @@ async function runIndexingWithProgress(force: boolean = false): Promise<void> {
                 // Cap at 99% until explicitly done
                 const percentage = Math.min(99, Math.round(currentPercentage));
                 if (!isShuttingDown) {
-                    connection.sendNotification('deeplens/progress', { token, message, percentage });
+                    // Enhance message with phase context
+                    let enhancedMessage = message;
+                    
+                    // Add phase-specific context for better visual feedback
+                    if (message.includes('Step 1/4')) {
+                        enhancedMessage = '📊 Scanning repository structure...';
+                    } else if (message.includes('Step 2/4')) {
+                        enhancedMessage = '🔍 Scanning workspace files...';
+                    } else if (message.includes('Step 3/4')) {
+                        enhancedMessage = '⚡ Extracting symbols...';
+                    } else if (message.includes('Step 4/4')) {
+                        enhancedMessage = '✅ Finalizing...';
+                    } else if (message.includes('Analyzing repository')) {
+                        enhancedMessage = '📊 Analyzing repository structure...';
+                    } else if (message.includes('Scanning files')) {
+                        enhancedMessage = '🔍 Scanning workspace files...';
+                    } else if (message.includes('Extracting symbols')) {
+                        enhancedMessage = '⚡ Extracting symbols from files...';
+                    } else if (message.includes('Finalizing')) {
+                        enhancedMessage = '✅ Finalizing index...';
+                    } else if (message.includes('Fast-scanning workspace symbols')) {
+                        enhancedMessage = '⚡ Fast-scanning workspace symbols...';
+                    }
+                    
+                    connection.sendNotification('deeplens/progress', { 
+                        token, 
+                        message: enhancedMessage, 
+                        percentage 
+                    });
                 }
             });
 
@@ -340,15 +395,18 @@ function mapItemTypeToSymbolKind(type: SearchItemType): SymbolKind {
 }
 
 // Implement workspace/symbol
-connection.onWorkspaceSymbol(async (params) => {
+connection.onWorkspaceSymbol(async (params, token) => {
     if (!isInitialized) return [];
 
-    const results = await searchEngine.search({
-        query: params.query,
-        scope: SearchScope.EVERYTHING, // Default for standard LSP request
-        maxResults: 20,
-    });
-
+    const results = await searchEngine.search(
+        {
+            query: params.query,
+            scope: SearchScope.EVERYTHING, // Default for standard LSP request
+            maxResults: 20,
+        },
+        undefined, // streamCallback
+        token, // Pass cancellation token
+    );
 
     return results.map((r) => ({
         name: r.item.name,
@@ -458,10 +516,17 @@ connection.onRequest(SetActiveFilesRequest, (params) => {
 });
 
 // Handle shutdown gracefully
-connection.onShutdown(() => {
+connection.onShutdown(async () => {
     isShuttingDown = true;
+
+    // Clear parent process monitor
+    if (parentProcessMonitor) {
+        clearInterval(parentProcessMonitor);
+        parentProcessMonitor = undefined;
+    }
+
     if (activityTracker) {
-        activityTracker.saveActivities();
+        await activityTracker.dispose();
     }
     connection.console.log('DeepLens Language Server shutting down');
 });

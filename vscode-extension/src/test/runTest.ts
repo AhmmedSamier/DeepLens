@@ -19,12 +19,7 @@ async function main() {
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
-            launchArgs: [
-                workspacePath,
-                '--no-sandbox',
-                '--disable-gpu',
-                '--headless'
-            ],
+            launchArgs: [workspacePath, '--no-sandbox', '--disable-gpu', '--headless'],
             timeout: 120_000, // 2 minutes for version fetch / download
         });
     } catch (err) {

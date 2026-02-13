@@ -100,10 +100,50 @@ export class Config {
     }
 
     /**
+     * Validate and clamp a number to a specified range
+     */
+    private validateNumber(value: number, min: number, max: number, defaultValue: number): number {
+        if (typeof value !== 'number' || isNaN(value)) {
+            return defaultValue;
+        }
+        return Math.max(min, Math.min(max, value));
+    }
+
+    /**
+     * Validate an array of strings
+     */
+    private validateStringArray(value: unknown, defaultValue: string[]): string[] {
+        if (!Array.isArray(value)) {
+            return defaultValue;
+        }
+        return value.filter((item) => typeof item === 'string' && item.length > 0);
+    }
+
+    /**
+     * Validate a boolean value
+     */
+    private validateBoolean(value: unknown, defaultValue: boolean): boolean {
+        if (typeof value === 'boolean') {
+            return value;
+        }
+        return defaultValue;
+    }
+
+    /**
      * Get exclude patterns
      */
     getExcludePatterns(): string[] {
-        return this.get('excludePatterns', [
+        const value = this.get('excludePatterns', [
+            '**/node_modules/**',
+            '**/dist/**',
+            '**/out/**',
+            '**/.git/**',
+            '**/build/**',
+            '**/bin/**',
+            '**/obj/**',
+            '**/vendor/**',
+        ]);
+        return this.validateStringArray(value, [
             '**/node_modules/**',
             '**/dist/**',
             '**/out/**',
@@ -119,9 +159,9 @@ export class Config {
      * Get max results
      */
     getMaxResults(): number {
-        return this.get('maxResults', 20);
+        const value = this.get('maxResults', 20);
+        return this.validateNumber(value, 1, 1000, 20);
     }
-
 
     /**
      * Check if text search is enabled
@@ -148,7 +188,8 @@ export class Config {
      * Get search concurrency
      */
     getSearchConcurrency(): number {
-        return this.get('searchConcurrency', 60);
+        const value = this.get('searchConcurrency', 60);
+        return this.validateNumber(value, 1, 200, 60);
     }
 
     /**
@@ -162,14 +203,36 @@ export class Config {
      * Get activity weight (0-1)
      */
     getActivityWeight(): number {
-        return this.get('activity.weight', 0.3);
+        const value = this.get('activity.weight', 0.3);
+        return this.validateNumber(value, 0, 1, 0.3);
     }
 
     /**
      * Get file extensions to index
      */
     getFileExtensions(): string[] {
-        return this.get('fileExtensions', [
+        const value = this.get('fileExtensions', [
+            'ts',
+            'tsx',
+            'js',
+            'jsx',
+            'py',
+            'java',
+            'cs',
+            'cpp',
+            'c',
+            'h',
+            'go',
+            'rb',
+            'php',
+            'txt',
+            'md',
+            'json',
+            'xml',
+            'yaml',
+            'yml',
+        ]);
+        return this.validateStringArray(value, [
             'ts',
             'tsx',
             'js',

@@ -16,6 +16,7 @@ export class DeepLensLspClient implements ISearchProvider {
     private context: vscode.ExtensionContext;
     private isStopping = false;
     private startPromise: Promise<void> | undefined;
+    private disposables: vscode.Disposable[] = [];
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
         message?: string;
@@ -127,12 +128,19 @@ export class DeepLensLspClient implements ISearchProvider {
                     const message = value.message || 'Done';
                     this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
                     disposable.dispose();
+                    // Remove from tracked disposables
+                    const index = this.disposables.indexOf(disposable);
+                    if (index > -1) {
+                        this.disposables.splice(index, 1);
+                    }
                     return;
                 }
 
                 this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
             },
         );
+        // Track the disposable
+        this.disposables.push(disposable);
     }
 
     private getServerPath(): string {
@@ -280,6 +288,17 @@ export class DeepLensLspClient implements ISearchProvider {
             }
             this.client = undefined;
         }
+
+        // Dispose all tracked disposables
+        for (const disposable of this.disposables) {
+            try {
+                disposable.dispose();
+            } catch {
+                // Ignore disposal errors
+            }
+        }
+        this.disposables = [];
+
         this.onProgress.dispose();
         this.onStreamResult.dispose();
     }

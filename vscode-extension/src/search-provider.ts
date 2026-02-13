@@ -1417,14 +1417,14 @@ export class SearchProvider {
         const enableIcons = vscode.workspace.getConfiguration('deeplens').get('experimental.enableFileIcons', false);
 
         if (item.type === SearchItemType.FILE) {
-             if (enableIcons) {
-                 // Try to use native file icon via resourceUri (Proposed API)
-                 resourceUri = vscode.Uri.file(item.filePath);
-                 iconPath = vscode.ThemeIcon.File;
-             } else {
-                 // Fallback to standard file icon
-                 iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('symbolIcon.fileForeground'));
-             }
+            if (enableIcons) {
+                // Try to use native file icon via resourceUri (Proposed API)
+                resourceUri = vscode.Uri.file(item.filePath);
+                iconPath = vscode.ThemeIcon.File;
+            } else {
+                // Fallback to standard file icon
+                iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('symbolIcon.fileForeground'));
+            }
         } else {
             // Fallback to custom icon logic
             const icon = this.getIconForItemType(item.type);
@@ -1446,9 +1446,7 @@ export class SearchProvider {
         if (item.type === SearchItemType.FILE && this.isFileDirty(item.filePath)) {
             const indicator = '$(circle-filled)'; // VS Code unsaved indicator style
             // Add (Unsaved) text for accessibility and clarity
-            description = description
-                ? `${indicator} ${description} (Unsaved)`
-                : `${indicator} Unsaved`;
+            description = description ? `${indicator} ${description} (Unsaved)` : `${indicator} Unsaved`;
         }
 
         // Add file path and line number

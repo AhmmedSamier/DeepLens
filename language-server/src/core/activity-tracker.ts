@@ -350,11 +350,12 @@ export class ActivityTracker {
     /**
      * Dispose resources
      */
-    dispose(): void {
+    async dispose(): Promise<void> {
         if (this.saveTimer) {
             clearInterval(this.saveTimer);
+            this.saveTimer = undefined;
         }
-        // Final save before disposal
-        this.saveActivities();
+        // Final save before disposal - wait for completion
+        await this.saveActivities();
     }
 }
