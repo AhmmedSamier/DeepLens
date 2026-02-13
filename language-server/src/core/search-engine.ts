@@ -107,6 +107,9 @@ export class SearchEngine implements ISearchProvider {
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
 
+    // Map Normalized File Path -> Array of Item Indices (Reverse Index for O(1) lookup)
+    private fileToItemIndices: Map<string, number[]> = new Map();
+
     public itemsMap: Map<string, SearchableItem> = new Map();
     private fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
@@ -236,6 +239,15 @@ export class SearchEngine implements ISearchProvider {
             this.scopedIndices.set(scope, indices);
         }
         indices.push(globalIndex);
+
+        // Update file indices
+        const normalizedFilePath = this.normalizePath(item.filePath);
+        let fileIndices = this.fileToItemIndices.get(normalizedFilePath);
+        if (!fileIndices) {
+            fileIndices = [];
+            this.fileToItemIndices.set(normalizedFilePath, fileIndices);
+        }
+        fileIndices.push(globalIndex);
     }
 
     /**
@@ -297,6 +309,7 @@ export class SearchEngine implements ISearchProvider {
 
             // Rebuild scope indices
             this.rebuildScopeIndices();
+            this.rebuildFileIndices();
 
             // Periodic cache pruning
             this.removedSinceLastPrune++;
@@ -399,6 +412,21 @@ export class SearchEngine implements ISearchProvider {
         }
 
         this.rebuildScopeIndices();
+        this.rebuildFileIndices();
+    }
+
+    private rebuildFileIndices(): void {
+        this.fileToItemIndices.clear();
+        const count = this.items.length;
+        for (let i = 0; i < count; i++) {
+            const filePath = this.normalizePath(this.items[i].filePath);
+            let indices = this.fileToItemIndices.get(filePath);
+            if (!indices) {
+                indices = [];
+                this.fileToItemIndices.set(filePath, indices);
+            }
+            indices.push(i);
+        }
     }
 
     private getPrepared(text: string): Fuzzysort.Prepared {
@@ -476,6 +504,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.scopedIndices.clear();
+        this.fileToItemIndices.clear();
         this.preparedCache.clear();
         this.preparedLowCache.clear();
     }
@@ -723,14 +752,13 @@ export class SearchEngine implements ISearchProvider {
         if (!this.gitProvider) return [];
         const modifiedFiles = await this.gitProvider.getModifiedFiles();
         const indices: number[] = [];
-        const count = this.items.length;
 
-        console.error(`[SearchEngine] Checking ${count} items against ${modifiedFiles.size} modified files`);
-
-        for (let i = 0; i < count; i++) {
-            const filePath = this.normalizePath(this.items[i].filePath);
-            if (modifiedFiles.has(filePath)) {
-                indices.push(i);
+        for (const filePath of modifiedFiles) {
+            const itemIndices = this.fileToItemIndices.get(filePath);
+            if (itemIndices) {
+                for (const index of itemIndices) {
+                    indices.push(index);
+                }
             }
         }
         return indices;

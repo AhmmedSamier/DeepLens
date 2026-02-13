@@ -3,6 +3,7 @@ import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { runActivityBenchmarks } from './activity.bench';
 import { runEndpointBenchmarks } from './endpoint_search.bench';
 import { runIndexingBenchmark } from './indexing.bench';
+import { runModifiedFilesBenchmark } from './modified-files.bench';
 import { runParserBenchmarks } from './parser.bench';
 import { runRouteMatcherBenchmarks } from './route-matcher.bench';
 import { runSearchBenchmarks } from './search.bench';
@@ -12,6 +13,7 @@ import { saveBenchmarks } from './utils';
 async function main() {
     console.log('Starting DeepLens Benchmarks...\n');
 
+    await runModifiedFilesBenchmark();
     await runEndpointBenchmarks();
     await runSearchBenchmarks();
     await runRouteMatcherBenchmarks();
