@@ -1,4 +1,4 @@
-﻿# Agent Instructions for DeepLens
+# Agent Instructions for DeepLens
 
 This document provides essential information for AI agents working on the DeepLens repository. DeepLens is a multi-component project consisting of a VS Code extension, a Language Server, and a Visual Studio extension.
 
@@ -6,7 +6,7 @@ This document provides essential information for AI agents working on the DeepLe
 
 - **vscode-extension**: Main entry point for VS Code, handles UI, client-side logic, and VS Code API integration.
 - **language-server**: Core search engine and workspace indexing using Tree-sitter and ripgrep. It runs as a separate process.
-- **visual-studio-extension**: Visual Studio integration (separate C# codebase) that communicates with the same Language Server.
+- **visual-studio-extension**: Visual Studio 2026 integration (C# codebase) that communicates with the same Language Server.
 
 ## Build & Development Commands
 
@@ -29,7 +29,7 @@ bun run build          # Builds the server and indexer worker into dist/
 
 ## Linting & Formatting
 
-The project uses ESLint and Prettier (with 4-space indentation).
+The project uses ESLint and Prettier with 4-space indentation.
 
 ```bash
 # In either vscode-extension or language-server
@@ -51,7 +51,8 @@ bun test <file_path>   # Run a single test file (Recommended for focused work)
 VS Code tests run in a headless Electron instance.
 ```bash
 cd vscode-extension
-bun run test           # Run all integration tests (Requires compilation)
+bun run compile        # Ensure latest build is available
+bun run test           # Run all integration tests
 ```
 
 ## Code Style Guidelines
@@ -65,7 +66,7 @@ bun run test           # Run all integration tests (Requires compilation)
 ### 2. Naming Conventions
 - **Classes**: `PascalCase` (e.g., `SearchEngine`, `WorkspaceIndexer`, `DeepLensLspClient`).
 - **Interfaces/Types**: `PascalCase` (e.g., `SearchOptions`, `SearchResult`).
-- **Methods/Functions**: `camelCase` (e.g., `indexWorkspace`, `recordActivity`, `runIndexingWithProgress`).
+- **Methods/Functions**: `camelCase` (e.g., `indexWorkspace`, `recordActivity`).
 - **Variables/Properties**: `camelCase`.
 - **Enums**: `PascalCase` for the enum name and `SCREAMING_SNAKE_CASE` or `PascalCase` for members.
 - **Files**: `kebab-case.ts` for most files (e.g., `lsp-client.ts`, `search-provider.ts`).
@@ -102,15 +103,8 @@ bun run test           # Run all integration tests (Requires compilation)
 ## Core Logic & Workers
 
 - **Workspace Indexer**: Uses `indexer-worker.ts` via Node.js `worker_threads` to parse files in parallel without blocking the main LSP thread.
-- **Tree-sitter**: WASM-based parsers are loaded dynamically for each supported language. New languages must be added to both `tree-sitter-parser.ts` and the build scripts.
-- **Ripgrep**: Used as a fallback and for high-performance text search via the `@vscode/ripgrep` package.
-
-## Visual Studio Integration Details
-
-- Located in `visual-studio-extension/`.
-- Written in C# using the Visual Studio SDK.
-- Launches the same `language-server/dist/server.js` using `node` or `bun`.
-- Implements a custom Tool Window for the "Search Everywhere" UI.
+- **Tree-sitter**: WASM-based parsers are loaded dynamically. New languages must be added to `tree-sitter-parser.ts` and `scripts/setup-parsers.ts`.
+- **Ripgrep**: Used for high-performance text search via `@vscode/ripgrep`.
 
 ## Communication Protocol
 The extension and server communicate via custom LSP requests:
@@ -119,44 +113,15 @@ The extension and server communicate via custom LSP requests:
 - `deeplens/progress`: Server-to-client notifications for indexing progress.
 - `deeplens/indexStats`: Returns counts of files, symbols, and cache size.
 
-## Common Tasks & Patterns
-
-- **Adding a new language**:
-    1. Add the `tree-sitter-<lang>` dependency to `language-server/package.json`.
-    2. Update `scripts/setup-parsers.ts` to include the new WASM file.
-    3. Register the language in `tree-sitter-parser.ts`.
-    4. Update supported languages list in `vscode-extension/src/extension.ts`.
-
-- **Modifying Search Logic**:
-    - Most changes should happen in `language-server/src/core/search-engine.ts` or individual providers in `providers/`.
-
-## Environment & Tooling
-- **Node.js**: ^20.0.0
-- **Bun**: Latest version recommended (used for scripts, builds, and LS testing).
-- **TypeScript**: ^5.0.0.
-- **Tree-sitter**: Used for deep symbol analysis across multiple languages (C#, TS, JS, Python, Go, Java, etc.).
-
 ## Verification Checklist
-1. Run `bun run compile` in `vscode-extension` to verify that both the server and the extension build correctly.
+1. Run `bun run compile` in `vscode-extension` to verify both server and extension build correctly.
 2. If changing the search engine, run `bun run test` in `language-server`.
 3. Ensure no new `any` types are introduced.
 4. Verify that `Shift-Shift` still opens the search dialog after UI changes.
 
 ## Current Feature Context: File Icons in Search Results (001-file-icons-search)
-
 - **Goal**: Add VSCode-style file icons to search results.
-- **Tech Stack**: Uses `@vscode/codicons` for authentic icons.
 - **Implementation**:
-    - Frontend enhancement in `vscode-extension`.
-    - File type detection based on extensions (primary) and filename patterns (fallback).
-    - Icons loaded lazily to maintain search performance.
-- **Data Model**:
-    - `FileIcon`: Maps extensions to icon names/classes.
-    - `SearchResult`: Enhanced with icon metadata.
-- **Testing Strategy**:
-    - Component tests for `FileIcon` and `SearchResultItem`.
-    - Integration tests ensuring icons appear without performance regression.
-- **Key Constraints**:
-    - Must match VSCode explorer visual style.
-    - No significant impact on search result rendering time (<10% regression).
-    - Graceful fallback to text extension if icon fails to load.
+    - File type detection based on extensions and filename patterns.
+    - Icons loaded lazily via `@vscode/codicons`.
+- **Constraints**: Must match VSCode explorer visual style; no significant performance regression.
