@@ -125,6 +125,7 @@ export interface ISearchProvider {
     resolveItems?(itemIds: string[]): Promise<SearchResult[]> | SearchResult[];
     getRecentItems?(count: number): Promise<SearchResult[]> | SearchResult[];
     recordActivity?(itemId: string): Promise<void> | void;
+    getIndexStats?(): Promise<IndexStats | undefined>;
 }
 
 /**

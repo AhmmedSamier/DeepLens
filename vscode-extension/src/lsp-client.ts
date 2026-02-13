@@ -84,10 +84,13 @@ export class DeepLensLspClient implements ISearchProvider {
 
         this.client = new LanguageClient('deeplensLS', 'DeepLens Language Server', serverOptions, clientOptions);
 
-        // Handle server progress reporting early to avoid missing initial requests
-        this.client.onRequest('window/workDoneProgress/create', async (params: { token: string | number }) => {
-            this.handleProgressCreation(params);
-        });
+        // Handle server progress reporting via global notification
+        this.client.onNotification(
+            'deeplens/progress',
+            (params: { token: string | number; message?: string; percentage?: number }) => {
+                this.handleProgressNotification(params);
+            },
+        );
 
         // Handle streamed search results
         this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
@@ -105,42 +108,31 @@ export class DeepLensLspClient implements ISearchProvider {
         await this.client.start();
     }
 
-    private handleProgressCreation(params: { token: string | number }) {
-        this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
-        this.createProgressHandler(params.token.toString());
-    }
+    private activeProgressTokens = new Set<string>();
 
-    private createProgressHandler(token: string) {
-        const disposable = this.client!.onNotification(
-            'deeplens/progress',
-            (value: { token: string | number; message?: string; percentage?: number }) => {
-                if (String(value.token) !== token) {
-                    return;
-                }
+    private handleProgressNotification(params: { token: string | number; message?: string; percentage?: number }) {
+        const token = String(params.token);
 
-                const isFinished =
-                    value.percentage === 100 ||
-                    value.message?.startsWith('Done') ||
-                    value.message === 'Cancelled' ||
-                    value.message === 'Failed';
+        // If we haven't seen this token before, it's a new task
+        if (!this.activeProgressTokens.has(token)) {
+            this.activeProgressTokens.add(token);
+            this.onProgress.fire({ state: 'start', message: 'Indexing started...' });
+        }
 
-                if (isFinished) {
-                    const message = value.message || 'Done';
-                    this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
-                    disposable.dispose();
-                    // Remove from tracked disposables
-                    const index = this.disposables.indexOf(disposable);
-                    if (index > -1) {
-                        this.disposables.splice(index, 1);
-                    }
-                    return;
-                }
+        const isFinished =
+            params.percentage === 100 ||
+            params.message?.startsWith('Done') ||
+            params.message === 'Cancelled' ||
+            params.message === 'Failed';
 
-                this.onProgress.fire({ state: 'report', message: value.message, percentage: value.percentage });
-            },
-        );
-        // Track the disposable
-        this.disposables.push(disposable);
+        if (isFinished) {
+            const message = params.message || 'Done';
+            this.onProgress.fire({ state: 'end', message: message, percentage: 100 });
+            this.activeProgressTokens.delete(token);
+            return;
+        }
+
+        this.onProgress.fire({ state: 'report', message: params.message, percentage: params.percentage });
     }
 
     private getServerPath(): string {

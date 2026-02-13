@@ -26,6 +26,7 @@ export class SearchProvider {
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
     private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
     private lastQueryId = 0;
+    private lastAutoRebuildTime = 0;
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
     private streamingResults: Map<number, SearchResult[]> = new Map();
     private searchCts: vscode.CancellationTokenSource | undefined;
@@ -1100,18 +1101,18 @@ export class SearchProvider {
             return [];
         }
 
-        this.processSearchResults(quickPick, results, trimmedQuery, duration, queryId);
+        await this.processSearchResults(quickPick, results, trimmedQuery, duration, queryId);
 
         return results;
     }
 
-    private processSearchResults(
+    private async processSearchResults(
         quickPick: vscode.QuickPick<SearchResultItem>,
         results: SearchResult[],
         query: string,
         duration: number,
         queryId: number,
-    ): void {
+    ): Promise<void> {
         // Merge command results if command search is enabled/relevant
         if (this.currentScope === SearchScope.EVERYTHING || this.currentScope === SearchScope.COMMANDS) {
             if (this.commandIndexer) {
@@ -1134,13 +1135,45 @@ export class SearchProvider {
 
             // If we still have NO results at the end of Phase 2, then we clear the stale items (history)
             if (results.length === 0) {
-                quickPick.items = this.getEmptyStateItems(query);
-                this.updateTitle(quickPick, 0, duration);
+                // Check if index is empty and should be rebuilt
+                if (
+                    this.currentScope === SearchScope.EVERYTHING &&
+                    this.searchEngine.getIndexStats &&
+                    queryId === this.lastQueryId
+                ) {
+                    try {
+                        const stats = await this.searchEngine.getIndexStats();
+                        // Verify queryId is still valid after await
+                        if (queryId === this.lastQueryId && stats) {
+                            const isIndexEmpty = stats.totalItems === 0 && stats.totalFiles === 0;
+                            if (isIndexEmpty && !stats.indexing) {
+                                const now = Date.now();
+                                // Limit auto-rebuild to once every 60 seconds to avoid loops
+                                if (now - this.lastAutoRebuildTime > 60000) {
+                                    this.lastAutoRebuildTime = now;
+                                    vscode.window.showInformationMessage(
+                                        'DeepLens index is empty. Rebuilding automatically...',
+                                    );
+                                    vscode.commands.executeCommand('deeplens.rebuildIndex');
+                                }
+                            }
+                        }
+                    } catch (e) {
+                        console.error('Failed to check index stats:', e);
+                    }
+                }
+
+                if (queryId === this.lastQueryId) {
+                    quickPick.items = this.getEmptyStateItems(query);
+                    this.updateTitle(quickPick, 0, duration);
+                }
             } else {
                 quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
                 this.updateTitle(quickPick, results.length, duration);
             }
-            this.streamingResults.delete(queryId); // Done with streaming for this query
+            if (queryId === this.lastQueryId) {
+                this.streamingResults.delete(queryId); // Done with streaming for this query
+            }
         }
     }
 
