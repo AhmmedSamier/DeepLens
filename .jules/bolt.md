@@ -69,3 +69,7 @@
 ## 2025-05-24 - Pre-check String Length in CamelHumps
 **Learning:** Adding a simple integer length check (`queryLen <= capitals.length`) before calling `indexOf` in the CamelHumps hot loop yielded a ~25% speedup for non-matching queries (which are frequent). `indexOf` overhead is measurable even for short strings in tight loops.
 **Action:** Always validate length constraints before performing substring searches in hot loops.
+
+## 2026-01-29 - Manual Inlining in Bun (Corrected)
+**Learning:** Contrary to previous findings, manual inlining of `processIndex` logic into the `performUnifiedSearch` loop, combined with strict name bitflag checking (`itemNameBitflags`), yielded massive speedups in Bun (~40-60%). The overhead of capturing many variables in a closure (`items`, `preparedNames`, etc.) likely outweighed any JIT benefits of the closure.
+**Action:** Trust manual inlining for hot loops with heavy context capture, even in Bun.
