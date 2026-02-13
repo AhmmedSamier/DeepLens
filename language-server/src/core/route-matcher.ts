@@ -5,6 +5,7 @@ export interface PreparedPath {
     cleanPath: string;
     segments: string[];
     segmentsLower: string[];
+    method?: string;
 }
 
 export interface RoutePattern {
@@ -14,6 +15,7 @@ export interface RoutePattern {
     templateSegmentsLower: string[];
     // Optimization: Pre-calculated boolean array to avoid repeated string checks (startsWith/endsWith) in the hot loop
     isParameter: boolean[];
+    method?: string;
 }
 
 /**
@@ -30,12 +32,13 @@ export class RouteMatcher {
         // Strip method if present (e.g. "GET api/...")
         const methodMatch = concretePath.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
         const pathOnly = methodMatch ? methodMatch[2] : concretePath;
+        const method = methodMatch ? methodMatch[1].toUpperCase() : undefined;
 
         const cleanPath = pathOnly.trim().replace(/(^\/|\/$)/g, '');
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
         const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
         const segmentsLower = segments.map((s) => s.toLowerCase());
-        return { cleanPath, segments, segmentsLower };
+        return { cleanPath, segments, segmentsLower, method };
     }
 
     /**
@@ -134,8 +137,11 @@ export class RouteMatcher {
 
         // 1. Clean up inputs
         // Remove HTTP methods like "[GET] " or "[POST] "
+        const methodMatch = template.match(/^\[([A-Z]+)\]/);
+        const method = methodMatch ? methodMatch[1] : undefined;
+
         const cleanTemplate = template
-            .replace(/^\[[A-Z]+\]\s+/, '')
+            .replace(/^\[[A-Z]+\]\s*/, '')
             .trim()
             .replace(/(^\/|\/$)/g, '');
 
@@ -163,7 +169,7 @@ export class RouteMatcher {
             const templateSegmentsLower = templateSegments.map((s) => s.toLowerCase());
             const isParameter = templateSegments.map((s) => s.startsWith('{') && s.endsWith('}'));
 
-            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower, isParameter };
+            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower, isParameter, method };
 
             if (this.cache.size >= this.CACHE_LIMIT) {
                 // Simple LRU-like: remove the first inserted item

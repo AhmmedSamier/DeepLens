@@ -1461,25 +1461,21 @@ export class SearchEngine implements ISearchProvider {
                     if (pattern) {
                         const item = items[i];
                         if (item) {
-                            // Check if the query has a method prefix and if it matches the item's method
-                            const qText = typeof queryForUrlMatch === 'string' ? queryForUrlMatch : queryForUrlMatch.cleanPath;
-                            const qTrim = qText.trim();
-                            const methodMatch = qTrim.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
-                            
-                            let finalQueryForMatch = queryForUrlMatch;
+                            // Optimized: Use pre-calculated method from PreparedPath instead of repeated regex match
+                            let finalQueryForMatch: string | PreparedPath = queryForUrlMatch;
                             let methodScoreBoost = 0;
-                            
-                            if (methodMatch) {
-                                const qMethod = methodMatch[1].toUpperCase();
-                                const itemMethodMatch = item.name.match(/^\[([A-Z]+)\]/);
-                                if (itemMethodMatch) {
-                                    const itemMethod = itemMethodMatch[1];
+
+                            const qMethod = typeof queryForUrlMatch !== 'string' ? queryForUrlMatch.method : undefined;
+
+                            if (qMethod) {
+                                const itemMethod = pattern.method;
+                                if (itemMethod) {
                                     if (itemMethod.startsWith(qMethod) || qMethod.startsWith(itemMethod)) {
-                                        finalQueryForMatch = methodMatch[2];
                                         methodScoreBoost = 0.5;
+                                        // finalQueryForMatch remains queryForUrlMatch (PreparedPath)
                                     } else {
                                         // Method mismatch, skip specialized route matching
-                                        finalQueryForMatch = "";
+                                        finalQueryForMatch = '';
                                     }
                                 }
                             }
@@ -1634,25 +1630,21 @@ export class SearchEngine implements ISearchProvider {
                     if (pattern) {
                         const item = items[i];
                         if (item) {
-                            // Check if the query has a method prefix and if it matches the item's method
-                            const qText = typeof queryForUrlMatch === 'string' ? queryForUrlMatch : queryForUrlMatch.cleanPath;
-                            const qTrim = qText.trim();
-                            const methodMatch = qTrim.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
-                            
-                            let finalQueryForMatch = queryForUrlMatch;
+                            // Optimized: Use pre-calculated method from PreparedPath instead of repeated regex match
+                            let finalQueryForMatch: string | PreparedPath = queryForUrlMatch;
                             let methodScoreBoost = 0;
-                            
-                            if (methodMatch) {
-                                const qMethod = methodMatch[1].toUpperCase();
-                                const itemMethodMatch = item.name.match(/^\[([A-Z]+)\]/);
-                                if (itemMethodMatch) {
-                                    const itemMethod = itemMethodMatch[1];
+
+                            const qMethod = typeof queryForUrlMatch !== 'string' ? queryForUrlMatch.method : undefined;
+
+                            if (qMethod) {
+                                const itemMethod = pattern.method;
+                                if (itemMethod) {
                                     if (itemMethod.startsWith(qMethod) || qMethod.startsWith(itemMethod)) {
-                                        finalQueryForMatch = methodMatch[2];
                                         methodScoreBoost = 0.5;
+                                        // finalQueryForMatch remains queryForUrlMatch (PreparedPath)
                                     } else {
                                         // Method mismatch, skip specialized route matching
-                                        finalQueryForMatch = "";
+                                        finalQueryForMatch = '';
                                     }
                                 }
                             }
