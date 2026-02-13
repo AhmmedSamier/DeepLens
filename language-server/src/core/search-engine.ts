@@ -960,6 +960,7 @@ export class SearchEngine implements ISearchProvider {
 
                 const { newBuffer, newLineIndex } = this.processBufferLines(
                     content,
+                    0,
                     queryLower,
                     queryLength,
                     maxResults,
@@ -1000,7 +1001,8 @@ export class SearchEngine implements ISearchProvider {
                 highWaterMark: 64 * 1024, // 64KB chunks
             });
 
-            let buffer = '';
+            let chunkBuffer: string[] = [];
+            let bufferedLength = 0;
             let lineIndex = 0;
 
             stream.on('data', (chunk: string) => {
@@ -1010,11 +1012,54 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                buffer += chunk;
+                const newlineIndex = chunk.indexOf('\n');
 
-                // Process full lines
+                // Case 1: No newline in this chunk
+                if (newlineIndex === -1) {
+                    chunkBuffer.push(chunk);
+                    bufferedLength += chunk.length;
+
+                    // Safety: Discard buffer if it grows too large without finding a newline (minified file)
+                    if (bufferedLength > 100 * 1024) {
+                        chunkBuffer = [];
+                        bufferedLength = 0;
+                    }
+                    return;
+                }
+
+                // Case 2: Newline found
+                // Construct the first pending line from buffer + start of chunk
+                const firstPart = chunk.substring(0, newlineIndex);
+                const completeLine = chunkBuffer.length > 0 ? chunkBuffer.join('') + firstPart : firstPart;
+
+                // Clear buffer as we consumed it
+                chunkBuffer = [];
+                bufferedLength = 0;
+
+                // Process the first line
+                const hitLimitFirst = this.processSingleLine(
+                    completeLine,
+                    lineIndex,
+                    queryLower,
+                    queryLength,
+                    maxResults,
+                    results,
+                    pendingResults,
+                    fileItem,
+                );
+
+                lineIndex++;
+
+                if (hitLimitFirst) {
+                    stream.destroy();
+                    resolve();
+                    return;
+                }
+
+                // Process lines in the rest of chunk
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
-                    buffer,
+                    chunk,
+                    newlineIndex + 1,
                     queryLower,
                     queryLength,
                     maxResults,
@@ -1024,7 +1069,12 @@ export class SearchEngine implements ISearchProvider {
                     lineIndex,
                 );
 
-                buffer = newBuffer;
+                // Store remainder in buffer
+                if (newBuffer.length > 0) {
+                    chunkBuffer.push(newBuffer);
+                    bufferedLength += newBuffer.length;
+                }
+
                 lineIndex = newLineIndex;
 
                 if (hitLimit) {
@@ -1032,16 +1082,12 @@ export class SearchEngine implements ISearchProvider {
                     resolve();
                     return;
                 }
-
-                // Safety: Discard buffer if it grows too large without finding a newline (minified file)
-                if (buffer.length > 100 * 1024) {
-                    buffer = '';
-                }
             });
 
             stream.on('end', () => {
                 // Process last line if any
-                if (buffer.length > 0) {
+                if (chunkBuffer.length > 0) {
+                    const buffer = chunkBuffer.join('');
                     const matchIndex = buffer.toLowerCase().indexOf(queryLower);
                     if (matchIndex >= 0) {
                         const trimmedLine = buffer.trim();
@@ -1072,6 +1118,7 @@ export class SearchEngine implements ISearchProvider {
 
     private processBufferLines(
         buffer: string,
+        bufferOffset: number,
         queryLower: string,
         queryLength: number,
         maxResults: number,
@@ -1080,7 +1127,7 @@ export class SearchEngine implements ISearchProvider {
         fileItem: SearchableItem,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let lastIndex = 0;
+        let lastIndex = bufferOffset;
         let newlineIndex;
         let lineIndex = startLineIndex;
 
@@ -1089,36 +1136,20 @@ export class SearchEngine implements ISearchProvider {
             const line = buffer.slice(lastIndex, newlineIndex);
             lastIndex = newlineIndex + 1;
 
-            // Skip extremely long lines (minified code)
-            if (line.length > 10000) {
-                lineIndex++;
-                continue;
-            }
-
-            // Simple case insensitive check
-            const matchIndex = line.toLowerCase().indexOf(queryLower);
-
-            if (matchIndex >= 0) {
-                const trimmedLine = line.trim();
-                if (trimmedLine.length > 0) {
-                    const indentation = line.search(/\S|$/);
-                    const result = this.createSearchResult(
-                        fileItem,
-                        trimmedLine,
-                        lineIndex,
-                        matchIndex,
-                        queryLength,
-                        indentation,
-                    );
-
-                    results.push(result);
-                    pendingResults.push(result);
-                }
-            }
+            const hitLimit = this.processSingleLine(
+                line,
+                lineIndex,
+                queryLower,
+                queryLength,
+                maxResults,
+                results,
+                pendingResults,
+                fileItem,
+            );
 
             lineIndex++;
 
-            if (results.length >= maxResults) {
+            if (hitLimit) {
                 return { newBuffer: '', newLineIndex: lineIndex, hitLimit: true };
             }
         }
@@ -1126,6 +1157,45 @@ export class SearchEngine implements ISearchProvider {
         // Keep remainder
         const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
         return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+    }
+
+    private processSingleLine(
+        line: string,
+        lineIndex: number,
+        queryLower: string,
+        queryLength: number,
+        maxResults: number,
+        results: SearchResult[],
+        pendingResults: SearchResult[],
+        fileItem: SearchableItem,
+    ): boolean {
+        // Skip extremely long lines (minified code)
+        if (line.length > 10000) {
+            return false;
+        }
+
+        // Simple case insensitive check
+        const matchIndex = line.toLowerCase().indexOf(queryLower);
+
+        if (matchIndex >= 0) {
+            const trimmedLine = line.trim();
+            if (trimmedLine.length > 0) {
+                const indentation = line.search(/\S|$/);
+                const result = this.createSearchResult(
+                    fileItem,
+                    trimmedLine,
+                    lineIndex,
+                    matchIndex,
+                    queryLength,
+                    indentation,
+                );
+
+                results.push(result);
+                pendingResults.push(result);
+            }
+        }
+
+        return results.length >= maxResults;
     }
 
     private createSearchResult(
