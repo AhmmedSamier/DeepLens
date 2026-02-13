@@ -266,33 +266,41 @@ export class WorkspaceIndexer {
             return [];
         }
 
-        const results: string[] = [];
-        for (const folderPath of workspaceFolders) {
-            try {
-                // Get both tracked and untracked (but not ignored) files
-                const output = await this.execGit(
-                    ['ls-files', '--cached', '--others', '--exclude-standard'],
-                    folderPath,
-                );
+        const limit = pLimit(50); // Consistent with processFileList concurrency
 
-                const lines = output.split('\n');
+        const folderPromises = workspaceFolders.map((folderPath) =>
+            limit(async () => {
+                try {
+                    // Get both tracked and untracked (but not ignored) files
+                    const output = await this.execGit(
+                        ['ls-files', '--cached', '--others', '--exclude-standard'],
+                        folderPath,
+                    );
 
-                for (let line of lines) {
-                    line = line.trim();
-                    if (!line) {
-                        continue;
+                    const lines = output.split('\n');
+                    const folderResults: string[] = [];
+
+                    for (let line of lines) {
+                        line = line.trim();
+                        if (!line) {
+                            continue;
+                        }
+
+                        // Ensure we have a proper absolute path
+                        const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
+                        folderResults.push(this.intern(fullPath));
                     }
-
-                    // Ensure we have a proper absolute path
-                    const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
-                    results.push(this.intern(fullPath));
+                    return folderResults;
+                } catch (error) {
+                    // Not a git repo or git not installed
+                    console.debug(`Git file listing failed for ${folderPath}:`, error);
+                    return [];
                 }
-            } catch (error) {
-                // Not a git repo or git not installed
-                console.debug(`Git file listing failed for ${folderPath}:`, error);
-            }
-        }
-        return results;
+            }),
+        );
+
+        const allResults = await Promise.all(folderPromises);
+        return allResults.flat();
     }
 
     /**
