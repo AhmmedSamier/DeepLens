@@ -286,8 +286,11 @@ export class TreeSitterParser {
             this.detectCSharpEndpoint(node, filePath, items, containerName);
         }
 
-        for (let i = 0; i < node.childCount; i++) {
-            this.extractSymbols(node.child(i) as TreeSitterNode, filePath, items, langId, currentContainer);
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
+                this.extractSymbols(child, filePath, items, langId, currentContainer);
+            }
         }
     }
 
@@ -345,28 +348,30 @@ export class TreeSitterParser {
         }
 
         // Recursively search children for attribute lists
-        for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child) {
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
                 this.findAttributeListsRecursive(child, results, false);
             }
         }
     }
 
     private processAttributeList(node: TreeSitterNode, results: { method: string | null; route: string | null }): void {
-        for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (!child || !child.type.includes('attribute')) continue;
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
+                if (!child.type.includes('attribute')) continue;
 
-            const info = this.getHttpAttributeInfo(child);
-            if (!info) continue;
+                const info = this.getHttpAttributeInfo(child);
+                if (!info) continue;
 
-            if (info.method !== 'ROUTE') {
-                results.method = info.method;
-            }
-            const attrRoute = this.extractAttributeRoute(child);
-            if (attrRoute) {
-                results.route = attrRoute;
+                if (info.method !== 'ROUTE') {
+                    results.method = info.method;
+                }
+                const attrRoute = this.extractAttributeRoute(child);
+                if (attrRoute) {
+                    results.route = attrRoute;
+                }
             }
         }
     }
@@ -462,9 +467,9 @@ export class TreeSitterParser {
             return this.cleanCSharpString(node.text);
         }
 
-        for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child) {
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
                 const found = this.findFirstStringLiteral(child);
                 if (found) return found;
             }
@@ -520,18 +525,22 @@ export class TreeSitterParser {
     }
 
     private findChildByType(node: TreeSitterNode, type: string): TreeSitterNode | null {
-        for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child && child.type === type) return child;
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
+                if (child.type === type) return child;
+            }
         }
         return null;
     }
 
     private filterChildrenByType(node: TreeSitterNode, type: string): TreeSitterNode[] {
         const results: TreeSitterNode[] = [];
-        for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child && child.type === type) results.push(child);
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
+                if (child.type === type) results.push(child);
+            }
         }
         return results;
     }
@@ -614,9 +623,11 @@ export class TreeSitterParser {
         const nameChild = node.childForFieldName('name');
         if (nameChild) return nameChild;
 
-        for (let i = 0; i < node.childCount; i++) {
-            const child = node.child(i);
-            if (child && child.type === 'identifier') return child;
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
+                if (child.type === 'identifier') return child;
+            }
         }
         return null;
     }
