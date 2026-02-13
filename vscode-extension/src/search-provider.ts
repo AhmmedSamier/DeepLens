@@ -1264,11 +1264,29 @@ export class SearchProvider {
      */
     private resultToQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
-        const icon = this.getIconForItemType(item.type);
-        const iconColor = this.getIconColorForItemType(item.type);
 
-        // Create colored icon
-        const coloredIcon = new vscode.ThemeIcon(icon, iconColor);
+        let iconPath: vscode.ThemeIcon | vscode.Uri;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        let resourceUri: vscode.Uri | undefined;
+
+        // Check if experimental icons are enabled
+        const enableIcons = vscode.workspace.getConfiguration('deeplens').get('experimental.enableFileIcons', false);
+
+        if (item.type === SearchItemType.FILE) {
+             if (enableIcons) {
+                 // Try to use native file icon via resourceUri (Proposed API)
+                 resourceUri = vscode.Uri.file(item.filePath);
+                 iconPath = vscode.ThemeIcon.File;
+             } else {
+                 // Fallback to standard file icon
+                 iconPath = new vscode.ThemeIcon('file', new vscode.ThemeColor('symbolIcon.fileForeground'));
+             }
+        } else {
+            // Fallback to custom icon logic
+            const icon = this.getIconForItemType(item.type);
+            const iconColor = this.getIconColorForItemType(item.type);
+            iconPath = new vscode.ThemeIcon(icon, iconColor);
+        }
 
         // Don't add icon to label - iconPath will render it
         const label = item.name;
@@ -1335,7 +1353,8 @@ export class SearchProvider {
             label: label as any,
             description,
             detail,
-            iconPath: coloredIcon,
+            iconPath: iconPath,
+            resourceUri: resourceUri,
             alwaysShow: true, // Crucial: prevent VS Code from re-filtering our fuzzy results
             result,
             buttons: buttons,
@@ -1538,4 +1557,5 @@ export class SearchProvider {
  */
 interface SearchResultItem extends vscode.QuickPickItem {
     result: SearchResult;
+    resourceUri?: vscode.Uri;
 }
