@@ -2,7 +2,9 @@ import * as path from 'path';
 import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { runActivityBenchmarks } from './activity.bench';
 import { runEndpointBenchmarks } from './endpoint_search.bench';
+import { runGitProviderBenchmarks } from './git-provider.bench';
 import { runIndexingBenchmark } from './indexing.bench';
+import { runModifiedFilesBenchmark } from './modified-files.bench';
 import { runParserBenchmarks } from './parser.bench';
 import { runPruneCacheBenchmarks } from './prune_cache.bench';
 import { runRouteMatcherBenchmarks } from './route-matcher.bench';
@@ -13,6 +15,7 @@ import { saveBenchmarks } from './utils';
 async function main() {
     console.log('Starting DeepLens Benchmarks...\n');
 
+    await runModifiedFilesBenchmark();
     await runEndpointBenchmarks();
     await runSearchBenchmarks();
     await runRouteMatcherBenchmarks();
@@ -22,6 +25,7 @@ async function main() {
     await runActivityTrackerBenchmarks();
     await runActivityBenchmarks();
     await runPruneCacheBenchmarks();
+    await runGitProviderBenchmarks();
 
     console.log('Benchmarks completed.');
 

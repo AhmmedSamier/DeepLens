@@ -1,72 +1,77 @@
 [
   {
+    "name": "getIndicesForModifiedFiles (50k items, 100 modified)",
+    "avgMs": 0.12612047000000076,
+    "totalMs": 12.612047000000075
+  },
+  {
     "name": "Endpoint Search (Unified)",
-    "avgMs": 9.32605464,
-    "totalMs": 466.302732
+    "avgMs": 9.829751299999998,
+    "totalMs": 491.4875649999999
   },
   {
     "name": "Endpoint Search (Burst)",
-    "avgMs": 3.8308821999999987,
-    "totalMs": 191.54410999999993
+    "avgMs": 3.670695340000002,
+    "totalMs": 183.5347670000001
   },
   {
     "name": "Fuzzy Search 'File100'",
-    "avgMs": 2.856705649999999,
-    "totalMs": 285.6705649999999
+    "avgMs": 2.7613213999999973,
+    "totalMs": 276.1321399999997
   },
   {
     "name": "CamelHumps Search 'FCC'",
-    "avgMs": 2.673923739999998,
-    "totalMs": 267.3923739999998
+    "avgMs": 2.4545721000000005,
+    "totalMs": 245.45721000000003
   },
   {
     "name": "Non-matching Search 'Zebra'",
-    "avgMs": 0.09646994000000177,
-    "totalMs": 9.646994000000177
+    "avgMs": 0.09764364999999998,
+    "totalMs": 9.764364999999998
   },
   {
     "name": "Path-only Match 'src'",
-    "avgMs": 3.3871233400000005,
-    "totalMs": 338.71233400000006
+    "avgMs": 3.822234920000001,
+    "totalMs": 382.2234920000001
   },
   {
     "name": "Burst Search 'calc'",
-    "avgMs": 0.012427149999998619,
-    "totalMs": 1.242714999999862
+    "avgMs": 0.010893280000000232,
+    "totalMs": 1.0893280000000232
   },
   {
     "name": "Route Match Search 'api/v1/users'",
-    "avgMs": 43.37736693000001,
-    "totalMs": 4337.736693000001
+    "avgMs": 50.12522965,
+    "totalMs": 5012.522965
   },
   {
     "name": "Route Match Burst 'api/v1/users'",
-    "avgMs": 0.011789759999992384,
-    "totalMs": 1.1789759999992384
+    "avgMs": 0.014932760000010602,
+    "totalMs": 1.4932760000010603
   },
   {
     "name": "Parse 500-method TS Class",
-    "avgMs": 80.52283619999999,
-    "totalMs": 805.2283619999998
+    "avgMs": 89.54107969999987,
+    "totalMs": 895.4107969999986
   },
   {
     "name": "Text Search 100 files",
-    "avgMs": 1.281982700000026,
-    "totalMs": 12.81982700000026
+    "avgMs": 1.9119523999999728,
+    "totalMs": 19.11952399999973
   },
   {
     "name": "Index 1000 files",
-    "avgMs": 259.1948706666669,
-    "totalMs": 777.5846120000006
+    "avgMs": 187.6805933333338,
+    "totalMs": 563.0417800000014
   },
   {
     "name": "Record Access (N=5000)",
-    "avgMs": 0.004825660000024073,
-    "totalMs": 0.24128300000120362
+    "avgMs": 0.00617922000001272,
+    "totalMs": 0.308961000000636
   },
   {
     "name": "recalculateAllScores (N=5000)",
-    "avgMs": 0.6797612499999559,
-    "totalMs": 13.595224999999118
+    "avgMs": 0.6757161499999711,
+    "totalMs": 13.514322999999422
   }
 ]
