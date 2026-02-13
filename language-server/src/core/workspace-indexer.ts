@@ -789,18 +789,25 @@ export class WorkspaceIndexer {
         let processed = 0;
         let nextReportingPercentage = 0;
 
-        for (const fileItem of fileItems) {
-            await this.indexFileSymbols(fileItem.filePath);
-            processed++;
+        const CONCURRENCY = 50;
+        const limit = pLimit(CONCURRENCY);
 
-            if (progressCallback) {
-                const percentage = (processed / totalFiles) * 100;
-                if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                    progressCallback(`Indexing symbols... (${processed}/${totalFiles})`, percentage);
-                    nextReportingPercentage = percentage + 5;
-                }
-            }
-        }
+        await Promise.all(
+            fileItems.map((fileItem) =>
+                limit(async () => {
+                    await this.indexFileSymbols(fileItem.filePath);
+                    processed++;
+
+                    if (progressCallback) {
+                        const percentage = (processed / totalFiles) * 100;
+                        if (percentage >= nextReportingPercentage || processed === totalFiles) {
+                            progressCallback(`Indexing symbols... (${processed}/${totalFiles})`, percentage);
+                            nextReportingPercentage = percentage + 5;
+                        }
+                    }
+                }),
+            ),
+        );
     }
 
     private async indexFileSymbols(filePath: string): Promise<void> {
