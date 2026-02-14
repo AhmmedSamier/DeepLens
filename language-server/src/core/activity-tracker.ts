@@ -340,6 +340,16 @@ export class ActivityTracker {
     }
 
     /**
+     * Remove a specific item from activity history
+     */
+    async removeItem(itemId: string): Promise<void> {
+        if (this.activities.has(itemId)) {
+            this.activities.delete(itemId);
+            await this.saveActivities();
+        }
+    }
+
+    /**
      * Clear all activity data
      */
     async clearAll(): Promise<void> {

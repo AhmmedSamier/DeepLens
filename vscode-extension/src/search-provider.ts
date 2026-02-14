@@ -45,6 +45,7 @@ export class SearchProvider {
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Switch to Global Search (/all)';
     private readonly TOOLTIP_NATIVE_SEARCH = 'Search in Files (Native)';
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
+    private readonly TOOLTIP_REMOVE_HISTORY = 'Remove from History';
 
     // Tooltips for item buttons
     private readonly TOOLTIP_COPY_PATH = 'Copy Path';
@@ -498,6 +499,16 @@ export class SearchProvider {
             // Map results to QuickPick items
             const items = results.map((r) => this.resultToQuickPickItem(r));
 
+            // Add remove button to history items
+            const removeButton = {
+                iconPath: new vscode.ThemeIcon('close'),
+                tooltip: this.TOOLTIP_REMOVE_HISTORY,
+            };
+
+            for (const item of items) {
+                item.buttons = [...(item.buttons || []), removeButton];
+            }
+
             // Add Clear History item if we have tracking enabled
             if (this.activityTracker) {
                 items.push(this.getClearHistoryItem());
@@ -629,6 +640,12 @@ export class SearchProvider {
             } else if (e.button.tooltip === this.TOOLTIP_REVEAL) {
                 const uri = vscode.Uri.file(result.item.filePath);
                 vscode.commands.executeCommand('revealInExplorer', uri);
+            } else if (e.button.tooltip === this.TOOLTIP_REMOVE_HISTORY) {
+                if (this.activityTracker) {
+                    await this.activityTracker.removeItem(result.item.id);
+                    this.showFeedback('Item removed from history');
+                    await this.showRecentHistory(quickPick);
+                }
             } else if (e.button.tooltip === this.TOOLTIP_REBUILD_INDEX) {
                 vscode.commands.executeCommand('deeplens.rebuildIndex');
                 quickPick.hide();
@@ -1168,8 +1185,7 @@ export class SearchProvider {
         // Auto-select the best recovery action
         // Prioritize switching scope, then native search
         const bestAction = quickPick.items.find(
-            (i) =>
-                i.result.item.id === this.CMD_SWITCH_SCOPE || i.result.item.id === this.CMD_NATIVE_SEARCH,
+            (i) => i.result.item.id === this.CMD_SWITCH_SCOPE || i.result.item.id === this.CMD_NATIVE_SEARCH,
         );
 
         if (bestAction) {

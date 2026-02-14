@@ -53,4 +53,19 @@ describe('ActivityTracker', () => {
         expect(score1).toBeGreaterThan(score2);
         expect(score2).toBeGreaterThan(0);
     });
+
+    it('should remove item when removeItem is called', async () => {
+        const item = {
+            id: 'test-remove',
+            name: 'test.ts',
+            type: SearchItemType.FILE,
+            filePath: '/test.ts',
+        };
+
+        tracker.recordAccess(item);
+        expect(tracker.getActivityScore(item.id)).toBeGreaterThan(0);
+
+        await tracker.removeItem(item.id);
+        expect(tracker.getActivityScore(item.id)).toBe(0);
+    });
 });

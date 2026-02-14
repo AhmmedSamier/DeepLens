@@ -132,7 +132,6 @@ export class SearchEngine implements ISearchProvider {
         this.providers.sort((a, b) => (b.priority || 0) - (a.priority || 0));
     }
 
-
     /**
      * Set configuration
      */
@@ -211,7 +210,6 @@ export class SearchEngine implements ISearchProvider {
             }
         }
     }
-
 
     private processAddedItem(item: SearchableItem, globalIndex: number): void {
         this.itemsMap.set(item.id, item);
@@ -408,7 +406,6 @@ export class SearchEngine implements ISearchProvider {
         this.rebuildFileIndices();
     }
 
-
     private rebuildFileIndices(): void {
         this.fileToItemIndices.clear();
         const count = this.items.length;
@@ -551,7 +548,6 @@ export class SearchEngine implements ISearchProvider {
             enableCamelHumps: options.enableCamelHumps !== false,
             isPotentialUrl: RouteMatcher.isPotentialUrl(query),
         };
-
     }
 
     /**
@@ -623,7 +619,6 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
         const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
-
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -1419,7 +1414,6 @@ export class SearchEngine implements ISearchProvider {
                     }
                 }
 
-
                 let score = -Infinity;
 
                 // 1. CamelHumps Score (Inlined)
@@ -1490,7 +1484,6 @@ export class SearchEngine implements ISearchProvider {
 
                 let resultScope: SearchScope | undefined;
 
-
                 // 3. URL/Endpoint Match
                 if (isPotentialUrl && preparedQuery && typeId === 11 /* ENDPOINT */) {
                     const pattern = preparedPatterns[i];
@@ -1515,7 +1508,7 @@ export class SearchEngine implements ISearchProvider {
                                     }
                                 }
                             }
-                            
+
                             if (finalQueryForMatch) {
                                 const urlScore = RouteMatcher.scoreMatchPattern(pattern, finalQueryForMatch);
                                 if (urlScore > 0) {
@@ -1529,7 +1522,6 @@ export class SearchEngine implements ISearchProvider {
                         }
                     }
                 }
-
 
                 if (score > MIN_SCORE) {
                     if (resultScope === undefined) {
@@ -1557,7 +1549,6 @@ export class SearchEngine implements ISearchProvider {
                                 score,
                                 scope: resultScope,
                             });
-
                         }
                     }
                 }
@@ -1583,10 +1574,8 @@ export class SearchEngine implements ISearchProvider {
                     }
                 }
 
-
                 let score = -Infinity;
                 let highlights: number[][] | undefined;
-
 
                 // 1. CamelHumps Score (Inlined)
                 if (enableCamelHumps) {
@@ -1624,7 +1613,6 @@ export class SearchEngine implements ISearchProvider {
                                 fuzzyScore = s;
                             }
                         }
-
                     }
 
                     if (fuzzyScore < 0.9) {
@@ -1684,7 +1672,7 @@ export class SearchEngine implements ISearchProvider {
                                     }
                                 }
                             }
-                            
+
                             if (finalQueryForMatch) {
                                 const urlScore = RouteMatcher.scoreMatchPattern(pattern, finalQueryForMatch);
                                 if (urlScore > 0) {
@@ -1698,7 +1686,6 @@ export class SearchEngine implements ISearchProvider {
                         }
                     }
                 }
-
 
                 if (score > MIN_SCORE) {
                     if (resultScope === undefined) {
@@ -1726,7 +1713,6 @@ export class SearchEngine implements ISearchProvider {
                                 score,
                                 scope: resultScope,
                             });
-
                         }
                     }
                 }
@@ -1743,7 +1729,6 @@ export class SearchEngine implements ISearchProvider {
         }
         return -Infinity;
     }
-
 
     private computeActivityScore(itemId: string, currentScore: number, minScore: number): number {
         if (currentScore > minScore && this.getActivityScore) {
@@ -1847,7 +1832,6 @@ export class SearchEngine implements ISearchProvider {
         }
         return { newScore: currentScore, newScope: currentScope };
     }
-
 
     private applyActivityBoost(item: SearchableItem, currentScore: number): number {
         if (this.getActivityScore) {
@@ -2204,7 +2188,6 @@ export class SearchEngine implements ISearchProvider {
                 }
             }
         };
-
 
         if (indices) {
             for (const i of indices) {

@@ -477,7 +477,6 @@ export class WorkspaceIndexer {
         let nextReportingPercentage = 0;
         let logged100 = false;
 
-
         const workers = this.getWorkers();
         if (workers.length === 0) {
             this.log(`No indexing workers available. Falling back to main thread.`);
@@ -629,7 +628,6 @@ export class WorkspaceIndexer {
                         }
                     }
                 };
-
 
                 worker.on('message', onMessage);
                 cleanupListeners.push(() => worker.removeListener('message', onMessage));

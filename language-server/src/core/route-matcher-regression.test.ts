@@ -5,11 +5,11 @@ describe('RouteMatcher Regression Tests', () => {
     it('should match correctly when query includes a method prefix and parameters', () => {
         const template = 'api/AdminDashboard/companies/{companyId}';
         const queryWithMethod = 'get api/AdminDashboard/companies/20';
-        
+
         // This was failing because the method 'get' was being treated as part of the first segment
         const score = RouteMatcher.scoreMatch(template, queryWithMethod);
         expect(score).toBeGreaterThan(0);
-        
+
         // Exact count match should have a high score
         expect(score).toBeGreaterThan(2.0);
     });

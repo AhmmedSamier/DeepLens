@@ -93,7 +93,7 @@ connection.onInitialize(async (params: InitializeParams) => {
     if (params.processId) {
         parentProcessMonitor = setInterval(() => {
             try {
-// kill(pid, 0) checks if process exists without killing it
+                // kill(pid, 0) checks if process exists without killing it
                 process.kill(params.processId as number, 0);
             } catch {
                 // Parent process is gone - clean up interval before exit
@@ -281,10 +281,10 @@ async function runIndexingWithProgress(force: boolean = false): Promise<void> {
             workspaceIndexer.resetCaches();
         }
 
-try {
+        try {
             const startTime = Date.now();
             let currentPercentage = 0;
-            
+
             // Enhanced progress callback with phase-specific messages
             await workspaceIndexer.indexWorkspace((message, increment) => {
                 if (increment) {
@@ -295,7 +295,7 @@ try {
                 if (!isShuttingDown) {
                     // Enhance message with phase context
                     let enhancedMessage = message;
-                    
+
                     // Add phase-specific context for better visual feedback
                     if (message.includes('Step 1/4')) {
                         enhancedMessage = '📊 Scanning repository structure...';
@@ -316,11 +316,11 @@ try {
                     } else if (message.includes('Fast-scanning workspace symbols')) {
                         enhancedMessage = '⚡ Fast-scanning workspace symbols...';
                     }
-                    
-                    connection.sendNotification('deeplens/progress', { 
-                        token, 
-                        message: enhancedMessage, 
-                        percentage 
+
+                    connection.sendNotification('deeplens/progress', {
+                        token,
+                        message: enhancedMessage,
+                        percentage,
                     });
                 }
             });

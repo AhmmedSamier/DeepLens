@@ -215,7 +215,7 @@ export class RouteMatcher {
                 if (!pSeg) return 0;
             } else {
                 if (isLast && tSegLower.startsWith(pSegLower)) {
-                    score += (tSegLower === pSegLower ? 0.1 : 0.05);
+                    score += tSegLower === pSegLower ? 0.1 : 0.05;
                 } else if (tSegLower === pSegLower) {
                     score += 0.1;
                 } else {
@@ -232,7 +232,7 @@ export class RouteMatcher {
     static isPotentialUrl(query: string): boolean {
         const q = query.trim();
         if (q.includes('/') && !q.includes(' ') && q.length > 2) return true;
-        
+
         // Match "get api/..." or "post /api/..."
         const methodMatch = q.match(/^(get|post|put|delete|patch|options|head|trace)\s+[/\w]/i);
         return !!methodMatch;

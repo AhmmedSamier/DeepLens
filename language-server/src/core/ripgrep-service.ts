@@ -49,7 +49,6 @@ export class RipgrepService {
             }
             if (this.rgPath) break;
         }
-
     }
 
     isAvailable(): boolean {
