@@ -70,7 +70,8 @@ export class WorkspaceIndexer {
             return this.workers;
         }
 
-        const workerCount = Math.max(1, os.cpus().length - 1);
+        // Cap workers at 8 to prevent OOM on many-core machines, especially with WASM overhead
+        const workerCount = Math.min(8, Math.max(1, os.cpus().length - 1));
 
         // Try to find the worker script in multiple locations
         // We prioritize .js because Node.js (VS Code) cannot run .ts directly in workers
@@ -477,7 +478,6 @@ export class WorkspaceIndexer {
         let nextReportingPercentage = 0;
         let logged100 = false;
 
-
         const workers = this.getWorkers();
         if (workers.length === 0) {
             this.log(`No indexing workers available. Falling back to main thread.`);
@@ -629,7 +629,6 @@ export class WorkspaceIndexer {
                         }
                     }
                 };
-
 
                 worker.on('message', onMessage);
                 cleanupListeners.push(() => worker.removeListener('message', onMessage));
