@@ -33,8 +33,10 @@ export class TreeSitterParser {
     private isInitialized: boolean = false;
     private languages: Map<string, unknown> = new Map();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private parser: any;
-    private currentLanguage: string = '';
+    private ParserClass: any = undefined;
+    private lib: TreeSitterLib | undefined = undefined;
+    private extensionPath: string = '';
+    private logger: Logger | undefined = undefined;
 
     constructor(extensionPath: string, logger?: Logger) {
         this.extensionPath = extensionPath;
@@ -89,7 +91,6 @@ export class TreeSitterParser {
             throw new Error('Parser class not found');
         }
 
-        this.parser = new this.ParserClass();
         this.isInitialized = true;
     }
 
@@ -153,16 +154,13 @@ export class TreeSitterParser {
         try {
             this.logDebugStart(langId, filePath);
 
-            if (this.currentLanguage !== langId) {
-                this.parser.setLanguage(lang);
-                this.currentLanguage = langId;
-            }
-
+            const parser = new this.ParserClass();
+            parser.setLanguage(lang);
             const content = await fs.promises.readFile(filePath, 'utf8');
-            const tree = this.parser.parse(content);
+            const tree = parser.parse(content);
             const items: SearchableItem[] = [];
 
-            this.extractSymbolsIterative(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
+            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
 
             this.logDebugEnd(langId, filePath, items, tree);
 
@@ -245,58 +243,53 @@ export class TreeSitterParser {
         }
     }
 
-    private extractSymbolsIterative(
-        rootNode: TreeSitterNode,
+    private extractSymbols(
+        node: TreeSitterNode,
         filePath: string,
         items: SearchableItem[],
         langId: string,
+        containerName?: string,
     ): void {
-        const stack: { node: TreeSitterNode; container?: string }[] = [{ node: rootNode }];
+        const type = this.getSearchItemType(node.type, langId);
+        let currentContainer = containerName;
 
-        while (stack.length > 0) {
-            const { node, container } = stack.pop()!;
-            const type = this.getSearchItemType(node.type, langId);
-            let currentContainer = container;
+        if (type) {
+            const nameNode = this.getNameNode(node);
+            if (nameNode) {
+                const name = nameNode.text;
+                const fullName = containerName ? `${containerName}.${name}` : name;
 
-            if (type) {
-                const nameNode = this.getNameNode(node);
-                if (nameNode) {
-                    const name = nameNode.text;
-                    const fullName = container ? `${container}.${name}` : name;
+                items.push({
+                    id: `ts:${filePath}:${fullName}:${node.startPosition.row}`,
+                    name: name,
+                    type: type,
+                    filePath: filePath,
+                    line: node.startPosition.row,
+                    column: node.startPosition.column,
+                    containerName: containerName,
+                    fullName: fullName,
+                });
 
-                    items.push({
-                        id: `ts:${filePath}:${fullName}:${node.startPosition.row}`,
-                        name: name,
-                        type: type,
-                        filePath: filePath,
-                        line: node.startPosition.row,
-                        column: node.startPosition.column,
-                        containerName: container,
-                        fullName: fullName,
-                    });
-
-                    // If it's a type (class/interface/enum), it becomes the container for children
-                    if (
-                        type === SearchItemType.CLASS ||
-                        type === SearchItemType.INTERFACE ||
-                        type === SearchItemType.ENUM
-                    ) {
-                        currentContainer = fullName;
-                    }
+                // If it's a type (class/interface/enum), it becomes the container for children
+                if (
+                    type === SearchItemType.CLASS ||
+                    type === SearchItemType.INTERFACE ||
+                    type === SearchItemType.ENUM
+                ) {
+                    currentContainer = fullName;
                 }
             }
+        }
 
-            // C# Endpoint detection
-            if (langId === 'csharp') {
-                this.detectCSharpEndpoint(node, filePath, items, container);
-            }
+        // C# Endpoint detection
+        if (langId === 'csharp') {
+            this.detectCSharpEndpoint(node, filePath, items, containerName);
+        }
 
-            // Push children in reverse order to process them in forward order
-            const children = node.children;
-            if (children) {
-                for (let i = children.length - 1; i >= 0; i--) {
-                    stack.push({ node: children[i], container: currentContainer });
-                }
+        const children = node.children;
+        if (children) {
+            for (const child of children) {
+                this.extractSymbols(child, filePath, items, langId, currentContainer);
             }
         }
     }

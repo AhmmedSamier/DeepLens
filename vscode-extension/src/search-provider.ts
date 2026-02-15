@@ -45,6 +45,7 @@ export class SearchProvider {
     private readonly TOOLTIP_SEARCH_EVERYWHERE = 'Switch to Global Search (/all)';
     private readonly TOOLTIP_NATIVE_SEARCH = 'Search in Files (Native)';
     private readonly LABEL_CLEAR_HISTORY = 'Clear Recent History';
+    private readonly TOOLTIP_REMOVE_HISTORY = 'Remove from History';
 
     // Tooltips for item buttons
     private readonly TOOLTIP_COPY_PATH = 'Copy Path';
@@ -498,6 +499,16 @@ export class SearchProvider {
             // Map results to QuickPick items
             const items = results.map((r) => this.resultToQuickPickItem(r));
 
+            // Add remove button to history items
+            const removeButton = {
+                iconPath: new vscode.ThemeIcon('close'),
+                tooltip: this.TOOLTIP_REMOVE_HISTORY,
+            };
+
+            for (const item of items) {
+                item.buttons = [...(item.buttons || []), removeButton];
+            }
+
             // Add Clear History item if we have tracking enabled
             if (this.activityTracker) {
                 items.push(this.getClearHistoryItem());
@@ -629,6 +640,12 @@ export class SearchProvider {
             } else if (e.button.tooltip === this.TOOLTIP_REVEAL) {
                 const uri = vscode.Uri.file(result.item.filePath);
                 vscode.commands.executeCommand('revealInExplorer', uri);
+            } else if (e.button.tooltip === this.TOOLTIP_REMOVE_HISTORY) {
+                if (this.activityTracker) {
+                    await this.activityTracker.removeItem(result.item.id);
+                    this.showFeedback('Item removed from history');
+                    await this.showRecentHistory(quickPick);
+                }
             } else if (e.button.tooltip === this.TOOLTIP_REBUILD_INDEX) {
                 vscode.commands.executeCommand('deeplens.rebuildIndex');
                 quickPick.hide();
@@ -1489,10 +1506,9 @@ export class SearchProvider {
                     iconPath: vscode.ThemeIcon.File,
                 };
             } else {
-                // Fallback to specific codicon based on extension
-                const icon = this.getFileIcon(item.filePath);
+                // Fallback to standard file icon
                 return {
-                    iconPath: new vscode.ThemeIcon(icon, new vscode.ThemeColor('symbolIcon.fileForeground')),
+                    iconPath: new vscode.ThemeIcon('file', new vscode.ThemeColor('symbolIcon.fileForeground')),
                 };
             }
         }
@@ -1640,92 +1656,6 @@ export class SearchProvider {
             default:
                 return undefined;
         }
-    }
-
-    /**
-     * Get specific codicon for file type based on extension or filename
-     */
-    private getFileIcon(filePath: string): string {
-        const fileName = filePath.split(/[/\\]/).pop()?.toLowerCase() || '';
-        const extension = fileName.includes('.') ? fileName.split('.').pop() : '';
-
-        // Files without extensions but specific names
-        if (['makefile', 'dockerfile', 'jenkinsfile', 'vagrantfile'].includes(fileName)) {
-            return 'file-code';
-        }
-        if (['license', 'copying', 'notice'].includes(fileName)) {
-            return 'file-text';
-        }
-
-        // Group by category to ensure we use valid built-in codicons
-        const codeExtensions = [
-            'ts',
-            'tsx',
-            'js',
-            'jsx',
-            'cs',
-            'cpp',
-            'cxx',
-            'cc',
-            'c',
-            'h',
-            'hpp',
-            'go',
-            'rs',
-            'php',
-            'py',
-            'rb',
-            'java',
-            'html',
-            'htm',
-            'css',
-            'scss',
-            'less',
-            'sql',
-            'sh',
-            'bat',
-            'ps1',
-            'json',
-            'jsonc',
-            'yml',
-            'yaml',
-            'toml',
-            'swift',
-            'kt',
-            'scala',
-            'xml',
-            'xsl',
-            'xsd',
-        ];
-
-        const mediaExtensions = ['png', 'jpg', 'jpeg', 'gif', 'svg', 'ico', 'bmp', 'tiff', 'webp'];
-        const zipExtensions = ['zip', 'gz', 'tar', '7z', 'rar', 'bz2', 'xz'];
-
-        if (codeExtensions.includes(extension || '')) {
-            return 'file-code';
-        }
-        if (mediaExtensions.includes(extension || '')) {
-            return 'file-media';
-        }
-        if (zipExtensions.includes(extension || '')) {
-            return 'file-zip';
-        }
-        if (extension === 'md' || extension === 'markdown') {
-            return 'markdown';
-        }
-        if (extension === 'pdf') {
-            return 'file-pdf';
-        }
-        if (['txt', 'log', 'csv', 'tsv', 'ini', 'conf'].includes(extension || '')) {
-            return 'file-text';
-        }
-
-        // Git related
-        if (fileName.startsWith('.git') || filePath.includes('.git/')) {
-            return 'git-source-control';
-        }
-
-        return 'file'; // Generic fallback for everything else
     }
 
     /**

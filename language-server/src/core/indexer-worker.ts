@@ -50,7 +50,6 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
             });
         }
     } catch (error) {
-
         parentPort?.postMessage({
             type: 'error',
             error: error instanceof Error ? error.message : String(error),

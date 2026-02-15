@@ -23,7 +23,7 @@ describe('SearchEngine Performance', () => {
             name: 'test.ts',
             type: SearchItemType.FILE,
             filePath: '/test.ts',
-            relativeFilePath: 'test.ts'
+            relativeFilePath: 'test.ts',
         };
 
         engine.setItems([fileItem]);

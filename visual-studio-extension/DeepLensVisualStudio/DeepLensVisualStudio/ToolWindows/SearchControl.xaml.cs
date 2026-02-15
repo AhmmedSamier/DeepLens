@@ -3,10 +3,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Runtime.CompilerServices;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -58,8 +55,6 @@ namespace DeepLensVisualStudio.ToolWindows
         public string FilePath { get; set; } = "";
         public string RelativePath { get; set; } = "";
         public int Line { get; set; }
-        public int? Column { get; set; }
-        public int[][]? Highlights { get; set; }
         public string ContainerName { get; set; } = "";
 
         public ICommand? OpenToSideCommand { get; set; }
@@ -70,18 +65,6 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get
             {
-                // For files, try to get file-specific icon if enabled
-                if (Kind.ToLowerInvariant() == "file" && !string.IsNullOrEmpty(FilePath))
-                {
-                    var settings = new DeepLensSettings();
-                    if (settings.EnableFileIcons)
-                    {
-                        // Use file extension to determine icon
-                        var ext = System.IO.Path.GetExtension(FilePath).TrimStart('.').ToLowerInvariant();
-                        return GetFileIconByExtension(ext);
-                    }
-                }
-
                 // Match VSCode extension icons using exact codicon Unicode values
                 // Source: https://github.com/microsoft/vscode-codicons/blob/main/src/template/mapping.json
                 switch (Kind.ToLowerInvariant())
@@ -106,31 +89,6 @@ namespace DeepLensVisualStudio.ToolWindows
                     default: return "\uEB63"; // symbol-misc (60259 = 0xEB63)
                 }
             }
-        }
-
-        private string GetFileIconByExtension(string extension)
-        {
-            // Map common file extensions to codicon icons
-            return extension switch
-            {
-                "cs" => "\uEB28", // csharp
-                "ts" or "tsx" => "\uEB2F", // typescript
-                "js" or "jsx" => "\uEB28", // javascript
-                "py" => "\uEB2F", // python
-                "java" => "\uEB28", // java
-                "go" => "\uEB28", // go
-                "cpp" or "cxx" or "cc" or "c" or "h" or "hpp" => "\uEB28", // cpp
-                "rb" => "\uEB28", // ruby
-                "php" => "\uEB28", // php
-                "json" => "\uEB26", // json
-                "xml" => "\uEB28", // xml
-                "html" or "htm" => "\uEB28", // html
-                "css" => "\uEB28", // css
-                "md" or "markdown" => "\uEB28", // markdown
-                "txt" => "\uEB28", // text
-                "yml" or "yaml" => "\uEB28", // yaml
-                _ => "\uEA7B" // default file icon
-            };
         }
 
         public string DirectoryPath
@@ -183,11 +141,7 @@ namespace DeepLensVisualStudio.ToolWindows
         public static LspSearchService? SharedSearchService => _sharedSearchService;
         private readonly HistoryService _historyService;
         private readonly SlashCommandService _slashCommandService;
-        private readonly CommandIndexer _commandIndexer;
         private CancellationTokenSource? _searchCts;
-        private System.Threading.Timer? _previewTimer;
-        private SearchResultViewModel? _lastPreviewedItem;
-        private bool _userHasNavigated;
         private string _searchQuery = "";
         private string _statusText = "Ready";
         private string _indexingStatusText = "";
@@ -457,14 +411,7 @@ namespace DeepLensVisualStudio.ToolWindows
 
             _historyService = new HistoryService();
             _slashCommandService = new SlashCommandService();
-            _commandIndexer = new CommandIndexer();
             GetLspService().OnProgress += OnLspProgress;
-            
-            // Index commands in background
-            _ = Task.Run(async () =>
-            {
-                await _commandIndexer.IndexCommandsAsync();
-            });
 
             OpenCommand = new RelayCommand(p =>
             {
@@ -483,7 +430,6 @@ namespace DeepLensVisualStudio.ToolWindows
             ResultsList.PreviewMouseLeftButtonUp += OnResultSingleClick;
             ResultsList.KeyDown += OnResultsKeyDown;
             ResultsList.MouseDoubleClick += OnResultsDoubleClick;
-            ResultsList.SelectionChanged += OnResultsSelectionChanged;
         }
 
         private void OnLspProgress(ProgressInfo info)
@@ -707,45 +653,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
             }
 
-            // Reset navigation tracking when query changes
-            _userHasNavigated = false;
-            _lastPreviewedItem = null;
-            _previewTimer?.Dispose();
-            _previewTimer = null;
-
             var query = SearchQuery?.Trim() ?? "";
-
-            // Handle /cmd or > prefix for Visual Studio commands
-            if (query.StartsWith("/cmd ", StringComparison.OrdinalIgnoreCase) || 
-                query.StartsWith("/commands ", StringComparison.OrdinalIgnoreCase) ||
-                query.StartsWith(">", StringComparison.OrdinalIgnoreCase))
-            {
-                Results.Clear();
-                string searchQuery = query;
-                if (query.StartsWith("/cmd ", StringComparison.OrdinalIgnoreCase))
-                    searchQuery = query.Substring(5);
-                else if (query.StartsWith("/commands ", StringComparison.OrdinalIgnoreCase))
-                    searchQuery = query.Substring(10);
-                else if (query.StartsWith(">"))
-                    searchQuery = query.Substring(1);
-
-                var commandResults = _commandIndexer.SearchCommands(searchQuery.Trim());
-                foreach (var cmd in commandResults)
-                {
-                    Results.Add(new SearchResultViewModel
-                    {
-                        Name = cmd.Name,
-                        Kind = "Command",
-                        ContainerName = cmd.Id,
-                        FilePath = "",
-                        RelativePath = "",
-                        Line = 0
-                    });
-                }
-                OnPropertyChanged(nameof(ResultCountText));
-                StatusText = commandResults.Any() ? $"{commandResults.Count()} commands found" : "No commands found";
-                return;
-            }
 
             // Check for slash commands first
             if (query.StartsWith("/") || query.StartsWith("#") || query.StartsWith(">"))
@@ -811,35 +719,17 @@ namespace DeepLensVisualStudio.ToolWindows
                     if (Results.Count == 0)
                     {
                         var history = _historyService.GetHistory();
-                        if (history.Any())
+                        foreach (var item in history)
                         {
-                            foreach (var item in history)
-                            {
-                                Results.Add(new SearchResultViewModel
-                                {
-                                    Name = item.Name,
-                                    Kind = item.Kind,
-                                    FilePath = item.FilePath,
-                                    RelativePath = item.RelativePath,
-                                    Line = item.Line,
-                                    ContainerName = item.ContainerName
-                                });
-                            }
-                            // Add Clear History item
                             Results.Add(new SearchResultViewModel
                             {
-                                Name = "Clear Recent History",
-                                Kind = "Command",
-                                FilePath = "",
-                                RelativePath = "",
-                                Line = 0,
-                                ContainerName = "clear-history"
+                                Name = item.Name,
+                                Kind = item.Kind,
+                                FilePath = item.FilePath,
+                                RelativePath = item.RelativePath,
+                                Line = item.Line,
+                                ContainerName = item.ContainerName
                             });
-                        }
-                        else
-                        {
-                            // Show welcome items
-                            ShowWelcomeItems();
                         }
                     }
                     StatusText = Results.Count > 0 ? "Recent items" : "Ready";
@@ -872,19 +762,6 @@ namespace DeepLensVisualStudio.ToolWindows
                 else if (FilterSymbols) scope = "symbols";
                 else if (FilterTypes) scope = "types";
                 else if (FilterText) scope = "text";
-                
-                // Handle /open and /modified scopes
-                if (query.StartsWith("/open ", StringComparison.OrdinalIgnoreCase) || 
-                    query.StartsWith("/o ", StringComparison.OrdinalIgnoreCase))
-                {
-                    scope = "open";
-                }
-                else if (query.StartsWith("/modified ", StringComparison.OrdinalIgnoreCase) || 
-                         query.StartsWith("/m ", StringComparison.OrdinalIgnoreCase) ||
-                         query.StartsWith("/git ", StringComparison.OrdinalIgnoreCase))
-                {
-                    scope = "modified";
-                }
 
                 var searchResults = await _sharedSearchService.SearchAsync(query, scope, token);
 
@@ -908,8 +785,6 @@ namespace DeepLensVisualStudio.ToolWindows
                         FilePath = result.FilePath,
                         RelativePath = relative,
                         Line = result.Line,
-                        Column = result.Column,
-                        Highlights = result.Highlights,
                         ContainerName = result.ContainerName,
                     };
 
@@ -1009,7 +884,7 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             ThreadHelper.ThrowIfNotOnUIThread();
 
-            if (string.IsNullOrEmpty(result.FilePath) || result.Kind == "Command" || result == _lastPreviewedItem)
+            if (string.IsNullOrEmpty(result.FilePath) || result.Kind == "Command")
                 return;
 
             try
@@ -1034,41 +909,10 @@ namespace DeepLensVisualStudio.ToolWindows
                         var textView = VsShellUtilities.GetTextView(frame);
                         if (textView != null)
                         {
-                            // Clear previous highlights
-                            MatchHighlighter.Instance.ClearHighlights(textView);
-
                             textView.SetCaretPos(result.Line - 1, 0);
                             textView.SetSelection(result.Line - 1, 0, result.Line - 1, 0);
                             textView.CenterLines(result.Line - 1, 1);
-
-                            // Highlight matches
-                            if (result.Highlights != null && result.Highlights.Length > 0)
-                            {
-                                foreach (var highlight in result.Highlights)
-                                {
-                                    if (highlight.Length >= 2)
-                                    {
-                                        int start = highlight[0];
-                                        int end = highlight[1];
-                                        MatchHighlighter.Instance.HighlightMatch(textView, result.Line - 1, start, end - start);
-                                    }
-                                }
-                            }
-                            else if (result.Column.HasValue)
-                            {
-                                // Highlight the name if we have column but no specific highlights
-                                int length = result.Name.Length;
-                                MatchHighlighter.Instance.HighlightMatch(textView, result.Line - 1, result.Column.Value, length);
-                            }
-                            else
-                            {
-                                // Fallback: Highlight whole line or just name at start?
-                                // Let's just highlight the name at column 0 if column missing
-                                // MatchHighlighter.Instance.HighlightMatch(textView, result.Line - 1, 0, result.Name.Length);
-                            }
                         }
-                        
-                        _lastPreviewedItem = result;
                     }
                 }
             }
@@ -1078,9 +922,9 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
-        private async void NavigateToResult(SearchResultViewModel result)
+        private void NavigateToResult(SearchResultViewModel result)
         {
-            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+            ThreadHelper.ThrowIfNotOnUIThread();
 
             if (result.Kind == "Command")
             {
@@ -1090,34 +934,6 @@ namespace DeepLensVisualStudio.ToolWindows
 
             try
             {
-                // Handle command execution
-                if (result.Kind == "Command" && !string.IsNullOrEmpty(result.ContainerName))
-                {
-                    if (result.ContainerName == "clear-history")
-                    {
-                        // Show confirmation dialog
-                        var result2 = System.Windows.MessageBox.Show(
-                            "Are you sure you want to clear recent history? This cannot be undone.",
-                            "Clear History",
-                            System.Windows.MessageBoxButton.YesNo,
-                            System.Windows.MessageBoxImage.Question);
-                        
-                        if (result2 == System.Windows.MessageBoxResult.Yes)
-                        {
-                            _historyService.ClearAll();
-                            StatusText = "Recent history cleared";
-                            // Refresh to show welcome items
-                            SearchQuery = "";
-                            _ = PerformSearchAsync();
-                        }
-                        return;
-                    }
-                    
-                    await _commandIndexer.ExecuteCommandAsync(result.ContainerName);
-                    StatusText = $"Executed: {result.Name}";
-                    return;
-                }
-
                 if (string.IsNullOrEmpty(result.FilePath))
                     return;
 
@@ -1217,62 +1033,6 @@ namespace DeepLensVisualStudio.ToolWindows
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
-        private void ShowWelcomeItems()
-        {
-            Results.Clear();
-            
-            // Add welcome items with tips
-            var welcomeItems = new[]
-            {
-                new SearchResultViewModel { Name = "Quick Start Tips", Kind = "Info", FilePath = "", RelativePath = "", Line = 0, ContainerName = "" },
-                new SearchResultViewModel { Name = "/t ClassName - Find classes and types", Kind = "Tip", FilePath = "", RelativePath = "", Line = 0, ContainerName = "" },
-                new SearchResultViewModel { Name = "/s methodName - Find methods and symbols", Kind = "Tip", FilePath = "", RelativePath = "", Line = 0, ContainerName = "" },
-                new SearchResultViewModel { Name = "/f fileName - Find files", Kind = "Tip", FilePath = "", RelativePath = "", Line = 0, ContainerName = "" },
-                new SearchResultViewModel { Name = "/txt searchText - Full text search", Kind = "Tip", FilePath = "", RelativePath = "", Line = 0, ContainerName = "" },
-                new SearchResultViewModel { Name = "/cmd commandName - Execute VS commands", Kind = "Tip", FilePath = "", RelativePath = "", Line = 0, ContainerName = "" },
-            };
-            
-            foreach (var item in welcomeItems)
-            {
-                Results.Add(item);
-            }
-            
-            StatusText = "Type to search or use slash commands";
-        }
-
-        private void OnResultsSelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            // Only preview if user has actively navigated (not initial selection)
-            if (!_userHasNavigated && ResultsList.SelectedItem != null)
-            {
-                _userHasNavigated = true;
-            }
-
-            if (_userHasNavigated && ResultsList.SelectedItem is SearchResultViewModel selectedItem)
-            {
-                // Don't preview commands or tips
-                if (selectedItem.Kind == "Command" || selectedItem.Kind == "Tip" || selectedItem.Kind == "Info")
-                {
-                    return;
-                }
-
-                // Cancel previous preview timer
-                _previewTimer?.Dispose();
-
-                // Debounce preview with 150ms delay
-                _previewTimer = new Timer(_ =>
-                {
-                    ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-                    {
-                        await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                        PreviewResult(selectedItem);
-                    });
-                }, null, 150, Timeout.Infinite);
-            }
-        }
-
-
-
         private void ExecuteSlashCommand(string commandName)
         {
             var cmd = _slashCommandService.GetCommand(commandName);
@@ -1338,7 +1098,6 @@ namespace DeepLensVisualStudio.ToolWindows
                     case "/commands":
                     case "/action":
                     case "/run":
-                        // Commands will be searched via CommandIndexer
                         FilterAll = true;
                         break;
                 }

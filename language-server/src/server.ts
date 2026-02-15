@@ -60,10 +60,8 @@ export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchRe
     'deeplens/getRecentItems',
 );
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
-export const RebuildIndexRequest = new RequestType<{ force: boolean }, { success: boolean }, void>(
-    'deeplens/rebuildIndex',
-);
-export const ClearCacheRequest = new RequestType0<{ success: boolean }, void>('deeplens/clearCache');
+export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
+export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
 export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
 export const SetActiveFilesRequest = new RequestType<{ files: string[] }, void, void>('deeplens/setActiveFiles');
 
@@ -488,25 +486,14 @@ connection.onRequest(RecordActivityRequest, (params) => {
 });
 
 connection.onRequest(RebuildIndexRequest, async (params) => {
-    if (isShuttingDown) return { success: false };
-
-    // Start indexing in the background and return immediately to avoid RPC timeouts
-    runIndexingWithProgress(params?.force ?? false).catch((error) => {
-        connection.console.error(`Background indexing failed: ${error}`);
-    });
-
-    return { success: true };
+    if (isShuttingDown) return;
+    await runIndexingWithProgress(params?.force ?? false);
 });
 
 connection.onRequest(ClearCacheRequest, async () => {
-    if (isShuttingDown) return { success: false };
+    if (isShuttingDown) return;
     if (activityTracker) await activityTracker.clearAll();
-
-    runIndexingWithProgress(true).catch((error) => {
-        connection.console.error(`Background cache-clear indexing failed: ${error}`);
-    });
-
-    return { success: true };
+    await runIndexingWithProgress();
 });
 
 connection.onRequest(IndexStatsRequest, async () => {

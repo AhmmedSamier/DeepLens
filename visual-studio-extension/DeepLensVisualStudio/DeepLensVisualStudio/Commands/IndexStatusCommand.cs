@@ -71,85 +71,26 @@ namespace DeepLensVisualStudio.Commands
                     statusMessage = "DeepLens Index Status\n\n📊 Index status not available";
                 }
 
-                // Show options dialog with custom buttons
-                var dialog = new System.Windows.Window
-                {
-                    Title = "DeepLens Index Statistics & Actions",
-                    Width = 400,
-                    Height = 300,
-                    WindowStartupLocation = System.Windows.WindowStartupLocation.CenterOwner,
-                    ResizeMode = System.Windows.ResizeMode.NoResize
-                };
+                // Show options dialog
+                var result = System.Windows.MessageBox.Show(
+                    statusMessage + "\n\n" +
+                    "Would you like to rebuild the index?\n\n" +
+                    "• Yes - Rebuild Index\n" +
+                    "• No - Clear Cache\n" +
+                    "• Cancel - Close",
+                    "DeepLens Index Statistics & Actions",
+                    System.Windows.MessageBoxButton.YesNoCancel,
+                    System.Windows.MessageBoxImage.Information);
 
-                var stackPanel = new System.Windows.Controls.StackPanel
+                switch (result)
                 {
-                    Margin = new System.Windows.Thickness(20)
-                };
-
-                var textBlock = new System.Windows.Controls.TextBlock
-                {
-                    Text = statusMessage,
-                    Margin = new System.Windows.Thickness(0, 0, 0, 20),
-                    TextWrapping = System.Windows.TextWrapping.Wrap
-                };
-                stackPanel.Children.Add(textBlock);
-
-                var rebuildButton = new System.Windows.Controls.Button
-                {
-                    Content = "Rebuild Index",
-                    Margin = new System.Windows.Thickness(0, 0, 0, 10),
-                    Padding = new System.Windows.Thickness(10, 5, 10, 5)
-                };
-                rebuildButton.Click += async (s, e) =>
-                {
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                    await RebuildIndexAsync(searchService);
-                };
-                stackPanel.Children.Add(rebuildButton);
-
-                var clearCacheButton = new System.Windows.Controls.Button
-                {
-                    Content = "Clear Cache",
-                    Margin = new System.Windows.Thickness(0, 0, 0, 10),
-                    Padding = new System.Windows.Thickness(10, 5, 10, 5)
-                };
-                clearCacheButton.Click += async (s, e) =>
-                {
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                    await ClearCacheAsync(searchService);
-                };
-                stackPanel.Children.Add(clearCacheButton);
-
-                var settingsButton = new System.Windows.Controls.Button
-                {
-                    Content = "Open Settings",
-                    Margin = new System.Windows.Thickness(0, 0, 0, 10),
-                    Padding = new System.Windows.Thickness(10, 5, 10, 5)
-                };
-                settingsButton.Click += (s, e) =>
-                {
-                    dialog.DialogResult = true;
-                    dialog.Close();
-                    OpenSettings();
-                };
-                stackPanel.Children.Add(settingsButton);
-
-                var cancelButton = new System.Windows.Controls.Button
-                {
-                    Content = "Close",
-                    Padding = new System.Windows.Thickness(10, 5, 10, 5)
-                };
-                cancelButton.Click += (s, e) =>
-                {
-                    dialog.DialogResult = false;
-                    dialog.Close();
-                };
-                stackPanel.Children.Add(cancelButton);
-
-                dialog.Content = stackPanel;
-                dialog.ShowDialog();
+                    case System.Windows.MessageBoxResult.Yes:
+                        await RebuildIndexAsync(searchService);
+                        break;
+                    case System.Windows.MessageBoxResult.No:
+                        await ClearCacheAsync(searchService);
+                        break;
+                }
             }
             catch (Exception ex)
             {
@@ -223,23 +164,6 @@ namespace DeepLensVisualStudio.Commands
             catch (Exception ex)
             {
                 Debug.WriteLine($"DeepLens: Error showing status bar message: {ex.Message}");
-            }
-        }
-
-        private void OpenSettings()
-        {
-            try
-            {
-                ThreadHelper.ThrowIfNotOnUIThread();
-                var dte = Package.GetGlobalService(typeof(SDTE)) as EnvDTE.DTE;
-                if (dte != null)
-                {
-                    dte.ExecuteCommand("Tools.Options", "DeepLens\\General");
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DeepLens: Error opening settings: {ex.Message}");
             }
         }
     }
