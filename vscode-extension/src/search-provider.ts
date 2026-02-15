@@ -1135,37 +1135,10 @@ export class SearchProvider {
 
             // If we still have NO results at the end of Phase 2, then we clear the stale items (history)
             if (results.length === 0) {
-                // Check if index is empty and should be rebuilt
-                if (
-                    this.currentScope === SearchScope.EVERYTHING &&
-                    this.searchEngine.getIndexStats &&
-                    queryId === this.lastQueryId
-                ) {
-                    try {
-                        const stats = await this.searchEngine.getIndexStats();
-                        // Verify queryId is still valid after await
-                        if (queryId === this.lastQueryId && stats) {
-                            const isIndexEmpty = stats.totalItems === 0 && stats.totalFiles === 0;
-                            if (isIndexEmpty && !stats.indexing) {
-                                const now = Date.now();
-                                // Limit auto-rebuild to once every 60 seconds to avoid loops
-                                if (now - this.lastAutoRebuildTime > 60000) {
-                                    this.lastAutoRebuildTime = now;
-                                    vscode.window.showInformationMessage(
-                                        'DeepLens index is empty. Rebuilding automatically...',
-                                    );
-                                    vscode.commands.executeCommand('deeplens.rebuildIndex');
-                                }
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Failed to check index stats:', e);
-                    }
-                }
+                await this.checkEmptyIndex(queryId);
 
                 if (queryId === this.lastQueryId) {
-                    quickPick.items = this.getEmptyStateItems(query);
-                    this.updateTitle(quickPick, 0, duration);
+                    this.handleEmptyStateDisplay(quickPick, query, duration);
                 }
             } else {
                 quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
@@ -1174,6 +1147,71 @@ export class SearchProvider {
             if (queryId === this.lastQueryId) {
                 this.streamingResults.delete(queryId); // Done with streaming for this query
             }
+        }
+    }
+
+    /**
+     * Handle empty state display and auto-selection
+     */
+    private handleEmptyStateDisplay(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        query: string,
+        duration: number,
+    ): void {
+        quickPick.items = this.getEmptyStateItems(query);
+
+        // Update title explicitly for empty state
+        // This ensures screen readers announce "No results found" immediately
+        const durationText = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+        quickPick.title = `DeepLens - No results found — Search took ${durationText}`;
+
+        // Auto-select the best recovery action
+        // Prioritize switching scope, then native search
+        const bestAction = quickPick.items.find(
+            (i) => i.result.item.id === this.CMD_SWITCH_SCOPE || i.result.item.id === this.CMD_NATIVE_SEARCH,
+        );
+
+        if (bestAction) {
+            quickPick.activeItems = [bestAction];
+        }
+    }
+
+    /**
+     * Check if index is empty and rebuild if necessary
+     */
+    private async checkEmptyIndex(queryId: number): Promise<void> {
+        // Only run for EVERYTHING scope and if searchEngine supports getIndexStats
+        if (
+            this.currentScope !== SearchScope.EVERYTHING ||
+            !this.searchEngine.getIndexStats ||
+            queryId !== this.lastQueryId
+        ) {
+            return;
+        }
+
+        try {
+            const stats = await this.searchEngine.getIndexStats();
+            // Verify queryId is still valid after await
+            if (queryId !== this.lastQueryId || !stats) {
+                return;
+            }
+
+            const isIndexEmpty = stats.totalItems === 0 && stats.totalFiles === 0;
+            if (isIndexEmpty && !stats.indexing) {
+                this.triggerAutoRebuild();
+            }
+        } catch (e) {
+            console.error('Failed to check index stats:', e);
+        }
+    }
+
+    private triggerAutoRebuild(): void {
+        const now = Date.now();
+        // Limit auto-rebuild to once every 60 seconds to avoid loops
+        if (now - this.lastAutoRebuildTime > 60000) {
+            this.lastAutoRebuildTime = now;
+            vscode.window.showInformationMessage('DeepLens index is empty. Rebuilding automatically...');
+            vscode.commands.executeCommand('deeplens.rebuildIndex');
         }
     }
 
@@ -1437,34 +1475,43 @@ export class SearchProvider {
     }
 
     /**
-     * Convert search result to QuickPick item
+     * Get icon and resource URI for item
      */
-    private resultToQuickPickItem(result: SearchResult): SearchResultItem {
-        const { item } = result;
-
-        let iconPath: vscode.ThemeIcon | vscode.Uri;
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        let resourceUri: vscode.Uri | undefined;
-
+    private getItemIcon(item: SearchableItem): { iconPath: vscode.ThemeIcon | vscode.Uri; resourceUri?: vscode.Uri } {
         // Check if experimental icons are enabled
         const enableIcons = vscode.workspace.getConfiguration('deeplens').get('experimental.enableFileIcons', false);
 
         if (item.type === SearchItemType.FILE) {
             if (enableIcons) {
                 // Try to use native file icon via resourceUri (Proposed API)
-                resourceUri = vscode.Uri.file(item.filePath);
-                iconPath = vscode.ThemeIcon.File;
+                return {
+                    resourceUri: vscode.Uri.file(item.filePath),
+                    iconPath: vscode.ThemeIcon.File,
+                };
             } else {
                 // Fallback to specific codicon based on extension
                 const icon = this.getFileIcon(item.filePath);
-                iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('symbolIcon.fileForeground'));
+                return {
+                    iconPath: new vscode.ThemeIcon(icon, new vscode.ThemeColor('symbolIcon.fileForeground')),
+                };
             }
-        } else {
-            // Fallback to custom icon logic
-            const icon = this.getIconForItemType(item.type);
-            const iconColor = this.getIconColorForItemType(item.type);
-            iconPath = new vscode.ThemeIcon(icon, iconColor);
         }
+
+        // Fallback to custom icon logic
+        const icon = this.getIconForItemType(item.type);
+        const iconColor = this.getIconColorForItemType(item.type);
+        return {
+            iconPath: new vscode.ThemeIcon(icon, iconColor),
+        };
+    }
+
+    /**
+     * Convert search result to QuickPick item
+     */
+    private resultToQuickPickItem(result: SearchResult): SearchResultItem {
+        const { item } = result;
+
+        const { iconPath, resourceUri } = this.getItemIcon(item);
 
         // Don't add icon to label - iconPath will render it
         const label = item.name;

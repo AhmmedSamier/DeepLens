@@ -887,7 +887,6 @@ export class SearchEngine implements ISearchProvider {
         this.logger?.log(`--- Starting LSP Text Search (Streaming): "${query}" ---`);
         const startTime = Date.now();
         const results: SearchResult[] = [];
-        const queryLower = query.toLowerCase();
 
         // Fallback: Node.js Stream Search
         // We still need fileItems for the fallback implementation
@@ -945,7 +944,7 @@ export class SearchEngine implements ISearchProvider {
 
                         await this.scanFileStream(
                             fileItem,
-                            queryLower,
+                            query,
                             query.length,
                             maxResults,
                             results,
@@ -982,7 +981,7 @@ export class SearchEngine implements ISearchProvider {
 
     private async scanFileStream(
         fileItem: SearchableItem,
-        queryLower: string,
+        query: string,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -990,7 +989,7 @@ export class SearchEngine implements ISearchProvider {
         fileSize?: number,
         token?: CancellationToken,
     ): Promise<void> {
-        // Optimization: For small files, readFile is significantly faster than createReadStream (Journal 2026-01-28)
+        // Optimization: For small files, readFile is significantly faster than createReadStream
         if (fileSize !== undefined && fileSize < 50 * 1024) {
             try {
                 const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
@@ -999,7 +998,7 @@ export class SearchEngine implements ISearchProvider {
                 const { newBuffer, newLineIndex } = this.processBufferLines(
                     content,
                     0,
-                    queryLower,
+                    query,
                     queryLength,
                     maxResults,
                     results,
@@ -1009,8 +1008,10 @@ export class SearchEngine implements ISearchProvider {
                 );
 
                 if (newBuffer.length > 0) {
-                    const matchIndex = newBuffer.toLowerCase().indexOf(queryLower);
-                    if (matchIndex >= 0) {
+                    const regex = new RegExp(escapeRegExp(query), 'i');
+                    const match = regex.exec(newBuffer);
+                    if (match) {
+                        const matchIndex = match.index;
                         const trimmedLine = newBuffer.trim();
                         if (trimmedLine.length > 0) {
                             const indentation = newBuffer.search(/\S|$/);
@@ -1029,7 +1030,7 @@ export class SearchEngine implements ISearchProvider {
                 }
                 return;
             } catch {
-                // Fallback to stream if readFile fails (unlikely if stat succeeded, but safe)
+                // Fallback to stream
             }
         }
 
@@ -1052,12 +1053,10 @@ export class SearchEngine implements ISearchProvider {
 
                 const newlineIndex = chunk.indexOf('\n');
 
-                // Case 1: No newline in this chunk
                 if (newlineIndex === -1) {
                     chunkBuffer.push(chunk);
                     bufferedLength += chunk.length;
 
-                    // Safety: Discard buffer if it grows too large without finding a newline (minified file)
                     if (bufferedLength > 100 * 1024) {
                         chunkBuffer = [];
                         bufferedLength = 0;
@@ -1065,40 +1064,40 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                // Case 2: Newline found
-                // Construct the first pending line from buffer + start of chunk
                 const firstPart = chunk.substring(0, newlineIndex);
                 const completeLine = chunkBuffer.length > 0 ? chunkBuffer.join('') + firstPart : firstPart;
 
-                // Clear buffer as we consumed it
                 chunkBuffer = [];
                 bufferedLength = 0;
 
-                // Process the first line
-                const hitLimitFirst = this.processSingleLine(
-                    completeLine,
-                    lineIndex,
-                    queryLower,
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
-                );
+                // Process first line (legacy way or update to new way?)
+                // Since this is a reconstructed line, we treat it as a single line buffer
+                const regex = new RegExp(escapeRegExp(query), 'i');
+                const match = regex.exec(completeLine);
+                if (match) {
+                    const hitLimit = this.processSingleLine(
+                        completeLine,
+                        lineIndex,
+                        match.index,
+                        queryLength,
+                        maxResults,
+                        results,
+                        pendingResults,
+                        fileItem,
+                    );
+                    if (hitLimit) {
+                        stream.destroy();
+                        resolve();
+                        return;
+                    }
+                }
 
                 lineIndex++;
 
-                if (hitLimitFirst) {
-                    stream.destroy();
-                    resolve();
-                    return;
-                }
-
-                // Process lines in the rest of chunk
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     chunk,
                     newlineIndex + 1,
-                    queryLower,
+                    query,
                     queryLength,
                     maxResults,
                     results,
@@ -1107,7 +1106,6 @@ export class SearchEngine implements ISearchProvider {
                     lineIndex,
                 );
 
-                // Store remainder in buffer
                 if (newBuffer.length > 0) {
                     chunkBuffer.push(newBuffer);
                     bufferedLength += newBuffer.length;
@@ -1123,11 +1121,11 @@ export class SearchEngine implements ISearchProvider {
             });
 
             stream.on('end', () => {
-                // Process last line if any
                 if (chunkBuffer.length > 0) {
                     const buffer = chunkBuffer.join('');
-                    const matchIndex = buffer.toLowerCase().indexOf(queryLower);
-                    if (matchIndex >= 0) {
+                    const regex = new RegExp(escapeRegExp(query), 'i');
+                    const match = regex.exec(buffer);
+                    if (match) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
                             const indentation = buffer.search(/\S|$/);
@@ -1135,7 +1133,7 @@ export class SearchEngine implements ISearchProvider {
                                 fileItem,
                                 trimmedLine,
                                 lineIndex,
-                                matchIndex,
+                                match.index,
                                 queryLength,
                                 indentation,
                             );
@@ -1148,7 +1146,6 @@ export class SearchEngine implements ISearchProvider {
             });
 
             stream.on('error', () => {
-                // Ignore error, just resolve
                 resolve();
             });
         });
@@ -1157,7 +1154,7 @@ export class SearchEngine implements ISearchProvider {
     private processBufferLines(
         buffer: string,
         bufferOffset: number,
-        queryLower: string,
+        query: string,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -1165,31 +1162,75 @@ export class SearchEngine implements ISearchProvider {
         fileItem: SearchableItem,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
+        // Optimization: Scan buffer for matches using RegExp first
+        // avoiding repeated toLowerCase() allocations for every line
+        const regex = new RegExp(escapeRegExp(query), 'gi');
+        const matches: number[] = [];
+        let m;
+
+        // If bufferOffset > 0, we are scanning a slice effectively, but regex runs on string from start?
+        // buffer argument is the FULL string chunk passed to this function.
+        // But we should only look at matches AFTER bufferOffset.
+        // regex.lastIndex works if we use 'g'.
+        regex.lastIndex = bufferOffset;
+        while ((m = regex.exec(buffer)) !== null) {
+            matches.push(m.index);
+        }
+
+        // Fast path: No matches in this chunk
+        if (matches.length === 0) {
+            let lastIndex = bufferOffset;
+            let newlineIndex;
+            let lineIndex = startLineIndex;
+            while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
+                lastIndex = newlineIndex + 1;
+                lineIndex++;
+            }
+            const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
+            return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+        }
+
+        let currentMatchIdx = 0;
         let lastIndex = bufferOffset;
         let newlineIndex;
         let lineIndex = startLineIndex;
 
         while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            // Optimized: Avoid slicing buffer repeatedly. Only slice the line we need.
-            const line = buffer.slice(lastIndex, newlineIndex);
-            lastIndex = newlineIndex + 1;
-
-            const hitLimit = this.processSingleLine(
-                line,
-                lineIndex,
-                queryLower,
-                queryLength,
-                maxResults,
-                results,
-                pendingResults,
-                fileItem,
-            );
-
-            lineIndex++;
-
-            if (hitLimit) {
-                return { newBuffer: '', newLineIndex: lineIndex, hitLimit: true };
+            // Check if we have matches in [lastIndex, newlineIndex)
+            // Skip matches that are before lastIndex (shouldn't happen if we consume correctly)
+            while (currentMatchIdx < matches.length && matches[currentMatchIdx] < lastIndex) {
+                currentMatchIdx++;
             }
+
+            if (currentMatchIdx < matches.length && matches[currentMatchIdx] < newlineIndex) {
+                // Found a match in this line!
+                const matchIndex = matches[currentMatchIdx];
+                const line = buffer.slice(lastIndex, newlineIndex);
+
+                // Only process once per line
+                const hitLimit = this.processSingleLine(
+                    line,
+                    lineIndex,
+                    matchIndex - lastIndex, // Relative match index
+                    queryLength,
+                    maxResults,
+                    results,
+                    pendingResults,
+                    fileItem,
+                );
+
+                if (hitLimit) {
+                    return { newBuffer: '', newLineIndex: lineIndex + 1, hitLimit: true };
+                }
+
+                // Skip all other matches in this line
+                while (currentMatchIdx < matches.length && matches[currentMatchIdx] < newlineIndex) {
+                    currentMatchIdx++;
+                }
+            }
+
+            lastIndex = newlineIndex + 1;
+            lineIndex++;
         }
 
         // Keep remainder
@@ -1200,7 +1241,7 @@ export class SearchEngine implements ISearchProvider {
     private processSingleLine(
         line: string,
         lineIndex: number,
-        queryLower: string,
+        matchIndexInLine: number,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -1212,25 +1253,20 @@ export class SearchEngine implements ISearchProvider {
             return false;
         }
 
-        // Simple case insensitive check
-        const matchIndex = line.toLowerCase().indexOf(queryLower);
+        const trimmedLine = line.trim();
+        if (trimmedLine.length > 0) {
+            const indentation = line.search(/\S|$/);
+            const result = this.createSearchResult(
+                fileItem,
+                trimmedLine,
+                lineIndex,
+                matchIndexInLine,
+                queryLength,
+                indentation,
+            );
 
-        if (matchIndex >= 0) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.length > 0) {
-                const indentation = line.search(/\S|$/);
-                const result = this.createSearchResult(
-                    fileItem,
-                    trimmedLine,
-                    lineIndex,
-                    matchIndex,
-                    queryLength,
-                    indentation,
-                );
-
-                results.push(result);
-                pendingResults.push(result);
-            }
+            results.push(result);
+            pendingResults.push(result);
         }
 
         return results.length >= maxResults;
@@ -1461,25 +1497,21 @@ export class SearchEngine implements ISearchProvider {
                     if (pattern) {
                         const item = items[i];
                         if (item) {
-                            // Check if the query has a method prefix and if it matches the item's method
-                            const qText = typeof queryForUrlMatch === 'string' ? queryForUrlMatch : queryForUrlMatch.cleanPath;
-                            const qTrim = qText.trim();
-                            const methodMatch = qTrim.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
-                            
-                            let finalQueryForMatch = queryForUrlMatch;
+                            // Optimized: Use pre-calculated method from PreparedPath instead of repeated regex match
+                            let finalQueryForMatch: string | PreparedPath = queryForUrlMatch;
                             let methodScoreBoost = 0;
-                            
-                            if (methodMatch) {
-                                const qMethod = methodMatch[1].toUpperCase();
-                                const itemMethodMatch = item.name.match(/^\[([A-Z]+)\]/);
-                                if (itemMethodMatch) {
-                                    const itemMethod = itemMethodMatch[1];
+
+                            const qMethod = typeof queryForUrlMatch !== 'string' ? queryForUrlMatch.method : undefined;
+
+                            if (qMethod) {
+                                const itemMethod = pattern.method;
+                                if (itemMethod) {
                                     if (itemMethod.startsWith(qMethod) || qMethod.startsWith(itemMethod)) {
-                                        finalQueryForMatch = methodMatch[2];
                                         methodScoreBoost = 0.5;
+                                        // finalQueryForMatch remains queryForUrlMatch (PreparedPath)
                                     } else {
                                         // Method mismatch, skip specialized route matching
-                                        finalQueryForMatch = "";
+                                        finalQueryForMatch = '';
                                     }
                                 }
                             }
@@ -1634,25 +1666,21 @@ export class SearchEngine implements ISearchProvider {
                     if (pattern) {
                         const item = items[i];
                         if (item) {
-                            // Check if the query has a method prefix and if it matches the item's method
-                            const qText = typeof queryForUrlMatch === 'string' ? queryForUrlMatch : queryForUrlMatch.cleanPath;
-                            const qTrim = qText.trim();
-                            const methodMatch = qTrim.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
-                            
-                            let finalQueryForMatch = queryForUrlMatch;
+                            // Optimized: Use pre-calculated method from PreparedPath instead of repeated regex match
+                            let finalQueryForMatch: string | PreparedPath = queryForUrlMatch;
                             let methodScoreBoost = 0;
-                            
-                            if (methodMatch) {
-                                const qMethod = methodMatch[1].toUpperCase();
-                                const itemMethodMatch = item.name.match(/^\[([A-Z]+)\]/);
-                                if (itemMethodMatch) {
-                                    const itemMethod = itemMethodMatch[1];
+
+                            const qMethod = typeof queryForUrlMatch !== 'string' ? queryForUrlMatch.method : undefined;
+
+                            if (qMethod) {
+                                const itemMethod = pattern.method;
+                                if (itemMethod) {
                                     if (itemMethod.startsWith(qMethod) || qMethod.startsWith(itemMethod)) {
-                                        finalQueryForMatch = methodMatch[2];
                                         methodScoreBoost = 0.5;
+                                        // finalQueryForMatch remains queryForUrlMatch (PreparedPath)
                                     } else {
                                         // Method mismatch, skip specialized route matching
-                                        finalQueryForMatch = "";
+                                        finalQueryForMatch = '';
                                     }
                                 }
                             }
@@ -2215,4 +2243,8 @@ export class SearchEngine implements ISearchProvider {
     recordActivity(): void {
         // No-op
     }
+}
+
+function escapeRegExp(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
