@@ -648,6 +648,9 @@ export class SearchProvider {
                 editor.setDecorations(this.matchDecorationType, []);
             });
 
+            this.streamingResults.clear();
+            this.currentQuickPick = undefined;
+
             quickPick.dispose();
         });
     }
@@ -885,7 +888,8 @@ export class SearchProvider {
 
     private resultToSlashCommandQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
-        const slashCmd = this.slashCommandService.getCommand(item.name.slice('slash-cmd:'.length));
+        const commandKey = item.id.startsWith('slash-cmd:') ? item.id.slice('slash-cmd:'.length) : item.name;
+        const slashCmd = this.slashCommandService.getCommand(commandKey);
         const iconColor = new vscode.ThemeColor('textLink.foreground');
 
         // Show primary alias (short form) as label

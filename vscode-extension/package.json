@@ -102,6 +102,13 @@
                     "maximum": 200,
                     "description": "Number of files to scan in parallel during text search. Higher values are faster but use more CPU/IO."
                 },
+                "deeplens.indexWorkerCount": {
+                    "type": "number",
+                    "default": 0,
+                    "minimum": 0,
+                    "maximum": 32,
+                    "description": "Number of background indexing workers. 0 = auto (up to 8 or CPU-1)."
+                },
                 "deeplens.activity.enabled": {
                     "type": "boolean",
                     "default": true,

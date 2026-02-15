@@ -64,20 +64,16 @@ export class DeepLensLspClient implements ISearchProvider {
             },
             errorHandler: {
                 error: () => {
-                    // Suppress errors during shutdown
                     if (this.isStopping) {
                         return { action: ErrorAction.Shutdown };
                     }
-                    // Default: shutdown on errors (don't keep a broken client running)
-                    return { action: ErrorAction.Shutdown };
+                    return { action: ErrorAction.Continue };
                 },
                 closed: () => {
-                    // Don't restart if we're stopping
                     if (this.isStopping) {
                         return { action: CloseAction.DoNotRestart };
                     }
-                    // Default: don't restart
-                    return { action: CloseAction.DoNotRestart };
+                    return { action: CloseAction.Restart };
                 },
             },
         };
@@ -95,14 +91,6 @@ export class DeepLensLspClient implements ISearchProvider {
         // Handle streamed search results
         this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
             this.onStreamResult.fire(params);
-        });
-
-        // Listen for state changes to detect unexpected disconnects
-        this.client.onDidChangeState((event) => {
-            if (event.newState === State.Stopped) {
-                // Server stopped unexpectedly - set flag to prevent further errors
-                this.isStopping = true;
-            }
         });
 
         await this.client.start();

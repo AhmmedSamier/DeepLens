@@ -28,7 +28,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Start LSP Client
     lspClient = new DeepLensLspClient(context);
-    await lspClient.start();
+    try {
+        await lspClient.start();
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.error(`Failed to start DeepLens language server: ${message}`);
+        vscode.window.showErrorMessage(
+            'DeepLens: Failed to start language server. Check the output log for details.',
+        );
+        return;
+    }
 
     // Command Indexer still runs locally for VS Code commands
     commandIndexer = new CommandIndexer(config);

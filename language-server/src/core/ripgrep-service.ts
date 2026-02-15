@@ -52,7 +52,7 @@ export class RipgrepService {
     }
 
     isAvailable(): boolean {
-        return !!this.rgPath && fs.existsSync(this.rgPath);
+        return !!this.rgPath;
     }
 
     async search(

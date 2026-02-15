@@ -192,6 +192,15 @@ export class Config {
         return this.validateNumber(value, 1, 200, 60);
     }
 
+    getIndexWorkerCount(): number {
+        const value = this.get('indexWorkerCount', 0);
+        const clamped = this.validateNumber(value, 0, 32, 0);
+        if (clamped === 0) {
+            return 0;
+        }
+        return clamped;
+    }
+
     /**
      * Check if activity tracking is enabled
      */

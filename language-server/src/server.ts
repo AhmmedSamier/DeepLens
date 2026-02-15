@@ -132,13 +132,33 @@ connection.onInitialize(async (params: InitializeParams) => {
     }
 
     const logFile = path.join(storagePath, 'debug.log');
+    let logQueue: string[] = [];
+    let logWriting = false;
+
+    const flushLogQueue = async () => {
+        if (logWriting) {
+            return;
+        }
+        logWriting = true;
+        try {
+            while (logQueue.length > 0) {
+                const batch = logQueue.join('');
+                logQueue = [];
+                try {
+                    await fs.promises.appendFile(logFile, batch);
+                } catch {
+                    break;
+                }
+            }
+        } finally {
+            logWriting = false;
+        }
+    };
+
     fileLogger = (msg: string) => {
         const timestamp = new Date().toISOString();
-        try {
-            fs.appendFileSync(logFile, `[${timestamp}] ${msg}\n`);
-        } catch {
-            // Ignore logging errors
-        }
+        logQueue.push(`[${timestamp}] ${msg}\n`);
+        void flushLogQueue();
     };
 
     fileLogger('--- DeepLens Server Starting ---');
@@ -498,13 +518,14 @@ connection.onRequest(ClearCacheRequest, async () => {
 
 connection.onRequest(IndexStatsRequest, async () => {
     const stats = searchEngine.getStats();
+    const lastIndexTimestamp = workspaceIndexer.getLastIndexTimestamp();
 
     return {
         totalItems: stats.totalItems,
         totalFiles: stats.fileCount,
         totalTypes: stats.typeCount,
         totalSymbols: stats.symbolCount,
-        lastUpdate: Date.now(),
+        lastUpdate: lastIndexTimestamp !== null ? lastIndexTimestamp : Date.now(),
         indexing: workspaceIndexer.isIndexing(),
         cacheSize: searchEngine.getCacheSize(),
     };
