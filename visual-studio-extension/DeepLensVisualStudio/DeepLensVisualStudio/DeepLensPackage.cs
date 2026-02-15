@@ -18,7 +18,6 @@ namespace DeepLensVisualStudio
     [Guid(PackageGuidString)]
     [ProvideAutoLoad(VSConstants.UICONTEXT.ShellInitialized_string, PackageAutoLoadFlags.BackgroundLoad)]
     [ProvideToolWindow(typeof(ToolWindows.SearchToolWindow), Style = VsDockStyle.Float, Window = "DocumentWell")]
-    [ProvideOptionPage(typeof(DeepLensOptionsPage), "DeepLens", "General", 0, 0, true)]
     [ProvideBindingPath]
     public sealed class DeepLensPackage : AsyncPackage, IVsSolutionEvents
     {
@@ -27,9 +26,6 @@ namespace DeepLensVisualStudio
         private static DeepLensPackage? _instance;
         private uint _solutionEventsCookie;
         private KeyboardHookService? _keyboardHookService;
-        private IVsStatusbar? _statusBar;
-        private uint _statusBarCookie;
-        private GitService? _gitService;
 
         protected override async Task InitializeAsync(CancellationToken cancellationToken,
             IProgress<ServiceProgressData> progress)
@@ -49,29 +45,6 @@ namespace DeepLensVisualStudio
                 _keyboardHookService.Install();
 
                 Debug.WriteLine("DeepLens: Double-shift keyboard hook installed at startup");
-                
-                // Initialize status bar
-                _statusBar = await GetServiceAsync(typeof(SVsStatusbar)) as IVsStatusbar;
-                if (_statusBar != null)
-                {
-                    _statusBar.SetText("DeepLens");
-                    // Subscribe to static progress event from LSP service
-                    LspSearchService.StaticOnProgress += OnLspProgress;
-                }
-                
-                // Initialize Git service
-                _gitService = new GitService(async () =>
-                {
-                    var lspService = SearchControl.GetLspService();
-                    if (lspService != null)
-                    {
-                        await lspService.RebuildIndexAsync(force: true);
-                    }
-                });
-                await _gitService.SetupGitListenerAsync();
-
-                // Track active files for /open scope
-                await TrackActiveFilesAsync();
                 
                 // Register for solution events to initialize LSP early
                 var solution = await GetServiceAsync(typeof(SVsSolution)) as IVsSolution;
@@ -128,85 +101,6 @@ namespace DeepLensVisualStudio
             }
         }
 
-        private void OnLspProgress(ProgressInfo progress)
-        {
-            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-            {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                UpdateStatusBar(progress);
-            });
-        }
-
-        private void UpdateStatusBar(ProgressInfo progress)
-        {
-            if (_statusBar == null) return;
-
-            try
-            {
-                string icon;
-                string text;
-                int color = 0; // Default color
-
-                if (progress.State == "start")
-                {
-                    icon = "\uE895"; // sync~spin equivalent (database icon)
-                    text = "DeepLens: Indexing...";
-                    color = 0x00FF9900; // Orange
-                }
-                else if (progress.State == "end")
-                {
-                    icon = "\uE8C4"; // database icon
-                    text = "DeepLens";
-                    color = 0x00CCCCCC; // Gray
-                }
-                else // report
-                {
-                    var message = progress.Message ?? "";
-                    var percentage = progress.Percentage.HasValue ? $" ({progress.Percentage}%)" : "";
-                    
-                    // Determine icon and color based on message content
-                    if (message.IndexOf("scanning", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        icon = "\uE8B6"; // search icon
-                        color = 0x00007ACC; // Blue
-                    }
-                    else if (message.IndexOf("parsing", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        icon = "\uE8A7"; // code icon
-                        color = 0x007C4DFF; // Purple
-                    }
-                    else if (message.IndexOf("indexing", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        icon = "\uE8C4"; // database icon
-                        color = 0x0000C853; // Green
-                    }
-                    else if (message.IndexOf("symbols", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        icon = "\uE945"; // symbol-parameter icon
-                        color = 0x00AA00FF; // Dark purple
-                    }
-                    else
-                    {
-                        icon = "\uE895"; // sync icon
-                        color = 0x00FF9900; // Orange
-                    }
-                    
-                    text = $"DeepLens{percentage}";
-                    if (!string.IsNullOrEmpty(message))
-                    {
-                        text = $"DeepLens: {message}{percentage}";
-                    }
-                }
-
-                _statusBar.SetText(text);
-                // Note: IVsStatusbar doesn't directly support colors, but we can use icon characters
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DeepLens: Error updating status bar: {ex.Message}");
-            }
-        }
-
         protected override void Dispose(bool disposing)
         {
             if (disposing)
@@ -220,14 +114,8 @@ namespace DeepLensVisualStudio
                     _solutionEventsCookie = 0;
                 }
 
-                // Unsubscribe from LSP progress
-                LspSearchService.StaticOnProgress -= OnLspProgress;
-
                 _keyboardHookService?.Dispose();
                 _keyboardHookService = null;
-                _gitService?.Dispose();
-                _gitService = null;
-                _statusBar = null;
                 _instance = null;
             }
 
@@ -309,58 +197,6 @@ namespace DeepLensVisualStudio
 
             return string.Empty;
         }
-        private async Task TrackActiveFilesAsync()
-        {
-            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-            try
-            {
-                var dte = GetService(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
-                if (dte == null) return;
-
-                // Update active files initially and on document events
-                UpdateActiveFiles(dte);
-
-                // Subscribe to document events
-                dte.Events.DocumentEvents.DocumentOpened += (doc) => UpdateActiveFiles(dte);
-                dte.Events.DocumentEvents.DocumentClosing += (doc) => UpdateActiveFiles(dte);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DeepLens: Error tracking active files: {ex.Message}");
-            }
-        }
-
-        private void UpdateActiveFiles(EnvDTE.DTE dte)
-        {
-            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-            {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-
-                try
-                {
-                    var activeFiles = new List<string>();
-                    foreach (EnvDTE.Document doc in dte.Documents)
-                    {
-                        if (doc != null && !string.IsNullOrEmpty(doc.FullName))
-                        {
-                            activeFiles.Add(doc.FullName);
-                        }
-                    }
-
-                    var lspService = SearchControl.GetLspService();
-                    if (lspService != null)
-                    {
-                        await lspService.SetActiveFilesAsync(activeFiles);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"DeepLens: Error updating active files: {ex.Message}");
-                }
-            });
-        }
-
         #region IVsSolutionEvents members
 
         public int OnAfterOpenProject(IVsHierarchy pHierarchy, int fAdded) => VSConstants.S_OK;

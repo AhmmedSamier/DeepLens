@@ -1111,6 +1111,7 @@ export class SearchEngine implements ISearchProvider {
                 if (hitLimit) {
                     stream.destroy();
                     resolve();
+                    return;
                 }
             });
 
@@ -1413,13 +1414,10 @@ export class SearchEngine implements ISearchProvider {
                     }
                 }
 
-                // New optimization: Check if name specifically contains query characters
-                const matchesName = (queryBitflags & itemNameBitflags[i]) === queryBitflags;
-
                 let score = -Infinity;
 
                 // 1. CamelHumps Score (Inlined)
-                if (enableCamelHumps && matchesName) {
+                if (enableCamelHumps) {
                     const capitals = preparedCapitals[i];
                     if (capitals && queryLen <= capitals.length) {
                         const matchIndex = capitals.indexOf(queryUpper);
@@ -1443,7 +1441,7 @@ export class SearchEngine implements ISearchProvider {
                     const pName = preparedNames[i];
                     // Optimization: Check bitflags FIRST to avoid pointer chasing and length check on pName.target
                     // Note: itemBitflags is now aggregate, so this check is looser but still valid
-                    if (matchesName && pName && queryLen <= pName.target.length) {
+                    if (pName && queryLen <= pName.target.length) {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
                             const s = res.score;
@@ -1576,14 +1574,11 @@ export class SearchEngine implements ISearchProvider {
                     }
                 }
 
-                // New optimization: Check if name specifically contains query characters
-                const matchesName = (queryBitflags & itemNameBitflags[i]) === queryBitflags;
-
                 let score = -Infinity;
                 let highlights: number[][] | undefined;
 
                 // 1. CamelHumps Score (Inlined)
-                if (enableCamelHumps && matchesName) {
+                if (enableCamelHumps) {
                     const capitals = preparedCapitals[i];
                     if (capitals && queryLen <= capitals.length) {
                         const matchIndex = capitals.indexOf(queryUpper);
@@ -1606,7 +1601,11 @@ export class SearchEngine implements ISearchProvider {
                     // Name (1.0)
                     const pName = preparedNames[i];
                     // Update: Use itemNameBitflags for strict name check
-                    if (matchesName && pName && queryLen <= pName.target.length) {
+                    if (
+                        pName &&
+                        (queryBitflags & itemNameBitflags[i]) === queryBitflags &&
+                        queryLen <= pName.target.length
+                    ) {
                         const res = Fuzzysort.single(query, pName);
                         if (res) {
                             const s = res.score;

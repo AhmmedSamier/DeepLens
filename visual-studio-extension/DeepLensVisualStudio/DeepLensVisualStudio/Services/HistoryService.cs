@@ -71,19 +71,6 @@ namespace DeepLensVisualStudio.Services
             return _history;
         }
 
-        /// <summary>
-        /// Clears all history items.
-        /// </summary>
-        public void ClearAll()
-        {
-            try
-            {
-                _history.Clear();
-                Save();
-            }
-            catch { }
-        }
-
         private void Save()
         {
             if (string.IsNullOrEmpty(_storagePath)) return;
