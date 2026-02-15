@@ -8,6 +8,8 @@ namespace DeepLensVisualStudio.Services
         public string Kind { get; set; } = "";
         public string FilePath { get; set; } = "";
         public int Line { get; set; }
+        public int? Column { get; set; }
+        public int[][]? Highlights { get; set; }
         public string ContainerName { get; set; } = "";
         public int Score { get; set; }
         public string UniqueKey => $"{FilePath}:{Line}:{Name}:{Kind}";
