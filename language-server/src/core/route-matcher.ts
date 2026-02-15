@@ -16,6 +16,7 @@ export interface RoutePattern {
     // Optimization: Pre-calculated boolean array to avoid repeated string checks (startsWith/endsWith) in the hot loop
     isParameter: boolean[];
     method?: string;
+    hasCatchAll: boolean;
 }
 
 /**
@@ -71,11 +72,15 @@ export class RouteMatcher {
 
         try {
             // 1. Try exact match first (Fastest)
-            if (pattern.regex.test(cleanPath)) {
+            // Optimization: Skip regex test if segment count mismatches and no catch-all (common case)
+            if (!pathSegments) {
+                pathSegments = cleanPath.split('/');
+            }
+
+            const canSkipRegex = !pattern.hasCatchAll && pattern.templateSegments.length !== pathSegments.length;
+
+            if (!canSkipRegex && pattern.regex.test(cleanPath)) {
                 let score = 2.0;
-                if (!pathSegments) {
-                    pathSegments = cleanPath.split('/');
-                }
 
                 const count = Math.min(pathSegments.length, pattern.templateSegments.length);
                 for (let i = 0; i < count; i++) {
@@ -150,6 +155,9 @@ export class RouteMatcher {
         // 2. Convert template to a Regular Expression
         let pattern = cleanTemplate;
 
+        // Check for catch-all parameter
+        const hasCatchAll = template.includes('{*');
+
         // Replace {*slug} (catch-all) with (.*)
         pattern = pattern.replace(/\{(\*\w+)\}/g, '___CATCHALL___');
 
@@ -169,7 +177,15 @@ export class RouteMatcher {
             const templateSegmentsLower = templateSegments.map((s) => s.toLowerCase());
             const isParameter = templateSegments.map((s) => s.startsWith('{') && s.endsWith('}'));
 
-            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower, isParameter, method };
+            cached = {
+                regex: exactRegex,
+                cleanTemplate,
+                templateSegments,
+                templateSegmentsLower,
+                isParameter,
+                method,
+                hasCatchAll,
+            };
 
             if (this.cache.size >= this.CACHE_LIMIT) {
                 // Simple LRU-like: remove the first inserted item
