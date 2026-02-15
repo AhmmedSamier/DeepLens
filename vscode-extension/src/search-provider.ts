@@ -759,6 +759,30 @@ export class SearchProvider {
     }
 
     /**
+     * Create a search result for a slash command
+     */
+    private createCommandSuggestion(cmd: SlashCommand, score: number, isRecent: boolean = false): SearchResult {
+        const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
+        const aliasText = this.formatAliasText(cmd);
+        const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
+        const exampleText = cmd.example ? ` • Try: ${cmd.example}` : '';
+        const description = `${cmd.description}${aliasText}${shortcutText}${exampleText}`;
+
+        return {
+            item: {
+                id: 'slash-cmd:' + primaryAlias,
+                name: primaryAlias,
+                type: SearchItemType.COMMAND,
+                filePath: '',
+                detail: isRecent ? `↺ Recent • ${description}` : description,
+                containerName: this.getCategoryLabel(cmd.category),
+            },
+            score: score,
+            scope: SearchScope.COMMANDS,
+        };
+    }
+
+    /**
      * Parse query to extract scope and search term
      * Only considers a command complete if it's followed by a space (e.g., "/t ")
      */
@@ -805,23 +829,7 @@ export class SearchProvider {
             )
                 continue;
 
-            const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const aliasText = this.formatAliasText(cmd);
-            const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
-            const description = `${cmd.description}${aliasText}${shortcutText}`;
-
-            commandSuggestions.push({
-                item: {
-                    id: 'slash-cmd:' + primaryAlias,
-                    name: primaryAlias,
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: `↺ Recent • ${description}`,
-                    containerName: this.getCategoryLabel(cmd.category),
-                },
-                score: 1000,
-                scope: SearchScope.COMMANDS,
-            });
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 1000, true));
             seen.add(cmd.name);
         }
 
@@ -829,23 +837,7 @@ export class SearchProvider {
         for (const cmd of commands) {
             if (seen.has(cmd.name)) continue;
 
-            const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
-            const aliasText = this.formatAliasText(cmd);
-            const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
-            const description = `${cmd.description}${aliasText}${shortcutText}`;
-
-            commandSuggestions.push({
-                item: {
-                    id: 'slash-cmd:' + primaryAlias,
-                    name: primaryAlias,
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: description,
-                    containerName: this.getCategoryLabel(cmd.category),
-                },
-                score: 1,
-                scope: SearchScope.COMMANDS,
-            });
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 1, false));
             seen.add(cmd.name);
         }
 

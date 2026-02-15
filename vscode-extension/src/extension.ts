@@ -33,9 +33,7 @@ export async function activate(context: vscode.ExtensionContext) {
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         logger.error(`Failed to start DeepLens language server: ${message}`);
-        vscode.window.showErrorMessage(
-            'DeepLens: Failed to start language server. Check the output log for details.',
-        );
+        vscode.window.showErrorMessage('DeepLens: Failed to start language server. Check the output log for details.');
         return;
     }
 

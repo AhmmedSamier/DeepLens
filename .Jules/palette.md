@@ -5,3 +5,7 @@
 ## 2024-02-14 - Direct manipulation in search history
 **Learning:** Users often have "polluted" search history (e.g., opened a wrong file) and want to clean it up without wiping everything. Adding a direct "Remove" action on individual history items empowers users to curate their workspace context.
 **Action:** When displaying recent history or suggestion lists, consider adding granular management actions (like remove/delete) directly on the items via `QuickInputButton`.
+
+## 2025-02-15 - Inline examples for slash commands
+**Learning:** Slash commands can be abstract. Showing a concrete example inline (e.g., "Try: /t User") significantly reduces the cognitive load of remembering syntax.
+**Action:** Check for unused metadata in command definitions (like 'example' or 'usage') and expose it in the UI description/detail fields.
