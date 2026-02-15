@@ -64,10 +64,13 @@ export class Debouncer<T = void> {
 /**
  * Simple debounce function for single-argument callbacks
  */
-export function debounce<T extends (...args: any[]) => any>(func: T, waitMs: number): (...args: Parameters<T>) => void {
+export function debounce<TArgs extends unknown[]>(
+    func: (...args: TArgs) => void,
+    waitMs: number,
+): (...args: TArgs) => void {
     let timeoutId: NodeJS.Timeout | undefined;
 
-    return function (this: any, ...args: Parameters<T>) {
+    return function (...args: TArgs) {
         if (timeoutId) {
             clearTimeout(timeoutId);
         }
@@ -81,14 +84,11 @@ export function debounce<T extends (...args: any[]) => any>(func: T, waitMs: num
 /**
  * Throttle function - ensures function is called at most once per interval
  */
-export function throttle<T extends (...args: any[]) => any>(
-    func: T,
-    limitMs: number,
-): (...args: Parameters<T>) => void {
+export function throttle<TArgs extends unknown[]>(func: (...args: TArgs) => void, limitMs: number): (...args: TArgs) => void {
     let lastCall = 0;
     let timeoutId: NodeJS.Timeout | undefined;
 
-    return function (this: any, ...args: Parameters<T>) {
+    return function (...args: TArgs) {
         const now = Date.now();
         const timeSinceLastCall = now - lastCall;
 

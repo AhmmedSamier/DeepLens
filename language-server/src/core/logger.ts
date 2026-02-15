@@ -190,8 +190,9 @@ export class Logger {
         for (const output of this.outputs) {
             try {
                 output.write(level, message);
-            } catch (error) {
-                // Silently fail if output fails
+            } catch (err) {
+                const errorMessage = err instanceof Error ? err.message : String(err);
+                process.stderr.write(`Logger output error: ${errorMessage}\n`);
             }
         }
     }

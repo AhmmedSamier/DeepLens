@@ -586,74 +586,9 @@ export class SearchProvider {
 
         quickPick.onDidTriggerItemButton(async (e) => {
             const result = (e.item as SearchResultItem).result;
-            if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
-                // Update user selection
-                this.userSelectedScope = SearchScope.EVERYTHING;
-
-                // Also update current scope
-                this.currentScope = SearchScope.EVERYTHING;
-
-                // Check if we need to update the query prefix
-                const currentQuery = quickPick.value;
-
-                // Check if current query has ANY known prefix
-                for (const [prefix] of this.PREFIX_MAP.entries()) {
-                    if (currentQuery.toLowerCase().startsWith(prefix)) {
-                        // Clear the prefix when switching scopes
-                        const replacement = '';
-                        quickPick.value = replacement + currentQuery.slice(prefix.length);
-                        break;
-                    }
-                }
-
-                quickPick.placeholder = this.getPlaceholder();
-                this.updateFilterButtons(quickPick);
-
-                // Re-run search with new filter
-                const { text } = this.parseQuery(quickPick.value);
-                const queryId = ++this.lastQueryId;
-                this.performSearch(quickPick, text, queryId);
-            } else if (e.button.tooltip === this.TOOLTIP_NATIVE_SEARCH) {
-                await vscode.commands.executeCommand('workbench.action.findInFiles', {
-                    query: quickPick.value,
-                    triggerSearch: true,
-                });
-                quickPick.hide();
-            } else if (e.button.tooltip === this.TOOLTIP_COPY_PATH) {
-                await vscode.env.clipboard.writeText(result.item.filePath);
-                this.showFeedback('Path copied to clipboard');
-            } else if (e.button.tooltip === this.TOOLTIP_COPY_REF) {
-                const ref = result.item.containerName
-                    ? `${result.item.containerName}.${result.item.name}`
-                    : result.item.name;
-                await vscode.env.clipboard.writeText(ref);
-                this.showFeedback('Reference copied to clipboard');
-            } else if (e.button.tooltip === this.TOOLTIP_COPY_REL) {
-                const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
-                await vscode.env.clipboard.writeText(relativePath);
-                this.showFeedback('Relative path copied to clipboard');
-            } else if (e.button.tooltip === this.TOOLTIP_OPEN_SIDE) {
+            await this.handleItemButtonClick(quickPick, result, e.button.tooltip, () => {
                 accepted = true;
-                this.navigateToItem(result, vscode.ViewColumn.Beside);
-                quickPick.hide();
-            } else if (e.button.tooltip === this.TOOLTIP_REVEAL) {
-                const uri = vscode.Uri.file(result.item.filePath);
-                vscode.commands.executeCommand('revealInExplorer', uri);
-            } else if (e.button.tooltip === this.TOOLTIP_REMOVE_HISTORY) {
-                if (this.activityTracker) {
-                    await this.activityTracker.removeItem(result.item.id);
-                    this.showFeedback('Item removed from history');
-                    await this.showRecentHistory(quickPick);
-                }
-            } else if (e.button.tooltip === this.TOOLTIP_REBUILD_INDEX) {
-                vscode.commands.executeCommand('deeplens.rebuildIndex');
-                quickPick.hide();
-            } else if (e.button.tooltip === this.TOOLTIP_CLEAR_CACHE) {
-                vscode.commands.executeCommand('deeplens.clearIndexCache');
-                quickPick.hide();
-            } else if (e.button.tooltip === this.TOOLTIP_SETTINGS) {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
-            }
+            });
         });
 
         quickPick.onDidAccept(async () => {
@@ -715,6 +650,109 @@ export class SearchProvider {
 
             quickPick.dispose();
         });
+    }
+
+    private async handleItemButtonClick(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        result: SearchResult,
+        tooltip: string,
+        markAccepted: () => void,
+    ): Promise<void> {
+        if (tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
+            this.handleSearchEverywhereButton(quickPick);
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_NATIVE_SEARCH) {
+            await vscode.commands.executeCommand('workbench.action.findInFiles', {
+                query: quickPick.value,
+                triggerSearch: true,
+            });
+            quickPick.hide();
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_COPY_PATH) {
+            await vscode.env.clipboard.writeText(result.item.filePath);
+            this.showFeedback('Path copied to clipboard');
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_COPY_REF) {
+            const ref = result.item.containerName
+                ? `${result.item.containerName}.${result.item.name}`
+                : result.item.name;
+            await vscode.env.clipboard.writeText(ref);
+            this.showFeedback('Reference copied to clipboard');
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_COPY_REL) {
+            const relativePath = vscode.workspace.asRelativePath(result.item.filePath);
+            await vscode.env.clipboard.writeText(relativePath);
+            this.showFeedback('Relative path copied to clipboard');
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_OPEN_SIDE) {
+            markAccepted();
+            this.navigateToItem(result, vscode.ViewColumn.Beside);
+            quickPick.hide();
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_REVEAL) {
+            const uri = vscode.Uri.file(result.item.filePath);
+            vscode.commands.executeCommand('revealInExplorer', uri);
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_REMOVE_HISTORY) {
+            if (this.activityTracker) {
+                await this.activityTracker.removeItem(result.item.id);
+                this.showFeedback('Item removed from history');
+                await this.showRecentHistory(quickPick);
+            }
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_REBUILD_INDEX) {
+            vscode.commands.executeCommand('deeplens.rebuildIndex');
+            quickPick.hide();
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_CLEAR_CACHE) {
+            vscode.commands.executeCommand('deeplens.clearIndexCache');
+            quickPick.hide();
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_SETTINGS) {
+            vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+        }
+    }
+
+    private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        this.userSelectedScope = SearchScope.EVERYTHING;
+        this.currentScope = SearchScope.EVERYTHING;
+
+        const currentQuery = quickPick.value;
+        const normalizedQuery = currentQuery.toLowerCase();
+
+        for (const [prefix] of this.PREFIX_MAP.entries()) {
+            if (normalizedQuery.startsWith(prefix)) {
+                quickPick.value = currentQuery.slice(prefix.length);
+                break;
+            }
+        }
+
+        quickPick.placeholder = this.getPlaceholder();
+        this.updateFilterButtons(quickPick);
+
+        const { text } = this.parseQuery(quickPick.value);
+        const queryId = ++this.lastQueryId;
+        this.performSearch(quickPick, text, queryId);
     }
 
     /**

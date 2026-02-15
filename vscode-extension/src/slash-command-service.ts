@@ -206,7 +206,7 @@ export class SlashCommandService {
         }
 
         const lowerQuery = query.toLowerCase();
-        const trimmedQuery = lowerQuery.replace(/^[\/#>]/, '');
+        const trimmedQuery = lowerQuery.replace(/^[/#>]/, '');
         const results: SlashCommand[] = [];
         const seen = new Set<string>();
 

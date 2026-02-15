@@ -153,8 +153,8 @@ export class RipgrepService {
                 const lines = buffer.split(/\r?\n/);
                 buffer = lines.pop() || '';
 
-                for (let line of lines) {
-                    line = line.trim();
+                for (const rawLine of lines) {
+                    const line = rawLine.trim();
                     if (!line) continue;
                     try {
                         const msg = JSON.parse(line);

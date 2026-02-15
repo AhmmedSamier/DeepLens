@@ -16,6 +16,16 @@ export class CancellationError extends Error {
     }
 }
 
+interface WorkerPoolState {
+    pendingItems: SearchableItem[];
+    activeTasks: number;
+    finished: boolean;
+    processed: number;
+    nextReportingPercentage: number;
+    logged100: boolean;
+    resolveAll: () => void;
+}
+
 /**
  * Workspace indexer that scans files and extracts symbols
  */
@@ -72,15 +82,12 @@ export class WorkspaceIndexer {
 
         const workerCount = Math.max(1, os.cpus().length - 1);
 
-        // Try to find the worker script in multiple locations
-        // We prioritize .js because Node.js (VS Code) cannot run .ts directly in workers
         const possibleScripts = [
             path.join(this.extensionPath, 'dist', 'indexer-worker.js'), // Production path
             path.join(__dirname, 'indexer-worker.js'), // Relative to current file (prod)
         ];
 
-        // Only add .ts if we are running in Bun
-        if (typeof (globalThis as any).Bun !== 'undefined') {
+        if ('Bun' in globalThis) {
             possibleScripts.push(path.join(__dirname, 'indexer-worker.ts'));
         }
 
@@ -280,13 +287,12 @@ export class WorkspaceIndexer {
                     const lines = output.split('\n');
                     const folderResults: string[] = [];
 
-                    for (let line of lines) {
-                        line = line.trim();
+                    for (const rawLine of lines) {
+                        const line = rawLine.trim();
                         if (!line) {
                             continue;
                         }
 
-                        // Ensure we have a proper absolute path
                         const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
                         folderResults.push(this.intern(fullPath));
                     }
@@ -463,19 +469,12 @@ export class WorkspaceIndexer {
         }
     }
 
-    /**
-     * Run concurrent file-by-file indexing pool using Worker Threads
-     */
     private async runFileIndexingPool(
         fileItems: SearchableItem[],
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
         const totalFiles = fileItems.length;
-        const BATCH_SIZE = 100; // Increased batch size for better throughput
-
-        let processed = 0;
-        let nextReportingPercentage = 0;
-        let logged100 = false;
+        const batchSize = 100;
 
         const workers = this.getWorkers();
         if (workers.length === 0) {
@@ -485,174 +484,244 @@ export class WorkspaceIndexer {
 
         this.log(`Using ${workers.length} persistent indexing workers...`);
 
-        try {
-            const pendingItems = [...fileItems];
-            let activeTasks = 0;
-            let finished = false;
-            let resolveAll: () => void;
+        const state: WorkerPoolState = {
+            pendingItems: [...fileItems],
+            activeTasks: 0,
+            finished: false,
+            processed: 0,
+            nextReportingPercentage: 0,
+            logged100: false,
+            resolveAll: () => {},
+        };
 
+        try {
             const promise = new Promise<void>((resolve) => {
-                resolveAll = resolve;
+                state.resolveAll = resolve;
             });
 
-            const assignTask = async (worker: Worker) => {
-                if (finished) return;
-
-                // Stop assigning if cancelled
-                if (this.cancellationToken.cancelled) {
-                    if (activeTasks === 0) {
-                        finished = true;
-                        resolveAll();
-                    }
-                    return;
-                }
-
-                const batchFiles: string[] = [];
-
-                // We increment activeTasks BEFORE doing anything async to prevent premature resolution
-                activeTasks++;
-
-                try {
-                    // Fill batch
-                    while (pendingItems.length > 0 && batchFiles.length < BATCH_SIZE) {
-                        const fileItem = pendingItems.shift()!;
-                        batchFiles.push(fileItem.filePath);
-                    }
-
-                    if (batchFiles.length > 0) {
-                        worker.postMessage({ filePaths: batchFiles });
-                    } else {
-                        // No items for this worker
-                        activeTasks--;
-                        if (activeTasks === 0 && pendingItems.length === 0 && !finished) {
-                            finished = true;
-                            resolveAll();
-                        }
-                    }
-                } catch (err) {
-                    this.log(`Error assigning task: ${err}`);
-                    activeTasks--;
-                    if (activeTasks === 0 && pendingItems.length === 0 && !finished) {
-                        finished = true;
-                        resolveAll();
-                    }
-                }
-            };
-
-            // Set up listeners for this run
-            const cleanupListeners: (() => void)[] = [];
-
-            for (let i = 0; i < workers.length; i++) {
-                const worker = workers[i];
-
-                const onMessage = (message: {
-                    type: string;
-                    items?: SearchableItem[];
-                    count?: number;
-                    isPartial?: boolean;
-                }) => {
-                    if (this.cancellationToken.cancelled && !finished) {
-                        // If cancelled, just drain remaining tasks and resolve
-                        if (message.type === 'result' || message.type === 'error') {
-                            if (!message.isPartial) {
-                                activeTasks--;
-                                if (activeTasks === 0) {
-                                    finished = true;
-                                    resolveAll();
-                                }
-                            }
-                        }
-                        return;
-                    }
-
-                    if (message.type === 'result') {
-                        const { items, count, isPartial } = message;
-
-                        if (items && items.length > 0) {
-                            // Interning and firing in a separate tick if the batch is large
-                            // helps keep the main thread responsive for other LSP requests
-                            const processItems = () => {
-                                const internedItems = items.map((item: SearchableItem) => ({
-                                    ...item,
-                                    name: this.intern(item.name),
-                                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                                    relativeFilePath: item.relativeFilePath
-                                        ? this.intern(item.relativeFilePath)
-                                        : undefined,
-                                    filePath: this.intern(item.filePath),
-                                }));
-                                this.fireItemsAdded(internedItems);
-                            };
-
-                            if (items.length > 100) {
-                                setTimeout(processItems, 0);
-                            } else {
-                                processItems();
-                            }
-                        }
-
-                        const itemsProcessed = count || 1;
-                        processed += itemsProcessed;
-
-                        if (!isPartial) {
-                            activeTasks--;
-                        }
-
-                        this.updateWorkerProgress(
-                            totalFiles,
-                            itemsProcessed,
-                            () => processed,
-                            () => logged100,
-                            (v) => (logged100 = v),
-                            () => nextReportingPercentage,
-                            (v) => (nextReportingPercentage = v),
-                            progressCallback,
-                        );
-
-                        if (!isPartial) {
-                            if (pendingItems.length > 0) {
-                                assignTask(worker);
-                            } else if (activeTasks === 0 && !finished) {
-                                finished = true;
-                                resolveAll!();
-                            }
-                        }
-                    } else if (message.type === 'error') {
-                        activeTasks--;
-                        if (pendingItems.length > 0) {
-                            assignTask(worker);
-                        } else if (activeTasks === 0 && !finished) {
-                            finished = true;
-                            resolveAll!();
-                        }
-                    }
-                };
-
-                worker.on('message', onMessage);
-                cleanupListeners.push(() => worker.removeListener('message', onMessage));
-            }
-
-            // Start initial tasks
-            const initialCount = Math.min(workers.length, pendingItems.length);
-            if (initialCount === 0) {
-                finished = true;
-                resolveAll!();
-            } else {
-                for (let i = 0; i < initialCount; i++) {
-                    assignTask(workers[i]);
-                }
-            }
-
+            const cleanupListeners = this.setupWorkerPoolListeners(
+                workers,
+                totalFiles,
+                state,
+                progressCallback,
+                batchSize,
+            );
+            this.startInitialWorkerTasks(workers, state, batchSize);
             await promise;
-
-            // Cleanup listeners so they don't fire on the next run
-            for (const cleanup of cleanupListeners) {
-                cleanup();
-            }
+            this.cleanupWorkerPoolListeners(cleanupListeners);
         } catch (error) {
             this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
             return this.runFileIndexingFallback(fileItems, progressCallback);
+        }
+    }
+
+    private setupWorkerPoolListeners(
+        workers: Worker[],
+        totalFiles: number,
+        state: WorkerPoolState,
+        progressCallback: ((message: string, increment?: number) => void) | undefined,
+        batchSize: number,
+    ): (() => void)[] {
+        const cleanupListeners: (() => void)[] = [];
+
+        for (const worker of workers) {
+            const onMessage = (message: {
+                type: string;
+                items?: SearchableItem[];
+                count?: number;
+                isPartial?: boolean;
+            }) => {
+                this.handleWorkerMessage(message, worker, state, totalFiles, progressCallback, batchSize);
+            };
+
+            worker.on('message', onMessage);
+            cleanupListeners.push(() => worker.removeListener('message', onMessage));
+        }
+
+        return cleanupListeners;
+    }
+
+    private startInitialWorkerTasks(workers: Worker[], state: WorkerPoolState, batchSize: number): void {
+        const initialCount = Math.min(workers.length, state.pendingItems.length);
+        if (initialCount === 0) {
+            state.finished = true;
+            state.resolveAll();
+            return;
+        }
+
+        for (let i = 0; i < initialCount; i++) {
+            this.assignWorkerTask(workers[i], batchSize, state);
+        }
+    }
+
+    private cleanupWorkerPoolListeners(cleanupListeners: (() => void)[]): void {
+        for (const cleanup of cleanupListeners) {
+            cleanup();
+        }
+    }
+
+    private assignWorkerTask(worker: Worker, batchSize: number, state: WorkerPoolState): void {
+        if (state.finished) {
+            return;
+        }
+
+        if (this.cancellationToken.cancelled) {
+            if (state.activeTasks === 0) {
+                state.finished = true;
+                state.resolveAll();
+            }
+            return;
+        }
+
+        const batchFiles: string[] = [];
+
+        state.activeTasks++;
+
+        try {
+            while (state.pendingItems.length > 0 && batchFiles.length < batchSize) {
+                const fileItem = state.pendingItems.shift()!;
+                batchFiles.push(fileItem.filePath);
+            }
+
+            if (batchFiles.length > 0) {
+                worker.postMessage({ filePaths: batchFiles });
+            } else {
+                state.activeTasks--;
+                if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
+                    state.finished = true;
+                    state.resolveAll();
+                }
+            }
+        } catch (error) {
+            this.log(`Error assigning task: ${error}`);
+            state.activeTasks--;
+            if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
+                state.finished = true;
+                state.resolveAll();
+            }
+        }
+    }
+
+    private handleWorkerMessage(
+        message: {
+            type: string;
+            items?: SearchableItem[];
+            count?: number;
+            isPartial?: boolean;
+        },
+        worker: Worker,
+        state: WorkerPoolState,
+        totalFiles: number,
+        progressCallback: ((message: string, increment?: number) => void) | undefined,
+        batchSize: number,
+    ): void {
+        if (this.handleCancelledWorkerMessage(message, state)) {
+            return;
+        }
+
+        if (message.type === 'result') {
+            this.handleWorkerResultMessage(message, worker, state, totalFiles, progressCallback, batchSize);
+        } else if (message.type === 'error') {
+            this.handleWorkerErrorMessage(worker, state, batchSize);
+        }
+    }
+
+    private handleCancelledWorkerMessage(
+        message: {
+            type: string;
+            items?: SearchableItem[];
+            count?: number;
+            isPartial?: boolean;
+        },
+        state: WorkerPoolState,
+    ): boolean {
+        if (!this.cancellationToken.cancelled || state.finished) {
+            return false;
+        }
+
+        if ((message.type === 'result' || message.type === 'error') && !message.isPartial) {
+            state.activeTasks--;
+            if (state.activeTasks === 0) {
+                state.finished = true;
+                state.resolveAll();
+            }
+        }
+
+        return true;
+    }
+
+    private handleWorkerResultMessage(
+        message: {
+            type: string;
+            items?: SearchableItem[];
+            count?: number;
+            isPartial?: boolean;
+        },
+        worker: Worker,
+        state: WorkerPoolState,
+        totalFiles: number,
+        progressCallback: ((message: string, increment?: number) => void) | undefined,
+        batchSize: number,
+    ): void {
+        const { items, count, isPartial } = message;
+
+        if (items && items.length > 0) {
+            const processItems = () => {
+                const internedItems = items.map((item: SearchableItem) => ({
+                    ...item,
+                    name: this.intern(item.name),
+                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                    relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
+                    filePath: this.intern(item.filePath),
+                }));
+                this.fireItemsAdded(internedItems);
+            };
+
+            if (items.length > 100) {
+                setTimeout(processItems, 0);
+            } else {
+                processItems();
+            }
+        }
+
+        const itemsProcessed = count || 1;
+        state.processed += itemsProcessed;
+
+        if (!isPartial) {
+            state.activeTasks--;
+        }
+
+        this.updateWorkerProgress(
+            totalFiles,
+            itemsProcessed,
+            () => state.processed,
+            () => state.logged100,
+            (v) => (state.logged100 = v),
+            () => state.nextReportingPercentage,
+            (v) => (state.nextReportingPercentage = v),
+            progressCallback,
+        );
+
+        if (isPartial) {
+            return;
+        }
+
+        if (state.pendingItems.length > 0) {
+            this.assignWorkerTask(worker, batchSize, state);
+        } else if (state.activeTasks === 0 && !state.finished) {
+            state.finished = true;
+            state.resolveAll();
+        }
+    }
+
+    private handleWorkerErrorMessage(worker: Worker, state: WorkerPoolState, batchSize: number): void {
+        state.activeTasks--;
+        if (state.pendingItems.length > 0) {
+            this.assignWorkerTask(worker, batchSize, state);
+        } else if (state.activeTasks === 0 && !state.finished) {
+            state.finished = true;
+            state.resolveAll();
         }
     }
 
@@ -926,71 +995,43 @@ export class WorkspaceIndexer {
     private async processGitChecks() {
         this.gitCheckTimer = undefined;
 
-        // Capture current state and clear queues immediately to allow new items to queue up
         const queue = new Map(this.gitCheckQueue);
         this.gitCheckQueue.clear();
 
-        // Process each workspace folder
         for (const [folder, files] of queue) {
             if (files.size === 0) continue;
 
             const filesArray = Array.from(files);
+            await this.processGitCheckBatch(folder, filesArray);
+        }
+    }
 
-            try {
-                // Use -z for null-terminated output to handle spaces/special chars safely
-                // Use -v -n to get status for all files (ignored or tracked)
-                // Use --stdin to pass many files at once
-                const input = filesArray.join('\0');
-                const output = await this.execGit(['check-ignore', '-v', '-n', '-z', '--stdin'], folder, input);
+    private async processGitCheckBatch(folder: string, filesArray: string[]): Promise<void> {
+        try {
+            const input = filesArray.join('\0');
+            const output = await this.execGit(['check-ignore', '-v', '-n', '-z', '--stdin'], folder, input);
 
-                // Parse null-terminated output
-                // Format: source \0 line \0 pattern \0 path \0
-                // For tracked files: "" \0 "" \0 "" \0 path \0
-                const parts = output.split('\0');
-                const ignoredFiles = new Set<string>();
+            const parts = output.split('\0');
+            const ignoredFiles = new Set<string>();
 
-                // Each entry has 4 parts. The last one might be empty string due to trailing null
-                for (let i = 0; i < parts.length - 1; i += 4) {
-                    const source = parts[i];
-                    // const line = parts[i+1];
-                    // const pattern = parts[i+2];
-                    const pathName = parts[i + 3];
+            for (let i = 0; i < parts.length - 1; i += 4) {
+                const source = parts[i];
+                const pathName = parts[i + 3];
 
-                    if (source && source.length > 0) {
-                        // If source is not empty, it matched a pattern -> ignored
-                        // Note: pathName from git output might be relative or absolute depending on input
-                        // But since we passed absolute paths (mostly), git usually echoes them back or relative to cwd
-                        // We need to match it back to our filesArray.
-                        // However, since we are processing a batch, and we know what we sent...
-
-                        // The pathName returned by check-ignore might be relative if we are inside the repo.
-                        // We should normalize it to check against our requested files.
-                        const absolutePath = path.isAbsolute(pathName) ? pathName : path.join(folder, pathName);
-                        ignoredFiles.add(absolutePath);
-                    }
+                if (source && source.length > 0) {
+                    const absolutePath = path.isAbsolute(pathName) ? pathName : path.join(folder, pathName);
+                    ignoredFiles.add(absolutePath);
                 }
+            }
 
-                // Resolve promises
-                for (const filePath of filesArray) {
-                    // We need to check if the file matches any of the ignored files.
-                    // Git might return paths slightly differently (e.g. forward/backslashes).
-                    // Best to check if 'filePath' is in 'ignoredFiles'.
-                    // To be safe, we could use relative paths for everything.
-                    // But let's assume normalization works.
-
-                    // Since we passed absolute paths, let's see what git returns.
-                    // In my test with absolute input, git returned absolute path.
-
-                    const isIgnored = ignoredFiles.has(filePath);
-                    this.resolveGitCheck(filePath, isIgnored);
-                }
-            } catch (error) {
-                console.error(`Git check-ignore batch failed for ${folder}:`, error);
-                // Fallback: resolve all as not ignored (safe default) or retry individually?
-                // For now, resolve as false to unblock.
-                for (const filePath of filesArray) {
-                    this.resolveGitCheck(filePath, false);
-                }
+            for (const filePath of filesArray) {
+                const isIgnored = ignoredFiles.has(filePath);
+                this.resolveGitCheck(filePath, isIgnored);
+            }
+        } catch (error) {
+            console.error(`Git check-ignore batch failed for ${folder}:`, error);
+            for (const filePath of filesArray) {
+                this.resolveGitCheck(filePath, false);
             }
         }
     }

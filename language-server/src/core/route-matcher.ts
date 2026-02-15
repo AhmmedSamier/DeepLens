@@ -29,10 +29,31 @@ export class RouteMatcher {
      * Pre-process a concrete path for efficient matching against multiple templates.
      */
     static prepare(concretePath: string): PreparedPath {
-        // Strip method if present (e.g. "GET api/...")
-        const methodMatch = concretePath.match(/^(get|post|put|delete|patch|options|head|trace)\s+(.*)$/i);
-        const pathOnly = methodMatch ? methodMatch[2] : concretePath;
-        const method = methodMatch ? methodMatch[1].toUpperCase() : undefined;
+        const trimmed = concretePath.trim();
+        const firstSpaceIndex = trimmed.indexOf(' ');
+        let pathOnly = trimmed;
+        let method: string | undefined;
+        if (firstSpaceIndex > 0) {
+            const candidateMethod = trimmed.slice(0, firstSpaceIndex).toUpperCase();
+            const rest = trimmed.slice(firstSpaceIndex + 1);
+            if (rest.length > 0) {
+                switch (candidateMethod) {
+                    case 'GET':
+                    case 'POST':
+                    case 'PUT':
+                    case 'DELETE':
+                    case 'PATCH':
+                    case 'OPTIONS':
+                    case 'HEAD':
+                    case 'TRACE':
+                        method = candidateMethod;
+                        pathOnly = rest;
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
 
         const cleanPath = pathOnly.trim().replace(/(^\/|\/$)/g, '');
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
@@ -183,9 +204,6 @@ export class RouteMatcher {
         }
     }
 
-    /**
-     * Check if segments match from the right (supporting parameters) and return a score
-     */
     private static calculateSegmentsScore(
         tSegs: string[],
         tSegsLower: string[],
@@ -197,10 +215,10 @@ export class RouteMatcher {
             return 0;
         }
 
-        let score = 1.0; // Base score for suffix match
+        let score = 1.0;
         const isExactCount = pSegs.length === tSegs.length;
         if (isExactCount) {
-            score = 2.0; // Higher base for exact count
+            score = 2.0;
         }
 
         for (let i = 1; i <= pSegs.length; i++) {
@@ -211,19 +229,43 @@ export class RouteMatcher {
             const isParam = isParams[index];
             const isLast = i === 1;
 
-            if (isParam) {
-                if (!pSeg) return 0;
-            } else {
-                if (isLast && tSegLower.startsWith(pSegLower)) {
-                    score += tSegLower === pSegLower ? 0.1 : 0.05;
-                } else if (tSegLower === pSegLower) {
-                    score += 0.1;
-                } else {
-                    return 0;
-                }
+            const { delta, isMatch } = this.calculateSingleSegmentScore(tSegLower, pSeg, pSegLower, isParam, isLast);
+            if (!isMatch) {
+                return 0;
             }
+            score += delta;
         }
         return score;
+    }
+
+    private static calculateSingleSegmentScore(
+        templateSegmentLower: string,
+        pathSegment: string,
+        pathSegmentLower: string,
+        isParam: boolean,
+        isLast: boolean,
+    ): { delta: number; isMatch: boolean } {
+        if (isParam) {
+            if (!pathSegment) {
+                return { delta: 0, isMatch: false };
+            }
+            return { delta: 0, isMatch: true };
+        }
+
+        if (!pathSegmentLower) {
+            return { delta: 0, isMatch: false };
+        }
+
+        if (isLast && templateSegmentLower.startsWith(pathSegmentLower)) {
+            const isExactMatch = templateSegmentLower === pathSegmentLower;
+            return { delta: isExactMatch ? 0.1 : 0.05, isMatch: true };
+        }
+
+        if (templateSegmentLower === pathSegmentLower) {
+            return { delta: 0.1, isMatch: true };
+        }
+
+        return { delta: 0, isMatch: false };
     }
 
     /**

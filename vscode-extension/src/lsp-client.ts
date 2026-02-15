@@ -244,54 +244,60 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     async stop(): Promise<void> {
-        // Set flag first to prevent any new requests
         this.isStopping = true;
 
-        // Wait for any ongoing start operation to complete
-        if (this.startPromise) {
-            try {
-                await this.startPromise;
-            } catch {
-                // Ignore start errors during stop
-            }
+        await this.waitForStartCompletion();
+        await this.stopClientInstance();
+
+        this.disposeTrackedDisposables();
+
+        this.onProgress.dispose();
+        this.onStreamResult.dispose();
+    }
+
+    private async waitForStartCompletion(): Promise<void> {
+        if (!this.startPromise) {
+            return;
         }
 
-        if (this.client) {
-            try {
-                // Check actual client state - only stop if running
-                const clientState = this.client.state;
-                if (clientState === State.Running) {
-                    await this.client.stop();
-                } else if (clientState === State.Starting) {
-                    // Client is still starting - just dispose, don't try to stop
-                    this.client.dispose();
-                } else {
-                    // Client is stopped or stopping - just dispose
-                    this.client.dispose();
-                }
-            } catch {
-                // Ignore errors during stop - the client may already be disconnected
-                // Try to dispose as a last resort cleanup
-                try {
-                    this.client.dispose();
-                } catch {
-                    // Ignore dispose errors too
-                }
+        try {
+            await this.startPromise;
+        } catch {
+            return;
+        }
+    }
+
+    private async stopClientInstance(): Promise<void> {
+        if (!this.client) {
+            return;
+        }
+
+        try {
+            const clientState = this.client.state;
+            if (clientState === State.Running) {
+                await this.client.stop();
+            } else {
+                this.client.dispose();
             }
+        } catch {
+            try {
+                this.client?.dispose();
+            } catch {
+                return;
+            }
+        } finally {
             this.client = undefined;
         }
+    }
 
-        // Dispose all tracked disposables
+    private disposeTrackedDisposables(): void {
         for (const disposable of this.disposables) {
             try {
                 disposable.dispose();
             } catch {
-                // Ignore disposal errors
+                continue;
             }
         }
         this.disposables = [];
-
-        this.onProgress.dispose();
-        this.onStreamResult.dispose();
     }
 }
