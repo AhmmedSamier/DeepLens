@@ -153,10 +153,10 @@
                     "default": true,
                     "description": "Show implementation counts above classes, interfaces and methods (Ctrl+F12)"
                 },
-                "deeplens.experimental.enableFileIcons": {
+"deeplens.experimental.enableFileIcons": {
                     "type": "boolean",
                     "default": false,
-                    "description": "Enable native file icons (Requires starting VS Code with --enable-proposed-api AhmedSamir.deeplens)"
+                    "description": "Enable native file icons (Requires starting VS Code with --enable-proposed-api AhmedSamir.deeplens). When disabled, uses codicon-based file icons."
                 }
             }
         }
