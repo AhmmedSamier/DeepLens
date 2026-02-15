@@ -584,7 +584,6 @@ export class SearchProvider {
 
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
-        // eslint-disable-next-line sonarjs/cognitive-complexity
         quickPick.onDidTriggerItemButton(async (e) => {
             const result = (e.item as SearchResultItem).result;
             if (e.button.tooltip === this.TOOLTIP_SEARCH_EVERYWHERE) {
