@@ -907,6 +907,10 @@ export class SearchEngine implements ISearchProvider {
         const startTime = Date.now();
         const results: SearchResult[] = [];
 
+        // Pre-compile regexes to avoid re-compilation in hot loops
+        const queryRegex = new RegExp(escapeRegExp(query), 'i');
+        const queryRegexGlobal = new RegExp(escapeRegExp(query), 'gi');
+
         // Fallback: Node.js Stream Search
         // We still need fileItems for the fallback implementation
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
@@ -964,6 +968,8 @@ export class SearchEngine implements ISearchProvider {
                         await this.scanFileStream(
                             fileItem,
                             query,
+                            queryRegex,
+                            queryRegexGlobal,
                             query.length,
                             maxResults,
                             results,
@@ -1001,6 +1007,8 @@ export class SearchEngine implements ISearchProvider {
     private async scanFileStream(
         fileItem: SearchableItem,
         query: string,
+        queryRegex: RegExp,
+        queryRegexGlobal: RegExp,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -1017,7 +1025,7 @@ export class SearchEngine implements ISearchProvider {
                 const { newBuffer, newLineIndex } = this.processBufferLines(
                     content,
                     0,
-                    query,
+                    queryRegexGlobal,
                     queryLength,
                     maxResults,
                     results,
@@ -1027,8 +1035,7 @@ export class SearchEngine implements ISearchProvider {
                 );
 
                 if (newBuffer.length > 0) {
-                    const regex = new RegExp(escapeRegExp(query), 'i');
-                    const match = regex.exec(newBuffer);
+                    const match = queryRegex.exec(newBuffer);
                     if (match) {
                         const matchIndex = match.index;
                         const trimmedLine = newBuffer.trim();
@@ -1091,8 +1098,7 @@ export class SearchEngine implements ISearchProvider {
 
                 // Process first line (legacy way or update to new way?)
                 // Since this is a reconstructed line, we treat it as a single line buffer
-                const regex = new RegExp(escapeRegExp(query), 'i');
-                const match = regex.exec(completeLine);
+                const match = queryRegex.exec(completeLine);
                 if (match) {
                     const hitLimit = this.processSingleLine(
                         completeLine,
@@ -1116,7 +1122,7 @@ export class SearchEngine implements ISearchProvider {
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     chunk,
                     newlineIndex + 1,
-                    query,
+                    queryRegexGlobal,
                     queryLength,
                     maxResults,
                     results,
@@ -1141,8 +1147,7 @@ export class SearchEngine implements ISearchProvider {
             stream.on('end', () => {
                 if (chunkBuffer.length > 0) {
                     const buffer = chunkBuffer.join('');
-                    const regex = new RegExp(escapeRegExp(query), 'i');
-                    const match = regex.exec(buffer);
+                    const match = queryRegex.exec(buffer);
                     if (match) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
@@ -1172,7 +1177,7 @@ export class SearchEngine implements ISearchProvider {
     private processBufferLines(
         buffer: string,
         bufferOffset: number,
-        query: string,
+        queryRegexGlobal: RegExp,
         queryLength: number,
         maxResults: number,
         results: SearchResult[],
@@ -1180,7 +1185,7 @@ export class SearchEngine implements ISearchProvider {
         fileItem: SearchableItem,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        const matches = this.getAllMatches(buffer, bufferOffset, query);
+        const matches = this.getAllMatches(buffer, bufferOffset, queryRegexGlobal);
 
         // Fast path: No matches in this chunk
         if (matches.length === 0) {
@@ -1200,10 +1205,9 @@ export class SearchEngine implements ISearchProvider {
         );
     }
 
-    private getAllMatches(buffer: string, bufferOffset: number, query: string): number[] {
+    private getAllMatches(buffer: string, bufferOffset: number, regex: RegExp): number[] {
         // Optimization: Scan buffer for matches using RegExp first
         // avoiding repeated toLowerCase() allocations for every line
-        const regex = new RegExp(escapeRegExp(query), 'gi');
         const matches: number[] = [];
         let m;
 
