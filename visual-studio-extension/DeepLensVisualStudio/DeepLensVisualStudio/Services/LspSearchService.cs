@@ -18,6 +18,7 @@ namespace DeepLensVisualStudio.Services
         [JsonProperty("type")] public string Type { get; set; } = "";
         [JsonProperty("filePath")] public string FilePath { get; set; } = "";
         [JsonProperty("line")] public int? Line { get; set; }
+        [JsonProperty("column")] public int? Column { get; set; }
         [JsonProperty("containerName")] public string ContainerName { get; set; } = "";
     }
 
@@ -25,6 +26,7 @@ namespace DeepLensVisualStudio.Services
     {
         [JsonProperty("item")] public LspSearchItem Item { get; set; } = new LspSearchItem();
         [JsonProperty("score")] public double Score { get; set; }
+        [JsonProperty("highlights")] public int[][]? Highlights { get; set; }
     }
 
     public class LspSearchService : IDisposable
@@ -53,9 +55,34 @@ namespace DeepLensVisualStudio.Services
         /// </summary>
         public event Action<ProgressInfo>? OnProgress;
 
-        private void Log(string message)
+        /// <summary>
+        /// Static event that can be subscribed to from package initialization.
+        /// </summary>
+        public static event Action<ProgressInfo>? StaticOnProgress;
+
+        private void Log(string message, LogLevel level = LogLevel.Info, Exception? exception = null)
         {
-            Debug.WriteLine($"DeepLens: {message}");
+            var levelPrefix = level switch
+            {
+                LogLevel.Error => "[ERROR]",
+                LogLevel.Warning => "[WARN]",
+                LogLevel.Info => "[INFO]",
+                _ => "[DEBUG]"
+            };
+
+            var logMessage = $"[{DateTime.Now:HH:mm:ss}] {levelPrefix} {message}";
+            
+            if (exception != null)
+            {
+                logMessage += $"\n  Exception: {exception.Message}";
+                if (exception.StackTrace != null)
+                {
+                    logMessage += $"\n  Stack Trace:\n{exception.StackTrace}";
+                }
+            }
+
+            Debug.WriteLine($"DeepLens: {logMessage}");
+            
             ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
             {
                 await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
@@ -70,11 +97,25 @@ namespace DeepLensVisualStudio.Services
                             outputWindow.CreatePane(ref DeepLensPaneGuid, "DeepLens", 1, 1);
                             outputWindow.GetPane(ref DeepLensPaneGuid, out pane);
                         }
-                        pane?.OutputStringThreadSafe($"[{DateTime.Now:HH:mm:ss}] {message}\n");
+                        pane?.OutputStringThreadSafe($"{logMessage}\n");
+                        
+                        // Show pane for errors
+                        if (level == LogLevel.Error)
+                        {
+                            pane?.Activate();
+                        }
                     }
                 }
                 catch { }
             });
+        }
+
+        private enum LogLevel
+        {
+            Debug,
+            Info,
+            Warning,
+            Error
         }
 
         public async Task<bool> InitializeAsync(string solutionPath, CancellationToken ct)
@@ -188,9 +229,27 @@ namespace DeepLensVisualStudio.Services
                 catch (Exception ex)
                 {
                     _lastError = $"Failed to setup RPC: {ex.Message}";
+                    Log("Failed to setup RPC", LogLevel.Error, ex);
                     _nodeProcess.Kill();
                     return false;
                 }
+
+                // Load settings and pass to LSP server
+                var settings = new DeepLensSettings();
+                var initializationOptions = new JObject
+                {
+                    ["storagePath"] = Path.Combine(Path.GetTempPath(), "DeepLens"),
+                    ["extensionPath"] = extensionDir,
+                    ["maxResults"] = settings.MaxResults,
+                    ["enableTextSearch"] = settings.EnableTextSearch,
+                    ["enableCamelHumps"] = settings.EnableCamelHumps,
+                    ["respectGitignore"] = settings.RespectGitignore,
+                    ["searchConcurrency"] = settings.SearchConcurrency,
+                    ["activityEnabled"] = settings.ActivityEnabled,
+                    ["activityWeight"] = settings.ActivityWeight,
+                    ["fileExtensions"] = new JArray(settings.FileExtensions.ToArray()),
+                    ["excludePatterns"] = new JArray(settings.ExcludePatterns.ToArray())
+                };
 
                 var initializeParams = new JObject
                 {
@@ -198,11 +257,7 @@ namespace DeepLensVisualStudio.Services
                     ["rootPath"] = solutionPath,
                     ["rootUri"] = new Uri(solutionPath).AbsoluteUri,
                     ["capabilities"] = new JObject(),
-                    ["initializationOptions"] = new JObject
-                    {
-                        ["storagePath"] = Path.Combine(Path.GetTempPath(), "DeepLens"),
-                        ["extensionPath"] = extensionDir
-                    }
+                    ["initializationOptions"] = initializationOptions
                 };
 
                 await _rpc.InvokeWithParameterObjectAsync("initialize", initializeParams);
@@ -215,7 +270,7 @@ namespace DeepLensVisualStudio.Services
             catch (Exception ex)
             {
                 _lastError = $"LSP Init Error: {ex.Message}";
-                Debug.WriteLine($"[DeepLens] {_lastError}");
+                Log("LSP initialization failed", LogLevel.Error, ex);
                 return false;
             }
         }
@@ -278,14 +333,23 @@ namespace DeepLensVisualStudio.Services
             try
             {
                 string? message = parameters["message"]?.ToString();
+                int? level = parameters["level"]?.Value<int>();
+                
                 if (!string.IsNullOrEmpty(message))
                 {
-                    Log($"[LSP Log] {message}");
+                    var logLevel = level switch
+                    {
+                        1 => LogLevel.Error,   // Error
+                        2 => LogLevel.Warning,  // Warning
+                        3 => LogLevel.Info,     // Info
+                        _ => LogLevel.Debug     // Log
+                    };
+                    Log($"[LSP] {message}", logLevel);
                 }
             }
             catch (Exception ex)
             {
-                Log($"Error processing log message: {ex.Message}");
+                Log("Error processing log message", LogLevel.Warning, ex);
             }
         }
 
@@ -294,21 +358,30 @@ namespace DeepLensVisualStudio.Services
             try
             {
                 string? message = parameters["message"]?.ToString();
+                int? type = parameters["type"]?.Value<int>();
+                
                 if (!string.IsNullOrEmpty(message))
                 {
-                    Log($"[LSP Message] {message}");
+                    var logLevel = type switch
+                    {
+                        1 => LogLevel.Error,   // Error
+                        2 => LogLevel.Warning,  // Warning
+                        3 => LogLevel.Info,     // Info
+                        _ => LogLevel.Info      // Log
+                    };
+                    Log($"[LSP Message] {message}", logLevel);
                 }
             }
             catch (Exception ex)
             {
-                Log($"Error processing show message: {ex.Message}");
+                Log("Error processing show message", LogLevel.Warning, ex);
             }
         }
 
         private bool OnWorkDoneProgressCreate(JToken parameters)
         {
             // Simply acknowledge the progress token creation - the server expects a response
-            Log($"Progress token creation requested: {parameters}");
+            Log($"Progress token creation requested: {parameters}", LogLevel.Debug);
             return true;
         }
 
@@ -334,7 +407,7 @@ namespace DeepLensVisualStudio.Services
                     percentage = parameters["percentage"]?.Value<int>();
                 }
                 
-                Log($"Progress - Message: {message}, Percentage: {percentage}");
+                Log($"Progress - Message: {message}, Percentage: {percentage}", LogLevel.Debug);
                 
                 // Determine state based on message content
                 string state;
@@ -353,16 +426,19 @@ namespace DeepLensVisualStudio.Services
                     state = "report";
                 }
 
-                OnProgress?.Invoke(new ProgressInfo
+                var progressInfo = new ProgressInfo
                 {
                     State = state,
                     Message = message,
                     Percentage = percentage
-                });
+                };
+                
+                OnProgress?.Invoke(progressInfo);
+                StaticOnProgress?.Invoke(progressInfo);
             }
             catch (Exception ex)
             {
-                Log($"Error processing progress notification: {ex.Message}");
+                Log("Error processing progress notification", LogLevel.Warning, ex);
             }
         }
 
@@ -421,13 +497,15 @@ namespace DeepLensVisualStudio.Services
                     Kind = MapLspKind(r.Item.Type),
                     FilePath = r.Item.FilePath,
                     Line = (r.Item.Line ?? 0) + 1,
+                    Column = r.Item.Column,
+                    Highlights = r.Highlights,
                     ContainerName = r.Item.ContainerName,
                     Score = (int)(r.Score * 10000)
                 });
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"DeepLens: GetRecentItems error: {ex.Message}");
+                Log("GetRecentItems error", LogLevel.Warning, ex);
                 return Enumerable.Empty<SearchResult>();
             }
         }
@@ -483,6 +561,7 @@ namespace DeepLensVisualStudio.Services
             catch (Exception ex)
             {
                 _lastError = $"LSP Search Error: {ex.Message}";
+                Log("LSP search error", LogLevel.Error, ex);
                 return Enumerable.Empty<SearchResult>();
             }
         }
@@ -491,11 +570,13 @@ namespace DeepLensVisualStudio.Services
         {
             if (_rpc == null) return Enumerable.Empty<SearchResult>();
 
+            // Load maxResults from settings
+            var settings = new DeepLensSettings();
             var searchParams = new JObject
             {
                 ["query"] = query,
                 ["scope"] = scope,
-                ["maxResults"] = 20,
+                ["maxResults"] = settings.MaxResults,
                 ["requestId"] = Environment.TickCount
             };
 
@@ -515,6 +596,8 @@ namespace DeepLensVisualStudio.Services
                 Kind = MapLspKind(r.Item.Type),
                 FilePath = r.Item.FilePath,
                 Line = (r.Item.Line ?? 0) + 1,
+                Column = r.Item.Column,
+                Highlights = r.Highlights,
                 ContainerName = r.Item.ContainerName,
                 Score = (int)(r.Score * 10000)
             });
@@ -533,7 +616,7 @@ namespace DeepLensVisualStudio.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"DeepLens: GetIndexStats error: {ex.Message}");
+                Log("GetIndexStats error", LogLevel.Warning, ex);
                 return null;
             }
         }
@@ -553,7 +636,7 @@ namespace DeepLensVisualStudio.Services
             catch (Exception ex)
             {
                 _lastError = $"LSP Rebuild Error: {ex.Message}";
-                Debug.WriteLine($"DeepLens: RebuildIndex error: {ex.Message}");
+                Log("RebuildIndex error", LogLevel.Error, ex);
             }
         }
 
@@ -571,7 +654,7 @@ namespace DeepLensVisualStudio.Services
             catch (Exception ex)
             {
                 _lastError = $"LSP Clear Cache Error: {ex.Message}";
-                Debug.WriteLine($"DeepLens: ClearCache error: {ex.Message}");
+                Log("ClearCache error", LogLevel.Error, ex);
             }
         }
 
@@ -610,7 +693,24 @@ namespace DeepLensVisualStudio.Services
             }
             catch (Exception ex)
             {
-                Debug.WriteLine($"DeepLens: RecordActivity error: {ex.Message}");
+                Log("RecordActivity error", LogLevel.Warning, ex);
+            }
+        }
+
+        /// <summary>
+        /// Sets the list of active/open files for the /open scope.
+        /// </summary>
+        public async Task SetActiveFilesAsync(List<string> filePaths)
+        {
+            if (!_isInitialized || _rpc == null) return;
+
+            try
+            {
+                await _rpc.InvokeWithParameterObjectAsync("deeplens/setActiveFiles", new { files = filePaths });
+            }
+            catch (Exception ex)
+            {
+                Log("SetActiveFiles error", LogLevel.Warning, ex);
             }
         }
 

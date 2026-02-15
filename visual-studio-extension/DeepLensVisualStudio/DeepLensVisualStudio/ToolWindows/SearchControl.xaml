@@ -1,4 +1,4 @@
-﻿<UserControl
+<UserControl
     x:Class="DeepLensVisualStudio.ToolWindows.SearchControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -148,32 +148,38 @@
                         Content="All"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterAll, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        ToolTip="Search everywhere (/all)" />
                     <RadioButton
                         Content="Classes"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterClasses, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        ToolTip="Find classes and types (/t)" />
                     <RadioButton
                         Content="Symbols"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterSymbols, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        ToolTip="Find methods and symbols (/s or #)" />
                     <RadioButton
                         Content="Files"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterFiles, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        ToolTip="Find files (/f)" />
                     <RadioButton
                         Content="Text"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterText, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        ToolTip="Full text search (/txt)" />
                     <RadioButton
                         Content="Endpoints"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterEndpoints, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        ToolTip="Find API endpoints (/e)" />
                 </StackPanel>
             </Border>
 
