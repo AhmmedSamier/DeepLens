@@ -178,18 +178,22 @@ export class SearchEngine implements ISearchProvider {
     async addItems(items: SearchableItem[]): Promise<void> {
         // Pre-calculate start index for new items
         const startIndex = this.items.length;
+        const requiredSize = startIndex + items.length;
 
-        // Resize itemTypeIds and itemBitflags
-        if (this.itemTypeIds.length < startIndex + items.length) {
-            const newTypeIds = new Uint8Array(startIndex + items.length);
+        // Resize itemTypeIds and itemBitflags with exponential growth
+        if (this.itemTypeIds.length < requiredSize) {
+            // Growth Strategy: 1.5x or requiredSize to prevent frequent allocations
+            const newCapacity = Math.max(requiredSize, Math.ceil(this.itemTypeIds.length * 1.5));
+
+            const newTypeIds = new Uint8Array(newCapacity);
             newTypeIds.set(this.itemTypeIds);
             this.itemTypeIds = newTypeIds;
 
-            const newBitflags = new Uint32Array(startIndex + items.length);
+            const newBitflags = new Uint32Array(newCapacity);
             newBitflags.set(this.itemBitflags);
             this.itemBitflags = newBitflags;
 
-            const newNameBitflags = new Uint32Array(startIndex + items.length);
+            const newNameBitflags = new Uint32Array(newCapacity);
             newNameBitflags.set(this.itemNameBitflags);
             this.itemNameBitflags = newNameBitflags;
         }
