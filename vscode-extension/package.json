@@ -136,7 +136,13 @@
                         "h",
                         "go",
                         "rb",
-                        "php"
+                        "php",
+                        "txt",
+                        "md",
+                        "json",
+                        "xml",
+                        "yaml",
+                        "yml"
                     ],
                     "description": "File extensions to index for search"
                 },

@@ -47,7 +47,7 @@ export class WorkspaceIndexer {
     private excludeMatchers: Minimatch[] = [];
     private workers: Worker[] = [];
     private workersInitialized: boolean = false;
-    private fileHashes: Map<string, string> = new Map();
+    private allowedExtensions: Set<string> = new Set();
 
     // Batched git check queue
     private gitCheckQueue: Map<string, Set<string>> = new Map();
@@ -65,6 +65,7 @@ export class WorkspaceIndexer {
         this.env = env;
         this.extensionPath = extensionPath;
         this.updateExcludeMatchers();
+        this.updateAllowedExtensions();
     }
 
     /**
@@ -128,6 +129,12 @@ export class WorkspaceIndexer {
         this.excludeMatchers = patterns.map((p) => new Minimatch(p, { dot: true }));
     }
 
+    private updateAllowedExtensions(): void {
+        const extensions = this.config.getFileExtensions();
+        const normalized = extensions.map((ext) => ext.toLowerCase());
+        this.allowedExtensions = new Set(normalized);
+    }
+
     public onItemsAdded(listener: (items: SearchableItem[]) => void) {
         this.onItemsAddedListeners.push(listener);
         return {
@@ -178,6 +185,7 @@ export class WorkspaceIndexer {
         this.cancellationToken = { cancelled: false };
         this.stringCache.clear();
         this.updateExcludeMatchers();
+        this.updateAllowedExtensions();
 
         try {
             const workspaceFolders = this.env.getWorkspaceFolders();
@@ -332,6 +340,10 @@ export class WorkspaceIndexer {
             files.map((filePath) =>
                 limit(async () => {
                     if (this.cancellationToken.cancelled) {
+                        return;
+                    }
+
+                    if (!this.shouldIndexFileByExtension(filePath)) {
                         return;
                     }
 
@@ -962,6 +974,20 @@ export class WorkspaceIndexer {
         return this.excludeMatchers.some((matcher) => matcher.match(normalizedPath));
     }
 
+    private shouldIndexFileByExtension(filePath: string): boolean {
+        if (this.allowedExtensions.size === 0) {
+            return true;
+        }
+
+        const ext = path.extname(filePath);
+        if (!ext) {
+            return true;
+        }
+
+        const normalized = ext.startsWith('.') ? ext.slice(1).toLowerCase() : ext.toLowerCase();
+        return this.allowedExtensions.has(normalized);
+    }
+
     /**
      * Check if a file is ignored by git
      */
@@ -1067,6 +1093,10 @@ export class WorkspaceIndexer {
             return; // Skip during full re-index or cooldown
         }
 
+        if (!this.shouldIndexFileByExtension(filePath)) {
+            return;
+        }
+
         if (this.shouldExcludeFile(filePath)) {
             return;
         }
@@ -1106,6 +1136,10 @@ export class WorkspaceIndexer {
             return; // Skip individual updates during full re-index or cooldown
         }
 
+        if (!this.shouldIndexFileByExtension(filePath)) {
+            return;
+        }
+
         if (this.shouldExcludeFile(filePath)) {
             return;
         }
@@ -1118,7 +1152,6 @@ export class WorkspaceIndexer {
         this.fireItemsRemoved(filePath);
 
         // Invalidate hash to force re-calculation
-        this.fileHashes.delete(filePath);
 
         // Re-add file item with updated size
         const fileName = path.basename(filePath);
@@ -1145,6 +1178,10 @@ export class WorkspaceIndexer {
      * Handle file deleted
      */
     private handleFileDeleted(filePath: string): void {
+        if (!this.shouldIndexFileByExtension(filePath)) {
+            return;
+        }
+
         if (this.shouldExcludeFile(filePath)) {
             return;
         }
@@ -1180,7 +1217,6 @@ export class WorkspaceIndexer {
      */
     public resetCaches(): void {
         this.stringCache.clear();
-        this.fileHashes.clear();
     }
 
     /**
