@@ -5,3 +5,7 @@
 ## 2025-02-12 - [SearchEngine] Exponential Growth for Hot Arrays
 **Learning:** `SearchEngine.addItems` was resizing TypedArrays to the exact required size for every batch of items added. Since `WorkspaceIndexer` adds items in batches of 50, this caused O(N^2) complexity due to repeated allocations and copying.
 **Action:** Implemented an exponential growth strategy (1.5x capacity) for `itemTypeIds`, `itemBitflags`, and `itemNameBitflags`. Benchmarking showed a **~32% improvement** (806ms -> 548ms) when indexing 60k items in batches of 50. Always consider growth strategy when resizing buffers in a loop!
+
+## 2025-02-12 - [SearchEngine] Removed Redundant Lowercased Strings
+**Learning:** `SearchEngine` was maintaining a parallel `preparedNamesLow` array and a `preparedLowCache` Map to store lowercased item names for prefix matching. However, the `Fuzzysort.Prepared` objects (stored in `preparedNames`) already contain the lowercased string internally as `_targetLower`.
+**Action:** Removed `preparedNamesLow` and `preparedLowCache`. Updated `burstSearch` to access `_targetLower` directly from the `Fuzzysort.Prepared` object (via casting). This reduces memory usage by eliminating duplicate string storage and pointer arrays, and saves CPU by avoiding a second `toLowerCase()` call per item. Always check if a library already computes/stores the data you need!

@@ -146,31 +146,6 @@ describe('SearchEngine', () => {
         expect(preparedCache.has('UniqueName1')).toBe(true);
     });
 
-    it('should manage low cache via ref counting', () => {
-        const engine = new SearchEngine();
-        const items: SearchableItem[] = [];
-
-        // Add items
-        for (let i = 0; i < 100; i++) {
-            items.push(createTestItem(`${i}`, `Item${i}`, SearchItemType.CLASS, `src/File${i}.ts`));
-        }
-
-        engine.setItems(items);
-
-        const preparedLowCache = (engine as any).preparedLowCache as Map<string, any>;
-
-        // Verify cache is populated
-        expect(preparedLowCache.size).toBe(100);
-
-        // Remove one item
-        engine.removeItemsByFile(path.normalize('/src/File0.ts'));
-
-        // Expectation: Size decreases by 1
-        expect(preparedLowCache.size).toBe(99);
-        expect(preparedLowCache.has('Item0')).toBe(false);
-        expect(preparedLowCache.has('Item1')).toBe(true);
-    });
-
     it('should filter by OPEN scope', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
