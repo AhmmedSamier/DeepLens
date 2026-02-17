@@ -79,6 +79,33 @@ const ID_TO_SCOPE = [
     SearchScope.ENDPOINTS,
 ];
 
+// Precompute ASCII bitflags table for O(1) lookup
+// Maps char code (0-127) to a bitmask.
+const CHAR_TO_BITFLAG = new Uint32Array(128);
+
+// Default to 'other ascii' (bit 30) for all entries initially
+for (let i = 0; i < 128; i++) {
+    CHAR_TO_BITFLAG[i] = 1 << 30;
+}
+
+// 0-9 -> bit 26
+for (let i = 48; i <= 57; i++) {
+    CHAR_TO_BITFLAG[i] = 1 << 26;
+}
+
+// A-Z -> 0-25 (Normalized to a-z, so 'A' maps to bit 0)
+for (let i = 65; i <= 90; i++) {
+    CHAR_TO_BITFLAG[i] = 1 << (i - 65);
+}
+
+// a-z -> 0-25 (Maps to bit 0-25)
+for (let i = 97; i <= 122; i++) {
+    CHAR_TO_BITFLAG[i] = 1 << (i - 97);
+}
+
+// Space (32) -> 0 (ignored)
+CHAR_TO_BITFLAG[32] = 0;
+
 /**
  * Core search engine that performs fuzzy matching and CamelHumps search
  */
@@ -1924,34 +1951,19 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private calculateBitflags(str: string): number {
-        // Optimization: Single pass for ASCII strings
+        // Optimization: Single pass for ASCII strings using lookup table
         const len = str.length;
         let bitflags = 0;
 
         for (let i = 0; i < len; i++) {
-            let code = str.charCodeAt(i);
+            const code = str.charCodeAt(i);
 
             // Check for non-ASCII
             if (code > 127) {
                 return this.calculateBitflagsSlow(str);
             }
 
-            if (code === 32) continue; // Space ignored
-
-            // Normalize A-Z to a-z
-            if (code >= 65 && code <= 90) {
-                code |= 32;
-            }
-
-            let bit = 0;
-            if (code >= 97 && code <= 122) {
-                bit = code - 97; // a-z
-            } else if (code >= 48 && code <= 57) {
-                bit = 26; // 0-9
-            } else {
-                bit = 30; // other ascii
-            }
-            bitflags |= 1 << bit;
+            bitflags |= CHAR_TO_BITFLAG[code];
         }
         return bitflags;
     }
