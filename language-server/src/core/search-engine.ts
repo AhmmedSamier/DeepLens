@@ -1576,6 +1576,11 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
+        // Optimization: Skip CamelHumps if query characters are not in the name
+        if ((context.queryBitflags & context.itemNameBitflags[i]) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const capitals = context.preparedCapitals[i];
         if (!capitals || context.queryLen > capitals.length) {
             return -Infinity;
@@ -1626,6 +1631,11 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
+        // Optimization: Skip fuzzy search if query characters are not in the name
+        if ((context.queryBitflags & context.itemNameBitflags[i]) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const pName = context.preparedNames[i];
         if (!pName || context.queryLen > pName.target.length) {
             return -Infinity;
