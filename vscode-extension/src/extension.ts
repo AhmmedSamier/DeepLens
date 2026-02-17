@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';
-import { SearchItemType, SearchScope, SearchableItem } from '../../language-server/src/core/types';
+import { SearchItemType, SearchableItem } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
@@ -94,7 +94,7 @@ export async function activate(context: vscode.ExtensionContext) {
             initialQuery = editor.document.getText(editor.selection);
         }
 
-        await searchProvider.show(SearchScope.EVERYTHING, initialQuery);
+        await searchProvider.show(undefined, initialQuery);
     });
 
     // Register rebuild index command

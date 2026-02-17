@@ -34,8 +34,8 @@ export class SearchProvider {
     private feedbackTimeout: NodeJS.Timeout | undefined;
 
     // Visual prefixes for button tooltips
-    private readonly ACTIVE_PREFIX = '● ';
-    private readonly INACTIVE_PREFIX = '○ ';
+    private readonly ACTIVE_PREFIX = 'Active: ';
+    private readonly INACTIVE_PREFIX = '';
     private readonly ICON_CLASS = 'symbol-class';
 
     // Tooltips for empty state buttons
@@ -368,14 +368,16 @@ export class SearchProvider {
     }
 
     /**
-     * Show search UI with specific scope
-     */
-    /**
      * Show search UI with specific scope and optional initial query
      */
-    async show(scope: SearchScope = SearchScope.EVERYTHING, initialQuery?: string): Promise<void> {
-        this.currentScope = scope;
-        this.userSelectedScope = scope; // Reset user selection when opening
+    async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
+        if (scope !== undefined) {
+            this.currentScope = scope;
+            this.userSelectedScope = scope;
+        } else {
+            // Use persisted scope
+            this.currentScope = this.userSelectedScope;
+        }
         await this.showInternal(initialQuery);
     }
 

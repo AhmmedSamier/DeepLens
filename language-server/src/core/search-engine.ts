@@ -17,6 +17,11 @@ import {
     SearchScope,
 } from './types';
 
+// Extend Fuzzysort.Prepared to include internal property
+interface ExtendedPrepared extends Fuzzysort.Prepared {
+    _targetLower: string;
+}
+
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
 
@@ -120,7 +125,6 @@ export class SearchEngine implements ISearchProvider {
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
-    private preparedNamesLow: (string | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
     private preparedCapitals: (string | null)[] = [];
@@ -129,7 +133,6 @@ export class SearchEngine implements ISearchProvider {
 
     // Deduplication cache for prepared strings
     private preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
-    private preparedLowCache: Map<string, { value: string; refCount: number }> = new Map();
 
     // Map Scope -> Array of Indices
     private scopedIndices: Map<SearchScope, number[]> = new Map();
@@ -191,7 +194,6 @@ export class SearchEngine implements ISearchProvider {
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.preparedCache.clear();
-        this.preparedLowCache.clear();
         this.filePaths = [];
         for (const item of items) {
             this.itemsMap.set(item.id, item);
@@ -305,7 +307,6 @@ export class SearchEngine implements ISearchProvider {
                 this.releasePrepared(this.preparedNames[read]);
                 this.releasePrepared(this.preparedFullNames[read]);
                 this.releasePrepared(this.preparedPaths[read]);
-                this.releasePreparedLow(item.name);
 
                 this.itemsMap.delete(item.id);
                 if (item.type === SearchItemType.FILE) {
@@ -322,7 +323,6 @@ export class SearchEngine implements ISearchProvider {
         this.itemBitflags[write] = this.itemBitflags[read];
         this.itemNameBitflags[write] = this.itemNameBitflags[read];
         this.preparedNames[write] = this.preparedNames[read];
-        this.preparedNamesLow[write] = this.preparedNamesLow[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
         this.preparedPaths[write] = this.preparedPaths[read];
         this.preparedCapitals[write] = this.preparedCapitals[read];
@@ -337,7 +337,6 @@ export class SearchEngine implements ISearchProvider {
             this.itemBitflags = this.itemBitflags.slice(0, write);
             this.itemNameBitflags = this.itemNameBitflags.slice(0, write);
             this.preparedNames.length = write;
-            this.preparedNamesLow.length = write;
             this.preparedFullNames.length = write;
             this.preparedPaths.length = write;
             this.preparedCapitals.length = write;
@@ -379,7 +378,6 @@ export class SearchEngine implements ISearchProvider {
      */
     private clearParallelArrays(): void {
         this.preparedNames = [];
-        this.preparedNamesLow = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
@@ -454,7 +452,6 @@ export class SearchEngine implements ISearchProvider {
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
-        this.preparedNamesLow.push(this.getPreparedLow(item.name));
         this.preparedFullNames.push(shouldPrepareFullName && item.fullName ? this.getPrepared(item.fullName) : null);
         this.preparedPaths.push(normalizedPath ? this.getPrepared(normalizedPath) : null);
         this.preparedCapitals.push(this.extractCapitals(item.name));
@@ -487,18 +484,6 @@ export class SearchEngine implements ISearchProvider {
         return prepared;
     }
 
-    private getPreparedLow(text: string): string {
-        const entry = this.preparedLowCache.get(text);
-        if (entry) {
-            entry.refCount++;
-            return entry.value;
-        }
-
-        const low = text.toLowerCase();
-        this.preparedLowCache.set(text, { value: low, refCount: 1 });
-        return low;
-    }
-
     private releasePrepared(prepared: Fuzzysort.Prepared | null): void {
         if (!prepared) return;
         const key = prepared.target;
@@ -507,17 +492,6 @@ export class SearchEngine implements ISearchProvider {
             entry.refCount--;
             if (entry.refCount <= 0) {
                 this.preparedCache.delete(key);
-            }
-        }
-    }
-
-    private releasePreparedLow(text: string | null): void {
-        if (!text) return;
-        const entry = this.preparedLowCache.get(text);
-        if (entry) {
-            entry.refCount--;
-            if (entry.refCount <= 0) {
-                this.preparedLowCache.delete(text);
             }
         }
     }
@@ -572,7 +546,6 @@ export class SearchEngine implements ISearchProvider {
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
         this.preparedNames = [];
-        this.preparedNamesLow = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedCapitals = [];
@@ -582,7 +555,6 @@ export class SearchEngine implements ISearchProvider {
         this.scopedIndices.clear();
         this.fileToItemIndices.clear();
         this.preparedCache.clear();
-        this.preparedLowCache.clear();
     }
 
     /**
@@ -619,14 +591,12 @@ export class SearchEngine implements ISearchProvider {
         size += this.itemBitflags.byteLength;
         size += this.itemNameBitflags.byteLength;
         size += this.preparedNames.length * 8;
-        size += this.preparedNamesLow.length * 8;
         size += this.preparedFullNames.length * 8;
         size += this.preparedPaths.length * 8;
         size += this.preparedCapitals.length * 8;
 
         // Cache maps (rough estimate: 100 bytes per entry)
         size += this.preparedCache.size * 100;
-        size += this.preparedLowCache.size * 50;
 
         return size;
     }
@@ -2161,9 +2131,13 @@ export class SearchEngine implements ISearchProvider {
 
             // Optimization: Check parallel array match BEFORE accessing the full item object
             // This prevents cache misses for non-matching items
-            const cachedName = this.preparedNamesLow[i];
+            const prepared = this.preparedNames[i];
 
-            if (cachedName) {
+            if (prepared) {
+                // Access internal lowercased string from Fuzzysort prepared object
+                // to avoid storing a duplicate array of strings
+                const cachedName = (prepared as unknown as ExtendedPrepared)._targetLower;
+
                 // Fast path
                 if (cachedName === queryLower || cachedName.startsWith(queryLower)) {
                     const item = this.items[i];
