@@ -1692,28 +1692,32 @@ export class SearchProvider {
 
     private handleSlashCommandNavigation(item: SearchableItem, preview: boolean): boolean {
         // Handle Slash Command Selection
-        if (item.id.startsWith('slash-cmd:') && this.currentQuickPick) {
-            if (preview) return true; // Don't do anything for preview
+        if (item.id.startsWith('slash-cmd:')) {
+            // If the quickpick is already closed (e.g. during a preview timeout race),
+            // we should still return true to prevent falling through to file navigation.
+            if (this.currentQuickPick) {
+                if (preview) return true; // Don't do anything for preview
 
-            const functionalPrefix = item.id.substring('slash-cmd:'.length);
+                const functionalPrefix = item.id.substring('slash-cmd:'.length);
 
-            // Find scope for this prefix (add space to match PREFIX_MAP)
-            const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
-            if (scope) {
-                this.userSelectedScope = scope; // <--- FIX: Persist user selection
-                this.currentScope = scope;
-                this.updateFilterButtons(this.currentQuickPick);
-                this.currentQuickPick.value = ''; // Clear the command text
-                this.currentQuickPick.placeholder = this.getPlaceholder();
+                // Find scope for this prefix (add space to match PREFIX_MAP)
+                const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
+                if (scope) {
+                    this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                    this.currentScope = scope;
+                    this.updateFilterButtons(this.currentQuickPick);
+                    this.currentQuickPick.value = ''; // Clear the command text
+                    this.currentQuickPick.placeholder = this.getPlaceholder();
+                }
+
+                // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
+                this.handleQueryChange(
+                    this.currentQuickPick,
+                    '',
+                    () => {},
+                    () => {},
+                );
             }
-
-            // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
-            this.handleQueryChange(
-                this.currentQuickPick,
-                '',
-                () => {},
-                () => {},
-            );
             return true;
         }
         return false;
