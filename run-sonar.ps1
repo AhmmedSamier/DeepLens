@@ -3,10 +3,10 @@ param(
 )
 
 if (-not $SonarToken) {
-    if ($env:SONAR_TOKEN) {
-        $SonarToken = $env:SONAR_TOKEN
+    if ($env:SONARQUBE_TOKEN) {
+        $SonarToken = $env:SONARQUBE_TOKEN
     } else {
-        Write-Error "Please provide -SonarToken or set SONAR_TOKEN environment variable."
+        Write-Error "Please provide -SonarToken or set SONARQUBE_TOKEN environment variable."
         exit 1
     }
 }

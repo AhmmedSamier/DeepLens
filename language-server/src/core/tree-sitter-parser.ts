@@ -200,9 +200,8 @@ export class TreeSitterParser {
             if (endpoints.length > 0) {
                 endpoints.forEach((e) => this.log(`  - Found Endpoint: ${e.name}`));
             } else if (items.length === 0) {
-                this.log(
-                    `Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${(tree.rootNode as unknown as TreeSitterNode).type}`,
-                );
+                const rootNode = tree.rootNode as TreeSitterNode;
+                this.log(`Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${rootNode.type}`);
             }
         }
     }
@@ -434,7 +433,7 @@ export class TreeSitterParser {
             parent = this.getParent(parent);
         }
 
-        if (parent && parent.type.toLowerCase().includes('class_declaration')) {
+        if (parent?.type.toLowerCase().includes('class_declaration')) {
             const results: { method: string | null; route: string | null } = { method: null, route: null };
             this.findAttributeListsRecursive(parent, results, true);
             return results.route;

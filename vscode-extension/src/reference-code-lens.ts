@@ -3,14 +3,14 @@ import * as vscode from 'vscode';
 /**
  * Symbol kinds to show references for
  */
-const SUPPORTED_SYMBOL_KINDS = [
+const SUPPORTED_SYMBOL_KINDS = new Set([
     vscode.SymbolKind.Class,
     vscode.SymbolKind.Interface,
     vscode.SymbolKind.Function,
     vscode.SymbolKind.Method,
     vscode.SymbolKind.Enum,
     vscode.SymbolKind.Struct,
-];
+]);
 
 /**
  * CodeLens types
@@ -25,7 +25,7 @@ enum CodeLensType {
  * Similar to JetBrains Rider's "Code Vision" feature
  */
 export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
-    private _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
+    private readonly _onDidChangeCodeLenses = new vscode.EventEmitter<void>();
     public readonly onDidChangeCodeLenses = this._onDidChangeCodeLenses.event;
 
     private enabled: boolean = true;
@@ -62,10 +62,9 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
 
         try {
             // Get document symbols using VSCode's built-in provider
-            const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[]>(
-                'vscode.executeDocumentSymbolProvider',
-                document.uri,
-            );
+            const symbols = await vscode.commands.executeCommand<
+                vscode.DocumentSymbol[] | vscode.SymbolInformation[]
+            >('vscode.executeDocumentSymbolProvider', document.uri);
 
             if (!symbols || token.isCancellationRequested) {
                 return [];
@@ -136,7 +135,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         document: vscode.TextDocument,
         codeLenses: vscode.CodeLens[],
     ) {
-        if (!SUPPORTED_SYMBOL_KINDS.includes(symbol.kind)) {
+        if (!SUPPORTED_SYMBOL_KINDS.has(symbol.kind)) {
             return;
         }
 
@@ -187,20 +186,21 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
      */
     async resolveCodeLens(codeLens: vscode.CodeLens, token: vscode.CancellationToken): Promise<vscode.CodeLens | null> {
         const lens = codeLens as CodeLensWithSymbol;
+        const { documentUri, symbolPosition, type } = lens;
 
-        if (!lens.documentUri || !lens.symbolPosition || !lens.type) {
+        if (!documentUri || !symbolPosition || !type) {
             return null;
         }
 
         try {
-            const isReference = lens.type === CodeLensType.REFERENCE;
+            const isReference = type === CodeLensType.REFERENCE;
             const command = isReference ? 'vscode.executeReferenceProvider' : 'vscode.executeImplementationProvider';
 
             // Fetch locations using VSCode's built-in provider
             const locations = await vscode.commands.executeCommand<vscode.Location[]>(
                 command,
-                lens.documentUri,
-                lens.symbolPosition,
+                documentUri,
+                symbolPosition,
             );
 
             if (token.isCancellationRequested) {
@@ -219,8 +219,8 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
                     return true;
                 }
 
-                const isSameFile = uri.toString() === lens.documentUri?.toString();
-                return !(isSameFile && range.contains(lens.symbolPosition!));
+                const isSameFile = uri.toString() === documentUri.toString();
+                return !(isSameFile && range.contains(symbolPosition));
             });
 
             const count = finalLocations.length;
@@ -257,7 +257,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             codeLens.command = {
                 title,
                 command: isReference ? 'editor.action.showReferences' : 'editor.action.peekImplementation',
-                arguments: [lens.documentUri, lens.symbolPosition, commandLocations],
+                arguments: [documentUri, symbolPosition, commandLocations],
                 tooltip: `Show all ${isReference ? 'references' : 'implementations'} to ${lens.symbolName}`,
             };
         } catch (error) {

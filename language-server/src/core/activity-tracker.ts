@@ -158,7 +158,7 @@ export class ActivityTracker {
             .slice(0, count);
 
         return sorted.map(a => {
-            const item = { ...a.item! };
+            const item = { ...a.item };
             const relativeTime = this.getRelativeTime(a.lastAccessed);
 
             // Append relative time to detail

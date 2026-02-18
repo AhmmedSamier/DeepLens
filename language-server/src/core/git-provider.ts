@@ -75,7 +75,15 @@ export class GitProvider {
         if (error instanceof Error) {
             return error.message;
         }
-        return error?.toString() ?? 'Unknown error';
+        if (typeof error === 'string') {
+            return error;
+        }
+        try {
+            return JSON.stringify(error);
+        } catch {
+            const tag = Object.prototype.toString.call(error);
+            return `Non-Error value: ${tag}`;
+        }
     }
 
     private async execGit(args: string[], cwd: string): Promise<string> {

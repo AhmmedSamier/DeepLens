@@ -168,10 +168,12 @@ export class SlashCommandService {
 
         for (const cmd of this.commands.values()) {
             if (!uniqueCommands.has(cmd.name)) {
-                if (!grouped.has(cmd.category)) {
-                    grouped.set(cmd.category, []);
+                let group = grouped.get(cmd.category);
+                if (!group) {
+                    group = [];
+                    grouped.set(cmd.category, group);
                 }
-                grouped.get(cmd.category)!.push(cmd);
+                group.push(cmd);
                 uniqueCommands.add(cmd.name);
             }
         }
@@ -200,9 +202,9 @@ export class SlashCommandService {
 
     getCommands(query?: string): SlashCommand[] {
         if (!query) {
-            return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name))).map(
-                (name) => this.commands.get(name)!,
-            );
+return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name)))
+            .map((name) => this.commands.get(name))
+            .filter((cmd): cmd is SlashCommand => cmd !== undefined);
         }
 
         const lowerQuery = query.toLowerCase();

@@ -20,19 +20,19 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
     async findFiles(include: string, exclude: string): Promise<string[]> {
         const results: string[] = [];
         for (const folder of this.workspaceFolders) {
-            // Convert pattern to absolute glob if needed
             const absoluteInclude = path.isAbsolute(include) ? include : path.join(folder, include);
-            // Replace backslashes with forward slashes for glob
-            const globPattern = absoluteInclude.replace(/\\/g, '/');
+            const globPattern = absoluteInclude.replaceAll('\\', '/');
+
+            const ignorePattern = exclude ? exclude.replaceAll('\\', '/') : undefined;
 
             const files = await glob(globPattern, {
-                ignore: exclude ? exclude.replace(/\\/g, '/') : undefined,
+                ignore: ignorePattern,
                 cwd: folder,
                 absolute: true,
                 nodir: true,
             });
 
-            results.push(...(files as string[]));
+            results.push(...files);
         }
         return results;
     }

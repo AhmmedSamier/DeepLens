@@ -94,7 +94,7 @@ connection.onInitialize(async (params: InitializeParams) => {
         parentProcessMonitor = setInterval(() => {
             try {
                 // kill(pid, 0) checks if process exists without killing it
-                process.kill(params.processId as number, 0);
+                process.kill(params.processId, 0);
             } catch {
                 // Parent process is gone - clean up interval before exit
                 if (parentProcessMonitor) {
@@ -575,7 +575,20 @@ process.on('uncaughtException', (error) => {
 });
 
 process.on('unhandledRejection', (reason) => {
-    const errorMsg = `Unhandled rejection: ${reason}`;
+    let reasonText: string;
+    if (reason instanceof Error) {
+        reasonText = `${reason.message}\n${reason.stack ?? ''}`;
+    } else if (typeof reason === 'string') {
+        reasonText = reason;
+    } else {
+        try {
+            reasonText = JSON.stringify(reason);
+        } catch {
+            const tag = Object.prototype.toString.call(reason);
+            reasonText = `Non-Error value: ${tag}`;
+        }
+    }
+    const errorMsg = `Unhandled rejection: ${reasonText}`;
     fileLogger(errorMsg);
     if (!isShuttingDown) {
         try {

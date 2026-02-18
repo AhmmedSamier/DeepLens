@@ -44,7 +44,7 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
     [SearchItemType.FUNCTION]: 1.25,
     [SearchItemType.METHOD]: 1.25,
     [SearchItemType.PROPERTY]: 1.1,
-    [SearchItemType.VARIABLE]: 1.0,
+    [SearchItemType.VARIABLE]: 1,
     [SearchItemType.FILE]: 0.9,
     [SearchItemType.TEXT]: 0.7,
     [SearchItemType.COMMAND]: 1.2,
@@ -67,7 +67,7 @@ const TYPE_TO_ID: Record<SearchItemType, number> = {
 
 // 0 is reserved/undefined, boosts start from 1
 const ID_TO_BOOST = [
-    1.0, // 0 (fallback)
+    1, // 0 (fallback)
     ITEM_TYPE_BOOSTS[SearchItemType.FILE],
     ITEM_TYPE_BOOSTS[SearchItemType.CLASS],
     ITEM_TYPE_BOOSTS[SearchItemType.INTERFACE],
@@ -309,13 +309,7 @@ export class SearchEngine implements ISearchProvider {
         let write = 0;
         for (let read = 0; read < count; read++) {
             const item = this.items[read];
-            if (item.filePath !== filePath) {
-                if (read !== write) {
-                    this.moveItem(read, write);
-                }
-                write++;
-            } else {
-                // Decrement reference counts for prepared strings
+            if (item.filePath === filePath) {
                 this.releasePrepared(this.preparedNames[read]);
                 this.releasePrepared(this.preparedFullNames[read]);
                 this.releasePrepared(this.preparedPaths[read]);
@@ -324,6 +318,11 @@ export class SearchEngine implements ISearchProvider {
                 if (item.type === SearchItemType.FILE) {
                     this.fileItemByNormalizedPath.delete(this.normalizePath(item.filePath));
                 }
+            } else {
+                if (read !== write) {
+                    this.moveItem(read, write);
+                }
+                write++;
             }
         }
         return write;
@@ -432,7 +431,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            const normalized = item.relativeFilePath.replace(/\\/g, '/');
+            const normalized = item.relativeFilePath.replaceAll('\\', '/');
             aggregateFlags |= this.calculateBitflags(normalized);
         }
 
@@ -460,7 +459,7 @@ export class SearchEngine implements ISearchProvider {
      * Populate parallel arrays with prepared data for an item
      */
     private populateParallelArrays(item: SearchableItem): void {
-        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replaceAll('\\', '/') : null;
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
@@ -580,7 +579,7 @@ export class SearchEngine implements ISearchProvider {
         const query = options.query || '';
         return {
             query,
-            normalizedQuery: query.replace(/\\/g, '/'),
+            normalizedQuery: query.replaceAll('\\', '/'),
             queryUpper: query.toUpperCase(),
             scope: options.scope || SearchScope.EVERYTHING,
             maxResults: options.maxResults || 20,
@@ -663,7 +662,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         // If the second arg is the token, use it. Otherwise use the third arg.
-        const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
+        const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -762,7 +761,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         targetLine: number | undefined,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-        const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+        const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
 
         // 1. Filter and search
         let indices: number[] | undefined;
@@ -843,7 +842,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
         // Try Ripgrep first
-        if (this.ripgrep && this.ripgrep.isAvailable()) {
+        if (this.ripgrep?.isAvailable()) {
             const results = await this.performRipgrepSearch(query, maxResults, onResult, token);
             // Fallback to stream search ONLY if ripgrep failed (null) or found nothing ([])
             // We want to be extra robust in tests and edge cases
@@ -864,7 +863,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         try {
             if (token?.isCancellationRequested) return [];
             // Pass cached file paths to ripgrep (No mapping/filtering needed)
-            const matches = await this.ripgrep!.search(query, this.filePaths, maxResults, token);
+            const matches = await this.ripgrep.search(query, this.filePaths, maxResults, token);
 
             const results: SearchResult[] = [];
             for (const match of matches) {
@@ -891,7 +890,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
                         containerName: fileItem.name,
                         detail: fileItem.relativeFilePath,
                     },
-                    score: 1.0,
+                    score: 1,
                     scope: SearchScope.TEXT,
                     highlights: match.submatches.map((sm) => [sm.start, sm.end]),
                 };
@@ -949,9 +948,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         const flushBatch = () => {
             if (pendingResults.length > 0) {
-                if (firstResultTime === null) {
-                    firstResultTime = Date.now() - startTime;
-                }
+                firstResultTime ??= Date.now() - startTime;
                 if (onResult) {
                     pendingResults.forEach((r) => onResult(r));
                 }
@@ -1013,7 +1010,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         flushBatch();
         const durationMs = Date.now() - startTime;
         const durationSec = (durationMs / 1000).toFixed(3);
-        const firstResultLog = firstResultTime !== null ? ` (First result in ${firstResultTime}ms)` : '';
+        const firstResultLog = firstResultTime === null ? '' : ` (First result in ${firstResultTime}ms)`;
 
         this.logger?.log(`Text search completed in ${durationSec}s${firstResultLog}. Found ${results.length} results.`);
         return results;
@@ -1309,7 +1306,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
                 containerName: fileItem.name,
                 detail: fileItem.relativeFilePath,
             },
-            score: 1.0,
+            score: 1,
             scope: SearchScope.TEXT,
             highlights: [[relativeMatchIndex, relativeMatchIndex + queryLength]],
         };
@@ -1894,7 +1891,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
         let bitflags = 0;
         const normalized = str
             .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
+            .replaceAll(/[\u0300-\u036f]/g, '')
             .toLowerCase();
         for (let i = 0; i < normalized.length; i++) {
             const code = normalized.codePointAt(i);
@@ -1923,7 +1920,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
     private extractCapitals(text: string): string {
         let res = text.charAt(0).toUpperCase();
         for (let i = 1; i < text.length; i++) {
-            const code = text.charCodeAt(i);
+            const code = text.codePointAt(i);
             if (code >= 65 && code <= 90) {
                 // A-Z
                 res += text[i];
@@ -1936,7 +1933,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
         const matchIndex = capitals.indexOf(query);
         if (matchIndex !== -1) {
             const lengthRatio = query.length / capitals.length;
-            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+            const positionBoost = matchIndex === 0 ? 1.5 : 1;
             return lengthRatio * positionBoost * 0.8;
         }
 
@@ -1948,7 +1945,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
     }
 
     private applyItemTypeBoost(score: number, typeId: number): number {
-        return score * (ID_TO_BOOST[typeId] || 1.0);
+        return score * (ID_TO_BOOST[typeId] || 1);
     }
 
     private getScopeForItemType(type: SearchItemType): SearchScope {
@@ -1983,7 +1980,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
             if (item) {
                 results.push({
                     item,
-                    score: 1.0,
+                    score: 1,
                     scope: this.getScopeForItemType(item.type),
                 });
             }
@@ -2002,7 +1999,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
         }
 
 const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
-        const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
+        const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -2010,7 +2007,7 @@ const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undef
             return [];
         }
 
-        const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+        const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
         const queryLower = normalizedQuery.toLowerCase();
 
         // Pass indices for burst match
@@ -2068,7 +2065,7 @@ const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undef
         const addResult = (item: SearchableItem, typeId: number) => {
             const result: SearchResult = {
                 item,
-                score: this.applyItemTypeBoost(1.0, typeId),
+                score: this.applyItemTypeBoost(1, typeId),
                 scope: ID_TO_SCOPE[typeId],
             };
             results.push(result);
@@ -2126,7 +2123,7 @@ if (indices) {
         const lineMatch = /^(.*?):(\d+)$/.exec(query);
         if (lineMatch) {
             const effectiveQuery = lineMatch[1];
-            const line = parseInt(lineMatch[2], 10);
+            const line = Number.parseInt(lineMatch[2], 10);
             return {
                 effectiveQuery,
                 targetLine: line > 0 ? line - 1 : undefined,
@@ -2205,5 +2202,5 @@ if (indices) {
 }
 
 function escapeRegExp(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    return string.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

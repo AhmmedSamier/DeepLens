@@ -93,10 +93,11 @@ export class Config {
     }
 
     private get<T>(key: string, defaultValue: T): T {
-        if (this.vscodeConfig && typeof this.vscodeConfig.get === 'function') {
+        if (this.vscodeConfig?.get) {
             return this.vscodeConfig.get(key, defaultValue);
         }
-        return this.data[key] !== undefined ? (this.data[key] as T) : defaultValue;
+        const value = this.data[key];
+        return value === undefined ? defaultValue : (value as T);
     }
 
     /**

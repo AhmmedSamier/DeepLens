@@ -39,7 +39,11 @@ export class MinHeap<T> {
 
         // We destructively empty the heap to sort
         while (this.heap.length > 0) {
-            result.push(this.pop()!);
+            const value = this.pop();
+            if (value === undefined) {
+                break;
+            }
+            result.push(value);
         }
 
         // Restore heap state

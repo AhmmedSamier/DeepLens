@@ -587,7 +587,7 @@ export class SearchProvider {
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
         quickPick.onDidTriggerItemButton(async (e) => {
-            const result = (e.item as SearchResultItem).result;
+            const result = e.item.result;
             await this.handleItemButtonClick(quickPick, result, e.button.tooltip, () => {
                 accepted = true;
             });
@@ -1350,10 +1350,10 @@ export class SearchProvider {
      * Get empty state items when no results are found
      */
     private getEmptyStateItems(query: string): SearchResultItem[] {
-        const detail =
-            this.currentScope !== SearchScope.EVERYTHING
-                ? 'Try switching to Global search or check for typos'
-                : `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`;
+        const isGlobalScope = this.currentScope === SearchScope.EVERYTHING;
+        const detail = isGlobalScope
+            ? `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`
+            : 'Try switching to Global search or check for typos';
 
         const items: SearchResultItem[] = [];
 
@@ -1565,10 +1565,10 @@ export class SearchProvider {
 
         // Add file path and line number
         const relativePath = vscode.workspace.asRelativePath(item.filePath);
-        if (item.line !== undefined) {
-            detail = `${relativePath}:${item.line + 1}`;
-        } else {
+        if (item.line === undefined) {
             detail = relativePath;
+        } else {
+            detail = `${relativePath}:${item.line + 1}`;
         }
 
         // Add additional detail if available
@@ -1765,7 +1765,9 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line !== undefined ? new vscode.Position(item.line, item.column || 0) : new vscode.Position(0, 0);
+                item.line === undefined
+                    ? new vscode.Position(0, 0)
+                    : new vscode.Position(item.line, item.column || 0);
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;

@@ -55,7 +55,7 @@ export class RouteMatcher {
             }
         }
 
-        const cleanPath = pathOnly.trim().replace(/(^\/|\/$)/g, '');
+        const cleanPath = pathOnly.trim().replaceAll(/(^\/|\/$)/g, '');
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
         const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
         const segmentsLower = segments.map((s) => s.toLowerCase());
@@ -164,7 +164,7 @@ export class RouteMatcher {
         const cleanTemplate = template
             .replace(/^\[[A-Z]+\]\s*/, '')
             .trim()
-            .replace(/(^\/|\/$)/g, '');
+            .replaceAll(/(^\/|\/$)/g, '');
 
         if (!cleanTemplate) return null;
 
@@ -172,17 +172,17 @@ export class RouteMatcher {
         let pattern = cleanTemplate;
 
         // Replace {*slug} (catch-all) with (.*)
-        pattern = pattern.replace(/\{(\*\w+)\}/g, '___CATCHALL___');
+        pattern = pattern.replaceAll(/\{(\*\w+)\}/g, '___CATCHALL___');
 
         // Replace {id}, {id:int}, {id?} etc with ([^\/]+)
-        pattern = pattern.replace(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
+        pattern = pattern.replaceAll(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
 
         // Escape regex specials
-        pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        pattern = pattern.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
         // Restore our markers with regex groups
-        pattern = pattern.replace(/___PARAM___/g, '([^\\/]+)');
-        pattern = pattern.replace(/___CATCHALL___/g, '(.*)');
+        pattern = pattern.replaceAll('___PARAM___', '([^/]+)');
+        pattern = pattern.replaceAll('___CATCHALL___', '(.*)');
 
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
