@@ -48,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const activeFiles: string[] = [];
 
         // Use tabGroups to get files actually open in tabs (more accurate than textDocuments)
-        if (typeof vscode.window.tabGroups !== 'undefined') {
+if (vscode.window.tabGroups !== undefined) {
             for (const group of vscode.window.tabGroups.all) {
                 for (const tab of group.tabs) {
                     if (tab.input instanceof vscode.TabInputText) {
@@ -81,7 +81,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.onDidChangeActiveTextEditor(updateActiveFiles),
     );
 
-    if (typeof vscode.window.tabGroups !== 'undefined') {
+    if (vscode.window.tabGroups !== undefined) {
         context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(updateActiveFiles));
     }
 

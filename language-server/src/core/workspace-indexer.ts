@@ -1317,9 +1317,9 @@ function pLimit(concurrency: number) {
     };
 
     const enqueue = <T>(fn: () => Promise<T>, resolve: (val: T) => void, reject: (err: unknown) => void) => {
-        queue.push(() => run(fn, resolve, reject));
+queue.push(() => run(fn, resolve, reject));
         if (activeCount < concurrency && queue.length > 0) {
-            queue.shift()!();
+            queue.shift()();
         }
     };
 

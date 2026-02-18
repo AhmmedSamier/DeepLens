@@ -75,6 +75,6 @@ describe('SearchEngine Stream Search', () => {
         // Check highlights (should be relative to trimmed name: 6)
         // "const " is length 6. So foo starts at 6.
         expect(result.highlights).toBeDefined();
-        expect(result.highlights![0]).toEqual([6, 9]);
+        expect(result.highlights[0]).toEqual([6, 9]);
     });
 });

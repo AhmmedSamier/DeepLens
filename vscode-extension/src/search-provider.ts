@@ -1396,83 +1396,65 @@ export class SearchProvider {
                     scope: SearchScope.COMMANDS,
                 },
             });
-        }
+}
 
-        // 3. Native Search Action
-        items.push({
-            label: 'Search in Files (Native)',
-            description: "Use VS Code's native search",
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('search-fuzzy'),
-            result: {
-                item: {
-                    id: this.CMD_NATIVE_SEARCH,
-                    name: 'Search in Files',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
+        // Helper method to create command items
+        const addCommandItem = (
+            label: string,
+            description: string,
+            icon: vscode.ThemeIcon,
+            commandId: string,
+        ) => {
+            items.push({
+                label,
+                description,
+                alwaysShow: true,
+                iconPath: icon,
+                result: {
+                    item: {
+                        id: commandId,
+                        name: label.replace(' (Native)', ''),
+                        type: SearchItemType.COMMAND,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: SearchScope.COMMANDS,
                 },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+            });
+        };
+
+// 3. Native Search Action
+        addCommandItem(
+            'Search in Files (Native)',
+            "Use VS Code's native search",
+            new vscode.ThemeIcon('search-fuzzy'),
+            this.CMD_NATIVE_SEARCH,
+        );
 
         // 4. Rebuild Index Action
-        items.push({
-            label: 'Rebuild Index',
-            description: 'Fix missing files',
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('refresh'),
-            result: {
-                item: {
-                    id: this.CMD_REBUILD_INDEX,
-                    name: 'Rebuild Index',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+        addCommandItem(
+            'Rebuild Index',
+            'Fix missing files',
+            new vscode.ThemeIcon('refresh'),
+            this.CMD_REBUILD_INDEX,
+        );
 
         // 5. Clear Cache Action
-        items.push({
-            label: 'Clear Index Cache',
-            description: 'Fix corruption',
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('trash'),
-            result: {
-                item: {
-                    id: this.CMD_CLEAR_CACHE,
-                    name: 'Clear Index Cache',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+        addCommandItem(
+            'Clear Index Cache',
+            'Fix corruption',
+            new vscode.ThemeIcon('trash'),
+            this.CMD_CLEAR_CACHE,
+        );
 
         // 6. Settings Action
-        items.push({
-            label: 'Configure Settings',
-            description: 'Check exclusion rules',
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('settings-gear'),
-            result: {
-                item: {
-                    id: this.CMD_SETTINGS,
-                    name: 'Configure Settings',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+        addCommandItem(
+            'Configure Settings',
+            'Check exclusion rules',
+            new vscode.ThemeIcon('settings-gear'),
+            this.CMD_SETTINGS,
+        );
 
         return items;
     }

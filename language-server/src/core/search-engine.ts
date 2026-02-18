@@ -655,7 +655,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -1572,7 +1572,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Apply type boost to final fuzzy score
         if (fuzzyScore > context.MIN_SCORE) {
-            const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+            const typeBoost = ID_TO_BOOST[typeId] || 1;
             fuzzyScore *= typeBoost;
         }
 
@@ -1676,9 +1676,7 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-        if (resultScope === undefined) {
-            resultScope = ID_TO_SCOPE[typeId];
-        }
+resultScope ??= ID_TO_SCOPE[typeId];
 
         const item = context.items[i];
         if (!item) {
@@ -1899,7 +1897,7 @@ export class SearchEngine implements ISearchProvider {
             .replace(/[\u0300-\u036f]/g, '')
             .toLowerCase();
         for (let i = 0; i < normalized.length; i++) {
-            const code = normalized.charCodeAt(i);
+            const code = normalized.codePointAt(i);
             if (code === 32) continue; // Space ignored
 
             let bit = 0;
@@ -2003,7 +2001,7 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
@@ -2109,14 +2107,13 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
-        if (indices) {
-            for (let k = 0; k < indices.length; k++) {
+if (indices) {
+            for (const index of indices) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
-                processItem(indices[k]);
+                processItem(index);
             }
         } else {
-            const count = this.items.length;
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < this.items.length; i++) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(i);
             }
@@ -2208,5 +2205,5 @@ export class SearchEngine implements ISearchProvider {
 }
 
 function escapeRegExp(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return string.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

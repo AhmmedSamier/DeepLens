@@ -75,7 +75,7 @@ export class GitProvider {
         if (error instanceof Error) {
             return error.message;
         }
-        return String(error);
+        return error?.toString() ?? 'Unknown error';
     }
 
     private async execGit(args: string[], cwd: string): Promise<string> {
