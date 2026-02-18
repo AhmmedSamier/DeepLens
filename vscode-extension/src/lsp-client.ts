@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
     CloseAction,
@@ -12,10 +12,10 @@ import {
 import { IndexStats, ISearchProvider, SearchOptions, SearchResult } from '../../language-server/src/core/types';
 
 export class DeepLensLspClient implements ISearchProvider {
-    private client: LanguageClient | undefined;
+    private client: LanguageClient | null = null;
     private context: vscode.ExtensionContext;
     private isStopping = false;
-    private startPromise: Promise<void> | undefined;
+    private startPromise: Promise<void> | null = null;
     private disposables: vscode.Disposable[] = [];
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
@@ -41,7 +41,7 @@ export class DeepLensLspClient implements ISearchProvider {
         try {
             await this.startPromise;
         } finally {
-            this.startPromise = undefined;
+            this.startPromise = null;
         }
     }
 
@@ -96,7 +96,7 @@ export class DeepLensLspClient implements ISearchProvider {
         await this.client.start();
     }
 
-    private activeProgressTokens = new Set<string>();
+    private readonly activeProgressTokens = new Set<string>();
 
     private handleProgressNotification(params: { token: string | number; message?: string; percentage?: number }) {
         const token = String(params.token);
@@ -244,7 +244,7 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     private async waitForStartCompletion(): Promise<void> {
-        if (!this.startPromise) {
+        if (this.startPromise === undefined) {
             return;
         }
 
@@ -265,16 +265,16 @@ export class DeepLensLspClient implements ISearchProvider {
             if (clientState === State.Running) {
                 await this.client.stop();
             } else {
-                this.client.dispose();
+                await this.client.dispose();
             }
         } catch {
             try {
-                this.client?.dispose();
+                await this.client?.dispose();
             } catch {
                 return;
             }
         } finally {
-            this.client = undefined;
+            this.client = null;
         }
     }
 

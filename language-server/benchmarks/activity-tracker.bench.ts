@@ -1,6 +1,6 @@
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import * as os from 'os';
-import * as path from 'path';
+import * as path from 'node:path';
 import { ActivityTracker } from '../src/core/activity-tracker';
 import { SearchableItem, SearchItemType } from '../src/core/types';
 import { benchmark } from './utils';

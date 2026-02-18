@@ -40,7 +40,7 @@ describe('ActivityTracker UX', () => {
             name: 'test2.ts',
             type: SearchItemType.FILE,
             filePath: '/test2.ts',
-            detail: undefined,
+            detail: null,
         };
 
         tracker.recordAccess(item);

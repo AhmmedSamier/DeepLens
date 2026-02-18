@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';

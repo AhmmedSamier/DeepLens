@@ -76,10 +76,9 @@ export class CommandIndexer {
             threshold: -10000,
         });
 
-        return results.map((r) => ({
+        return results.map(r => ({
             item: r.obj.item,
             score: r.score,
-            highlights: undefined,
             scope: SearchScope.COMMANDS,
         }));
     }

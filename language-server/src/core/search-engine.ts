@@ -1,6 +1,6 @@
-import * as fs from 'fs';
 import * as Fuzzysort from 'fuzzysort';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { CancellationToken } from 'vscode-languageserver';
 import { Config } from './config';
 import { GitProvider } from './git-provider';
@@ -20,6 +20,18 @@ import {
 // Extend Fuzzysort.Prepared to include internal property
 interface ExtendedPrepared extends Fuzzysort.Prepared {
     _targetLower: string;
+}
+
+interface TextScanContext {
+    query: string;
+    queryRegex: RegExp;
+    queryRegexGlobal: RegExp;
+    queryLength: number;
+    maxResults: number;
+    results: SearchResult[];
+    pendingResults: SearchResult[];
+    fileItem: SearchableItem;
+    token?: CancellationToken;
 }
 
 // REMOVED: PreparedItem interface
@@ -117,7 +129,7 @@ CHAR_TO_BITFLAG[32] = 0;
 export class SearchEngine implements ISearchProvider {
     id = 'engine';
     priority = 0;
-    private providers: ISearchProvider[] = [];
+    private readonly providers: ISearchProvider[] = [];
 
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
@@ -132,16 +144,16 @@ export class SearchEngine implements ISearchProvider {
     private filePaths: string[] = [];
 
     // Deduplication cache for prepared strings
-    private preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
+    private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
     // Map Scope -> Array of Indices
-    private scopedIndices: Map<SearchScope, number[]> = new Map();
+    private readonly scopedIndices: Map<SearchScope, number[]> = new Map();
 
     // Map Normalized File Path -> Array of Item Indices (Reverse Index for O(1) lookup)
-    private fileToItemIndices: Map<string, number[]> = new Map();
+    private readonly fileToItemIndices: Map<string, number[]> = new Map();
 
     public itemsMap: Map<string, SearchableItem> = new Map();
-    private fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
+    private readonly fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
     private config?: Config;
@@ -415,8 +427,8 @@ export class SearchEngine implements ISearchProvider {
         const nameFlags = this.calculateBitflags(item.name);
         let aggregateFlags = nameFlags;
 
-        if (this.shouldProcessFullName(item)) {
-            aggregateFlags |= this.calculateBitflags(item.fullName!);
+        if (this.shouldProcessFullName(item) && item.fullName) {
+            aggregateFlags |= this.calculateBitflags(item.fullName);
         }
 
         if (item.relativeFilePath) {
@@ -523,7 +535,7 @@ export class SearchEngine implements ISearchProvider {
         this.activityWeight = weight;
     }
 
-    private isWindows = process.platform === 'win32';
+    private readonly isWindows = process.platform === 'win32';
 
     /**
      * Set the list of currently active or open files to prioritize them
@@ -917,11 +929,12 @@ export class SearchEngine implements ISearchProvider {
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
 
         // Zed Optimization: Prioritize active/open files
-        const prioritizedFiles = fileItems.sort((a, b) => {
+        fileItems.sort((a, b) => {
             const aActive = this.isActive(a.filePath) ? 1 : 0;
             const bActive = this.isActive(b.filePath) ? 1 : 0;
             return bActive - aActive;
         });
+        const prioritizedFiles = fileItems;
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -966,18 +979,19 @@ export class SearchEngine implements ISearchProvider {
 
                         processedFiles++;
 
-                        await this.scanFileStream(
-                            fileItem,
+                        const scanContext: TextScanContext = {
                             query,
                             queryRegex,
                             queryRegexGlobal,
-                            query.length,
+                            queryLength: query.length,
                             maxResults,
                             results,
                             pendingResults,
-                            fileSize,
+                            fileItem,
                             token,
-                        );
+                        };
+
+                        await this.scanFileStream(scanContext, fileSize);
                     } catch {
                         // Ignore read/stat errors
                     }
@@ -1005,35 +1019,16 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private async scanFileStream(
-        fileItem: SearchableItem,
-        query: string,
-        queryRegex: RegExp,
-        queryRegexGlobal: RegExp,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileSize?: number,
-        token?: CancellationToken,
-    ): Promise<void> {
+    private async scanFileStream(context: TextScanContext, fileSize?: number): Promise<void> {
+        const { fileItem, queryRegex, queryLength, maxResults, results, pendingResults, token } = context;
+
         // Optimization: For small files, readFile is significantly faster than createReadStream
         if (fileSize !== undefined && fileSize < 50 * 1024) {
             try {
                 const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
                 if (results.length >= maxResults) return;
 
-                const { newBuffer, newLineIndex } = this.processBufferLines(
-                    content,
-                    0,
-                    queryRegexGlobal,
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
-                    0,
-                );
+                const { newBuffer, newLineIndex } = this.processBufferLines(content, 0, context, 0);
 
                 if (newBuffer.length > 0) {
                     const match = queryRegex.exec(newBuffer);
@@ -1101,16 +1096,7 @@ export class SearchEngine implements ISearchProvider {
                 // Since this is a reconstructed line, we treat it as a single line buffer
                 const match = queryRegex.exec(completeLine);
                 if (match) {
-                    const hitLimit = this.processSingleLine(
-                        completeLine,
-                        lineIndex,
-                        match.index,
-                        queryLength,
-                        maxResults,
-                        results,
-                        pendingResults,
-                        fileItem,
-                    );
+                    const hitLimit = this.processSingleLine(completeLine, lineIndex, match.index, context);
                     if (hitLimit) {
                         stream.destroy();
                         resolve();
@@ -1123,12 +1109,7 @@ export class SearchEngine implements ISearchProvider {
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     chunk,
                     newlineIndex + 1,
-                    queryRegexGlobal,
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
+                    context,
                     lineIndex,
                 );
 
@@ -1178,32 +1159,17 @@ export class SearchEngine implements ISearchProvider {
     private processBufferLines(
         buffer: string,
         bufferOffset: number,
-        queryRegexGlobal: RegExp,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileItem: SearchableItem,
+        context: TextScanContext,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        const matches = this.getAllMatches(buffer, bufferOffset, queryRegexGlobal);
+        const matches = this.getAllMatches(buffer, bufferOffset, context.queryRegexGlobal);
 
         // Fast path: No matches in this chunk
         if (matches.length === 0) {
             return this.advanceLinesWithoutMatches(buffer, bufferOffset, startLineIndex);
         }
 
-        return this.processLinesWithMatches(
-            buffer,
-            bufferOffset,
-            matches,
-            startLineIndex,
-            queryLength,
-            maxResults,
-            results,
-            pendingResults,
-            fileItem,
-        );
+        return this.processLinesWithMatches(buffer, bufferOffset, matches, startLineIndex, context);
     }
 
     private getAllMatches(buffer: string, bufferOffset: number, regex: RegExp): number[] {
@@ -1244,11 +1210,7 @@ export class SearchEngine implements ISearchProvider {
         bufferOffset: number,
         matches: number[],
         startLineIndex: number,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileItem: SearchableItem,
+        context: TextScanContext,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
         let currentMatchIdx = 0;
         let lastIndex = bufferOffset;
@@ -1272,11 +1234,7 @@ export class SearchEngine implements ISearchProvider {
                     line,
                     lineIndex,
                     matchIndex - lastIndex, // Relative match index
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
+                    context,
                 );
 
                 if (hitLimit) {
@@ -1302,11 +1260,7 @@ export class SearchEngine implements ISearchProvider {
         line: string,
         lineIndex: number,
         matchIndexInLine: number,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileItem: SearchableItem,
+        context: TextScanContext,
     ): boolean {
         // Skip extremely long lines (minified code)
         if (line.length > 10000) {
@@ -1317,19 +1271,19 @@ export class SearchEngine implements ISearchProvider {
         if (trimmedLine.length > 0) {
             const indentation = line.search(/\S|$/);
             const result = this.createSearchResult(
-                fileItem,
+                context.fileItem,
                 trimmedLine,
                 lineIndex,
                 matchIndexInLine,
-                queryLength,
+                context.queryLength,
                 indentation,
             );
 
-            results.push(result);
-            pendingResults.push(result);
+            context.results.push(result);
+            context.pendingResults.push(result);
         }
 
-        return results.length >= maxResults;
+        return context.results.length >= context.maxResults;
     }
 
     private createSearchResult(
@@ -1468,7 +1422,7 @@ export class SearchEngine implements ISearchProvider {
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
             activityWeight: this.activityWeight,
-            invActivityWeight: 1.0 - this.activityWeight,
+            invActivityWeight: 1 - this.activityWeight,
         };
     }
 
@@ -1587,8 +1541,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const lengthRatio = context.queryLen / capitals.length;
-        const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+        const positionBoost = matchIndex === 0 ? 1.5 : 1;
+        const typeBoost = ID_TO_BOOST[typeId] || 1;
         return lengthRatio * positionBoost * 0.8 * typeBoost;
     }
 
@@ -1690,7 +1644,7 @@ export class SearchEngine implements ISearchProvider {
         let finalQueryForMatch: string | PreparedPath = context.queryForUrlMatch;
         let methodScoreBoost = 0;
 
-        const qMethod = typeof context.queryForUrlMatch !== 'string' ? context.queryForUrlMatch.method : undefined;
+        const qMethod = typeof context.queryForUrlMatch === 'string' ? undefined : context.queryForUrlMatch.method;
 
         if (qMethod) {
             const itemMethod = pattern.method;
@@ -1926,7 +1880,7 @@ export class SearchEngine implements ISearchProvider {
         let bitflags = 0;
 
         for (let i = 0; i < len; i++) {
-            const code = str.charCodeAt(i);
+            const code = str.codePointAt(i) || 0;
 
             // Check for non-ASCII
             if (code > 127) {
@@ -2172,7 +2126,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private parseQueryWithLineNumber(query: string): { effectiveQuery: string; targetLine?: number } {
-        const lineMatch = query.match(/^(.*?):(\d+)$/);
+        const lineMatch = /^(.*?):(\d+)$/.exec(query);
         if (lineMatch) {
             const effectiveQuery = lineMatch[1];
             const line = parseInt(lineMatch[2], 10);

@@ -1,5 +1,5 @@
 import { runTests } from '@vscode/test-electron';
-import * as path from 'path';
+import * as path from 'node:path';
 
 async function main() {
     try {

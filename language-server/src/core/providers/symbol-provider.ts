@@ -6,7 +6,7 @@ export class SymbolProvider implements ISearchProvider {
     id = 'symbols';
     priority = 100;
 
-    constructor(private engine: SearchEngine) {}
+    constructor(private readonly engine: SearchEngine) {}
 
     async search(context: SearchContext): Promise<SearchResult[]> {
         const { scope, query } = context;

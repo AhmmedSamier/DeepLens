@@ -6,7 +6,7 @@ export class RecentProvider implements ISearchProvider {
     id = 'recent';
     priority = 1000; // Highest priority for instant results
 
-    constructor(private tracker: ActivityTracker) {}
+    constructor(private readonly tracker: ActivityTracker) {}
 
     async search(context: SearchContext): Promise<SearchResult[]> {
         // Only return recent items if the query is empty

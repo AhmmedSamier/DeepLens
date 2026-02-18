@@ -1,10 +1,10 @@
-import * as cp from 'child_process';
-import * as fs from 'fs';
 import { Minimatch } from 'minimatch';
-import * as os from 'os';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
-import { Worker } from 'worker_threads';
+import * as cp from 'node:child_process';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Worker } from 'node:worker_threads';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { SearchableItem, SearchItemType } from './types';
@@ -36,13 +36,13 @@ export class WorkspaceIndexer {
     private indexing: boolean = false;
     private cancellationToken = { cancelled: false };
     private watchersActive: boolean = true;
-    private watcherCooldownTimer: NodeJS.Timeout | undefined;
-    private config: Config;
+    private watcherCooldownTimer: NodeJS.Timeout | null = null;
+    private readonly config: Config;
     private fileWatcher: { dispose(): void } | undefined;
-    private treeSitter: import('./tree-sitter-parser').TreeSitterParser;
-    private env: IndexerEnvironment;
-    private stringCache: Map<string, string> = new Map();
-    private extensionPath: string;
+    private readonly treeSitter: import('./tree-sitter-parser').TreeSitterParser;
+    private readonly env: IndexerEnvironment;
+    private readonly stringCache: Map<string, string> = new Map();
+    private readonly extensionPath: string;
     private lastIndexTimestamp: number | null = null;
     private excludeMatchers: Minimatch[] = [];
     private workers: Worker[] = [];
@@ -50,9 +50,9 @@ export class WorkspaceIndexer {
     private allowedExtensions: Set<string> = new Set();
 
     // Batched git check queue
-    private gitCheckQueue: Map<string, Set<string>> = new Map();
-    private gitCheckResolvers: Map<string, ((ignored: boolean) => void)[]> = new Map();
-    private gitCheckTimer: NodeJS.Timeout | undefined;
+    private readonly gitCheckQueue: Map<string, Set<string>> = new Map();
+    private readonly gitCheckResolvers: Map<string, ((ignored: boolean) => void)[]> = new Map();
+    private gitCheckTimer: NodeJS.Timeout | null = null;
 
     constructor(
         config: Config,
@@ -595,39 +595,46 @@ export class WorkspaceIndexer {
         }
 
         if (this.cancellationToken.cancelled) {
-            if (state.activeTasks === 0) {
-                state.finished = true;
-                state.resolveAll();
-            }
+            this.finishIfNoActiveTasks(state);
             return;
         }
 
-        const batchFiles: string[] = [];
+        const batchFiles = this.collectBatch(state, batchSize);
 
         state.activeTasks++;
 
         try {
-            while (state.pendingItems.length > 0 && batchFiles.length < batchSize) {
-                const fileItem = state.pendingItems.shift()!;
-                batchFiles.push(fileItem.filePath);
-            }
-
             if (batchFiles.length > 0) {
                 worker.postMessage({ filePaths: batchFiles });
             } else {
-                state.activeTasks--;
-                if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
-                    state.finished = true;
-                    state.resolveAll();
-                }
+                this.finalizeTask(state);
             }
         } catch (error) {
             this.log(`Error assigning task: ${error}`);
-            state.activeTasks--;
-            if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
-                state.finished = true;
-                state.resolveAll();
+            this.finalizeTask(state);
+        }
+    }
+
+    private collectBatch(state: WorkerPoolState, batchSize: number): string[] {
+        const batchFiles: string[] = [];
+        while (state.pendingItems.length > 0 && batchFiles.length < batchSize) {
+            const fileItem = state.pendingItems.shift();
+            if (fileItem) {
+                batchFiles.push(fileItem.filePath);
             }
+        }
+        return batchFiles;
+    }
+
+    private finalizeTask(state: WorkerPoolState): void {
+        state.activeTasks--;
+        this.finishIfNoActiveTasks(state);
+    }
+
+    private finishIfNoActiveTasks(state: WorkerPoolState): void {
+        if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
+            state.finished = true;
+            state.resolveAll();
         }
     }
 
@@ -670,10 +677,7 @@ export class WorkspaceIndexer {
 
         if ((message.type === 'result' || message.type === 'error') && !message.isPartial) {
             state.activeTasks--;
-            if (state.activeTasks === 0) {
-                state.finished = true;
-                state.resolveAll();
-            }
+            this.finishIfNoActiveTasks(state);
         }
 
         return true;
@@ -721,16 +725,7 @@ export class WorkspaceIndexer {
             state.activeTasks--;
         }
 
-        this.updateWorkerProgress(
-            totalFiles,
-            itemsProcessed,
-            () => state.processed,
-            () => state.logged100,
-            (v) => (state.logged100 = v),
-            () => state.nextReportingPercentage,
-            (v) => (state.nextReportingPercentage = v),
-            progressCallback,
-        );
+        this.updateWorkerProgress(totalFiles, itemsProcessed, state, progressCallback);
 
         if (isPartial) {
             return;
@@ -738,9 +733,8 @@ export class WorkspaceIndexer {
 
         if (state.pendingItems.length > 0) {
             this.assignWorkerTask(worker, batchSize, state);
-        } else if (state.activeTasks === 0 && !state.finished) {
-            state.finished = true;
-            state.resolveAll();
+        } else {
+            this.finishIfNoActiveTasks(state);
         }
     }
 
@@ -748,28 +742,23 @@ export class WorkspaceIndexer {
         state.activeTasks--;
         if (state.pendingItems.length > 0) {
             this.assignWorkerTask(worker, batchSize, state);
-        } else if (state.activeTasks === 0 && !state.finished) {
-            state.finished = true;
-            state.resolveAll();
+        } else {
+            this.finishIfNoActiveTasks(state);
         }
     }
 
     private updateWorkerProgress(
         totalFiles: number,
         itemsProcessed: number,
-        getProcessed: () => number,
-        getLogged100: () => boolean,
-        setLogged100: (v: boolean) => void,
-        getNextReportingPercentage: () => number,
-        setNextReportingPercentage: (v: number) => void,
+        state: WorkerPoolState,
         progressCallback: ((message: string, increment?: number) => void) | undefined,
     ) {
-        const processed = getProcessed();
-        const logged100 = getLogged100();
+        const processed = state.processed;
+        const logged100 = state.logged100;
 
         if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
             if (processed >= totalFiles) {
-                setLogged100(true);
+                state.logged100 = true;
             }
             this.log(
                 `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
@@ -778,10 +767,10 @@ export class WorkspaceIndexer {
 
         if (progressCallback) {
             const percentage = (processed / totalFiles) * 100;
-            const nextReportingPercentage = getNextReportingPercentage();
+            const nextReportingPercentage = state.nextReportingPercentage;
             if (percentage >= nextReportingPercentage || processed === totalFiles) {
                 progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
-                setNextReportingPercentage(percentage + 5);
+                state.nextReportingPercentage = percentage + 5;
             }
         }
     }
@@ -1032,7 +1021,7 @@ export class WorkspaceIndexer {
     }
 
     private async processGitChecks() {
-        this.gitCheckTimer = undefined;
+        this.gitCheckTimer = null;
 
         const queue = new Map(this.gitCheckQueue);
         this.gitCheckQueue.clear();
@@ -1204,7 +1193,7 @@ export class WorkspaceIndexer {
         }
         this.watcherCooldownTimer = setTimeout(() => {
             this.watchersActive = true;
-            this.watcherCooldownTimer = undefined;
+            this.watcherCooldownTimer = null;
         }, ms);
     }
 

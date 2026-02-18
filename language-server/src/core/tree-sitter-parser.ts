@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { SearchItemType, SearchableItem } from './types';
 
 /**
@@ -31,12 +31,12 @@ interface TreeSitterLib {
 
 export class TreeSitterParser {
     private isInitialized: boolean = false;
-    private languages: Map<string, unknown> = new Map();
+    private readonly languages: Map<string, unknown> = new Map();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private ParserClass: any = undefined;
     private lib: TreeSitterLib | undefined = undefined;
-    private extensionPath: string = '';
-    private logger: Logger | undefined = undefined;
+    private readonly extensionPath: string = '';
+    private readonly logger: Logger | undefined = undefined;
 
     constructor(extensionPath: string, logger?: Logger) {
         this.extensionPath = extensionPath;
@@ -94,7 +94,7 @@ export class TreeSitterParser {
         this.isInitialized = true;
     }
 
-    private static LANGUAGE_MAP: Record<string, string> = {
+    private static readonly LANGUAGE_MAP: Record<string, string> = {
         typescript: 'tree-sitter-typescript.wasm',
         typescriptreact: 'tree-sitter-tsx.wasm',
         javascript: 'tree-sitter-javascript.wasm',
@@ -496,7 +496,7 @@ export class TreeSitterParser {
 
         const text = node.text;
         // Minimal API Map methods: app.MapGet, app.MapPost, etc.
-        const mapMatch = text.match(/\.Map(Get|Post|Put|Delete|Patch)\s*\(/);
+        const mapMatch = /\.Map(Get|Post|Put|Delete|Patch)\s*\(/.exec(text);
         if (!mapMatch) return;
 
         const httpMethod = mapMatch[1].toUpperCase();
@@ -551,27 +551,27 @@ export class TreeSitterParser {
 
     private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
         // Classes & Types
-        if (nodeType.match(/class_declaration|class_definition|^class$/)) {
+        if (/class_declaration|class_definition|^class$/.test(nodeType)) {
             return SearchItemType.CLASS;
         }
-        if (nodeType.match(/interface_declaration|interface_definition|^interface$/)) {
+        if (/interface_declaration|interface_definition|^interface$/.test(nodeType)) {
             return SearchItemType.INTERFACE;
         }
-        if (nodeType.match(/enum_declaration|enum_definition|^enum$/)) {
+        if (/enum_declaration|enum_definition|^enum$/.test(nodeType)) {
             return SearchItemType.ENUM;
         }
-        if (nodeType.match(/struct_declaration|struct_definition|^struct$/)) {
+        if (/struct_declaration|struct_definition|^struct$/.test(nodeType)) {
             return SearchItemType.CLASS;
         }
-        if (nodeType.match(/trait_declaration|trait_definition|^trait$/)) {
+        if (/trait_declaration|trait_definition|^trait$/.test(nodeType)) {
             return SearchItemType.INTERFACE;
         }
 
         // Functions & Methods
-        if (nodeType.match(/method_declaration|method_definition|^method$/)) {
+        if (/method_declaration|method_definition|^method$/.test(nodeType)) {
             return SearchItemType.METHOD;
         }
-        if (nodeType.match(/function_declaration|function_definition|^function$/)) {
+        if (/function_declaration|function_definition|^function$/.test(nodeType)) {
             return SearchItemType.FUNCTION;
         }
 
@@ -595,10 +595,10 @@ export class TreeSitterParser {
         }
 
         // Fallback for common properties and variables
-        if (nodeType.match(/property_declaration|property_definition/)) {
+        if (/property_declaration|property_definition/.test(nodeType)) {
             return SearchItemType.PROPERTY;
         }
-        if (nodeType.match(/variable_declaration|variable_declarator/)) {
+        if (/variable_declaration|variable_declarator/.test(nodeType)) {
             return SearchItemType.VARIABLE;
         }
 

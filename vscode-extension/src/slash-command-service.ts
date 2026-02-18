@@ -23,13 +23,13 @@ export enum SlashCommandCategory {
 }
 
 export class SlashCommandService {
-    private commands: Map<string, SlashCommand> = new Map();
-    private categoryGroups: Map<SlashCommandCategory, SlashCommand[]> = new Map();
+    private readonly commands: Map<string, SlashCommand> = new Map();
+    private readonly categoryGroups: Map<SlashCommandCategory, SlashCommand[]> = new Map();
     private recentlyUsed: string[] = [];
 
     constructor() {
         this.initializeCommands();
-        this.initializeGroups();
+        this.categoryGroups = this.initializeGroups();
         this.loadRecentCommands();
     }
 
@@ -162,7 +162,7 @@ export class SlashCommandService {
         }
     }
 
-    private initializeGroups(): void {
+    private initializeGroups(): Map<SlashCommandCategory, SlashCommand[]> {
         const grouped = new Map<SlashCommandCategory, SlashCommand[]>();
         const uniqueCommands = new Set<string>();
 
@@ -176,10 +176,10 @@ export class SlashCommandService {
             }
         }
 
-        this.categoryGroups = grouped;
+        return grouped;
     }
 
-    private async loadRecentCommands(): Promise<void> {
+    private loadRecentCommands(): void {
         const context = vscode.workspace.getConfiguration('deeplens');
         const recent = context.get<string[]>('recentSlashCommands', []);
         this.recentlyUsed = recent;

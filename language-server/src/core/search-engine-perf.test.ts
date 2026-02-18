@@ -1,5 +1,5 @@
 import { describe, expect, it, spyOn } from 'bun:test';
-import * as fs from 'fs';
+import * as fs from 'node:fs';
 import { Config } from './config';
 import { SearchEngine } from './search-engine';
 import { SearchItemType, SearchScope } from './types';

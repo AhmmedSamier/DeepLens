@@ -29,3 +29,4 @@ bun.lockb
 # Coverage
 coverage/
 .nyc_output/
+.scannerwork/

@@ -12,10 +12,10 @@ import {
     TextDocumentSyncKind,
 } from 'vscode-languageserver/node';
 
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
-import { pathToFileURL } from 'url';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
 import { FileProvider } from './core/providers/file-provider';
@@ -82,7 +82,7 @@ let activityTracker: ActivityTracker;
 let isInitialized = false;
 let isShuttingDown = false;
 let fileLogger: (msg: string) => void = () => {};
-let parentProcessMonitor: NodeJS.Timeout | undefined;
+let parentProcessMonitor: NodeJS.Timeout | null = null;
 
 connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
@@ -99,7 +99,7 @@ connection.onInitialize(async (params: InitializeParams) => {
                 // Parent process is gone - clean up interval before exit
                 if (parentProcessMonitor) {
                     clearInterval(parentProcessMonitor);
-                    parentProcessMonitor = undefined;
+                    parentProcessMonitor = null;
                 }
                 process.exit(1);
             }
@@ -170,9 +170,13 @@ connection.onInitialize(async (params: InitializeParams) => {
     let folders: string[] = [];
     if (params.workspaceFolders) {
         folders = params.workspaceFolders.map((f) => uriToPath(f.uri));
+        // eslint-disable-next-line sonarjs/deprecation
     } else if (params.rootUri) {
+        // eslint-disable-next-line sonarjs/deprecation
         folders = [uriToPath(params.rootUri)];
+        // eslint-disable-next-line sonarjs/deprecation
     } else if (params.rootPath) {
+        // eslint-disable-next-line sonarjs/deprecation
         folders = [params.rootPath];
     }
 
@@ -268,14 +272,14 @@ connection.onDidChangeConfiguration(async () => {
     }
 });
 
-let currentIndexingPromise: Promise<void> | undefined;
+let currentIndexingPromise: Promise<void> | null = null;
 
 /**
  * Run indexing with progress reporting
  */
 async function runIndexingWithProgress(force: boolean = false): Promise<void> {
     // If indexing is already running, cancel it and wait for it to stop
-    if (currentIndexingPromise) {
+    if (currentIndexingPromise !== null) {
         workspaceIndexer.cancel();
         try {
             await currentIndexingPromise;
@@ -385,7 +389,7 @@ async function runIndexingWithProgress(force: boolean = false): Promise<void> {
         // Ignore errors, they are handled inside indexingTask
     } finally {
         if (currentIndexingPromise === p) {
-            currentIndexingPromise = undefined;
+            currentIndexingPromise = null;
         }
     }
 }
@@ -525,7 +529,7 @@ connection.onRequest(IndexStatsRequest, async () => {
         totalFiles: stats.fileCount,
         totalTypes: stats.typeCount,
         totalSymbols: stats.symbolCount,
-        lastUpdate: lastIndexTimestamp !== null ? lastIndexTimestamp : Date.now(),
+        lastUpdate: lastIndexTimestamp ?? Date.now(),
         indexing: workspaceIndexer.isIndexing(),
         cacheSize: searchEngine.getCacheSize(),
     };
@@ -543,7 +547,7 @@ connection.onShutdown(async () => {
     // Clear parent process monitor
     if (parentProcessMonitor) {
         clearInterval(parentProcessMonitor);
-        parentProcessMonitor = undefined;
+        parentProcessMonitor = null;
     }
 
     if (activityTracker) {

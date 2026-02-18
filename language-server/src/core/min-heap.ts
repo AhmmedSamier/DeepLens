@@ -3,8 +3,8 @@
  */
 export class MinHeap<T> {
     private heap: T[];
-    private compare: (a: T, b: T) => number;
-    private maxSize: number;
+    private readonly compare: (a: T, b: T) => number;
+    private readonly maxSize: number;
 
     constructor(maxSize: number, compare: (a: T, b: T) => number) {
         this.heap = [];

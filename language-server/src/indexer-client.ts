@@ -1,12 +1,12 @@
 import { glob } from 'glob';
-import * as path from 'path';
-import { fileURLToPath } from 'url';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Connection, FileChangeType } from 'vscode-languageserver/node';
 import { IndexerEnvironment } from './core/indexer-interfaces';
 
 export class LspIndexerEnvironment implements IndexerEnvironment {
-    private connection: Connection;
-    private workspaceFolders: string[];
+    private readonly connection: Connection;
+    private readonly workspaceFolders: string[];
 
     constructor(connection: Connection, workspaceFolders: string[]) {
         this.connection = connection;

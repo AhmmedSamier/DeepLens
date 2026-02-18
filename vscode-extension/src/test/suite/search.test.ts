@@ -1,4 +1,4 @@
-import * as assert from 'assert';
+import * as assert from 'node:assert';
 import * as vscode from 'vscode';
 // We import SearchScope from the actual source to ensure type safety in tests
 import { SearchItemType, SearchScope } from '../../../../language-server/src/core/types';

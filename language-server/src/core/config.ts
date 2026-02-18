@@ -103,7 +103,7 @@ export class Config {
      * Validate and clamp a number to a specified range
      */
     private validateNumber(value: number, min: number, max: number, defaultValue: number): number {
-        if (typeof value !== 'number' || isNaN(value)) {
+        if (typeof value !== 'number' || Number.isNaN(value)) {
             return defaultValue;
         }
         return Math.max(min, Math.min(max, value));

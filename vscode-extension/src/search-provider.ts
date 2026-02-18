@@ -17,21 +17,21 @@ import { SlashCommand, SlashCommandService } from './slash-command-service';
  * Search provider with enhanced UI (filter buttons, icons, counts)
  */
 export class SearchProvider {
-    private searchEngine: ISearchProvider;
-    private config: Config;
-    private activityTracker: ActivityTracker | undefined;
-    private commandIndexer: CommandIndexer | undefined;
-    private slashCommandService: SlashCommandService;
+    private readonly searchEngine: ISearchProvider;
+    private readonly config: Config;
+    private readonly activityTracker: ActivityTracker | undefined;
+    private readonly commandIndexer: CommandIndexer | undefined;
+    private readonly slashCommandService: SlashCommandService;
     private currentScope: SearchScope = SearchScope.EVERYTHING;
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
-    private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
+    private readonly filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
     private lastQueryId = 0;
     private lastAutoRebuildTime = 0;
-    private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
-    private streamingResults: Map<number, SearchResult[]> = new Map();
-    private searchCts: vscode.CancellationTokenSource | undefined;
+    private currentQuickPick: vscode.QuickPick<SearchResultItem> | null = null;
+    private readonly streamingResults: Map<number, SearchResult[]> = new Map();
+    private searchCts: vscode.CancellationTokenSource | null = null;
     private lastTitle = '';
-    private feedbackTimeout: NodeJS.Timeout | undefined;
+    private feedbackTimeout: NodeJS.Timeout | null = null;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = 'Active: ';
@@ -62,7 +62,7 @@ export class SearchProvider {
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
-    private matchDecorationType = vscode.window.createTextEditorDecorationType({
+    private readonly matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
         borderColor: new vscode.ThemeColor('editor.findMatchHighlightBorder'),
@@ -162,7 +162,7 @@ export class SearchProvider {
                 if (this.currentQuickPick) {
                     this.currentQuickPick.title = this.lastTitle;
                 }
-                this.feedbackTimeout = undefined;
+                this.feedbackTimeout = null;
             }, 2000);
         }
         vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
@@ -350,7 +350,7 @@ export class SearchProvider {
         // Actually, if new results arrive, they are more important. Cancel flash.
         if (this.feedbackTimeout) {
             clearTimeout(this.feedbackTimeout);
-            this.feedbackTimeout = undefined;
+            this.feedbackTimeout = null;
         }
 
         quickPick.title = this.lastTitle;
@@ -363,7 +363,7 @@ export class SearchProvider {
         if (this.searchCts) {
             this.searchCts.cancel();
             this.searchCts.dispose();
-            this.searchCts = undefined;
+            this.searchCts = null;
         }
     }
 
@@ -371,12 +371,12 @@ export class SearchProvider {
      * Show search UI with specific scope and optional initial query
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
-        if (scope !== undefined) {
-            this.currentScope = scope;
-            this.userSelectedScope = scope;
-        } else {
+        if (scope === undefined) {
             // Use persisted scope
             this.currentScope = this.userSelectedScope;
+        } else {
+            this.currentScope = scope;
+            this.userSelectedScope = scope;
         }
         await this.showInternal(initialQuery);
     }
@@ -537,7 +537,7 @@ export class SearchProvider {
         let fuzzyTimeout: NodeJS.Timeout | undefined;
         let previewTimeout: NodeJS.Timeout | undefined;
         let accepted = false;
-        let lastActiveItemId: string | undefined;
+        let lastActiveItemId: string | null = null;
         let userHasNavigated = false;
 
         // Cleanup timeouts on hide
@@ -551,7 +551,7 @@ export class SearchProvider {
             cleanupTimeouts();
             // Reset navigation tracking when query changes
             userHasNavigated = false;
-            lastActiveItemId = undefined;
+            lastActiveItemId = null;
             this.handleQueryChange(
                 quickPick,
                 query,
@@ -569,7 +569,7 @@ export class SearchProvider {
 
                 // Only preview if user has actually navigated (not just auto-focus on first result)
                 // We detect navigation by checking if the active item changed from a previous value
-                if (lastActiveItemId !== undefined && lastActiveItemId !== currentItemId) {
+                if (lastActiveItemId !== null && lastActiveItemId !== currentItemId) {
                     userHasNavigated = true;
                 }
 
@@ -651,7 +651,7 @@ export class SearchProvider {
             });
 
             this.streamingResults.clear();
-            this.currentQuickPick = undefined;
+            this.currentQuickPick = null;
 
             quickPick.dispose();
         });
@@ -788,7 +788,7 @@ export class SearchProvider {
      * Parse query to extract scope and search term
      * Only considers a command complete if it's followed by a space (e.g., "/t ")
      */
-    private parseQuery(query: string): { scope: SearchScope | undefined; text: string } {
+    private parseQuery(query: string): { scope: SearchScope | null; text: string } {
         // Check for prefixes with space (completed commands)
         // We only auto-switch scope if the command is followed by space
         // This allows typing "/txt" without immediately switching to "/t" (types)
@@ -803,7 +803,7 @@ export class SearchProvider {
         }
 
         return {
-            scope: undefined,
+            scope: null,
             text: query,
         };
     }

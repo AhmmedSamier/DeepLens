@@ -1,7 +1,7 @@
 import { SearchEngine } from '../src/core/search-engine';
 import { SearchItemType, SearchScope } from '../src/core/types';
 import { benchmark, saveBenchmarks } from './utils';
-import * as path from 'path';
+import * as path from 'node:path';
 
 async function runBurstBenchmark() {
     console.log("=== Burst Search Benchmarks ===");

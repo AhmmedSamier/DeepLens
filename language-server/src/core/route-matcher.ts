@@ -22,7 +22,7 @@ export interface RoutePattern {
  * Utility to match concrete URL paths against ASP.NET route templates.
  */
 export class RouteMatcher {
-    private static cache = new Map<string, RoutePattern>();
+    private static readonly cache = new Map<string, RoutePattern>();
     private static readonly CACHE_LIMIT = 1000;
 
     /**
@@ -93,7 +93,7 @@ export class RouteMatcher {
         try {
             // 1. Try exact match first (Fastest)
             if (pattern.regex.test(cleanPath)) {
-                let score = 2.0;
+                let score = 2;
                 if (!pathSegments) {
                     pathSegments = cleanPath.split('/');
                 }
@@ -158,7 +158,7 @@ export class RouteMatcher {
 
         // 1. Clean up inputs
         // Remove HTTP methods like "[GET] " or "[POST] "
-        const methodMatch = template.match(/^\[([A-Z]+)\]/);
+        const methodMatch = /^\[([A-Z]+)\]/.exec(template);
         const method = methodMatch ? methodMatch[1] : undefined;
 
         const cleanTemplate = template
@@ -215,10 +215,10 @@ export class RouteMatcher {
             return 0;
         }
 
-        let score = 1.0;
+        let score = 1;
         const isExactCount = pSegs.length === tSegs.length;
         if (isExactCount) {
-            score = 2.0;
+            score = 2;
         }
 
         for (let i = 1; i <= pSegs.length; i++) {
@@ -276,7 +276,7 @@ export class RouteMatcher {
         if (q.includes('/') && !q.includes(' ') && q.length > 2) return true;
 
         // Match "get api/..." or "post /api/..."
-        const methodMatch = q.match(/^(get|post|put|delete|patch|options|head|trace)\s+[/\w]/i);
+        const methodMatch = /^(get|post|put|delete|patch|options|head|trace)\s+[/\w]/i.exec(q);
         return !!methodMatch;
     }
 }

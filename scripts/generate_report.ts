@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const benchmarkDir = process.env.BENCHMARK_DIR || 'benchmark-results';
 const outputFile = process.env.REPORT_OUTPUT || 'benchmark_report.md';
