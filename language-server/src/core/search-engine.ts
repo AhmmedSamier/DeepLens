@@ -131,6 +131,14 @@ export class SearchEngine implements ISearchProvider {
     private preparedPatterns: (RoutePattern | null)[] = [];
     private filePaths: string[] = [];
 
+    // 1-item cache for normalizePath (filePath -> normalizedPath)
+    private lastFilePath: string | null = null;
+    private lastNormalizedFilePath: string | null = null;
+
+    // 1-item cache for relative path normalization in populateParallelArrays
+    private lastRelPath: string | null = null;
+    private lastRelPathNormalized: string | null = null;
+
     // Deduplication cache for prepared strings
     private preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
@@ -420,8 +428,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            const normalized = item.relativeFilePath.replace(/\\/g, '/');
-            aggregateFlags |= this.calculateBitflags(normalized);
+            // OPTIMIZATION: Removed redundant replace(/\\/g, '/') because \ and / map to the same bitflag (30)
+            aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
         }
 
         return { nameFlags, aggregateFlags };
@@ -448,7 +456,18 @@ export class SearchEngine implements ISearchProvider {
      * Populate parallel arrays with prepared data for an item
      */
     private populateParallelArrays(item: SearchableItem): void {
-        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replace(/\\/g, '/') : null;
+        let normalizedPath: string | null = null;
+
+        if (item.relativeFilePath) {
+            if (item.relativeFilePath === this.lastRelPath) {
+                normalizedPath = this.lastRelPathNormalized;
+            } else {
+                normalizedPath = item.relativeFilePath.replace(/\\/g, '/');
+                this.lastRelPath = item.relativeFilePath;
+                this.lastRelPathNormalized = normalizedPath;
+            }
+        }
+
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
@@ -555,6 +574,10 @@ export class SearchEngine implements ISearchProvider {
         this.scopedIndices.clear();
         this.fileToItemIndices.clear();
         this.preparedCache.clear();
+        this.lastFilePath = null;
+        this.lastNormalizedFilePath = null;
+        this.lastRelPath = null;
+        this.lastRelPathNormalized = null;
     }
 
     /**
@@ -776,8 +799,15 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private normalizePath(filePath: string): string {
+        if (filePath === this.lastFilePath) {
+            return this.lastNormalizedFilePath!;
+        }
+
         const normalized = path.normalize(filePath);
-        return this.isWindows ? normalized.toLowerCase() : normalized;
+        const result = this.isWindows ? normalized.toLowerCase() : normalized;
+        this.lastFilePath = filePath;
+        this.lastNormalizedFilePath = result;
+        return result;
     }
 
     private isActive(filePath: string): boolean {
