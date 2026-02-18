@@ -431,8 +431,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            const normalized = item.relativeFilePath.replaceAll('\\', '/');
-            aggregateFlags |= this.calculateBitflags(normalized);
+            aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
         }
 
         return { nameFlags, aggregateFlags };
@@ -654,7 +653,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -1673,7 +1672,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-resultScope ??= ID_TO_SCOPE[typeId];
+        resultScope ??= ID_TO_SCOPE[typeId];
 
         const item = context.items[i];
         if (!item) {
@@ -1875,7 +1874,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
         let bitflags = 0;
 
         for (let i = 0; i < len; i++) {
-            const code = str.codePointAt(i) || 0;
+            const code = str.charCodeAt(i);
 
             // Check for non-ASCII
             if (code > 127) {
@@ -1998,7 +1997,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
             return [];
         }
 
-const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
@@ -2104,7 +2103,7 @@ const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undef
             }
         };
 
-if (indices) {
+        if (indices) {
             for (const index of indices) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(index);
