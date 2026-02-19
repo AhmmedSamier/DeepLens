@@ -9,7 +9,13 @@ import {
     State,
     TransportKind,
 } from 'vscode-languageclient/node';
-import { IndexStats, ISearchProvider, SearchOptions, SearchResult } from '../../language-server/src/core/types';
+import {
+    IndexStats,
+    ISearchProvider,
+    RipgrepUnavailableNotification,
+    SearchOptions,
+    SearchResult,
+} from '../../language-server/src/core/types';
 
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | null = null;
@@ -23,6 +29,7 @@ export class DeepLensLspClient implements ISearchProvider {
         percentage?: number;
     }>();
     public onStreamResult = new vscode.EventEmitter<{ requestId?: number; result: SearchResult }>();
+    public onRipgrepUnavailable = new vscode.EventEmitter<void>();
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
@@ -91,6 +98,11 @@ export class DeepLensLspClient implements ISearchProvider {
         // Handle streamed search results
         this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
             this.onStreamResult.fire(params);
+        });
+
+        // T013: Handle ripgrep unavailable notification
+        this.client.onNotification(RipgrepUnavailableNotification, () => {
+            this.onRipgrepUnavailable.fire();
         });
 
         await this.client.start();

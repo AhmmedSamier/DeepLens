@@ -1,177 +1,202 @@
 [
   {
     "name": "getIndicesForModifiedFiles (50k items, 100 modified)",
-    "avgMs": 0.05175209999999879,
-    "totalMs": 5.175209999999879
+    "avgMs": 0.014873000000002322,
+    "totalMs": 1.487300000000232
   },
   {
     "name": "Endpoint Search (Unified)",
-    "avgMs": 15.569800139999998,
-    "totalMs": 778.4900069999999
+    "avgMs": 7.921764000000003,
+    "totalMs": 396.08820000000014
   },
   {
     "name": "Endpoint Search (Burst)",
-    "avgMs": 5.643041020000001,
-    "totalMs": 282.15205100000003
+    "avgMs": 5.909972000000007,
+    "totalMs": 295.49860000000035
   },
   {
     "name": "Fuzzy Search 'File100'",
-    "avgMs": 45.76536107,
-    "totalMs": 4576.536107
+    "avgMs": 33.077257,
+    "totalMs": 3307.7257
   },
   {
     "name": "CamelHumps Search 'FCC'",
-    "avgMs": 45.62813419,
-    "totalMs": 4562.813419
+    "avgMs": 32.908184999999996,
+    "totalMs": 3290.8184999999994
   },
   {
     "name": "Non-matching Search 'Zebra'",
-    "avgMs": 0.3981749800000034,
-    "totalMs": 39.81749800000034
+    "avgMs": 0.9042920000000049,
+    "totalMs": 90.42920000000049
   },
   {
     "name": "Path-only Match 'src'",
-    "avgMs": 55.02656794000001,
-    "totalMs": 5502.656794
+    "avgMs": 41.128328999999994,
+    "totalMs": 4112.832899999999
   },
   {
     "name": "Search 'Component' (Large result set)",
-    "avgMs": 86.15432268000004,
-    "totalMs": 4307.716134000002
+    "avgMs": 59.588099999999976,
+    "totalMs": 2979.404999999999
+  },
+  {
+    "name": "File Scope Search 'File100Component.ts'",
+    "avgMs": 22.83463899999999,
+    "totalMs": 2283.463899999999
+  },
+  {
+    "name": "Type Scope Search 'File100Component'",
+    "avgMs": 23.970793999999987,
+    "totalMs": 2397.0793999999987
+  },
+  {
+    "name": "Method Scope Search 'calculateSomething100'",
+    "avgMs": 10.616286,
+    "totalMs": 1061.6286
   },
   {
     "name": "10 Concurrent Searches",
-    "avgMs": 40.89138692,
-    "totalMs": 2044.5693460000002
+    "avgMs": 47.880216,
+    "totalMs": 2394.0108
   },
   {
     "name": "Route Match Search 'api/v1/users'",
-    "avgMs": 51.28096902000005,
-    "totalMs": 5128.096902000005
+    "avgMs": 26.42207900000001,
+    "totalMs": 2642.2079000000012
   },
   {
     "name": "Route Match Burst 'api/v1/users'",
-    "avgMs": 0.017843550000034156,
-    "totalMs": 1.7843550000034156
+    "avgMs": 0.025023000000001048,
+    "totalMs": 2.5023000000001048
   },
   {
     "name": "Parse 500-method TS Class",
-    "avgMs": 77.65949340000006,
-    "totalMs": 776.5949340000006
+    "avgMs": 55.598969999999824,
+    "totalMs": 555.9896999999983
   },
   {
     "name": "Parse typescript (100 classes/methods)",
-    "avgMs": 10.709210349999921,
-    "totalMs": 214.18420699999842
+    "avgMs": 8.693294999999853,
+    "totalMs": 173.86589999999705
   },
   {
     "name": "Parse python (100 classes/methods)",
-    "avgMs": 10.685288249999939,
-    "totalMs": 213.7057649999988
+    "avgMs": 8.889504999999918,
+    "totalMs": 177.79009999999835
   },
   {
     "name": "Parse csharp (100 classes/methods)",
-    "avgMs": 18.205969800000094,
-    "totalMs": 364.11939600000187
+    "avgMs": 10.688870000000316,
+    "totalMs": 213.7774000000063
   },
   {
     "name": "Parse go (100 classes/methods)",
-    "avgMs": 11.506091650000235,
-    "totalMs": 230.1218330000047
+    "avgMs": 5.822720000000118,
+    "totalMs": 116.45440000000235
   },
   {
     "name": "Parse java (100 classes/methods)",
-    "avgMs": 13.06165245000011,
-    "totalMs": 261.2330490000022
+    "avgMs": 8.147980000000098,
+    "totalMs": 162.95960000000196
   },
   {
     "name": "Parse php (100 classes/methods)",
-    "avgMs": 13.466361950000282,
-    "totalMs": 269.32723900000565
+    "avgMs": 10.265625,
+    "totalMs": 205.3125
   },
   {
     "name": "Parse ruby (100 classes/methods)",
-    "avgMs": 9.4697919000002,
-    "totalMs": 189.395838000004
+    "avgMs": 6.238914999999906,
+    "totalMs": 124.77829999999813
   },
   {
     "name": "Parse cpp (100 classes/methods)",
-    "avgMs": 11.21297014999982,
-    "totalMs": 224.25940299999638
+    "avgMs": 7.8307000000000695,
+    "totalMs": 156.6140000000014
   },
   {
     "name": "Parse c (100 classes/methods)",
-    "avgMs": 8.19794135000011,
-    "totalMs": 163.9588270000022
+    "avgMs": 6.309965000000011,
+    "totalMs": 126.19930000000022
   },
   {
     "name": "Text Search 100 files",
-    "avgMs": 2.7918658999995385,
-    "totalMs": 27.918658999995387
+    "avgMs": 16.73315999999977,
+    "totalMs": 167.3315999999977
   },
   {
     "name": "Index 5000 files",
-    "avgMs": 971.8467806666667,
-    "totalMs": 2915.5403420000002
+    "avgMs": 678.1517000000022,
+    "totalMs": 2034.4551000000065
   },
   {
     "name": "Index 2000 files (Concurrency: 10)",
-    "avgMs": 302.96957549999934,
-    "totalMs": 605.9391509999987
+    "avgMs": 436.1696499999962,
+    "totalMs": 872.3392999999924
   },
   {
     "name": "Index 2000 files (Concurrency: 20)",
-    "avgMs": 269.39753199999905,
-    "totalMs": 538.7950639999981
+    "avgMs": 376.9385500000062,
+    "totalMs": 753.8771000000124
   },
   {
     "name": "Index 2000 files (Concurrency: 50)",
-    "avgMs": 275.1376065000004,
-    "totalMs": 550.2752130000008
+    "avgMs": 393.3133499999967,
+    "totalMs": 786.6266999999934
   },
   {
     "name": "Index 2000 files (Concurrency: 100)",
-    "avgMs": 267.29062150000027,
-    "totalMs": 534.5812430000005
+    "avgMs": 424.4856,
+    "totalMs": 848.9712
   },
   {
     "name": "Batch Update 500 files",
-    "avgMs": 274.5512544999947,
-    "totalMs": 549.1025089999894
+    "avgMs": 1096.1763999999966,
+    "totalMs": 2192.3527999999933
   },
   {
     "name": "Many Small Files (2000 files, 1 symbol each)",
-    "avgMs": 282.59161333333276,
-    "totalMs": 847.7748399999982
+    "avgMs": 349.88903333333536,
+    "totalMs": 1049.667100000006
   },
   {
     "name": "Few Large Files (20 files, 100 symbols each)",
-    "avgMs": 133.04174599999774,
-    "totalMs": 399.12523799999326
+    "avgMs": 148.51736666666693,
+    "totalMs": 445.5521000000008
+  },
+  {
+    "name": "Mixed extensions (ts+bin) with fileExtensions=['ts','bin']",
+    "avgMs": 521.7572333333325,
+    "totalMs": 1565.2716999999975
+  },
+  {
+    "name": "Mixed extensions (ts+bin) with fileExtensions=['ts']",
+    "avgMs": 614.9854333333351,
+    "totalMs": 1844.9563000000053
   },
   {
     "name": "Update Single File (Incremental)",
-    "avgMs": 56.53269134000002,
-    "totalMs": 2826.634567000001
+    "avgMs": 108.69675600000016,
+    "totalMs": 5434.837800000008
   },
   {
     "name": "Record Access (N=5000)",
-    "avgMs": 0.003850640000018757,
-    "totalMs": 0.19253200000093784
+    "avgMs": 0.0010399999999208375,
+    "totalMs": 0.05199999999604188
   },
   {
     "name": "recalculateAllScores (N=5000)",
-    "avgMs": 0.7077960000002349,
-    "totalMs": 14.155920000004699
+    "avgMs": 0.6162850000000617,
+    "totalMs": 12.325700000001234
   },
   {
     "name": "Remove 1000 items (Incremental Pruning)",
-    "avgMs": 67277.108203,
-    "totalMs": 67277.108203
+    "avgMs": 95625.5626,
+    "totalMs": 95625.5626
   },
   {
     "name": "GitProvider.getModifiedFiles",
-    "avgMs": 10.163430449999577,
-    "totalMs": 203.26860899999156
+    "avgMs": 54.20632000000042,
+    "totalMs": 1084.1264000000083
   }
 ]

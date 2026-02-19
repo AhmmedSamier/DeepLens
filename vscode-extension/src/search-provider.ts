@@ -62,6 +62,11 @@ export class SearchProvider {
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
+    private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
+        iconPath: new vscode.ThemeIcon('stop-circle'),
+        tooltip: 'Cancel search',
+    };
+
     private readonly matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
@@ -267,6 +272,11 @@ export class SearchProvider {
         }
 
         quickPick.buttons = buttons;
+
+        // T008: Add cancel button if busy
+        if (quickPick.busy) {
+            quickPick.buttons = [...quickPick.buttons, SearchProvider.CANCEL_BUTTON];
+        }
     }
 
     /**
@@ -364,6 +374,20 @@ export class SearchProvider {
             this.searchCts.cancel();
             this.searchCts.dispose();
             this.searchCts = null;
+        }
+    }
+
+    /**
+     * T012: Disable text search (ripgrep unavailable)
+     */
+    public disableTextSearch(): void {
+        // Remove text scope from buttons list indirectly by filtering it out in the next update list
+        // Actually we need to make createFilterButtons or the orderedScopes list dynamic
+        // For simplicity, we'll just remove it from the filterButtons map
+        this.filterButtons.delete(SearchScope.TEXT);
+
+        if (this.currentQuickPick) {
+            this.updateFilterButtons(this.currentQuickPick);
         }
     }
 
@@ -950,12 +974,14 @@ export class SearchProvider {
             await this.showRecentHistory(quickPick);
             if (queryId === this.lastQueryId) {
                 quickPick.busy = false;
+                this.updateFilterButtons(quickPick);
             }
             return;
         }
 
         // Start busy indicator for deep scan
         quickPick.busy = true;
+        this.updateFilterButtons(quickPick);
 
         // PHASE 0: Absolute Instant (Immediate exact-name hits)
         // PHASE 0: Absolute Instant (Immediate exact-name hits)
@@ -1033,6 +1059,7 @@ export class SearchProvider {
                 } finally {
                     if (queryId === this.lastQueryId) {
                         quickPick.busy = false;
+                        this.updateFilterButtons(quickPick);
                     }
                 }
             }, 100),
@@ -1046,6 +1073,23 @@ export class SearchProvider {
         quickPick: vscode.QuickPick<SearchResultItem>,
         button: vscode.QuickInputButton,
     ): Promise<void> {
+        // T009: Detect cancel button press
+        if (button === SearchProvider.CANCEL_BUTTON) {
+            this.cancelSearch();
+            quickPick.busy = false;
+            this.updateFilterButtons(quickPick);
+
+            // Flash cancellation status to placeholder
+            const originalPlaceholder = quickPick.placeholder;
+            quickPick.placeholder = 'Search cancelled';
+            setTimeout(() => {
+                if (this.currentQuickPick === quickPick) {
+                    quickPick.placeholder = originalPlaceholder;
+                }
+            }, 800);
+            return;
+        }
+
         const tooltip = button.tooltip || '';
         const baseName = tooltip.replace(this.ACTIVE_PREFIX, '').replace(this.INACTIVE_PREFIX, '');
 
@@ -1396,15 +1440,10 @@ export class SearchProvider {
                     scope: SearchScope.COMMANDS,
                 },
             });
-}
+        }
 
         // Helper method to create command items
-        const addCommandItem = (
-            label: string,
-            description: string,
-            icon: vscode.ThemeIcon,
-            commandId: string,
-        ) => {
+        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
             items.push({
                 label,
                 description,
@@ -1424,7 +1463,7 @@ export class SearchProvider {
             });
         };
 
-// 3. Native Search Action
+        // 3. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1433,20 +1472,10 @@ export class SearchProvider {
         );
 
         // 4. Rebuild Index Action
-        addCommandItem(
-            'Rebuild Index',
-            'Fix missing files',
-            new vscode.ThemeIcon('refresh'),
-            this.CMD_REBUILD_INDEX,
-        );
+        addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
         // 5. Clear Cache Action
-        addCommandItem(
-            'Clear Index Cache',
-            'Fix corruption',
-            new vscode.ThemeIcon('trash'),
-            this.CMD_CLEAR_CACHE,
-        );
+        addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
         // 6. Settings Action
         addCommandItem(
@@ -1765,9 +1794,7 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line === undefined
-                    ? new vscode.Position(0, 0)
-                    : new vscode.Position(item.line, item.column || 0);
+                item.line === undefined ? new vscode.Position(0, 0) : new vscode.Position(item.line, item.column || 0);
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;

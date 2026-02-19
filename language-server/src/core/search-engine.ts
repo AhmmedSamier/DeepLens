@@ -159,7 +159,7 @@ export class SearchEngine implements ISearchProvider {
     private config?: Config;
     private logger?: { log: (msg: string) => void; error: (msg: string) => void };
     private activeFiles: Set<string> = new Set();
-    private ripgrep: RipgrepService | undefined;
+    public ripgrep: RipgrepService | undefined;
     private gitProvider: GitProvider | undefined;
 
     /**
@@ -654,7 +654,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -1385,7 +1385,22 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
             this.searchAllItems(searchContext, heap, token);
         }
 
-        return heap.getSorted();
+        const results = heap.getSorted();
+
+        // T006: Apply activity boost post-sort (deferred from hot loop)
+        if (this.getActivityScore) {
+            for (let i = 0; i < results.length; i++) {
+                const r = results[i];
+                const activityScore = this.getActivityScore(r.item.id);
+                if (activityScore > 0 && r.score > 0.05) {
+                    r.score = r.score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                }
+            }
+            // Re-sort results if activity boost was applied (as scores changed)
+            results.sort((a, b) => b.score - a.score);
+        }
+
+        return results;
     }
 
     private prepareSearchContext(query: string, enableCamelHumps: boolean, scope: SearchScope) {
@@ -1482,6 +1497,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): boolean {
+        // T004: Bitflag screening fires first (Audit: firing before fuzzysort/distance guards)
         // Short-circuit if query characters are not present in Name, FullName, or Path
         if ((context.queryBitflags & context.itemBitflags[i]) !== context.queryBitflags) {
             // Special case: Check for potential URL/endpoint match
@@ -1493,6 +1509,14 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
                 RouteMatcher.isMatchPattern(pattern, context.queryForUrlMatch)
             );
         }
+
+        // T005: Character-count distance guard (per research.md §2)
+        // Skip items that are mathematically too distant in length to yield a quality fuzzy match
+        const pName = context.preparedNames[i];
+        if (pName && Math.abs(context.queryLen - pName.target.length) > context.queryLen) {
+            return false;
+        }
+
         return true;
     }
 
@@ -1673,35 +1697,28 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-resultScope ??= ID_TO_SCOPE[typeId];
+        resultScope ??= ID_TO_SCOPE[typeId];
 
         const item = context.items[i];
         if (!item) {
             return;
         }
 
-        // Apply activity boost
-        let finalScore = score;
-        if (context.getActivityScore) {
-            const activityScore = context.getActivityScore(item.id);
-            if (activityScore > 0 && score > 0.05) {
-                finalScore = score * context.invActivityWeight + activityScore * context.activityWeight;
-            }
-        }
+        // T006: Activity boost removed from hot loop; deferred to post-sort in performUnifiedSearch
 
-        // Only push if score is still above minimum after activity boost
-        if (finalScore > context.MIN_SCORE) {
+        // Only push if score is still above minimum
+        if (score > context.MIN_SCORE) {
             // Skip if heap is full and this score is too low
             if (heap.isFull()) {
                 const minItem = heap.peek();
-                if (minItem && finalScore <= minItem.score) {
+                if (minItem && score <= minItem.score) {
                     return;
                 }
             }
 
             heap.push({
                 item,
-                score: finalScore,
+                score: score,
                 scope: resultScope,
             });
         }
@@ -1998,7 +2015,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
             return [];
         }
 
-const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
@@ -2104,7 +2121,7 @@ const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undef
             }
         };
 
-if (indices) {
+        if (indices) {
             for (const index of indices) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(index);

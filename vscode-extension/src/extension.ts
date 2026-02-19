@@ -44,11 +44,25 @@ export async function activate(context: vscode.ExtensionContext) {
     // UI remains local
     searchProvider = new SearchProvider(lspClient, config, activityTracker, commandIndexer);
 
+    // T013: Listen for ripgrep unavailability
+    context.subscriptions.push(
+        lspClient.onRipgrepUnavailable.event(() => {
+            searchProvider.disableTextSearch();
+            vscode.window
+                .showWarningMessage('DeepLens: Ripgrep is unavailable. Text search is disabled.', 'Open Settings')
+                .then((val) => {
+                    if (val === 'Open Settings') {
+                        vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens.ripgrep');
+                    }
+                });
+        }),
+    );
+
     const updateActiveFiles = () => {
         const activeFiles: string[] = [];
 
         // Use tabGroups to get files actually open in tabs (more accurate than textDocuments)
-if (vscode.window.tabGroups) {
+        if (vscode.window.tabGroups) {
             for (const group of vscode.window.tabGroups.all) {
                 for (const tab of group.tabs) {
                     if (tab.input instanceof vscode.TabInputText) {
@@ -81,7 +95,7 @@ if (vscode.window.tabGroups) {
         vscode.window.onDidChangeActiveTextEditor(updateActiveFiles),
     );
 
-if (vscode.window.tabGroups != undefined) {
+    if (vscode.window.tabGroups != undefined) {
         context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(updateActiveFiles));
     }
 
