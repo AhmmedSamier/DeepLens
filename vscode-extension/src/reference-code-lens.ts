@@ -62,10 +62,9 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
 
         try {
             // Get document symbols using VSCode's built-in provider
-            const symbols = await vscode.commands.executeCommand<vscode.DocumentSymbol[] | vscode.SymbolInformation[]>(
-                'vscode.executeDocumentSymbolProvider',
-                document.uri,
-            );
+            const symbols = await vscode.commands.executeCommand<
+                vscode.DocumentSymbol[] | vscode.SymbolInformation[]
+            >('vscode.executeDocumentSymbolProvider', document.uri);
 
             if (!symbols || token.isCancellationRequested) {
                 return [];

@@ -202,9 +202,9 @@ export class SlashCommandService {
 
     getCommands(query?: string): SlashCommand[] {
         if (!query) {
-            return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name)))
-                .map((name) => this.commands.get(name))
-                .filter((cmd): cmd is SlashCommand => cmd !== undefined);
+return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name)))
+            .map((name) => this.commands.get(name))
+            .filter((cmd): cmd is SlashCommand => cmd !== undefined);
         }
 
         const lowerQuery = query.toLowerCase();
