@@ -577,7 +577,6 @@ export class SearchEngine implements ISearchProvider {
             queryLower,
             scope: options.scope || SearchScope.EVERYTHING,
             maxResults: options.maxResults || 20,
-            enableCamelHumps: options.enableCamelHumps !== false,
             isPotentialUrl: RouteMatcher.isPotentialUrl(query),
         };
     }

@@ -861,14 +861,16 @@ export class WorkspaceIndexer {
                 const internedContainerName = containerName ? this.intern(containerName) : undefined;
                 const fullName = this.intern(containerName ? `${containerName}.${symbol.name}` : symbol.name);
 
+                const selectionStart = symbol.selectionRange?.start ?? symbol.range.start;
+
                 collector.push({
-                    id: `symbol:${filePath}:${fullName}:${symbol.range.start.line}`,
+                    id: `symbol:${filePath}:${fullName}:${selectionStart.line}`,
                     name: name,
                     type: itemType,
                     filePath,
                     relativeFilePath,
-                    line: symbol.range.start.line,
-                    column: symbol.range.start.character,
+                    line: selectionStart.line,
+                    column: selectionStart.character,
                     containerName: internedContainerName,
                     fullName,
                     detail: symbol.detail,

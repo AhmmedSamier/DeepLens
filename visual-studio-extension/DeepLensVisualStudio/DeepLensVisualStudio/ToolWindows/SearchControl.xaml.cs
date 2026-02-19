@@ -11,6 +11,7 @@ using System.Windows.Input;
 using DeepLensVisualStudio.Services;
 using Microsoft.VisualStudio.Shell;
 using Microsoft.VisualStudio.Shell.Interop;
+using Microsoft.VisualStudio.TextManager.Interop;
 using Microsoft.VisualStudio;
 
 namespace DeepLensVisualStudio.ToolWindows
@@ -889,7 +890,6 @@ namespace DeepLensVisualStudio.ToolWindows
 
             try
             {
-                // Use Provisional (Preview) tab and do not take focus
                 using (new NewDocumentStateScope(__VSNEWDOCUMENTSTATE.NDS_Provisional | __VSNEWDOCUMENTSTATE.NDS_NoActivate, VSConstants.NewDocumentStateReason.SolutionExplorer))
                 {
                     IVsWindowFrame? frame;
@@ -903,14 +903,28 @@ namespace DeepLensVisualStudio.ToolWindows
 
                     if (frame != null)
                     {
-                        // Ensure it's shown but not activated to keep focus in search tool window
                         frame.ShowNoActivate();
 
                         var textView = VsShellUtilities.GetTextView(frame);
                         if (textView != null)
                         {
-                            textView.SetCaretPos(result.Line - 1, 0);
-                            textView.SetSelection(result.Line - 1, 0, result.Line - 1, 0);
+                            int column = GetMatchColumn(textView, result);
+                            int endColumn = column + (result.Name?.Length ?? 0);
+                            if (result.Line > 0)
+                            {
+                                textView.GetBuffer(out IVsTextLines buffer);
+                                if (buffer != null)
+                                {
+                                    buffer.GetLengthOfLine(result.Line - 1, out int lineLength);
+                                    if (endColumn > lineLength)
+                                    {
+                                        endColumn = lineLength;
+                                    }
+                                }
+                            }
+
+                            textView.SetCaretPos(result.Line - 1, column);
+                            textView.SetSelection(result.Line - 1, column, result.Line - 1, endColumn);
                             textView.CenterLines(result.Line - 1, 1);
                         }
                     }
@@ -937,7 +951,6 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (string.IsNullOrEmpty(result.FilePath))
                     return;
 
-                // Open document
                 IVsWindowFrame? frame;
 
                 VsShellUtilities.OpenDocument(
@@ -948,41 +961,53 @@ namespace DeepLensVisualStudio.ToolWindows
                     out _,
                     out frame);
 
-
                 frame?.Show();
-
-                // Promote to permanent tab (non-provisional)
-                // VSFPROPID_IsProvisional is -5010, available via __VSFPROPID5
                 frame?.SetProperty((int)__VSFPROPID5.VSFPROPID_IsProvisional, false);
 
-                // Navigate to line
                 if (frame != null)
                 {
                     var textView = VsShellUtilities.GetTextView(frame);
                     if (textView != null)
                     {
-                        textView.SetCaretPos(result.Line - 1, 0);
-                        textView.SetSelection(result.Line - 1, 0, result.Line - 1, 0);
+                        int column = GetMatchColumn(textView, result);
+                        int endColumn = column + (result.Name?.Length ?? 0);
+                        if (result.Line > 0)
+                        {
+                            textView.GetBuffer(out IVsTextLines buffer);
+                            if (buffer != null)
+                            {
+                                buffer.GetLengthOfLine(result.Line - 1, out int lineLength);
+                                if (endColumn > lineLength)
+                                {
+                                    endColumn = lineLength;
+                                }
+                            }
+                        }
+
+                        textView.SetCaretPos(result.Line - 1, column);
+                        textView.SetSelection(result.Line - 1, column, result.Line - 1, endColumn);
                         textView.CenterLines(result.Line - 1, 1);
                     }
                 }
 
                 StatusText = $"Opened {result.Name}";
 
-                // Notify LSP of selection
                 var lspService = GetLspService();
                 if (lspService != null)
                 {
-                    // Assuming we have a way to get the ID, or the ID is symbol:filePath:fullName:line
                     string itemId = result.Kind == "File" ? $"file:{result.FilePath}" : $"symbol:{result.FilePath}:{result.Name}:{result.Line - 1}";
-                    _ = Task.Run(async () => {
-                        try {
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
                             await lspService.RecordActivityAsync(itemId);
-                        } catch { }
+                        }
+                        catch
+                        {
+                        }
                     });
                 }
 
-                // Add to history
                 _historyService.AddItem(new HistoryItem
                 {
                     Name = result.Name,
@@ -1031,6 +1056,59 @@ namespace DeepLensVisualStudio.ToolWindows
         protected void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        }
+
+        private int GetMatchColumn(IVsTextView textView, SearchResultViewModel result)
+        {
+            if (result.Line <= 0)
+            {
+                return 0;
+            }
+
+            textView.GetBuffer(out IVsTextLines buffer);
+            if (buffer == null)
+            {
+                return 0;
+            }
+
+            buffer.GetLineText(result.Line - 1, 0, result.Line - 1, -1, out string lineText);
+            if (string.IsNullOrEmpty(lineText))
+            {
+                return 0;
+            }
+
+            string name = result.Name ?? string.Empty;
+            if (name.Length == 0)
+            {
+                return 0;
+            }
+
+            int index = lineText.IndexOf(name, StringComparison.Ordinal);
+            if (index < 0)
+            {
+                string trimmedName = name.Trim();
+                if (trimmedName.Length > 0)
+                {
+                    index = lineText.IndexOf(trimmedName, StringComparison.Ordinal);
+                    if (index < 0)
+                    {
+                        index = lineText.IndexOf(trimmedName, StringComparison.OrdinalIgnoreCase);
+                    }
+                }
+            }
+
+            if (index < 0)
+            {
+                int leadingWhitespace = lineText.Length - lineText.TrimStart().Length;
+                index = leadingWhitespace;
+            }
+
+            if (index < 0)
+            {
+                index = 0;
+            }
+
+            return index;
         }
 
         private void ExecuteSlashCommand(string commandName)

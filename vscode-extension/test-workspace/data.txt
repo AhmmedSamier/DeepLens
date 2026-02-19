@@ -1,2 +1,2 @@
 DeepLens is a high-performance search engine.
-It supports fast, high-quality search.
+It supports fast, high-quality search with fuzzy matching capabilities.
