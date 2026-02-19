@@ -1453,40 +1453,41 @@ export class SearchProvider {
      * Get welcome items for empty state
      */
     private getWelcomeItems(): SearchResultItem[] {
-        const items = [
-            ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
-            ['/t', 'Search Classes', 'Find classes, interfaces, and enums (/t)', SearchScope.TYPES],
-            ['/f', 'Search Files', 'Find files by name or path (/f)', SearchScope.FILES],
-            ['/s', 'Search Symbols', 'Find methods, functions, and variables (/s)', SearchScope.SYMBOLS],
-            ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
-        ] as const;
+        const welcomeCommands = [
+            { id: '/all', label: 'Search Everything' },
+            { id: '/t', label: 'Search Classes' },
+            { id: '/f', label: 'Search Files' },
+            { id: '/s', label: 'Search Symbols' },
+            { id: '/txt', label: 'Search Text' },
+            { id: '/cmd', label: 'Search Commands' },
+        ];
 
-        const iconMap = new Map<SearchScope, string>([
-            [SearchScope.EVERYTHING, 'search'],
-            [SearchScope.TYPES, this.ICON_CLASS],
-            [SearchScope.FILES, 'file'],
-            [SearchScope.SYMBOLS, 'symbol-method'],
-            [SearchScope.TEXT, 'whole-word'],
-        ]);
+        const items: SearchResultItem[] = [];
 
-        return items.map(([cmd, name, detail, scope]) => {
+        for (const { id, label } of welcomeCommands) {
+            const cmd = this.slashCommandService.getCommand(id);
+            if (!cmd) {
+                continue;
+            }
+
             const item = this.resultToQuickPickItem({
                 item: {
-                    id: `slash-cmd:${cmd}`,
-                    name,
+                    id: `slash-cmd:${id}`,
+                    name: label,
                     type: SearchItemType.COMMAND,
                     filePath: '',
-                    detail,
+                    detail: `${cmd.description} (${cmd.name})`,
                 },
                 score: 1,
-                scope,
+                scope: cmd.scope,
             });
 
-            const icon = iconMap.get(scope) || 'lightbulb';
-            item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('textLink.foreground'));
+            item.iconPath = new vscode.ThemeIcon(cmd.icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
-            return item;
-        });
+            items.push(item);
+        }
+
+        return items;
     }
 
     /**
@@ -1696,28 +1697,32 @@ export class SearchProvider {
 
     private handleSlashCommandNavigation(item: SearchableItem, preview: boolean): boolean {
         // Handle Slash Command Selection
-        if (item.id.startsWith('slash-cmd:') && this.currentQuickPick) {
-            if (preview) return true; // Don't do anything for preview
+        if (item.id.startsWith('slash-cmd:')) {
+            // If the quickpick is already closed (e.g. during a preview timeout race),
+            // we should still return true to prevent falling through to file navigation.
+            if (this.currentQuickPick) {
+                if (preview) return true; // Don't do anything for preview
 
-            const functionalPrefix = item.id.substring('slash-cmd:'.length);
+                const functionalPrefix = item.id.substring('slash-cmd:'.length);
 
-            // Find scope for this prefix (add space to match PREFIX_MAP)
-            const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
-            if (scope) {
-                this.userSelectedScope = scope; // <--- FIX: Persist user selection
-                this.currentScope = scope;
-                this.updateFilterButtons(this.currentQuickPick);
-                this.currentQuickPick.value = ''; // Clear the command text
-                this.currentQuickPick.placeholder = this.getPlaceholder();
+                // Find scope for this prefix (add space to match PREFIX_MAP)
+                const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
+                if (scope) {
+                    this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                    this.currentScope = scope;
+                    this.updateFilterButtons(this.currentQuickPick);
+                    this.currentQuickPick.value = ''; // Clear the command text
+                    this.currentQuickPick.placeholder = this.getPlaceholder();
+                }
+
+                // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
+                this.handleQueryChange(
+                    this.currentQuickPick,
+                    '',
+                    () => {},
+                    () => {},
+                );
             }
-
-            // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
-            this.handleQueryChange(
-                this.currentQuickPick,
-                '',
-                () => {},
-                () => {},
-            );
             return true;
         }
         return false;
