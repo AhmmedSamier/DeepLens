@@ -1,6 +1,6 @@
-import * as cp from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as cp from 'node:child_process';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { CancellationToken } from 'vscode-languageserver';
 
 export interface RgMatch {
@@ -13,9 +13,13 @@ export interface RgMatch {
 }
 
 export class RipgrepService {
-    private rgPath: string;
+    private readonly rgPath: string;
 
     constructor(extensionPath: string) {
+        this.rgPath = this.findRgPath(extensionPath);
+    }
+
+    private findRgPath(extensionPath: string): string {
         let binPatterns: string[] = [];
 
         // Determine target binary names based on platform/arch
@@ -37,18 +41,15 @@ export class RipgrepService {
         ];
 
         // Find the first matching binary
-        this.rgPath = '';
-
         for (const dir of searchDirs) {
             for (const name of binPatterns) {
                 const candidate = path.join(dir, name);
                 if (fs.existsSync(candidate)) {
-                    this.rgPath = candidate;
-                    break;
+                    return candidate;
                 }
             }
-            if (this.rgPath) break;
         }
+        return '';
     }
 
     isAvailable(): boolean {

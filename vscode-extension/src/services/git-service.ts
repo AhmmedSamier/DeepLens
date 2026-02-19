@@ -19,7 +19,7 @@ export interface GitAPI {
 
 export class GitService {
     private gitChangeDebounce: NodeJS.Timeout | undefined;
-    private onRepoChange: () => Promise<void>;
+    private readonly onRepoChange: () => Promise<void>;
 
     constructor(onRepoChange: () => Promise<void>) {
         this.onRepoChange = onRepoChange;

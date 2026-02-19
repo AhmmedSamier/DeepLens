@@ -2,12 +2,12 @@
  * Debounce utility for batching rapid function calls
  */
 export class Debouncer<T = void> {
-    private timeoutId: NodeJS.Timeout | undefined;
+    private timeoutId: NodeJS.Timeout | null = null;
     private pendingArgs: T[] = [];
 
     constructor(
-        private callback: (args: T[]) => void | Promise<void>,
-        private delayMs: number,
+        private readonly callback: (args: T[]) => void | Promise<void>,
+        private readonly delayMs: number,
     ) {}
 
     /**
@@ -32,7 +32,7 @@ export class Debouncer<T = void> {
     flush(): void {
         if (this.timeoutId) {
             clearTimeout(this.timeoutId);
-            this.timeoutId = undefined;
+            this.timeoutId = null;
         }
 
         if (this.pendingArgs.length > 0) {
@@ -48,7 +48,7 @@ export class Debouncer<T = void> {
     cancel(): void {
         if (this.timeoutId) {
             clearTimeout(this.timeoutId);
-            this.timeoutId = undefined;
+            this.timeoutId = null;
         }
         this.pendingArgs = [];
     }
@@ -68,7 +68,7 @@ export function debounce<TArgs extends unknown[]>(
     func: (...args: TArgs) => void,
     waitMs: number,
 ): (...args: TArgs) => void {
-    let timeoutId: NodeJS.Timeout | undefined;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     return function (...args: TArgs) {
         if (timeoutId) {
@@ -84,9 +84,12 @@ export function debounce<TArgs extends unknown[]>(
 /**
  * Throttle function - ensures function is called at most once per interval
  */
-export function throttle<TArgs extends unknown[]>(func: (...args: TArgs) => void, limitMs: number): (...args: TArgs) => void {
+export function throttle<TArgs extends unknown[]>(
+    func: (...args: TArgs) => void,
+    limitMs: number,
+): (...args: TArgs) => void {
     let lastCall = 0;
-    let timeoutId: NodeJS.Timeout | undefined;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     return function (...args: TArgs) {
         const now = Date.now();
@@ -95,15 +98,13 @@ export function throttle<TArgs extends unknown[]>(func: (...args: TArgs) => void
         if (timeSinceLastCall >= limitMs) {
             lastCall = now;
             func.apply(this, args);
-        } else {
+        } else if (!timeoutId) {
             // Schedule for later if not already scheduled
-            if (!timeoutId) {
-                timeoutId = setTimeout(() => {
-                    lastCall = Date.now();
-                    timeoutId = undefined;
-                    func.apply(this, args);
-                }, limitMs - timeSinceLastCall);
-            }
+            timeoutId = setTimeout(() => {
+                lastCall = Date.now();
+                timeoutId = null;
+                func.apply(this, args);
+            }, limitMs - timeSinceLastCall);
         }
     };
 }

@@ -22,7 +22,7 @@ export interface RoutePattern {
  * Utility to match concrete URL paths against ASP.NET route templates.
  */
 export class RouteMatcher {
-    private static cache = new Map<string, RoutePattern>();
+    private static readonly cache = new Map<string, RoutePattern>();
     private static readonly CACHE_LIMIT = 1000;
 
     /**
@@ -55,7 +55,7 @@ export class RouteMatcher {
             }
         }
 
-        const cleanPath = pathOnly.trim().replace(/(^\/|\/$)/g, '');
+        const cleanPath = pathOnly.trim().replaceAll(/(^\/|\/$)/g, '');
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
         const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
         const segmentsLower = segments.map((s) => s.toLowerCase());
@@ -93,7 +93,7 @@ export class RouteMatcher {
         try {
             // 1. Try exact match first (Fastest)
             if (pattern.regex.test(cleanPath)) {
-                let score = 2.0;
+                let score = 2;
                 if (!pathSegments) {
                     pathSegments = cleanPath.split('/');
                 }
@@ -158,13 +158,13 @@ export class RouteMatcher {
 
         // 1. Clean up inputs
         // Remove HTTP methods like "[GET] " or "[POST] "
-        const methodMatch = template.match(/^\[([A-Z]+)\]/);
+        const methodMatch = /^\[([A-Z]+)\]/.exec(template);
         const method = methodMatch ? methodMatch[1] : undefined;
 
         const cleanTemplate = template
             .replace(/^\[[A-Z]+\]\s*/, '')
             .trim()
-            .replace(/(^\/|\/$)/g, '');
+            .replaceAll(/(^\/|\/$)/g, '');
 
         if (!cleanTemplate) return null;
 
@@ -172,17 +172,17 @@ export class RouteMatcher {
         let pattern = cleanTemplate;
 
         // Replace {*slug} (catch-all) with (.*)
-        pattern = pattern.replace(/\{(\*\w+)\}/g, '___CATCHALL___');
+        pattern = pattern.replaceAll(/\{(\*\w+)\}/g, '___CATCHALL___');
 
         // Replace {id}, {id:int}, {id?} etc with ([^\/]+)
-        pattern = pattern.replace(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
+        pattern = pattern.replaceAll(/\{[\w?]+(?::\w+)?\}/g, '___PARAM___');
 
         // Escape regex specials
-        pattern = pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        pattern = pattern.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 
         // Restore our markers with regex groups
-        pattern = pattern.replace(/___PARAM___/g, '([^\\/]+)');
-        pattern = pattern.replace(/___CATCHALL___/g, '(.*)');
+        pattern = pattern.replaceAll('___PARAM___', '([^/]+)');
+        pattern = pattern.replaceAll('___CATCHALL___', '(.*)');
 
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
@@ -215,10 +215,10 @@ export class RouteMatcher {
             return 0;
         }
 
-        let score = 1.0;
+        let score = 1;
         const isExactCount = pSegs.length === tSegs.length;
         if (isExactCount) {
-            score = 2.0;
+            score = 2;
         }
 
         for (let i = 1; i <= pSegs.length; i++) {
@@ -276,7 +276,7 @@ export class RouteMatcher {
         if (q.includes('/') && !q.includes(' ') && q.length > 2) return true;
 
         // Match "get api/..." or "post /api/..."
-        const methodMatch = q.match(/^(get|post|put|delete|patch|options|head|trace)\s+[/\w]/i);
+        const methodMatch = /^(get|post|put|delete|patch|options|head|trace)\s+[/\w]/i.exec(q);
         return !!methodMatch;
     }
 }

@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import * as fs from 'fs';
-import * as os from 'os';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { Config } from '../core/config';
 import { SearchEngine } from '../core/search-engine';
 import { SearchItemType, SearchScope, SearchableItem } from '../core/types';
@@ -75,6 +75,6 @@ describe('SearchEngine Stream Search', () => {
         // Check highlights (should be relative to trimmed name: 6)
         // "const " is length 6. So foo starts at 6.
         expect(result.highlights).toBeDefined();
-        expect(result.highlights![0]).toEqual([6, 9]);
+        expect(result.highlights[0]).toEqual([6, 9]);
     });
 });

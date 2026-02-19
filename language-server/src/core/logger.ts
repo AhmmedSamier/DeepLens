@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { appendFileSync, existsSync, mkdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 /**
  * Log levels for the logging service
@@ -45,7 +45,7 @@ class ConsoleLogger implements LogOutput {
  * File logger implementation
  */
 class FileLogger implements LogOutput {
-    constructor(private filePath: string) {}
+    constructor(private readonly filePath: string) {}
 
     write(level: LogLevel, message: string): void {
         const timestamp = new Date().toISOString();
@@ -53,7 +53,7 @@ class FileLogger implements LogOutput {
         const formattedMessage = `[${timestamp}] [${levelStr}] ${message}\n`;
 
         try {
-            fs.appendFileSync(this.filePath, formattedMessage);
+            appendFileSync(this.filePath, formattedMessage);
         } catch (error) {
             // Silently fail if we can't write to file
             console.error(`Failed to write to log file: ${error}`);
@@ -65,7 +65,9 @@ class FileLogger implements LogOutput {
  * LSP Connection logger implementation (for language server)
  */
 class ConnectionLogger implements LogOutput {
-    constructor(private connection: { console: { log: (msg: string) => void; error: (msg: string) => void } }) {}
+    constructor(
+        private readonly connection: { console: { log: (msg: string) => void; error: (msg: string) => void } },
+    ) {}
 
     write(level: LogLevel, message: string): void {
         const levelStr = LogLevel[level];
@@ -119,10 +121,10 @@ export class Logger {
      */
     addFileOutput(filePath: string): void {
         // Ensure directory exists
-        const dir = path.dirname(filePath);
+        const dir = dirname(filePath);
         try {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
+            if (!existsSync(dir)) {
+                mkdirSync(dir, { recursive: true });
             }
             this.outputs.push(new FileLogger(filePath));
         } catch (error) {

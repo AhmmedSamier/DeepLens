@@ -2,8 +2,8 @@ import { expect, test, describe, beforeEach, afterEach } from "bun:test";
 import { ActivityTracker } from "../src/core/activity-tracker";
 import { SearchEngine } from "../src/core/search-engine";
 import { SearchItemType } from "../src/core/types";
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 describe("Recent History", () => {
     const tempDir = path.join(process.cwd(), ".test-temp-" + Date.now());

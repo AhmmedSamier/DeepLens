@@ -6,7 +6,7 @@ import {
 } from '../../language-server/src/core/indexer-interfaces';
 
 export class VsCodeIndexerEnvironment implements IndexerEnvironment {
-    private logger: vscode.OutputChannel;
+    private readonly logger: vscode.OutputChannel;
 
     constructor() {
         this.logger = vscode.window.createOutputChannel('DeepLens (Indexer)');

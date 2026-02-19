@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { runActivityBenchmarks } from './activity.bench';
 import { runConcurrencyBenchmarks } from './concurrency.bench';

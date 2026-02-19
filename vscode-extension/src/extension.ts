@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { Config } from '../../language-server/src/core/config';
@@ -48,7 +48,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const activeFiles: string[] = [];
 
         // Use tabGroups to get files actually open in tabs (more accurate than textDocuments)
-        if (typeof vscode.window.tabGroups !== 'undefined') {
+if (vscode.window.tabGroups) {
             for (const group of vscode.window.tabGroups.all) {
                 for (const tab of group.tabs) {
                     if (tab.input instanceof vscode.TabInputText) {
@@ -81,7 +81,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.onDidChangeActiveTextEditor(updateActiveFiles),
     );
 
-    if (typeof vscode.window.tabGroups !== 'undefined') {
+if (vscode.window.tabGroups != undefined) {
         context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(updateActiveFiles));
     }
 
@@ -109,9 +109,7 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage('DeepLens: Index cache cleared.');
     });
 
-    context.subscriptions.push(searchCommand);
-    context.subscriptions.push(rebuildCommand);
-    context.subscriptions.push(clearCacheCommand);
+    context.subscriptions.push(searchCommand, rebuildCommand, clearCacheCommand);
 
     // Status Bar Item
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -177,7 +175,7 @@ export async function activate(context: vscode.ExtensionContext) {
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
             statusItem.color = '#ff9900'; // Orange for indexing
         } else if (e.state === 'report') {
-            const percentageText = e.percentage !== undefined ? ` (${e.percentage}%)` : '';
+            const percentageText = typeof e.percentage === 'number' ? ` (${e.percentage}%)` : '';
 
             // Determine icon and color based on message content
             let icon = '$(sync~spin)';
@@ -226,8 +224,10 @@ export async function activate(context: vscode.ExtensionContext) {
         { scheme: 'file', language: 'php' },
     ];
 
-    context.subscriptions.push(vscode.languages.registerCodeLensProvider(supportedLanguages, codeLensProvider));
-    context.subscriptions.push(codeLensProvider);
+    context.subscriptions.push(
+        vscode.languages.registerCodeLensProvider(supportedLanguages, codeLensProvider),
+        codeLensProvider,
+    );
 
     // Track document opens for activity
     if (config.isActivityTrackingEnabled()) {

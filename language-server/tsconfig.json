@@ -2,7 +2,7 @@
     "compilerOptions": {
         "module": "nodenext",
         "target": "ES2021",
-        "outDir": "out",
+        "outDir": "dist",
         "lib": [
             "ES2021"
         ],
@@ -12,19 +12,17 @@
         "skipLibCheck": true,
         "esModuleInterop": true,
         "types": [
-            "node",
-            "vscode",
-            "mocha"
+            "node"
         ]
     },
     "include": [
         "src/**/*",
-        "../language-server/src/**/*"
+        "scripts/**/*",
+        "tests/**/*"
     ],
     "exclude": [
         "node_modules",
-        ".vscode-test",
-        "cognitive-lens",
-        "../language-server/**/*.test.ts"
+        "dist",
+        "coverage"
     ]
 }

@@ -1,5 +1,5 @@
-import * as path from 'path';
-import * as fs from 'fs';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
 import { SearchEngine } from '../src/core/search-engine';
 import { Config } from '../src/core/config';
 import { SearchItemType, SearchScope } from '../src/core/types';

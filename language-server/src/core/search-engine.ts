@@ -1,6 +1,6 @@
-import * as fs from 'fs';
 import * as Fuzzysort from 'fuzzysort';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { CancellationToken } from 'vscode-languageserver';
 import { Config } from './config';
 import { GitProvider } from './git-provider';
@@ -22,6 +22,18 @@ interface ExtendedPrepared extends Fuzzysort.Prepared {
     _targetLower: string;
 }
 
+interface TextScanContext {
+    query: string;
+    queryRegex: RegExp;
+    queryRegexGlobal: RegExp;
+    queryLength: number;
+    maxResults: number;
+    results: SearchResult[];
+    pendingResults: SearchResult[];
+    fileItem: SearchableItem;
+    token?: CancellationToken;
+}
+
 // REMOVED: PreparedItem interface
 // We now use parallel arrays to save memory (Struct of Arrays)
 
@@ -32,7 +44,7 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
     [SearchItemType.FUNCTION]: 1.25,
     [SearchItemType.METHOD]: 1.25,
     [SearchItemType.PROPERTY]: 1.1,
-    [SearchItemType.VARIABLE]: 1.0,
+    [SearchItemType.VARIABLE]: 1,
     [SearchItemType.FILE]: 0.9,
     [SearchItemType.TEXT]: 0.7,
     [SearchItemType.COMMAND]: 1.2,
@@ -55,7 +67,7 @@ const TYPE_TO_ID: Record<SearchItemType, number> = {
 
 // 0 is reserved/undefined, boosts start from 1
 const ID_TO_BOOST = [
-    1.0, // 0 (fallback)
+    1, // 0 (fallback)
     ITEM_TYPE_BOOSTS[SearchItemType.FILE],
     ITEM_TYPE_BOOSTS[SearchItemType.CLASS],
     ITEM_TYPE_BOOSTS[SearchItemType.INTERFACE],
@@ -117,7 +129,7 @@ CHAR_TO_BITFLAG[32] = 0;
 export class SearchEngine implements ISearchProvider {
     id = 'engine';
     priority = 0;
-    private providers: ISearchProvider[] = [];
+    private readonly providers: ISearchProvider[] = [];
 
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
@@ -140,16 +152,16 @@ export class SearchEngine implements ISearchProvider {
     private lastRelPathNormalized: string | null = null;
 
     // Deduplication cache for prepared strings
-    private preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
+    private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
     // Map Scope -> Array of Indices
-    private scopedIndices: Map<SearchScope, number[]> = new Map();
+    private readonly scopedIndices: Map<SearchScope, number[]> = new Map();
 
     // Map Normalized File Path -> Array of Item Indices (Reverse Index for O(1) lookup)
-    private fileToItemIndices: Map<string, number[]> = new Map();
+    private readonly fileToItemIndices: Map<string, number[]> = new Map();
 
     public itemsMap: Map<string, SearchableItem> = new Map();
-    private fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
+    private readonly fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
     private config?: Config;
@@ -305,13 +317,7 @@ export class SearchEngine implements ISearchProvider {
         let write = 0;
         for (let read = 0; read < count; read++) {
             const item = this.items[read];
-            if (item.filePath !== filePath) {
-                if (read !== write) {
-                    this.moveItem(read, write);
-                }
-                write++;
-            } else {
-                // Decrement reference counts for prepared strings
+            if (item.filePath === filePath) {
                 this.releasePrepared(this.preparedNames[read]);
                 this.releasePrepared(this.preparedFullNames[read]);
                 this.releasePrepared(this.preparedPaths[read]);
@@ -320,6 +326,11 @@ export class SearchEngine implements ISearchProvider {
                 if (item.type === SearchItemType.FILE) {
                     this.fileItemByNormalizedPath.delete(this.normalizePath(item.filePath));
                 }
+            } else {
+                if (read !== write) {
+                    this.moveItem(read, write);
+                }
+                write++;
             }
         }
         return write;
@@ -423,8 +434,8 @@ export class SearchEngine implements ISearchProvider {
         const nameFlags = this.calculateBitflags(item.name);
         let aggregateFlags = nameFlags;
 
-        if (this.shouldProcessFullName(item)) {
-            aggregateFlags |= this.calculateBitflags(item.fullName!);
+        if (this.shouldProcessFullName(item) && item.fullName) {
+            aggregateFlags |= this.calculateBitflags(item.fullName);
         }
 
         if (item.relativeFilePath) {
@@ -542,7 +553,7 @@ export class SearchEngine implements ISearchProvider {
         this.activityWeight = weight;
     }
 
-    private isWindows = process.platform === 'win32';
+    private readonly isWindows = process.platform === 'win32';
 
     /**
      * Set the list of currently active or open files to prioritize them
@@ -591,7 +602,7 @@ export class SearchEngine implements ISearchProvider {
         const query = options.query || '';
         return {
             query,
-            normalizedQuery: query.replace(/\\/g, '/'),
+            normalizedQuery: query.replaceAll('\\', '/'),
             queryUpper: query.toUpperCase(),
             scope: options.scope || SearchScope.EVERYTHING,
             maxResults: options.maxResults || 20,
@@ -666,7 +677,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -674,7 +685,7 @@ export class SearchEngine implements ISearchProvider {
 
         const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         // If the second arg is the token, use it. Otherwise use the third arg.
-        const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
+        const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -773,7 +784,7 @@ export class SearchEngine implements ISearchProvider {
         targetLine: number | undefined,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-        const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+        const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
 
         // 1. Filter and search
         let indices: number[] | undefined;
@@ -861,7 +872,7 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
         // Try Ripgrep first
-        if (this.ripgrep && this.ripgrep.isAvailable()) {
+        if (this.ripgrep?.isAvailable()) {
             const results = await this.performRipgrepSearch(query, maxResults, onResult, token);
             // Fallback to stream search ONLY if ripgrep failed (null) or found nothing ([])
             // We want to be extra robust in tests and edge cases
@@ -882,7 +893,7 @@ export class SearchEngine implements ISearchProvider {
         try {
             if (token?.isCancellationRequested) return [];
             // Pass cached file paths to ripgrep (No mapping/filtering needed)
-            const matches = await this.ripgrep!.search(query, this.filePaths, maxResults, token);
+            const matches = await this.ripgrep.search(query, this.filePaths, maxResults, token);
 
             const results: SearchResult[] = [];
             for (const match of matches) {
@@ -909,7 +920,7 @@ export class SearchEngine implements ISearchProvider {
                         containerName: fileItem.name,
                         detail: fileItem.relativeFilePath,
                     },
-                    score: 1.0,
+                    score: 1,
                     scope: SearchScope.TEXT,
                     highlights: match.submatches.map((sm) => [sm.start, sm.end]),
                 };
@@ -947,11 +958,12 @@ export class SearchEngine implements ISearchProvider {
         const fileItems = this.items.filter((item) => item.type === SearchItemType.FILE);
 
         // Zed Optimization: Prioritize active/open files
-        const prioritizedFiles = fileItems.sort((a, b) => {
+        fileItems.sort((a, b) => {
             const aActive = this.isActive(a.filePath) ? 1 : 0;
             const bActive = this.isActive(b.filePath) ? 1 : 0;
             return bActive - aActive;
         });
+        const prioritizedFiles = fileItems;
 
         // Limit concurrency
         const CONCURRENCY = this.config?.getSearchConcurrency() || 20;
@@ -966,9 +978,7 @@ export class SearchEngine implements ISearchProvider {
 
         const flushBatch = () => {
             if (pendingResults.length > 0) {
-                if (firstResultTime === null) {
-                    firstResultTime = Date.now() - startTime;
-                }
+                firstResultTime ??= Date.now() - startTime;
                 if (onResult) {
                     pendingResults.forEach((r) => onResult(r));
                 }
@@ -996,18 +1006,19 @@ export class SearchEngine implements ISearchProvider {
 
                         processedFiles++;
 
-                        await this.scanFileStream(
-                            fileItem,
+                        const scanContext: TextScanContext = {
                             query,
                             queryRegex,
                             queryRegexGlobal,
-                            query.length,
+                            queryLength: query.length,
                             maxResults,
                             results,
                             pendingResults,
-                            fileSize,
+                            fileItem,
                             token,
-                        );
+                        };
+
+                        await this.scanFileStream(scanContext, fileSize);
                     } catch {
                         // Ignore read/stat errors
                     }
@@ -1029,41 +1040,22 @@ export class SearchEngine implements ISearchProvider {
         flushBatch();
         const durationMs = Date.now() - startTime;
         const durationSec = (durationMs / 1000).toFixed(3);
-        const firstResultLog = firstResultTime !== null ? ` (First result in ${firstResultTime}ms)` : '';
+        const firstResultLog = firstResultTime === null ? '' : ` (First result in ${firstResultTime}ms)`;
 
         this.logger?.log(`Text search completed in ${durationSec}s${firstResultLog}. Found ${results.length} results.`);
         return results;
     }
 
-    private async scanFileStream(
-        fileItem: SearchableItem,
-        query: string,
-        queryRegex: RegExp,
-        queryRegexGlobal: RegExp,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileSize?: number,
-        token?: CancellationToken,
-    ): Promise<void> {
+    private async scanFileStream(context: TextScanContext, fileSize?: number): Promise<void> {
+        const { fileItem, queryRegex, queryLength, maxResults, results, pendingResults, token } = context;
+
         // Optimization: For small files, readFile is significantly faster than createReadStream
         if (fileSize !== undefined && fileSize < 50 * 1024) {
             try {
                 const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
                 if (results.length >= maxResults) return;
 
-                const { newBuffer, newLineIndex } = this.processBufferLines(
-                    content,
-                    0,
-                    queryRegexGlobal,
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
-                    0,
-                );
+                const { newBuffer, newLineIndex } = this.processBufferLines(content, 0, context, 0);
 
                 if (newBuffer.length > 0) {
                     const match = queryRegex.exec(newBuffer);
@@ -1131,16 +1123,7 @@ export class SearchEngine implements ISearchProvider {
                 // Since this is a reconstructed line, we treat it as a single line buffer
                 const match = queryRegex.exec(completeLine);
                 if (match) {
-                    const hitLimit = this.processSingleLine(
-                        completeLine,
-                        lineIndex,
-                        match.index,
-                        queryLength,
-                        maxResults,
-                        results,
-                        pendingResults,
-                        fileItem,
-                    );
+                    const hitLimit = this.processSingleLine(completeLine, lineIndex, match.index, context);
                     if (hitLimit) {
                         stream.destroy();
                         resolve();
@@ -1153,12 +1136,7 @@ export class SearchEngine implements ISearchProvider {
                 const { newBuffer, newLineIndex, hitLimit } = this.processBufferLines(
                     chunk,
                     newlineIndex + 1,
-                    queryRegexGlobal,
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
+                    context,
                     lineIndex,
                 );
 
@@ -1208,32 +1186,17 @@ export class SearchEngine implements ISearchProvider {
     private processBufferLines(
         buffer: string,
         bufferOffset: number,
-        queryRegexGlobal: RegExp,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileItem: SearchableItem,
+        context: TextScanContext,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        const matches = this.getAllMatches(buffer, bufferOffset, queryRegexGlobal);
+        const matches = this.getAllMatches(buffer, bufferOffset, context.queryRegexGlobal);
 
         // Fast path: No matches in this chunk
         if (matches.length === 0) {
             return this.advanceLinesWithoutMatches(buffer, bufferOffset, startLineIndex);
         }
 
-        return this.processLinesWithMatches(
-            buffer,
-            bufferOffset,
-            matches,
-            startLineIndex,
-            queryLength,
-            maxResults,
-            results,
-            pendingResults,
-            fileItem,
-        );
+        return this.processLinesWithMatches(buffer, bufferOffset, matches, startLineIndex, context);
     }
 
     private getAllMatches(buffer: string, bufferOffset: number, regex: RegExp): number[] {
@@ -1274,11 +1237,7 @@ export class SearchEngine implements ISearchProvider {
         bufferOffset: number,
         matches: number[],
         startLineIndex: number,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileItem: SearchableItem,
+        context: TextScanContext,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
         let currentMatchIdx = 0;
         let lastIndex = bufferOffset;
@@ -1302,11 +1261,7 @@ export class SearchEngine implements ISearchProvider {
                     line,
                     lineIndex,
                     matchIndex - lastIndex, // Relative match index
-                    queryLength,
-                    maxResults,
-                    results,
-                    pendingResults,
-                    fileItem,
+                    context,
                 );
 
                 if (hitLimit) {
@@ -1332,11 +1287,7 @@ export class SearchEngine implements ISearchProvider {
         line: string,
         lineIndex: number,
         matchIndexInLine: number,
-        queryLength: number,
-        maxResults: number,
-        results: SearchResult[],
-        pendingResults: SearchResult[],
-        fileItem: SearchableItem,
+        context: TextScanContext,
     ): boolean {
         // Skip extremely long lines (minified code)
         if (line.length > 10000) {
@@ -1347,19 +1298,19 @@ export class SearchEngine implements ISearchProvider {
         if (trimmedLine.length > 0) {
             const indentation = line.search(/\S|$/);
             const result = this.createSearchResult(
-                fileItem,
+                context.fileItem,
                 trimmedLine,
                 lineIndex,
                 matchIndexInLine,
-                queryLength,
+                context.queryLength,
                 indentation,
             );
 
-            results.push(result);
-            pendingResults.push(result);
+            context.results.push(result);
+            context.pendingResults.push(result);
         }
 
-        return results.length >= maxResults;
+        return context.results.length >= context.maxResults;
     }
 
     private createSearchResult(
@@ -1385,7 +1336,7 @@ export class SearchEngine implements ISearchProvider {
                 containerName: fileItem.name,
                 detail: fileItem.relativeFilePath,
             },
-            score: 1.0,
+            score: 1,
             scope: SearchScope.TEXT,
             highlights: [[relativeMatchIndex, relativeMatchIndex + queryLength]],
         };
@@ -1498,7 +1449,7 @@ export class SearchEngine implements ISearchProvider {
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
             activityWeight: this.activityWeight,
-            invActivityWeight: 1.0 - this.activityWeight,
+            invActivityWeight: 1 - this.activityWeight,
         };
     }
 
@@ -1617,8 +1568,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const lengthRatio = context.queryLen / capitals.length;
-        const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
-        const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+        const positionBoost = matchIndex === 0 ? 1.5 : 1;
+        const typeBoost = ID_TO_BOOST[typeId] || 1;
         return lengthRatio * positionBoost * 0.8 * typeBoost;
     }
 
@@ -1648,7 +1599,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Apply type boost to final fuzzy score
         if (fuzzyScore > context.MIN_SCORE) {
-            const typeBoost = ID_TO_BOOST[typeId] || 1.0;
+            const typeBoost = ID_TO_BOOST[typeId] || 1;
             fuzzyScore *= typeBoost;
         }
 
@@ -1720,7 +1671,7 @@ export class SearchEngine implements ISearchProvider {
         let finalQueryForMatch: string | PreparedPath = context.queryForUrlMatch;
         let methodScoreBoost = 0;
 
-        const qMethod = typeof context.queryForUrlMatch !== 'string' ? context.queryForUrlMatch.method : undefined;
+        const qMethod = typeof context.queryForUrlMatch === 'string' ? undefined : context.queryForUrlMatch.method;
 
         if (qMethod) {
             const itemMethod = pattern.method;
@@ -1752,9 +1703,7 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-        if (resultScope === undefined) {
-            resultScope = ID_TO_SCOPE[typeId];
-        }
+resultScope ??= ID_TO_SCOPE[typeId];
 
         const item = context.items[i];
         if (!item) {
@@ -1956,7 +1905,7 @@ export class SearchEngine implements ISearchProvider {
         let bitflags = 0;
 
         for (let i = 0; i < len; i++) {
-            const code = str.charCodeAt(i);
+            const code = str.codePointAt(i) || 0;
 
             // Check for non-ASCII
             if (code > 127) {
@@ -1972,10 +1921,10 @@ export class SearchEngine implements ISearchProvider {
         let bitflags = 0;
         const normalized = str
             .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
+            .replaceAll(/[\u0300-\u036f]/g, '')
             .toLowerCase();
         for (let i = 0; i < normalized.length; i++) {
-            const code = normalized.charCodeAt(i);
+            const code = normalized.codePointAt(i);
             if (code === 32) continue; // Space ignored
 
             let bit = 0;
@@ -2001,7 +1950,7 @@ export class SearchEngine implements ISearchProvider {
     private extractCapitals(text: string): string {
         let res = text.charAt(0).toUpperCase();
         for (let i = 1; i < text.length; i++) {
-            const code = text.charCodeAt(i);
+            const code = text.codePointAt(i);
             if (code >= 65 && code <= 90) {
                 // A-Z
                 res += text[i];
@@ -2014,7 +1963,7 @@ export class SearchEngine implements ISearchProvider {
         const matchIndex = capitals.indexOf(query);
         if (matchIndex !== -1) {
             const lengthRatio = query.length / capitals.length;
-            const positionBoost = matchIndex === 0 ? 1.5 : 1.0;
+            const positionBoost = matchIndex === 0 ? 1.5 : 1;
             return lengthRatio * positionBoost * 0.8;
         }
 
@@ -2026,7 +1975,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private applyItemTypeBoost(score: number, typeId: number): number {
-        return score * (ID_TO_BOOST[typeId] || 1.0);
+        return score * (ID_TO_BOOST[typeId] || 1);
     }
 
     private getScopeForItemType(type: SearchItemType): SearchScope {
@@ -2061,7 +2010,7 @@ export class SearchEngine implements ISearchProvider {
             if (item) {
                 results.push({
                     item,
-                    score: 1.0,
+                    score: 1,
                     scope: this.getScopeForItemType(item.type),
                 });
             }
@@ -2079,8 +2028,8 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
-        const cancellationToken = !onResult ? (onResultOrToken as CancellationToken) : token;
+const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+        const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
 
@@ -2088,7 +2037,7 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        const normalizedQuery = effectiveQuery.replace(/\\/g, '/');
+        const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
         const queryLower = normalizedQuery.toLowerCase();
 
         // Pass indices for burst match
@@ -2146,7 +2095,7 @@ export class SearchEngine implements ISearchProvider {
         const addResult = (item: SearchableItem, typeId: number) => {
             const result: SearchResult = {
                 item,
-                score: this.applyItemTypeBoost(1.0, typeId),
+                score: this.applyItemTypeBoost(1, typeId),
                 scope: ID_TO_SCOPE[typeId],
             };
             results.push(result);
@@ -2185,14 +2134,13 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
-        if (indices) {
-            for (let k = 0; k < indices.length; k++) {
+if (indices) {
+            for (const index of indices) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
-                processItem(indices[k]);
+                processItem(index);
             }
         } else {
-            const count = this.items.length;
-            for (let i = 0; i < count; i++) {
+            for (let i = 0; i < this.items.length; i++) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(i);
             }
@@ -2202,10 +2150,10 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private parseQueryWithLineNumber(query: string): { effectiveQuery: string; targetLine?: number } {
-        const lineMatch = query.match(/^(.*?):(\d+)$/);
+        const lineMatch = /^(.*?):(\d+)$/.exec(query);
         if (lineMatch) {
             const effectiveQuery = lineMatch[1];
-            const line = parseInt(lineMatch[2], 10);
+            const line = Number.parseInt(lineMatch[2], 10);
             return {
                 effectiveQuery,
                 targetLine: line > 0 ? line - 1 : undefined,
@@ -2284,5 +2232,5 @@ export class SearchEngine implements ISearchProvider {
 }
 
 function escapeRegExp(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return string.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
 }

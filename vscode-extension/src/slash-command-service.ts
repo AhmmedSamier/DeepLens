@@ -23,13 +23,13 @@ export enum SlashCommandCategory {
 }
 
 export class SlashCommandService {
-    private commands: Map<string, SlashCommand> = new Map();
-    private categoryGroups: Map<SlashCommandCategory, SlashCommand[]> = new Map();
+    private readonly commands: Map<string, SlashCommand> = new Map();
+    private readonly categoryGroups: Map<SlashCommandCategory, SlashCommand[]> = new Map();
     private recentlyUsed: string[] = [];
 
     constructor() {
         this.initializeCommands();
-        this.initializeGroups();
+        this.categoryGroups = this.initializeGroups();
         this.loadRecentCommands();
     }
 
@@ -162,24 +162,26 @@ export class SlashCommandService {
         }
     }
 
-    private initializeGroups(): void {
+    private initializeGroups(): Map<SlashCommandCategory, SlashCommand[]> {
         const grouped = new Map<SlashCommandCategory, SlashCommand[]>();
         const uniqueCommands = new Set<string>();
 
         for (const cmd of this.commands.values()) {
             if (!uniqueCommands.has(cmd.name)) {
-                if (!grouped.has(cmd.category)) {
-                    grouped.set(cmd.category, []);
+                let group = grouped.get(cmd.category);
+                if (!group) {
+                    group = [];
+                    grouped.set(cmd.category, group);
                 }
-                grouped.get(cmd.category)!.push(cmd);
+                group.push(cmd);
                 uniqueCommands.add(cmd.name);
             }
         }
 
-        this.categoryGroups = grouped;
+        return grouped;
     }
 
-    private async loadRecentCommands(): Promise<void> {
+    private loadRecentCommands(): void {
         const context = vscode.workspace.getConfiguration('deeplens');
         const recent = context.get<string[]>('recentSlashCommands', []);
         this.recentlyUsed = recent;
@@ -200,9 +202,9 @@ export class SlashCommandService {
 
     getCommands(query?: string): SlashCommand[] {
         if (!query) {
-            return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name))).map(
-                (name) => this.commands.get(name)!,
-            );
+return Array.from(new Set(Array.from(this.commands.values()).map((c) => c.name)))
+            .map((name) => this.commands.get(name))
+            .filter((cmd): cmd is SlashCommand => cmd !== undefined);
         }
 
         const lowerQuery = query.toLowerCase();

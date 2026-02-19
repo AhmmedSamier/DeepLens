@@ -6,6 +6,7 @@
     "scripts": {
         "build": "bun run scripts/setup-parsers.ts && bun build src/server.ts --outfile dist/server.js --target node --format cjs && bun build src/core/indexer-worker.ts --outfile dist/indexer-worker.js --target node --format cjs && bun run scripts/copy-ripgrep.ts",
         "test": "bun run scripts/setup-parsers.ts && bun test",
+        "test:coverage": "bun run scripts/setup-parsers.ts && bun test --coverage --coverage-reporter=lcov --coverage-dir=coverage",
         "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts",
         "benchmark:memory": "bun run scripts/memory-benchmark.ts",
         "lint": "eslint src --cache",

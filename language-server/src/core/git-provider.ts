@@ -1,5 +1,5 @@
-import * as cp from 'child_process';
-import * as path from 'path';
+import * as cp from 'node:child_process';
+import * as path from 'node:path';
 
 /**
  * Provides access to Git status for filtering search results
@@ -50,7 +50,7 @@ export class GitProvider {
         return modifiedFiles;
     }
 
-    private isWindows = process.platform === 'win32';
+    private readonly isWindows = process.platform === 'win32';
 
     private addFilesToSet(set: Set<string>, root: string, output: string): void {
         const lines = output.split('\n');
@@ -75,7 +75,15 @@ export class GitProvider {
         if (error instanceof Error) {
             return error.message;
         }
-        return String(error);
+        if (typeof error === 'string') {
+            return error;
+        }
+        try {
+            return JSON.stringify(error);
+        } catch {
+            const tag = Object.prototype.toString.call(error);
+            return `Non-Error value: ${tag}`;
+        }
     }
 
     private async execGit(args: string[], cwd: string): Promise<string> {

@@ -6,7 +6,7 @@ export class FileProvider implements ISearchProvider {
     id = 'files';
     priority = 200;
 
-    constructor(private engine: SearchEngine) {}
+    constructor(private readonly engine: SearchEngine) {}
 
     async search(context: SearchContext): Promise<SearchResult[]> {
         const { scope, query } = context;

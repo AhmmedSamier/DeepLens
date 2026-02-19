@@ -17,21 +17,21 @@ import { SlashCommand, SlashCommandService } from './slash-command-service';
  * Search provider with enhanced UI (filter buttons, icons, counts)
  */
 export class SearchProvider {
-    private searchEngine: ISearchProvider;
-    private config: Config;
-    private activityTracker: ActivityTracker | undefined;
-    private commandIndexer: CommandIndexer | undefined;
-    private slashCommandService: SlashCommandService;
+    private readonly searchEngine: ISearchProvider;
+    private readonly config: Config;
+    private readonly activityTracker: ActivityTracker | undefined;
+    private readonly commandIndexer: CommandIndexer | undefined;
+    private readonly slashCommandService: SlashCommandService;
     private currentScope: SearchScope = SearchScope.EVERYTHING;
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
-    private filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
+    private readonly filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
     private lastQueryId = 0;
     private lastAutoRebuildTime = 0;
-    private currentQuickPick: vscode.QuickPick<SearchResultItem> | undefined;
-    private streamingResults: Map<number, SearchResult[]> = new Map();
-    private searchCts: vscode.CancellationTokenSource | undefined;
+    private currentQuickPick: vscode.QuickPick<SearchResultItem> | null = null;
+    private readonly streamingResults: Map<number, SearchResult[]> = new Map();
+    private searchCts: vscode.CancellationTokenSource | null = null;
     private lastTitle = '';
-    private feedbackTimeout: NodeJS.Timeout | undefined;
+    private feedbackTimeout: NodeJS.Timeout | null = null;
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = 'Active: ';
@@ -62,7 +62,7 @@ export class SearchProvider {
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
-    private matchDecorationType = vscode.window.createTextEditorDecorationType({
+    private readonly matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
         borderColor: new vscode.ThemeColor('editor.findMatchHighlightBorder'),
@@ -162,7 +162,7 @@ export class SearchProvider {
                 if (this.currentQuickPick) {
                     this.currentQuickPick.title = this.lastTitle;
                 }
-                this.feedbackTimeout = undefined;
+                this.feedbackTimeout = null;
             }, 2000);
         }
         vscode.window.setStatusBarMessage(`$(check) ${message}`, 2000);
@@ -350,7 +350,7 @@ export class SearchProvider {
         // Actually, if new results arrive, they are more important. Cancel flash.
         if (this.feedbackTimeout) {
             clearTimeout(this.feedbackTimeout);
-            this.feedbackTimeout = undefined;
+            this.feedbackTimeout = null;
         }
 
         quickPick.title = this.lastTitle;
@@ -363,7 +363,7 @@ export class SearchProvider {
         if (this.searchCts) {
             this.searchCts.cancel();
             this.searchCts.dispose();
-            this.searchCts = undefined;
+            this.searchCts = null;
         }
     }
 
@@ -371,12 +371,12 @@ export class SearchProvider {
      * Show search UI with specific scope and optional initial query
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
-        if (scope !== undefined) {
-            this.currentScope = scope;
-            this.userSelectedScope = scope;
-        } else {
+        if (scope === undefined) {
             // Use persisted scope
             this.currentScope = this.userSelectedScope;
+        } else {
+            this.currentScope = scope;
+            this.userSelectedScope = scope;
         }
         await this.showInternal(initialQuery);
     }
@@ -537,7 +537,7 @@ export class SearchProvider {
         let fuzzyTimeout: NodeJS.Timeout | undefined;
         let previewTimeout: NodeJS.Timeout | undefined;
         let accepted = false;
-        let lastActiveItemId: string | undefined;
+        let lastActiveItemId: string | null = null;
         let userHasNavigated = false;
 
         // Cleanup timeouts on hide
@@ -551,7 +551,7 @@ export class SearchProvider {
             cleanupTimeouts();
             // Reset navigation tracking when query changes
             userHasNavigated = false;
-            lastActiveItemId = undefined;
+            lastActiveItemId = null;
             this.handleQueryChange(
                 quickPick,
                 query,
@@ -569,7 +569,7 @@ export class SearchProvider {
 
                 // Only preview if user has actually navigated (not just auto-focus on first result)
                 // We detect navigation by checking if the active item changed from a previous value
-                if (lastActiveItemId !== undefined && lastActiveItemId !== currentItemId) {
+                if (lastActiveItemId !== null && lastActiveItemId !== currentItemId) {
                     userHasNavigated = true;
                 }
 
@@ -587,7 +587,7 @@ export class SearchProvider {
         quickPick.onDidTriggerButton((button) => this.handleButtonPress(quickPick, button));
 
         quickPick.onDidTriggerItemButton(async (e) => {
-            const result = (e.item as SearchResultItem).result;
+            const result = e.item.result;
             await this.handleItemButtonClick(quickPick, result, e.button.tooltip, () => {
                 accepted = true;
             });
@@ -651,7 +651,7 @@ export class SearchProvider {
             });
 
             this.streamingResults.clear();
-            this.currentQuickPick = undefined;
+            this.currentQuickPick = null;
 
             quickPick.dispose();
         });
@@ -788,7 +788,7 @@ export class SearchProvider {
      * Parse query to extract scope and search term
      * Only considers a command complete if it's followed by a space (e.g., "/t ")
      */
-    private parseQuery(query: string): { scope: SearchScope | undefined; text: string } {
+    private parseQuery(query: string): { scope: SearchScope | null; text: string } {
         // Check for prefixes with space (completed commands)
         // We only auto-switch scope if the command is followed by space
         // This allows typing "/txt" without immediately switching to "/t" (types)
@@ -803,7 +803,7 @@ export class SearchProvider {
         }
 
         return {
-            scope: undefined,
+            scope: null,
             text: query,
         };
     }
@@ -1350,10 +1350,10 @@ export class SearchProvider {
      * Get empty state items when no results are found
      */
     private getEmptyStateItems(query: string): SearchResultItem[] {
-        const detail =
-            this.currentScope !== SearchScope.EVERYTHING
-                ? 'Try switching to Global search or check for typos'
-                : `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`;
+        const isGlobalScope = this.currentScope === SearchScope.EVERYTHING;
+        const detail = isGlobalScope
+            ? `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`
+            : 'Try switching to Global search or check for typos';
 
         const items: SearchResultItem[] = [];
 
@@ -1396,83 +1396,65 @@ export class SearchProvider {
                     scope: SearchScope.COMMANDS,
                 },
             });
-        }
+}
 
-        // 3. Native Search Action
-        items.push({
-            label: 'Search in Files (Native)',
-            description: "Use VS Code's native search",
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('search-fuzzy'),
-            result: {
-                item: {
-                    id: this.CMD_NATIVE_SEARCH,
-                    name: 'Search in Files',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
+        // Helper method to create command items
+        const addCommandItem = (
+            label: string,
+            description: string,
+            icon: vscode.ThemeIcon,
+            commandId: string,
+        ) => {
+            items.push({
+                label,
+                description,
+                alwaysShow: true,
+                iconPath: icon,
+                result: {
+                    item: {
+                        id: commandId,
+                        name: label.replace(' (Native)', ''),
+                        type: SearchItemType.COMMAND,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: SearchScope.COMMANDS,
                 },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+            });
+        };
+
+// 3. Native Search Action
+        addCommandItem(
+            'Search in Files (Native)',
+            "Use VS Code's native search",
+            new vscode.ThemeIcon('search-fuzzy'),
+            this.CMD_NATIVE_SEARCH,
+        );
 
         // 4. Rebuild Index Action
-        items.push({
-            label: 'Rebuild Index',
-            description: 'Fix missing files',
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('refresh'),
-            result: {
-                item: {
-                    id: this.CMD_REBUILD_INDEX,
-                    name: 'Rebuild Index',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+        addCommandItem(
+            'Rebuild Index',
+            'Fix missing files',
+            new vscode.ThemeIcon('refresh'),
+            this.CMD_REBUILD_INDEX,
+        );
 
         // 5. Clear Cache Action
-        items.push({
-            label: 'Clear Index Cache',
-            description: 'Fix corruption',
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('trash'),
-            result: {
-                item: {
-                    id: this.CMD_CLEAR_CACHE,
-                    name: 'Clear Index Cache',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+        addCommandItem(
+            'Clear Index Cache',
+            'Fix corruption',
+            new vscode.ThemeIcon('trash'),
+            this.CMD_CLEAR_CACHE,
+        );
 
         // 6. Settings Action
-        items.push({
-            label: 'Configure Settings',
-            description: 'Check exclusion rules',
-            alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('settings-gear'),
-            result: {
-                item: {
-                    id: this.CMD_SETTINGS,
-                    name: 'Configure Settings',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        });
+        addCommandItem(
+            'Configure Settings',
+            'Check exclusion rules',
+            new vscode.ThemeIcon('settings-gear'),
+            this.CMD_SETTINGS,
+        );
 
         return items;
     }
@@ -1583,10 +1565,10 @@ export class SearchProvider {
 
         // Add file path and line number
         const relativePath = vscode.workspace.asRelativePath(item.filePath);
-        if (item.line !== undefined) {
-            detail = `${relativePath}:${item.line + 1}`;
-        } else {
+        if (item.line === undefined) {
             detail = relativePath;
+        } else {
+            detail = `${relativePath}:${item.line + 1}`;
         }
 
         // Add additional detail if available
@@ -1783,7 +1765,9 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line !== undefined ? new vscode.Position(item.line, item.column || 0) : new vscode.Position(0, 0);
+                item.line === undefined
+                    ? new vscode.Position(0, 0)
+                    : new vscode.Position(item.line, item.column || 0);
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;

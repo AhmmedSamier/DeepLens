@@ -3,8 +3,8 @@
  */
 export class MinHeap<T> {
     private heap: T[];
-    private compare: (a: T, b: T) => number;
-    private maxSize: number;
+    private readonly compare: (a: T, b: T) => number;
+    private readonly maxSize: number;
 
     constructor(maxSize: number, compare: (a: T, b: T) => number) {
         this.heap = [];
@@ -39,7 +39,11 @@ export class MinHeap<T> {
 
         // We destructively empty the heap to sort
         while (this.heap.length > 0) {
-            result.push(this.pop()!);
+            const value = this.pop();
+            if (value === undefined) {
+                break;
+            }
+            result.push(value);
         }
 
         // Restore heap state

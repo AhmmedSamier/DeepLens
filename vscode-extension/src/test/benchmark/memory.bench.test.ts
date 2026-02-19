@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import * as assert from 'assert';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as assert from 'node:assert';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 
 // Define gc
@@ -41,10 +41,10 @@ suite('Extension Memory Benchmark', () => {
 
     suiteSetup(async () => {
         extension = vscode.extensions.getExtension('AhmedSamir.deeplens')!;
-        if (!extension.isActive) {
-            api = await extension.activate();
-        } else {
+        if (extension.isActive) {
             api = extension.exports;
+        } else {
+            api = await extension.activate();
         }
     });
 
@@ -71,13 +71,13 @@ suite('Extension Memory Benchmark', () => {
         // Open search to initialize UI components
         await searchProvider.show();
 
-        const quickPick = (searchProvider as any).currentQuickPick;
+        const quickPick = searchProvider.currentQuickPick;
         assert.ok(quickPick, 'QuickPick should be initialized');
 
         // Mock searchEngine to delay execution, forcing the race condition
-        const originalSearchEngine = (searchProvider as any).searchEngine;
+        const originalSearchEngine = searchProvider.searchEngine;
         const delayedSearchEngine = createDelayedSearchEngine(originalSearchEngine);
-        (searchProvider as any).searchEngine = delayedSearchEngine;
+        searchProvider.searchEngine = delayedSearchEngine;
 
         // Simulate Type-Pause-Type sequence
         console.log('Simulating Type-Pause-Type...');
@@ -87,7 +87,7 @@ suite('Extension Memory Benchmark', () => {
             const query = `test query ${i}`;
 
             // Call handleQueryChange.
-            (searchProvider as any).handleQueryChange(
+            searchProvider.handleQueryChange(
                 quickPick,
                 query,
                 () => {},
@@ -113,7 +113,7 @@ suite('Extension Memory Benchmark', () => {
         console.log('Memory After Typing:', afterMemory);
 
         // Check streamingResults size (Internal check)
-        const streamingResultsSize = (searchProvider as any).streamingResults.size;
+        const streamingResultsSize = searchProvider.streamingResults.size;
         console.log('Streaming Results Map Size:', streamingResultsSize);
 
         results.push({
@@ -132,6 +132,6 @@ suite('Extension Memory Benchmark', () => {
         }
 
         // Restore
-        (searchProvider as any).searchEngine = originalSearchEngine;
+        searchProvider.searchEngine = originalSearchEngine;
     });
 });

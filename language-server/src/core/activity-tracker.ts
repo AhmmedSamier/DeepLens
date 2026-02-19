@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { promises as fsPromises } from 'node:fs';
+import { join } from 'node:path';
 import { SearchableItem, SearchResult, SearchScope } from './types';
 
 /**
@@ -25,9 +25,9 @@ export interface ActivityStorage {
  * Tracks user activity to personalize search results and provide history
  */
 export class ActivityTracker {
-    private activities: Map<string, ActivityRecord> = new Map();
-    private storage: ActivityStorage;
-    private saveTimer: NodeJS.Timeout | undefined;
+    private readonly activities: Map<string, ActivityRecord> = new Map();
+    private readonly storage: ActivityStorage;
+    private saveTimer: NodeJS.Timeout | null = null;
     private readonly STORAGE_KEY = 'deeplens.activity';
     private readonly SAVE_INTERVAL = 5 * 60 * 1000; // 5 minutes
     private readonly DECAY_DAYS = 30;
@@ -36,7 +36,7 @@ export class ActivityTracker {
     // Coalescing save operations
     private needsSave = false;
     private savePromise: Promise<void> | null = null;
-    private initPromise: Promise<void> | null = null;
+    private readonly initPromise: Promise<void>;
 
     constructor(
         storageOrContext:
@@ -52,20 +52,20 @@ export class ActivityTracker {
             const storagePath = storageOrContext;
             this.storage = {
                 load: async () => {
-                    const file = path.join(storagePath, 'activity.json');
+                    const file = join(storagePath, 'activity.json');
                     try {
-                        const content = await fs.promises.readFile(file, 'utf8');
+                        const content = await fsPromises.readFile(file, 'utf8');
                         return JSON.parse(content);
                     } catch {
                         // Fallback to no logger if not available yet
                         return undefined;
                     }
                 },
-                save: async (data) => {
-                    const file = path.join(storagePath, 'activity.json');
+                save: async data => {
+                    const file = join(storagePath, 'activity.json');
                     try {
-                        await fs.promises.mkdir(storagePath, { recursive: true });
-                        await fs.promises.writeFile(file, JSON.stringify(data));
+                        await fsPromises.mkdir(storagePath, { recursive: true });
+                        await fsPromises.writeFile(file, JSON.stringify(data));
                     } catch {
                         // Safe to ignore or log to file if we had a reference
                     }
@@ -75,12 +75,13 @@ export class ActivityTracker {
             const context = storageOrContext;
             this.storage = {
                 load: async () => context.workspaceState.get(this.STORAGE_KEY),
-                save: async (data) => {
+                save: async data => {
                     await context.workspaceState.update(this.STORAGE_KEY, data);
                 },
             };
         }
 
+        // eslint-disable-next-line sonarjs/no-async-constructor
         this.initPromise = this.loadActivities();
         this.startPeriodicSave();
     }
@@ -89,9 +90,7 @@ export class ActivityTracker {
      * Wait for activities to be loaded (mainly for testing/benchmarking)
      */
     async waitForLoaded(): Promise<void> {
-        if (this.initPromise) {
-            await this.initPromise;
-        }
+        await this.initPromise;
     }
 
     /**
@@ -146,7 +145,7 @@ export class ActivityTracker {
             .sort((a, b) => b.score - a.score)
             .slice(0, count);
 
-        return sorted.map((r) => r.itemId);
+        return sorted.map(r => r.itemId);
     }
 
     /**
@@ -154,12 +153,12 @@ export class ActivityTracker {
      */
     getRecentItems(count: number): SearchResult[] {
         const sorted = Array.from(this.activities.values())
-            .filter((a) => a.item)
+            .filter(a => a.item)
             .sort((a, b) => b.lastAccessed - a.lastAccessed)
             .slice(0, count);
 
-        return sorted.map((a) => {
-            const item = { ...a.item! };
+        return sorted.map(a => {
+            const item = { ...a.item };
             const relativeTime = this.getRelativeTime(a.lastAccessed);
 
             // Append relative time to detail
@@ -171,7 +170,7 @@ export class ActivityTracker {
 
             return {
                 item,
-                score: 2.0,
+                score: 2,
                 scope: SearchScope.EVERYTHING,
             };
         });
@@ -285,9 +284,7 @@ export class ActivityTracker {
     async saveActivities(): Promise<void> {
         this.needsSave = true;
 
-        if (!this.savePromise) {
-            this.savePromise = this.runSaveLoop();
-        }
+        this.savePromise ??= this.runSaveLoop();
 
         return this.savePromise;
     }
@@ -363,7 +360,7 @@ export class ActivityTracker {
     async dispose(): Promise<void> {
         if (this.saveTimer) {
             clearInterval(this.saveTimer);
-            this.saveTimer = undefined;
+            this.saveTimer = null;
         }
         // Final save before disposal - wait for completion
         await this.saveActivities();

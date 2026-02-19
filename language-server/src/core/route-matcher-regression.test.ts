@@ -11,7 +11,7 @@ describe('RouteMatcher Regression Tests', () => {
         expect(score).toBeGreaterThan(0);
 
         // Exact count match should have a high score
-        expect(score).toBeGreaterThan(2.0);
+        expect(score).toBeGreaterThan(2);
     });
 
     it('should handle different methods correctly', () => {

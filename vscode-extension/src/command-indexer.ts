@@ -13,7 +13,7 @@ interface PreparedCommand {
  * Indexes VS Code commands for search
  */
 export class CommandIndexer {
-    private config: Config;
+    private readonly config: Config;
     private commandItems: SearchableItem[] = [];
     private preparedItems: PreparedCommand[] = [];
 
@@ -76,10 +76,9 @@ export class CommandIndexer {
             threshold: -10000,
         });
 
-        return results.map((r) => ({
+        return results.map(r => ({
             item: r.obj.item,
             score: r.score,
-            highlights: undefined,
             scope: SearchScope.COMMANDS,
         }));
     }
@@ -91,17 +90,15 @@ export class CommandIndexer {
     private commandIdToTitle(commandId: string): string {
         // Remove common prefixes
         const title = commandId
-            .replace(/^workbench\.action\./, '')
-            .replace(/^editor\.action\./, '')
-            .replace(/^vscode\./, '');
+            .replaceAll(/^workbench\.action\./g, '')
+            .replaceAll(/^editor\.action\./g, '')
+            .replaceAll(/^vscode\./g, '');
 
         // Split by dots and capitalize
         const parts = title.split('.');
         return parts
             .map((part) => {
-                // Split camelCase
-                const words = part.replace(/([A-Z])/g, ' $1').trim();
-                // Capitalize first letter of each word
+                const words = part.replaceAll(/([A-Z])/g, ' $1').trim();
                 return words.charAt(0).toUpperCase() + words.slice(1);
             })
             .join(' ');

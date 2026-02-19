@@ -1,5 +1,5 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as cp from 'child_process';
 import { GitProvider } from '../src/core/git-provider';
 import { benchmark } from './utils';

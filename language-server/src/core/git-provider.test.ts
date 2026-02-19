@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from 'bun:test';
-import * as cp from 'child_process';
-import { EventEmitter } from 'events';
+import * as cp from 'node:child_process';
+import { EventEmitter } from 'node:events';
 import { GitProvider } from './git-provider';
 
 class MockChildProcess extends EventEmitter {

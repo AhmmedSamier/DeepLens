@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 
 export class LoggingService {
-    private outputChannel: vscode.OutputChannel;
+    private readonly outputChannel: vscode.OutputChannel;
     private static instance: LoggingService;
 
     private constructor() {
@@ -24,7 +24,18 @@ export class LoggingService {
         const timestamp = new Date().toLocaleTimeString();
         let errorMsg = message;
         if (error) {
-            errorMsg += error instanceof Error ? ` - ${error.message}` : ` - ${String(error)}`;
+            if (error instanceof Error) {
+                errorMsg += ` - ${error.message}`;
+            } else {
+                let extra: string;
+                try {
+                    extra = JSON.stringify(error);
+                } catch {
+                    const tag = Object.prototype.toString.call(error);
+                    extra = `Non-Error value: ${tag}`;
+                }
+                errorMsg += ` - ${extra}`;
+            }
         }
         this.outputChannel.appendLine(`[${timestamp}] [ERROR] ${errorMsg}`);
         if (error instanceof Error && error.stack) {

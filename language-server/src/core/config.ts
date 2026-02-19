@@ -93,17 +93,18 @@ export class Config {
     }
 
     private get<T>(key: string, defaultValue: T): T {
-        if (this.vscodeConfig && typeof this.vscodeConfig.get === 'function') {
+        if (this.vscodeConfig?.get) {
             return this.vscodeConfig.get(key, defaultValue);
         }
-        return this.data[key] !== undefined ? (this.data[key] as T) : defaultValue;
+        const value = this.data[key];
+        return value === undefined ? defaultValue : (value as T);
     }
 
     /**
      * Validate and clamp a number to a specified range
      */
     private validateNumber(value: number, min: number, max: number, defaultValue: number): number {
-        if (typeof value !== 'number' || isNaN(value)) {
+        if (typeof value !== 'number' || Number.isNaN(value)) {
             return defaultValue;
         }
         return Math.max(min, Math.min(max, value));

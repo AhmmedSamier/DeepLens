@@ -183,6 +183,7 @@
         "package": "vsce package --allow-missing-repository && bun run scripts/fix-vsix-permissions.ts",
         "vsix": "bun run compile && bun run package",
         "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
+        "test:coverage": "bun run compile && tsc -p . && nyc --reporter=lcov --report-dir=coverage node ./out/vscode-extension/src/test/runTest.js",
         "benchmark": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runBenchmark.js"
     },
     "devDependencies": {
@@ -206,7 +207,8 @@
         "mocha": "^11.7.5",
         "prettier": "^3.7.4",
         "prettier-plugin-organize-imports": "^4.3.0",
-        "typescript": "^5.9.3"
+        "typescript": "^5.9.3",
+        "nyc": "^15.1.0"
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",

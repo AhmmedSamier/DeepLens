@@ -2,8 +2,8 @@
  * Simple benchmark utility
  */
 import { SearchItemType } from '../src/core/types';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 const results: { name: string, avgMs: number, totalMs: number }[] = [];
 

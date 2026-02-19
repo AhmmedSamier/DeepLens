@@ -1,6 +1,6 @@
 import { describe, expect, it, mock } from 'bun:test';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 
 // Mock vscode
 mock.module('vscode', () => ({
@@ -70,15 +70,15 @@ namespace WebAPI.Controllers
             expect(endpoints.length).toBeGreaterThan(0);
 
             // Check specific endpoints
-            const getRevenue = endpoints.find((e) => e.fullName!.includes('GetRevenueSummary'));
+            const getRevenue = endpoints.find((e) => e.fullName.includes('GetRevenueSummary'));
             expect(getRevenue).toBeDefined();
             expect(getRevenue?.name).toContain('api/AdminDashboard/{year}');
 
-            const getAllCustomers = endpoints.find((e) => e.fullName!.includes('GetAllCustomers'));
+            const getAllCustomers = endpoints.find((e) => e.fullName.includes('GetAllCustomers'));
             expect(getAllCustomers).toBeDefined();
             expect(getAllCustomers?.name).toContain('api/AdminDashboard/customers');
 
-            const changeUsername = endpoints.find((e) => e.fullName!.includes('ChangeEmployeeUsername'));
+            const changeUsername = endpoints.find((e) => e.fullName.includes('ChangeEmployeeUsername'));
             expect(changeUsername).toBeDefined();
             expect(changeUsername?.name).toContain('api/AdminDashboard/customers/{companyId}/{employeeId}/username');
         } finally {

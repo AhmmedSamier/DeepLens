@@ -1,4 +1,4 @@
-import * as path from 'path';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import {
     CloseAction,
@@ -12,10 +12,10 @@ import {
 import { IndexStats, ISearchProvider, SearchOptions, SearchResult } from '../../language-server/src/core/types';
 
 export class DeepLensLspClient implements ISearchProvider {
-    private client: LanguageClient | undefined;
-    private context: vscode.ExtensionContext;
+    private client: LanguageClient | null = null;
+    private readonly context: vscode.ExtensionContext;
     private isStopping = false;
-    private startPromise: Promise<void> | undefined;
+    private startPromise: Promise<void> | null = null;
     private disposables: vscode.Disposable[] = [];
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
@@ -41,7 +41,7 @@ export class DeepLensLspClient implements ISearchProvider {
         try {
             await this.startPromise;
         } finally {
-            this.startPromise = undefined;
+            this.startPromise = null;
         }
     }
 
@@ -96,7 +96,7 @@ export class DeepLensLspClient implements ISearchProvider {
         await this.client.start();
     }
 
-    private activeProgressTokens = new Set<string>();
+    private readonly activeProgressTokens = new Set<string>();
 
     private handleProgressNotification(params: { token: string | number; message?: string; percentage?: number }) {
         const token = String(params.token);
@@ -130,8 +130,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async search(options: SearchOptions, token?: vscode.CancellationToken): Promise<SearchResult[]> {
         if (!this.isReady()) return [];
+        const client = this.client;
+        if (!client) return [];
         try {
-            return await this.client!.sendRequest<SearchResult[]>('deeplens/search', options, token);
+            return await client.sendRequest<SearchResult[]>('deeplens/search', options, token);
         } catch (error) {
             // Silently handle errors during shutdown
             if (!this.isStopping) {
@@ -143,8 +145,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async burstSearch(options: SearchOptions, token?: vscode.CancellationToken): Promise<SearchResult[]> {
         if (!this.isReady()) return [];
+        const client = this.client;
+        if (!client) return [];
         try {
-            return await this.client!.sendRequest<SearchResult[]>('deeplens/burstSearch', options, token);
+            return await client.sendRequest<SearchResult[]>('deeplens/burstSearch', options, token);
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens burstSearch error:', error);
@@ -155,8 +159,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async resolveItems(itemIds: string[]): Promise<SearchResult[]> {
         if (!this.isReady()) return [];
+        const client = this.client;
+        if (!client) return [];
         try {
-            return await this.client!.sendRequest<SearchResult[]>('deeplens/resolveItems', { itemIds });
+            return await client.sendRequest<SearchResult[]>('deeplens/resolveItems', { itemIds });
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens resolveItems error:', error);
@@ -167,8 +173,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async getRecentItems(count: number): Promise<SearchResult[]> {
         if (!this.isReady()) return [];
+        const client = this.client;
+        if (!client) return [];
         try {
-            return await this.client!.sendRequest<SearchResult[]>('deeplens/getRecentItems', { count });
+            return await client.sendRequest<SearchResult[]>('deeplens/getRecentItems', { count });
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens getRecentItems error:', error);
@@ -179,8 +187,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async recordActivity(itemId: string): Promise<void> {
         if (!this.isReady()) return;
+        const client = this.client;
+        if (!client) return;
         try {
-            await this.client!.sendRequest('deeplens/recordActivity', { itemId });
+            await client.sendRequest('deeplens/recordActivity', { itemId });
         } catch {
             // Silently ignore activity recording errors - they're not critical
         }
@@ -188,8 +198,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async setActiveFiles(files: string[]): Promise<void> {
         if (!this.isReady()) return;
+        const client = this.client;
+        if (!client) return;
         try {
-            await this.client!.sendRequest('deeplens/setActiveFiles', { files });
+            await client.sendRequest('deeplens/setActiveFiles', { files });
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens setActiveFiles error:', error);
@@ -199,8 +211,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async rebuildIndex(force: boolean = false): Promise<void> {
         if (!this.isReady()) return;
+        const client = this.client;
+        if (!client) return;
         try {
-            await this.client!.sendRequest('deeplens/rebuildIndex', { force });
+            await client.sendRequest('deeplens/rebuildIndex', { force });
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens rebuildIndex error:', error);
@@ -210,8 +224,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async clearCache(): Promise<void> {
         if (!this.isReady()) return;
+        const client = this.client;
+        if (!client) return;
         try {
-            await this.client!.sendRequest('deeplens/clearCache');
+            await client.sendRequest('deeplens/clearCache');
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens clearCache error:', error);
@@ -221,8 +237,10 @@ export class DeepLensLspClient implements ISearchProvider {
 
     async getIndexStats(): Promise<IndexStats | undefined> {
         if (!this.isReady()) return undefined;
+        const client = this.client;
+        if (!client) return undefined;
         try {
-            return await this.client!.sendRequest<IndexStats>('deeplens/indexStats');
+            return await client.sendRequest<IndexStats>('deeplens/indexStats');
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens getIndexStats error:', error);
@@ -244,7 +262,7 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     private async waitForStartCompletion(): Promise<void> {
-        if (!this.startPromise) {
+        if (this.startPromise === undefined) {
             return;
         }
 
@@ -265,16 +283,16 @@ export class DeepLensLspClient implements ISearchProvider {
             if (clientState === State.Running) {
                 await this.client.stop();
             } else {
-                this.client.dispose();
+                await this.client.dispose();
             }
         } catch {
             try {
-                this.client?.dispose();
+                await this.client?.dispose();
             } catch {
                 return;
             }
         } finally {
-            this.client = undefined;
+            this.client = null;
         }
     }
 
