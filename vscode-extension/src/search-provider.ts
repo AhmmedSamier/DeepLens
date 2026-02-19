@@ -1592,11 +1592,13 @@ export class SearchProvider {
         }
 
         // Add file path and line number
-        const relativePath = vscode.workspace.asRelativePath(item.filePath);
-        if (item.line === undefined) {
-            detail = relativePath;
-        } else {
-            detail = `${relativePath}:${item.line + 1}`;
+        if (item.type !== SearchItemType.COMMAND) {
+            const relativePath = vscode.workspace.asRelativePath(item.filePath);
+            if (item.line === undefined) {
+                detail = relativePath;
+            } else {
+                detail = `${relativePath}:${item.line + 1}`;
+            }
         }
 
         // Add additional detail if available
