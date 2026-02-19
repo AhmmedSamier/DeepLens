@@ -112,6 +112,7 @@ export interface SearchContext {
     maxResults: number;
     enableCamelHumps: boolean;
     isPotentialUrl: boolean;
+    queryLower: string;
 }
 
 /**

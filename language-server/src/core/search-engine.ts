@@ -577,10 +577,13 @@ export class SearchEngine implements ISearchProvider {
 
     private createSearchContext(options: SearchOptions): SearchContext {
         const query = options.query || '';
+        const queryUpper = query.toUpperCase();
+        const queryLower = query.toLowerCase();
         return {
             query,
             normalizedQuery: query.replaceAll('\\', '/'),
-            queryUpper: query.toUpperCase(),
+            queryUpper,
+            queryLower,
             scope: options.scope || SearchScope.EVERYTHING,
             maxResults: options.maxResults || 20,
             enableCamelHumps: options.enableCamelHumps !== false,
@@ -1406,6 +1409,7 @@ export class SearchEngine implements ISearchProvider {
     private prepareSearchContext(query: string, enableCamelHumps: boolean, scope: SearchScope) {
         const queryLen = query.length;
         const queryUpper = enableCamelHumps ? query.toUpperCase() : '';
+        const queryLower = query.toLowerCase(); // Added queryLower
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
         const preparedQuery = isPotentialUrl ? RouteMatcher.prepare(query) : null;
@@ -1435,6 +1439,7 @@ export class SearchEngine implements ISearchProvider {
             getActivityScore: this.getActivityScore,
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
+            queryLower,
         };
     }
 
@@ -1513,8 +1518,20 @@ export class SearchEngine implements ISearchProvider {
         // T005: Character-count distance guard (per research.md §2)
         // Skip items that are mathematically too distant in length to yield a quality fuzzy match
         const pName = context.preparedNames[i];
-        if (pName && Math.abs(context.queryLen - pName.target.length) > context.queryLen) {
-            return false;
+        if (pName) {
+            const targetLen = pName.target.length;
+            const diff = Math.abs(context.queryLen - targetLen);
+
+            // Exception: If the query is a prefix of the target, always process it
+            const targetLower = (pName as any)._targetLower;
+            if (targetLower && targetLower.startsWith(context.queryLower)) {
+                return true;
+            }
+
+            // Relaxed threshold: Only skip if diff is more than twice the query length
+            if (diff > context.queryLen * 2) {
+                return false;
+            }
         }
 
         return true;
@@ -1764,6 +1781,7 @@ export class SearchEngine implements ISearchProvider {
         queryUpper: string,
         enableCamelHumps: boolean,
         isPotentialUrl: boolean,
+        queryLower: string,
         minScore: number,
     ): { score: number; resultScope: SearchScope } {
         // Kept for backward compatibility if needed, but not used in hot path

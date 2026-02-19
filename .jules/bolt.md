@@ -11,7 +11,8 @@
 **Action:** Replaced the conditional logic with a precomputed static `Uint32Array` lookup table (`CHAR_TO_BITFLAG`). Benchmarking demonstrated a **~1.27x speedup** for this specific function. Small O(1) lookups often beat branching logic in tight loops.
 ## 2025-02-12 - [SearchEngine] Removed Redundant Lowercased Strings
 **Learning:** `SearchEngine` was maintaining a parallel `preparedNamesLow` array and a `preparedLowCache` Map to store lowercased item names for prefix matching. However, the `Fuzzysort.Prepared` objects (stored in `preparedNames`) already contain the lowercased string internally as `_targetLower`.
-**Action:** Removed `preparedNamesLow` and `preparedLowCache`. Updated `burstSearch` to access `_targetLower` directly from the `Fuzzysort.Prepared` object (via casting). This reduces memory usage by eliminating duplicate string storage and pointer arrays, and saves CPU by avoiding a second `toLowerCase()` call per item. ## 2026-02-19 - [SearchEngine] Search-Time Optimizations (US1/US2)
+**Action:** Removed `preparedNamesLow` and `preparedLowCache`. Updated `burstSearch` to access `_targetLower` directly from the `Fuzzysort.Prepared` object (via casting). This reduces memory usage by eliminating duplicate string storage and pointer arrays, and saves CPU by avoiding a second `toLowerCase()` call per item.
+## 2026-02-19 - [SearchEngine] Search-Time Optimizations (US1/US2)
 **Learning:** Even with parallel arrays, scanning 100k+ items with `Fuzzysort.single` in a tight loop hit performance limits (especially CamelHumps matching which was 30ms+).
 **Action:**
 1.  **Bitflag Audit:** Confirmed bitflag screening fires first, which is critical.
