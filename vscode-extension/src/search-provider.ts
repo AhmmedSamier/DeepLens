@@ -12,6 +12,7 @@ import {
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
+import { formatKeybinding } from './utils/keybinding-utils';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -766,9 +767,13 @@ export class SearchProvider {
     private createCommandSuggestion(cmd: SlashCommand, score: number, isRecent: boolean = false): SearchResult {
         const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
         const aliasText = this.formatAliasText(cmd);
-        const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
         const exampleText = cmd.example ? ` • Try: ${cmd.example}` : '';
-        const description = `${cmd.description}${aliasText}${shortcutText}${exampleText}`;
+        const description = `${cmd.description}${aliasText}${exampleText}`;
+
+        // Add shortcut to category label for cleaner UI
+        const categoryLabel = this.getCategoryLabel(cmd.category);
+        const shortcut = cmd.keyboardShortcut ? formatKeybinding(cmd.keyboardShortcut) : '';
+        const containerName = shortcut ? `${categoryLabel}  ${shortcut}` : categoryLabel;
 
         return {
             item: {
@@ -777,7 +782,7 @@ export class SearchProvider {
                 type: SearchItemType.COMMAND,
                 filePath: '',
                 detail: isRecent ? `↺ Recent • ${description}` : description,
-                containerName: this.getCategoryLabel(cmd.category),
+                containerName: containerName,
             },
             score: score,
             scope: SearchScope.COMMANDS,
@@ -1396,15 +1401,10 @@ export class SearchProvider {
                     scope: SearchScope.COMMANDS,
                 },
             });
-}
+        }
 
         // Helper method to create command items
-        const addCommandItem = (
-            label: string,
-            description: string,
-            icon: vscode.ThemeIcon,
-            commandId: string,
-        ) => {
+        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
             items.push({
                 label,
                 description,
@@ -1424,7 +1424,7 @@ export class SearchProvider {
             });
         };
 
-// 3. Native Search Action
+        // 3. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1433,20 +1433,10 @@ export class SearchProvider {
         );
 
         // 4. Rebuild Index Action
-        addCommandItem(
-            'Rebuild Index',
-            'Fix missing files',
-            new vscode.ThemeIcon('refresh'),
-            this.CMD_REBUILD_INDEX,
-        );
+        addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
         // 5. Clear Cache Action
-        addCommandItem(
-            'Clear Index Cache',
-            'Fix corruption',
-            new vscode.ThemeIcon('trash'),
-            this.CMD_CLEAR_CACHE,
-        );
+        addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
         // 6. Settings Action
         addCommandItem(
@@ -1765,9 +1755,7 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line === undefined
-                    ? new vscode.Position(0, 0)
-                    : new vscode.Position(item.line, item.column || 0);
+                item.line === undefined ? new vscode.Position(0, 0) : new vscode.Position(item.line, item.column || 0);
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;

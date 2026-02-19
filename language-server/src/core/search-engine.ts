@@ -143,6 +143,14 @@ export class SearchEngine implements ISearchProvider {
     private preparedPatterns: (RoutePattern | null)[] = [];
     private filePaths: string[] = [];
 
+    // 1-item cache for normalizePath (filePath -> normalizedPath)
+    private lastFilePath: string | null = null;
+    private lastNormalizedFilePath: string | null = null;
+
+    // 1-item cache for relative path normalization in populateParallelArrays
+    private lastRelPath: string | null = null;
+    private lastRelPathNormalized: string | null = null;
+
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
@@ -458,7 +466,18 @@ export class SearchEngine implements ISearchProvider {
      * Populate parallel arrays with prepared data for an item
      */
     private populateParallelArrays(item: SearchableItem): void {
-        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replaceAll('\\', '/') : null;
+        let normalizedPath: string | null = null;
+
+        if (item.relativeFilePath) {
+            if (item.relativeFilePath === this.lastRelPath) {
+                normalizedPath = this.lastRelPathNormalized;
+            } else {
+                normalizedPath = item.relativeFilePath.replace(/\\/g, '/');
+                this.lastRelPath = item.relativeFilePath;
+                this.lastRelPathNormalized = normalizedPath;
+            }
+        }
+
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
@@ -565,6 +584,10 @@ export class SearchEngine implements ISearchProvider {
         this.scopedIndices.clear();
         this.fileToItemIndices.clear();
         this.preparedCache.clear();
+        this.lastFilePath = null;
+        this.lastNormalizedFilePath = null;
+        this.lastRelPath = null;
+        this.lastRelPathNormalized = null;
     }
 
     /**
@@ -786,8 +809,15 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private normalizePath(filePath: string): string {
+        if (filePath === this.lastFilePath) {
+            return this.lastNormalizedFilePath!;
+        }
+
         const normalized = path.normalize(filePath);
-        return this.isWindows ? normalized.toLowerCase() : normalized;
+        const result = this.isWindows ? normalized.toLowerCase() : normalized;
+        this.lastFilePath = filePath;
+        this.lastNormalizedFilePath = result;
+        return result;
     }
 
     private isActive(filePath: string): boolean {
@@ -1526,6 +1556,11 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
+        // Optimization: Skip CamelHumps if query characters are not in the name
+        if ((context.queryBitflags & context.itemNameBitflags[i]) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const capitals = context.preparedCapitals[i];
         if (!capitals || context.queryLen > capitals.length) {
             return -Infinity;
@@ -1576,6 +1611,11 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
+        // Optimization: Skip fuzzy search if query characters are not in the name
+        if ((context.queryBitflags & context.itemNameBitflags[i]) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const pName = context.preparedNames[i];
         if (!pName || context.queryLen > pName.target.length) {
             return -Infinity;
