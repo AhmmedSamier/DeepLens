@@ -424,8 +424,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            const normalized = item.relativeFilePath.replaceAll('\\', '/');
-            aggregateFlags |= this.calculateBitflags(normalized);
+            // Optimization: Skip normalization as calculateBitflags maps both \ and / to same bitflag (bit 30)
+            aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
         }
 
         return { nameFlags, aggregateFlags };
