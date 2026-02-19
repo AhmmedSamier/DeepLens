@@ -439,7 +439,6 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            // OPTIMIZATION: Removed redundant replace(/\\/g, '/') because \ and / map to the same bitflag (30)
             aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
         }
 
@@ -1915,7 +1914,7 @@ export class SearchEngine implements ISearchProvider {
         let bitflags = 0;
 
         for (let i = 0; i < len; i++) {
-            const code = str.codePointAt(i) || 0;
+            const code = str.charCodeAt(i);
 
             // Check for non-ASCII
             if (code > 127) {
