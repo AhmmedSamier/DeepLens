@@ -143,6 +143,14 @@ export class SearchEngine implements ISearchProvider {
     private preparedPatterns: (RoutePattern | null)[] = [];
     private filePaths: string[] = [];
 
+    // 1-item cache for normalizePath (filePath -> normalizedPath)
+    private lastFilePath: string | null = null;
+    private lastNormalizedFilePath: string | null = null;
+
+    // 1-item cache for relative path normalization in populateParallelArrays
+    private lastRelPath: string | null = null;
+    private lastRelPathNormalized: string | null = null;
+
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
@@ -431,8 +439,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            const normalized = item.relativeFilePath.replaceAll('\\', '/');
-            aggregateFlags |= this.calculateBitflags(normalized);
+            // OPTIMIZATION: Removed redundant replace(/\\/g, '/') because \ and / map to the same bitflag (30)
+            aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
         }
 
         return { nameFlags, aggregateFlags };
@@ -459,7 +467,18 @@ export class SearchEngine implements ISearchProvider {
      * Populate parallel arrays with prepared data for an item
      */
     private populateParallelArrays(item: SearchableItem): void {
-        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replaceAll('\\', '/') : null;
+        let normalizedPath: string | null = null;
+
+        if (item.relativeFilePath) {
+            if (item.relativeFilePath === this.lastRelPath) {
+                normalizedPath = this.lastRelPathNormalized;
+            } else {
+                normalizedPath = item.relativeFilePath.replace(/\\/g, '/');
+                this.lastRelPath = item.relativeFilePath;
+                this.lastRelPathNormalized = normalizedPath;
+            }
+        }
+
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
@@ -566,6 +585,10 @@ export class SearchEngine implements ISearchProvider {
         this.scopedIndices.clear();
         this.fileToItemIndices.clear();
         this.preparedCache.clear();
+        this.lastFilePath = null;
+        this.lastNormalizedFilePath = null;
+        this.lastRelPath = null;
+        this.lastRelPathNormalized = null;
     }
 
     /**
@@ -654,7 +677,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -787,8 +810,15 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
     }
 
     private normalizePath(filePath: string): string {
+        if (filePath === this.lastFilePath) {
+            return this.lastNormalizedFilePath!;
+        }
+
         const normalized = path.normalize(filePath);
-        return this.isWindows ? normalized.toLowerCase() : normalized;
+        const result = this.isWindows ? normalized.toLowerCase() : normalized;
+        this.lastFilePath = filePath;
+        this.lastNormalizedFilePath = result;
+        return result;
     }
 
     private isActive(filePath: string): boolean {
@@ -1683,7 +1713,7 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-resultScope ??= ID_TO_SCOPE[typeId];
+        resultScope ??= ID_TO_SCOPE[typeId];
 
         const item = context.items[i];
         if (!item) {
@@ -2008,7 +2038,7 @@ resultScope ??= ID_TO_SCOPE[typeId];
             return [];
         }
 
-const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
@@ -2114,7 +2144,7 @@ const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undef
             }
         };
 
-if (indices) {
+        if (indices) {
             for (const index of indices) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(index);

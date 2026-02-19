@@ -61,7 +61,7 @@ export class ActivityTracker {
                         return undefined;
                     }
                 },
-                save: async data => {
+                save: async (data) => {
                     const file = join(storagePath, 'activity.json');
                     try {
                         await fsPromises.mkdir(storagePath, { recursive: true });
@@ -75,7 +75,7 @@ export class ActivityTracker {
             const context = storageOrContext;
             this.storage = {
                 load: async () => context.workspaceState.get(this.STORAGE_KEY),
-                save: async data => {
+                save: async (data) => {
                     await context.workspaceState.update(this.STORAGE_KEY, data);
                 },
             };
@@ -145,7 +145,7 @@ export class ActivityTracker {
             .sort((a, b) => b.score - a.score)
             .slice(0, count);
 
-        return sorted.map(r => r.itemId);
+        return sorted.map((r) => r.itemId);
     }
 
     /**
@@ -153,11 +153,11 @@ export class ActivityTracker {
      */
     getRecentItems(count: number): SearchResult[] {
         const sorted = Array.from(this.activities.values())
-            .filter(a => a.item)
+            .filter((a) => a.item)
             .sort((a, b) => b.lastAccessed - a.lastAccessed)
             .slice(0, count);
 
-        return sorted.map(a => {
+        return sorted.map((a) => {
             const item = { ...a.item };
             const relativeTime = this.getRelativeTime(a.lastAccessed);
 
