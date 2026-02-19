@@ -1396,15 +1396,10 @@ export class SearchProvider {
                     scope: SearchScope.COMMANDS,
                 },
             });
-}
+        }
 
         // Helper method to create command items
-        const addCommandItem = (
-            label: string,
-            description: string,
-            icon: vscode.ThemeIcon,
-            commandId: string,
-        ) => {
+        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
             items.push({
                 label,
                 description,
@@ -1424,7 +1419,7 @@ export class SearchProvider {
             });
         };
 
-// 3. Native Search Action
+        // 3. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1433,20 +1428,10 @@ export class SearchProvider {
         );
 
         // 4. Rebuild Index Action
-        addCommandItem(
-            'Rebuild Index',
-            'Fix missing files',
-            new vscode.ThemeIcon('refresh'),
-            this.CMD_REBUILD_INDEX,
-        );
+        addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
         // 5. Clear Cache Action
-        addCommandItem(
-            'Clear Index Cache',
-            'Fix corruption',
-            new vscode.ThemeIcon('trash'),
-            this.CMD_CLEAR_CACHE,
-        );
+        addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
         // 6. Settings Action
         addCommandItem(
@@ -1765,9 +1750,7 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line === undefined
-                    ? new vscode.Position(0, 0)
-                    : new vscode.Position(item.line, item.column || 0);
+                item.line === undefined ? new vscode.Position(0, 0) : new vscode.Position(item.line, item.column || 0);
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;
