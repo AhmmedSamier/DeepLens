@@ -1577,6 +1577,10 @@ const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
+        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const pName = context.preparedNames[i];
         if (!pName || context.queryLen > pName.target.length) {
             return -Infinity;
