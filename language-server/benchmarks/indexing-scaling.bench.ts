@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'os';
+import { execSync } from 'node:child_process';
 import { WorkspaceIndexer } from '../src/core/workspace-indexer';
 import { Config } from '../src/core/config';
 import { TreeSitterParser } from '../src/core/tree-sitter-parser';
@@ -17,6 +18,17 @@ export async function runIndexingScalingBenchmarks() {
     const FILE_COUNT = 2000;
     for (let i = 0; i < FILE_COUNT; i++) {
         fs.writeFileSync(path.join(tempDir, `file_${i}.ts`), `export class Class${i} { method() {} }`);
+    }
+
+    // Initialize git repo to prevent "fatal: not a git repository" errors
+    try {
+        execSync('git init', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git config user.email "bench@example.com"', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git config user.name "Benchmark"', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git add .', { cwd: tempDir, stdio: 'ignore' });
+        execSync('git commit -m "Initial commit"', { cwd: tempDir, stdio: 'ignore' });
+    } catch (e) {
+        console.warn('Failed to initialize git repo in temp dir:', e);
     }
 
     const env: IndexerEnvironment = {

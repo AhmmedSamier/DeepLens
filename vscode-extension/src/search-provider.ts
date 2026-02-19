@@ -12,7 +12,6 @@ import {
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
-import { formatKeybinding } from './utils/keybinding-utils';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -767,13 +766,9 @@ export class SearchProvider {
     private createCommandSuggestion(cmd: SlashCommand, score: number, isRecent: boolean = false): SearchResult {
         const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
         const aliasText = this.formatAliasText(cmd);
+        const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
         const exampleText = cmd.example ? ` • Try: ${cmd.example}` : '';
-        const description = `${cmd.description}${aliasText}${exampleText}`;
-
-        // Add shortcut to category label for cleaner UI
-        const categoryLabel = this.getCategoryLabel(cmd.category);
-        const shortcut = cmd.keyboardShortcut ? formatKeybinding(cmd.keyboardShortcut) : '';
-        const containerName = shortcut ? `${categoryLabel}  ${shortcut}` : categoryLabel;
+        const description = `${cmd.description}${aliasText}${shortcutText}${exampleText}`;
 
         return {
             item: {
@@ -782,7 +777,7 @@ export class SearchProvider {
                 type: SearchItemType.COMMAND,
                 filePath: '',
                 detail: isRecent ? `↺ Recent • ${description}` : description,
-                containerName: containerName,
+                containerName: this.getCategoryLabel(cmd.category),
             },
             score: score,
             scope: SearchScope.COMMANDS,
@@ -1401,10 +1396,15 @@ export class SearchProvider {
                     scope: SearchScope.COMMANDS,
                 },
             });
-        }
+}
 
         // Helper method to create command items
-        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
+        const addCommandItem = (
+            label: string,
+            description: string,
+            icon: vscode.ThemeIcon,
+            commandId: string,
+        ) => {
             items.push({
                 label,
                 description,
@@ -1424,7 +1424,7 @@ export class SearchProvider {
             });
         };
 
-        // 3. Native Search Action
+// 3. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1433,10 +1433,20 @@ export class SearchProvider {
         );
 
         // 4. Rebuild Index Action
-        addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
+        addCommandItem(
+            'Rebuild Index',
+            'Fix missing files',
+            new vscode.ThemeIcon('refresh'),
+            this.CMD_REBUILD_INDEX,
+        );
 
         // 5. Clear Cache Action
-        addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
+        addCommandItem(
+            'Clear Index Cache',
+            'Fix corruption',
+            new vscode.ThemeIcon('trash'),
+            this.CMD_CLEAR_CACHE,
+        );
 
         // 6. Settings Action
         addCommandItem(
@@ -1453,41 +1463,40 @@ export class SearchProvider {
      * Get welcome items for empty state
      */
     private getWelcomeItems(): SearchResultItem[] {
-        const welcomeCommands = [
-            { id: '/all', label: 'Search Everything' },
-            { id: '/t', label: 'Search Classes' },
-            { id: '/f', label: 'Search Files' },
-            { id: '/s', label: 'Search Symbols' },
-            { id: '/txt', label: 'Search Text' },
-            { id: '/cmd', label: 'Search Commands' },
-        ];
+        const items = [
+            ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
+            ['/t', 'Search Classes', 'Find classes, interfaces, and enums (/t)', SearchScope.TYPES],
+            ['/f', 'Search Files', 'Find files by name or path (/f)', SearchScope.FILES],
+            ['/s', 'Search Symbols', 'Find methods, functions, and variables (/s)', SearchScope.SYMBOLS],
+            ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
+        ] as const;
 
-        const items: SearchResultItem[] = [];
+        const iconMap = new Map<SearchScope, string>([
+            [SearchScope.EVERYTHING, 'search'],
+            [SearchScope.TYPES, this.ICON_CLASS],
+            [SearchScope.FILES, 'file'],
+            [SearchScope.SYMBOLS, 'symbol-method'],
+            [SearchScope.TEXT, 'whole-word'],
+        ]);
 
-        for (const { id, label } of welcomeCommands) {
-            const cmd = this.slashCommandService.getCommand(id);
-            if (!cmd) {
-                continue;
-            }
-
+        return items.map(([cmd, name, detail, scope]) => {
             const item = this.resultToQuickPickItem({
                 item: {
-                    id: `slash-cmd:${id}`,
-                    name: label,
+                    id: `slash-cmd:${cmd}`,
+                    name,
                     type: SearchItemType.COMMAND,
                     filePath: '',
-                    detail: `${cmd.description} (${cmd.name})`,
+                    detail,
                 },
                 score: 1,
-                scope: cmd.scope,
+                scope,
             });
 
-            item.iconPath = new vscode.ThemeIcon(cmd.icon, new vscode.ThemeColor('textLink.foreground'));
+            const icon = iconMap.get(scope) || 'lightbulb';
+            item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
-            items.push(item);
-        }
-
-        return items;
+            return item;
+        });
     }
 
     /**
@@ -1697,32 +1706,28 @@ export class SearchProvider {
 
     private handleSlashCommandNavigation(item: SearchableItem, preview: boolean): boolean {
         // Handle Slash Command Selection
-        if (item.id.startsWith('slash-cmd:')) {
-            // If the quickpick is already closed (e.g. during a preview timeout race),
-            // we should still return true to prevent falling through to file navigation.
-            if (this.currentQuickPick) {
-                if (preview) return true; // Don't do anything for preview
+        if (item.id.startsWith('slash-cmd:') && this.currentQuickPick) {
+            if (preview) return true; // Don't do anything for preview
 
-                const functionalPrefix = item.id.substring('slash-cmd:'.length);
+            const functionalPrefix = item.id.substring('slash-cmd:'.length);
 
-                // Find scope for this prefix (add space to match PREFIX_MAP)
-                const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
-                if (scope) {
-                    this.userSelectedScope = scope; // <--- FIX: Persist user selection
-                    this.currentScope = scope;
-                    this.updateFilterButtons(this.currentQuickPick);
-                    this.currentQuickPick.value = ''; // Clear the command text
-                    this.currentQuickPick.placeholder = this.getPlaceholder();
-                }
-
-                // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
-                this.handleQueryChange(
-                    this.currentQuickPick,
-                    '',
-                    () => {},
-                    () => {},
-                );
+            // Find scope for this prefix (add space to match PREFIX_MAP)
+            const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
+            if (scope) {
+                this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                this.currentScope = scope;
+                this.updateFilterButtons(this.currentQuickPick);
+                this.currentQuickPick.value = ''; // Clear the command text
+                this.currentQuickPick.placeholder = this.getPlaceholder();
             }
+
+            // Manually trigger handleQueryChange to force scope update logic/timeouts to reset
+            this.handleQueryChange(
+                this.currentQuickPick,
+                '',
+                () => {},
+                () => {},
+            );
             return true;
         }
         return false;
@@ -1760,7 +1765,9 @@ export class SearchProvider {
             const document = await vscode.workspace.openTextDocument(uri);
 
             const position =
-                item.line === undefined ? new vscode.Position(0, 0) : new vscode.Position(item.line, item.column || 0);
+                item.line === undefined
+                    ? new vscode.Position(0, 0)
+                    : new vscode.Position(item.line, item.column || 0);
 
             // Calculate range for selection and highlighting
             let range: vscode.Range;

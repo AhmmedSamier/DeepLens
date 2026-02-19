@@ -143,14 +143,6 @@ export class SearchEngine implements ISearchProvider {
     private preparedPatterns: (RoutePattern | null)[] = [];
     private filePaths: string[] = [];
 
-    // 1-item cache for normalizePath (filePath -> normalizedPath)
-    private lastFilePath: string | null = null;
-    private lastNormalizedFilePath: string | null = null;
-
-    // 1-item cache for relative path normalization in populateParallelArrays
-    private lastRelPath: string | null = null;
-    private lastRelPathNormalized: string | null = null;
-
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
@@ -439,7 +431,8 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (item.relativeFilePath) {
-            aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
+            const normalized = item.relativeFilePath.replaceAll('\\', '/');
+            aggregateFlags |= this.calculateBitflags(normalized);
         }
 
         return { nameFlags, aggregateFlags };
@@ -466,18 +459,7 @@ export class SearchEngine implements ISearchProvider {
      * Populate parallel arrays with prepared data for an item
      */
     private populateParallelArrays(item: SearchableItem): void {
-        let normalizedPath: string | null = null;
-
-        if (item.relativeFilePath) {
-            if (item.relativeFilePath === this.lastRelPath) {
-                normalizedPath = this.lastRelPathNormalized;
-            } else {
-                normalizedPath = item.relativeFilePath.replace(/\\/g, '/');
-                this.lastRelPath = item.relativeFilePath;
-                this.lastRelPathNormalized = normalizedPath;
-            }
-        }
-
+        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replaceAll('\\', '/') : null;
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
@@ -584,10 +566,6 @@ export class SearchEngine implements ISearchProvider {
         this.scopedIndices.clear();
         this.fileToItemIndices.clear();
         this.preparedCache.clear();
-        this.lastFilePath = null;
-        this.lastNormalizedFilePath = null;
-        this.lastRelPath = null;
-        this.lastRelPathNormalized = null;
     }
 
     /**
@@ -676,7 +654,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
-        const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
+const { query, scope, maxResults = 20, enableCamelHumps = true } = options;
 
         if (!query || query.trim().length === 0) {
             return this.handleEmptyQuerySearch(options, maxResults);
@@ -809,15 +787,8 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private normalizePath(filePath: string): string {
-        if (filePath === this.lastFilePath) {
-            return this.lastNormalizedFilePath!;
-        }
-
         const normalized = path.normalize(filePath);
-        const result = this.isWindows ? normalized.toLowerCase() : normalized;
-        this.lastFilePath = filePath;
-        this.lastNormalizedFilePath = result;
-        return result;
+        return this.isWindows ? normalized.toLowerCase() : normalized;
     }
 
     private isActive(filePath: string): boolean {
@@ -1556,11 +1527,6 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
-        // Optimization: Skip CamelHumps if query characters are not in the name
-        if ((context.queryBitflags & context.itemNameBitflags[i]) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const capitals = context.preparedCapitals[i];
         if (!capitals || context.queryLen > capitals.length) {
             return -Infinity;
@@ -1611,8 +1577,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // Optimization: Skip fuzzy search if query characters are not in the name
-        if ((context.queryBitflags & context.itemNameBitflags[i]) !== context.queryBitflags) {
+        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
             return -Infinity;
         }
 
@@ -1712,7 +1677,7 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-        resultScope ??= ID_TO_SCOPE[typeId];
+resultScope ??= ID_TO_SCOPE[typeId];
 
         const item = context.items[i];
         if (!item) {
@@ -1959,7 +1924,7 @@ export class SearchEngine implements ISearchProvider {
     private extractCapitals(text: string): string {
         let res = text.charAt(0).toUpperCase();
         for (let i = 1; i < text.length; i++) {
-            const code = text.codePointAt(i);
+            const code = text.charCodeAt(i);
             if (code >= 65 && code <= 90) {
                 // A-Z
                 res += text[i];
@@ -2037,7 +2002,7 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
+const onResult = typeof onResultOrToken === 'function' ? onResultOrToken : undefined;
         const cancellationToken = onResult ? token : (onResultOrToken as CancellationToken);
 
         const { effectiveQuery, targetLine } = this.parseQueryWithLineNumber(query);
@@ -2143,7 +2108,7 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
-        if (indices) {
+if (indices) {
             for (const index of indices) {
                 if (results.length >= maxResults || token?.isCancellationRequested) break;
                 processItem(index);
