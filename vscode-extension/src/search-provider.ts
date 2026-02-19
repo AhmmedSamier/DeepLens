@@ -1168,7 +1168,6 @@ export class SearchProvider {
             query: trimmedQuery,
             scope: this.currentScope,
             maxResults: this.config.getMaxResults(),
-            enableCamelHumps: this.config.isCamelHumpsEnabled(),
             requestId: queryId,
         };
 

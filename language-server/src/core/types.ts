@@ -91,8 +91,6 @@ export interface SearchOptions {
     scope: SearchScope;
     /** Maximum number of results */
     maxResults?: number;
-    /** Enable CamelHumps matching */
-    enableCamelHumps?: boolean;
     /** File patterns to exclude */
     excludePatterns?: string[];
     /** File extensions to include */
@@ -110,7 +108,6 @@ export interface SearchContext {
     queryUpper: string;
     scope: SearchScope;
     maxResults: number;
-    enableCamelHumps: boolean;
     isPotentialUrl: boolean;
     queryLower: string;
 }
@@ -149,14 +146,8 @@ export interface IndexStats {
     cacheSize: number;
 }
 
-/**
- * Ripgrep unavailability notification params
- */
-export interface RipgrepUnavailableParams {}
+export type RipgrepUnavailableParams = object;
 
-/**
- * Ripgrep unavailability notification
- */
 export const RipgrepUnavailableNotification = new NotificationType<RipgrepUnavailableParams>(
     'deeplens/ripgrepUnavailable',
 );

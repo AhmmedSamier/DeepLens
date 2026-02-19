@@ -53,7 +53,7 @@ export async function runSearchBenchmarks() {
         await engine.search({ query: "File100", scope: SearchScope.EVERYTHING });
     }, 100);
 
-    await benchmark("CamelHumps Search 'FCC'", async () => {
+    await benchmark("Short query search 'FCC'", async () => {
         await engine.search({ query: "FCC", scope: SearchScope.EVERYTHING });
     }, 100);
 

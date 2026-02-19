@@ -22,7 +22,7 @@
 - [ ] T001 Checkout or stash WIP so `main` branch is clean; run `bun run benchmark` inside `language-server/` and redirect full output to `specs/002-improve-search-time/benchmark-baseline.txt` (captures `search.bench.ts` and `search_burst.bench.ts` timings)
 - [ ] T002 Commit `specs/002-improve-search-time/benchmark-baseline.txt` to the feature branch (`002-improve-search-time`) with message `chore: capture benchmark baseline before search-time optimisations`
 
-**Checkpoint**: `benchmark-baseline.txt` exists in the repo, contains raw timing numbers for `Search 'Component'` and `CamelHumps Search 'FCC'` benchmarks, and is committed.
+**Checkpoint**: `benchmark-baseline.txt` exists in the repo, contains raw timing numbers for `Search 'Component'` and `Short query search 'FCC'` benchmarks, and is committed.
 
 ---
 
@@ -42,14 +42,14 @@
 
 **Goal**: Reduce per-item cost in the `performUnifiedSearch` hot loop so that 95th-percentile symbol search completes in <500ms on a 5M-LoC corpus (SC-001) and first-result latency drops ≥50% vs baseline (SC-003 partial contribution).
 
-**Independent Test**: Run `bun run benchmark` in `language-server/`. The `Search 'Component' (Large result set)` and `CamelHumps Search 'FCC'` benchmarks must show ≥20% improvement vs `benchmark-baseline.txt`. Symbol search in a real VS Code window returns results for a known symbol in <500ms.
+**Independent Test**: Run `bun run benchmark` in `language-server/`. The `Search 'Component' (Large result set)` and `Short query search 'FCC'` benchmarks must show ≥20% improvement vs `benchmark-baseline.txt`. Symbol search in a real VS Code window returns results for a known symbol in <500ms.
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Audit `language-server/src/core/search-engine.ts` hot loop in `performUnifiedSearch`: locate the exact line order of (a) CamelHumps bitflag pre-screening `(queryBitflags & itemBitflags) !== queryBitflags`, (b) character-count guard, and (c) `fuzzysort.single()` call — document the current order in a code comment. If bitflag screening already fires before `fuzzysort`, confirm and comment; otherwise reorder so it fires first.
+- [ ] T004 [US1] Audit `language-server/src/core/search-engine.ts` hot loop in `performUnifiedSearch`: locate the exact line order of (a) bitflag pre-screening `(queryBitflags & itemBitflags) !== queryBitflags`, (b) character-count guard, and (c) `fuzzysort.single()` call — document the current order in a code comment. If bitflag screening already fires before `fuzzysort`, confirm and comment; otherwise reorder so it fires first.
 - [ ] T005 [US1] Add character-count distance guard in the hot loop of `language-server/src/core/search-engine.ts`, immediately after the bitflag pre-screening check and before the `fuzzysort.single()` call: `if (Math.abs(query.length - preparedName._target.length) > query.length) continue;` — add a JSDoc comment explaining the guard and citing `research.md §2`.
 - [ ] T006 [US1] Defer `activityScore` boosting in `language-server/src/core/search-engine.ts`: remove the `activityScore(item.filePath)` call from inside the hot loop and instead apply it as a post-sort tiebreak pass after the top-K heap is assembled. Ensure the final ranked result ordering is semantically equivalent to the pre-change behaviour (activityScore is a small relative adjustment to ranking, not filtering).
-- [ ] T007 [US1] Re-run `bun run benchmark` in `language-server/` and capture output to `specs/002-improve-search-time/benchmark-results-us1.txt`; compare against `benchmark-baseline.txt` and confirm ≥20% improvement on `Search 'Component'` and `CamelHumps Search 'FCC'` benchmarks.
+- [ ] T007 [US1] Re-run `bun run benchmark` in `language-server/` and capture output to `specs/002-improve-search-time/benchmark-results-us1.txt`; compare against `benchmark-baseline.txt` and confirm ≥20% improvement on `Search 'Component'` and `Short query search 'FCC'` benchmarks.
 
 **Checkpoint**: After T007, User Story 1 is independently verifiable. Symbol search benchmarks show measurable improvement. All existing `bun test` tests in `language-server/` still pass.
 

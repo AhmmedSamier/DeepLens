@@ -19,7 +19,7 @@
 
 **Findings from code analysis:**
 
-1. **`performUnifiedSearch` hot loop** (`search-engine.ts`): The main search loop iterates over all items (or a scope-filtered subset) and computes bitflag screening, CamelHumps matching, and/or fuzzysort scoring per item. For EVERYTHING scope with 200k+ items, worst-case is a full linear sweep. CamelHumps query bitflags already allow O(1) pre-screening (`(queryBitflags & itemBitflags) !== queryBitflags → skip`), but this screening must fire before the more expensive fuzzysort call.
+1. **`performUnifiedSearch` hot loop** (`search-engine.ts`): The main search loop iterates over all items (or a scope-filtered subset) and computes bitflag screening and fuzzy scoring per item. For EVERYTHING scope with 200k+ items, worst-case is a full linear sweep. Query bitflags already allow O(1) pre-screening (`(queryBitflags & itemBitflags) !== queryBitflags → skip`), but this screening must fire before the more expensive fuzzysort call.
 2. **`scopedIndices` pre-filtering**: Already implemented. Scoped searches (TYPES, FILES, SYMBOLS…) only iterate scope-relevant items. EVERYTHING scope iterates all. **No structural change needed here** — the optimisation focus is on per-item cost reduction.
 3. **Fuzzysort threshold**: The current threshold allows many items that barely match. Tightening the threshold, or adding a maximum character-distance guard before calling fuzzysort, reduces the number of full fuzzy evaluations.
 4. **Score computation overhead**: `ITEM_TYPE_BOOSTS` multiply and `activityScore` callback are done per result. These can be deferred until the top-K heap is assembled.

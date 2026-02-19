@@ -4,7 +4,7 @@
   <p><b>High-performance "Search Everywhere" for Visual Studio 2022 & 2026</b></p>
 </div>
 
-DeepLens brings the ultimate "Search Everywhere" experience to Visual Studio. Powered by a high-performance standalone search engine, it provides instant, unified access to types, symbols, files, and API endpoints across your entire solution with lightning-fast fuzzy matching and CamelHumps support.
+DeepLens brings the ultimate "Search Everywhere" experience to Visual Studio. Powered by a high-performance standalone search engine, it provides instant, unified access to types, symbols, files, and API endpoints across your entire solution with lightning-fast fuzzy matching and activity-based ranking.
 
 ## 🌟 Key Features
 
@@ -24,7 +24,6 @@ DeepLens is now a first-class citizen in Visual Studio, living in its own Tool W
 
 ### ⚡ **Smart Matching Engine**
 - **Fuzzy Search**: Type partial matches like `usebas` to find `useCallback`.
-- **CamelHumps Support**: Type `UB` to find `UserButton` or `UserBinding`.
 - **High Performance**: Designed to handle massive solutions with tens of thousands of files in milliseconds.
 
 ### 🎯 **Premium UI/UX**

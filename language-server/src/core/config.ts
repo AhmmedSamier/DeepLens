@@ -27,7 +27,6 @@ export class Config {
             maxResults: 20,
 
             enableTextSearch: true,
-            enableCamelHumps: true,
             searchConcurrency: 60,
             respectGitignore: true,
             'activity.enabled': true,
@@ -169,13 +168,6 @@ export class Config {
      */
     isTextSearchEnabled(): boolean {
         return this.get('enableTextSearch', true);
-    }
-
-    /**
-     * Check if CamelHumps matching is enabled
-     */
-    isCamelHumpsEnabled(): boolean {
-        return this.get('enableCamelHumps', true);
     }
 
     /**

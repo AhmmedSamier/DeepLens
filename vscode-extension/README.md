@@ -4,7 +4,7 @@
   <p><b>High-performance "Search Everywhere" for VS Code and Visual Studio 2026</b></p>
 </div>
 
-DeepLens provides a powerful, unified search experience across your entire workspace, powered by a high-performance standalone search engine. Quickly find types, symbols, files, and even API endpoints with lightning-fast fuzzy matching, CamelHumps support, and activity-based ranking.
+DeepLens provides a powerful, unified search experience across your entire workspace, powered by a high-performance standalone search engine. Quickly find types, symbols, files, and even API endpoints with lightning-fast fuzzy matching and activity-based ranking.
 
 ## 🌟 Key Features
 
@@ -42,7 +42,6 @@ DeepLens automatically extracts and indexes API endpoints (like `GET /api/users`
 ### ⚡ **Smart Matching Engine**
 
 - **Fuzzy Search**: Type partial matches like `usebas` to find `useCallback`.
-- **CamelHumps**: Type `RFC` to find `React.FC` or `RequestForComment`.
 - **Ranking**: Results are ranked based on match quality, item type, and your personal usage patterns.
 
 ### 🎯 **Premium UI/UX**
@@ -104,9 +103,6 @@ Customize DeepLens to fit your workflow in VS Code Settings:
 
     // Number of files to scan in parallel during text search
     "deeplens.searchConcurrency": 60,
-
-    // Enable CamelHumps matching (e.g., 'RFC' -> 'React.FC')
-    "deeplens.enableCamelHumps": true,
 
     // Respect .gitignore files when indexing (highly recommended)
     "deeplens.respectGitignore": true,

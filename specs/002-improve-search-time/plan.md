@@ -145,7 +145,7 @@ vscode-extension/
 **Decision C — Audit bitflag pre-screening order**:
 - Confirm `(queryBitflags & itemBitflags) !== queryBitflags` gates occur *before* the fuzzysort call in the hot loop. If the current order already does this, no change is needed. Document the finding.
 
-**Benchmark gate**: After Phase 3, re-run `bun run benchmark`. The `Search 'Component' (Large result set)` and `CamelHumps Search 'FCC'` benchmarks must show ≥20% improvement vs baseline. (The 50% SC-003 target is end-to-end; Phase 1 + 2 + 3 contributions are cumulative.)
+**Benchmark gate**: After Phase 3, re-run `bun run benchmark`. The `Search 'Component' (Large result set)` and `Short query search 'FCC'` benchmarks must show ≥20% improvement vs baseline. (The 50% SC-003 target is end-to-end; Phase 1 + 2 + 3 contributions are cumulative.)
 
 ---
 

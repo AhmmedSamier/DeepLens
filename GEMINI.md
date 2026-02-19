@@ -1,6 +1,6 @@
 # DeepLens
 
-DeepLens is a high-performance "Search Everywhere" tool for VS Code and Visual Studio, powered by a standalone language server. It provides unified navigation across types, symbols, files, and text with fuzzy matching, CamelHumps support, and activity-based ranking.
+DeepLens is a high-performance "Search Everywhere" tool for VS Code and Visual Studio, powered by a standalone language server. It provides unified navigation across types, symbols, files, and text with fuzzy matching and activity-based ranking.
 
 ## Project Structure
 
@@ -18,7 +18,7 @@ The repository is a monorepo containing:
 - **Runtime/Package Manager:** [Bun](https://bun.sh) (for TS/JS parts)
 - **Languages:** TypeScript (Core & VS Code), C# (Visual Studio)
 - **Parsing:** `web-tree-sitter` and various `tree-sitter-*` grammars.
-- **Search Engine:** Custom fuzzy matching + `fuzzysort`, `ripgrep` for text search, and CamelHumps matching.
+- **Search Engine:** Custom fuzzy matching + `fuzzysort`, `ripgrep` for text search.
 - **Protocol:** VS Code Language Server Protocol.
 - **Testing:** `bun test` (Server), `mocha` + `@vscode/test-electron` (VS Code).
 
