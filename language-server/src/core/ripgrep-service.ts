@@ -14,9 +14,15 @@ export interface RgMatch {
 
 export class RipgrepService {
     private readonly rgPath: string;
+    private ripgrepHealthy = true;
+    private onUnavailableCallback: (() => void) | null = null;
 
     constructor(extensionPath: string) {
         this.rgPath = this.findRgPath(extensionPath);
+    }
+
+    public setUnavailableCallback(cb: () => void): void {
+        this.onUnavailableCallback = cb;
     }
 
     private findRgPath(extensionPath: string): string {
@@ -49,6 +55,7 @@ export class RipgrepService {
                 }
             }
         }
+        this.onUnavailableCallback?.();
         return '';
     }
 
@@ -215,6 +222,10 @@ export class RipgrepService {
             });
 
             child.on('error', (err) => {
+                if (this.ripgrepHealthy) {
+                    this.ripgrepHealthy = false;
+                    this.onUnavailableCallback?.();
+                }
                 if (cancellationListener) cancellationListener.dispose();
                 reject(err);
             });

@@ -32,6 +32,22 @@ describe('SearchEngine', () => {
         expect(results[0].item.name).toBe('EmployeeService.cs');
     });
 
+    it('should find EmployeeService when typing empserv (US1 regression)', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
+        ];
+        engine.setItems(items);
+
+        const results = await engine.search({
+            query: 'empserv',
+            scope: SearchScope.EVERYTHING,
+        });
+
+        expect(results.length).toBeGreaterThan(0);
+        expect(results[0].item.name).toBe('EmployeeService.cs');
+    });
+
     it('should handle filename:line pattern', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [

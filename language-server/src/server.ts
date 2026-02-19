@@ -23,7 +23,14 @@ import { RecentProvider } from './core/providers/recent-provider';
 import { SymbolProvider } from './core/providers/symbol-provider';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
-import { IndexStats, SearchItemType, SearchOptions, SearchResult, SearchScope } from './core/types';
+import {
+    IndexStats,
+    RipgrepUnavailableNotification,
+    SearchItemType,
+    SearchOptions,
+    SearchResult,
+    SearchScope,
+} from './core/types';
 import { CancellationError, WorkspaceIndexer } from './core/workspace-indexer';
 import { LspIndexerEnvironment } from './indexer-client';
 
@@ -205,6 +212,10 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     searchEngine.setConfig(config);
     searchEngine.setExtensionPath(extensionPath);
+    // T011: Wire ripgrep unavailable notification
+    searchEngine.ripgrep?.setUnavailableCallback(() => {
+        connection.sendNotification(RipgrepUnavailableNotification, {});
+    });
     searchEngine.setLogger({
         log: (msg) => connection.console.log(msg),
         error: (msg) => connection.console.error(msg),

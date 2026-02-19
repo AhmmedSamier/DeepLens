@@ -1,4 +1,4 @@
-import { CancellationToken } from 'vscode-languageserver';
+import { CancellationToken, NotificationType } from 'vscode-languageserver-protocol';
 
 /**
  * Core type definitions for the search engine
@@ -112,6 +112,7 @@ export interface SearchContext {
     maxResults: number;
     enableCamelHumps: boolean;
     isPotentialUrl: boolean;
+    queryLower: string;
 }
 
 /**
@@ -147,3 +148,15 @@ export interface IndexStats {
     /** Size of the cache on disk in bytes */
     cacheSize: number;
 }
+
+/**
+ * Ripgrep unavailability notification params
+ */
+export interface RipgrepUnavailableParams {}
+
+/**
+ * Ripgrep unavailability notification
+ */
+export const RipgrepUnavailableNotification = new NotificationType<RipgrepUnavailableParams>(
+    'deeplens/ripgrepUnavailable',
+);
