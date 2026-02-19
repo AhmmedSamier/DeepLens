@@ -12,6 +12,7 @@ import {
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
+import { formatKeybinding } from './utils/keybinding-utils';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -766,9 +767,13 @@ export class SearchProvider {
     private createCommandSuggestion(cmd: SlashCommand, score: number, isRecent: boolean = false): SearchResult {
         const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
         const aliasText = this.formatAliasText(cmd);
-        const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
         const exampleText = cmd.example ? ` • Try: ${cmd.example}` : '';
-        const description = `${cmd.description}${aliasText}${shortcutText}${exampleText}`;
+        const description = `${cmd.description}${aliasText}${exampleText}`;
+
+        // Add shortcut to category label for cleaner UI
+        const categoryLabel = this.getCategoryLabel(cmd.category);
+        const shortcut = cmd.keyboardShortcut ? formatKeybinding(cmd.keyboardShortcut) : '';
+        const containerName = shortcut ? `${categoryLabel}  ${shortcut}` : categoryLabel;
 
         return {
             item: {
@@ -777,7 +782,7 @@ export class SearchProvider {
                 type: SearchItemType.COMMAND,
                 filePath: '',
                 detail: isRecent ? `↺ Recent • ${description}` : description,
-                containerName: this.getCategoryLabel(cmd.category),
+                containerName: containerName,
             },
             score: score,
             scope: SearchScope.COMMANDS,
