@@ -527,7 +527,7 @@ export class SearchProvider {
 
             // Add remove button to history items
             const removeButton = {
-                iconPath: new vscode.ThemeIcon('close'),
+                iconPath: new vscode.ThemeIcon('trash'),
                 tooltip: this.TOOLTIP_REMOVE_HISTORY,
             };
 
