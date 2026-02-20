@@ -16,6 +16,7 @@ export interface RoutePattern {
     // Optimization: Pre-calculated boolean array to avoid repeated string checks (startsWith/endsWith) in the hot loop
     isParameter: boolean[];
     method?: string;
+    hasCatchAll?: boolean;
 }
 
 /**
@@ -74,8 +75,8 @@ export class RouteMatcher {
      */
     static scoreMatchPattern(pattern: RoutePattern, concretePath: string | PreparedPath): number {
         let cleanPath: string;
-        let pathSegments: string[] | undefined;
-        let pathSegmentsLower: string[] | undefined;
+        let pathSegments: string[];
+        let pathSegmentsLower: string[];
 
         if (typeof concretePath === 'string') {
             const prepared = this.prepare(concretePath);
@@ -92,12 +93,16 @@ export class RouteMatcher {
 
         try {
             // 1. Try exact match first (Fastest)
-            if (pattern.regex.test(cleanPath)) {
-                let score = 2;
-                if (!pathSegments) {
-                    pathSegments = cleanPath.split('/');
+            // Optimization: Skip expensive regex if length mismatch and no catch-all
+            let matchesRegex = false;
+            if (pattern.hasCatchAll || pathSegments.length === pattern.templateSegments.length) {
+                if (pattern.regex.test(cleanPath)) {
+                    matchesRegex = true;
                 }
+            }
 
+            if (matchesRegex) {
+                let score = 2;
                 const count = Math.min(pathSegments.length, pattern.templateSegments.length);
                 for (let i = 0; i < count; i++) {
                     if (!pattern.isParameter[i]) {
@@ -108,13 +113,6 @@ export class RouteMatcher {
             }
 
             // 2. Try segment-based suffix matching
-            if (!pathSegments) {
-                pathSegments = cleanPath.split('/');
-            }
-            if (!pathSegmentsLower) {
-                pathSegmentsLower = pathSegments.map((s) => s.toLowerCase());
-            }
-
             return this.calculateSegmentsScore(
                 pattern.templateSegments,
                 pattern.templateSegmentsLower,
@@ -172,6 +170,7 @@ export class RouteMatcher {
         let pattern = cleanTemplate;
 
         // Replace {*slug} (catch-all) with (.*)
+        const hasCatchAll = pattern.includes('{*');
         pattern = pattern.replaceAll(/\{(\*\w+)\}/g, '___CATCHALL___');
 
         // Replace {id}, {id:int}, {id?} etc with ([^\/]+)
@@ -190,7 +189,7 @@ export class RouteMatcher {
             const templateSegmentsLower = templateSegments.map((s) => s.toLowerCase());
             const isParameter = templateSegments.map((s) => s.startsWith('{') && s.endsWith('}'));
 
-            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower, isParameter, method };
+            cached = { regex: exactRegex, cleanTemplate, templateSegments, templateSegmentsLower, isParameter, method, hasCatchAll };
 
             if (this.cache.size >= this.CACHE_LIMIT) {
                 // Simple LRU-like: remove the first inserted item
@@ -204,6 +203,7 @@ export class RouteMatcher {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private static calculateSegmentsScore(
         tSegs: string[],
         tSegsLower: string[],
@@ -229,43 +229,31 @@ export class RouteMatcher {
             const isParam = isParams[index];
             const isLast = i === 1;
 
-            const { delta, isMatch } = this.calculateSingleSegmentScore(tSegLower, pSeg, pSegLower, isParam, isLast);
+            // Inlined segment matching logic to avoid object allocation
+            let delta = 0;
+            let isMatch = false;
+
+            if (isParam) {
+                if (pSeg) {
+                    isMatch = true;
+                }
+            } else if (pSegLower) {
+                if (isLast && tSegLower.startsWith(pSegLower)) {
+                    const isExactMatch = tSegLower === pSegLower;
+                    delta = isExactMatch ? 0.1 : 0.05;
+                    isMatch = true;
+                } else if (tSegLower === pSegLower) {
+                    delta = 0.1;
+                    isMatch = true;
+                }
+            }
+
             if (!isMatch) {
                 return 0;
             }
             score += delta;
         }
         return score;
-    }
-
-    private static calculateSingleSegmentScore(
-        templateSegmentLower: string,
-        pathSegment: string,
-        pathSegmentLower: string,
-        isParam: boolean,
-        isLast: boolean,
-    ): { delta: number; isMatch: boolean } {
-        if (isParam) {
-            if (!pathSegment) {
-                return { delta: 0, isMatch: false };
-            }
-            return { delta: 0, isMatch: true };
-        }
-
-        if (!pathSegmentLower) {
-            return { delta: 0, isMatch: false };
-        }
-
-        if (isLast && templateSegmentLower.startsWith(pathSegmentLower)) {
-            const isExactMatch = templateSegmentLower === pathSegmentLower;
-            return { delta: isExactMatch ? 0.1 : 0.05, isMatch: true };
-        }
-
-        if (templateSegmentLower === pathSegmentLower) {
-            return { delta: 0.1, isMatch: true };
-        }
-
-        return { delta: 0, isMatch: false };
     }
 
     /**
