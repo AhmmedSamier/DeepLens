@@ -9,3 +9,7 @@
 ## 2025-02-15 - Inline examples for slash commands
 **Learning:** Slash commands can be abstract. Showing a concrete example inline (e.g., "Try: /t User") significantly reduces the cognitive load of remembering syntax.
 **Action:** Check for unused metadata in command definitions (like 'example' or 'usage') and expose it in the UI description/detail fields.
+
+## 2025-02-16 - Command visibility in welcome screens
+**Learning:** "Welcome" or "Help" items in a QuickPick often hide critical information (like keyboard shortcuts) in `detail` text which is visually secondary. Users might miss the shortcut if it's buried in a long sentence.
+**Action:** Move the primary interaction trigger (the command itself, e.g. `/all`) to the `description` field for immediate visibility and scanability, while keeping the explanation in `detail`.
