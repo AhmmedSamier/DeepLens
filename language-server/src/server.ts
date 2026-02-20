@@ -118,18 +118,14 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     // Try to create storage directory with error handling
     try {
-        if (!fs.existsSync(storagePath)) {
-            fs.mkdirSync(storagePath, { recursive: true });
-        }
+        await fs.promises.mkdir(storagePath, { recursive: true });
     } catch (error) {
         connection.console.error(`Failed to create storage directory at ${storagePath}: ${error}`);
 
         // Fall back to temp directory
         const tempPath = path.join(os.tmpdir(), 'deeplens-' + process.pid);
         try {
-            if (!fs.existsSync(tempPath)) {
-                fs.mkdirSync(tempPath, { recursive: true });
-            }
+            await fs.promises.mkdir(tempPath, { recursive: true });
             storagePath = tempPath;
             connection.console.log(`Using temporary storage at ${tempPath}`);
         } catch (tempError) {
