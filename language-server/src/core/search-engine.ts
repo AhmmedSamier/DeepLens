@@ -96,32 +96,46 @@ const ID_TO_SCOPE = [
     SearchScope.ENDPOINTS,
 ];
 
-// Precompute ASCII bitflags table for O(1) lookup
-// Maps char code (0-127) to a bitmask.
-const CHAR_TO_BITFLAG = new Uint32Array(128);
+// Precompute bitflags table for O(1) lookup for the Basic Multilingual Plane (BMP)
+// Maps char code (0-65535) to a bitmask.
+const CHAR_TO_BITFLAG = new Uint32Array(65536);
+let areBitflagsInitialized = false;
 
-// Default to 'other ascii' (bit 30) for all entries initially
-for (let i = 0; i < 128; i++) {
-    CHAR_TO_BITFLAG[i] = 1 << 30;
+function ensureBitflagsInitialized(): void {
+    if (areBitflagsInitialized) return;
+
+    // Helper to calculate bitflag for a single character
+    const computeCharBitflag = (char: string): number => {
+        let bitflags = 0;
+        const normalized = char
+            .normalize('NFD')
+            .replaceAll(/[\u0300-\u036f]/g, '')
+            .toLowerCase();
+
+        for (let i = 0; i < normalized.length; i++) {
+            const code = normalized.codePointAt(i);
+            if (code === undefined || code === 32) continue; // Space ignored
+
+            let bit = 0;
+            if (code >= 97 && code <= 122) {
+                bit = code - 97; // a-z
+            } else if (code >= 48 && code <= 57) {
+                bit = 26; // 0-9
+            } else if (code <= 127) {
+                bit = 30; // other ascii
+            } else {
+                bit = 31; // other utf8
+            }
+            bitflags |= 1 << bit;
+        }
+        return bitflags;
+    };
+
+    for (let i = 0; i < 65536; i++) {
+        CHAR_TO_BITFLAG[i] = computeCharBitflag(String.fromCharCode(i));
+    }
+    areBitflagsInitialized = true;
 }
-
-// 0-9 -> bit 26
-for (let i = 48; i <= 57; i++) {
-    CHAR_TO_BITFLAG[i] = 1 << 26;
-}
-
-// A-Z -> 0-25 (Normalized to a-z, so 'A' maps to bit 0)
-for (let i = 65; i <= 90; i++) {
-    CHAR_TO_BITFLAG[i] = 1 << (i - 65);
-}
-
-// a-z -> 0-25 (Maps to bit 0-25)
-for (let i = 97; i <= 122; i++) {
-    CHAR_TO_BITFLAG[i] = 1 << (i - 97);
-}
-
-// Space (32) -> 0 (ignored)
-CHAR_TO_BITFLAG[32] = 0;
 
 export class SearchEngine implements ISearchProvider {
     id = 'engine';
@@ -1763,44 +1777,15 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private calculateBitflags(str: string): number {
-        // Optimization: Single pass for ASCII strings using lookup table
+        ensureBitflagsInitialized();
+
+        // Optimization: Single pass using lookup table for BMP characters
         const len = str.length;
         let bitflags = 0;
 
         for (let i = 0; i < len; i++) {
             const code = str.charCodeAt(i);
-
-            // Check for non-ASCII
-            if (code > 127) {
-                return this.calculateBitflagsSlow(str);
-            }
-
             bitflags |= CHAR_TO_BITFLAG[code];
-        }
-        return bitflags;
-    }
-
-    private calculateBitflagsSlow(str: string): number {
-        let bitflags = 0;
-        const normalized = str
-            .normalize('NFD')
-            .replaceAll(/[\u0300-\u036f]/g, '')
-            .toLowerCase();
-        for (let i = 0; i < normalized.length; i++) {
-            const code = normalized.codePointAt(i);
-            if (code === 32) continue; // Space ignored
-
-            let bit = 0;
-            if (code >= 97 && code <= 122) {
-                bit = code - 97; // a-z
-            } else if (code >= 48 && code <= 57) {
-                bit = 26; // 0-9
-            } else if (code <= 127) {
-                bit = 30; // other ascii
-            } else {
-                bit = 31; // other utf8
-            }
-            bitflags |= 1 << bit;
         }
         return bitflags;
     }
