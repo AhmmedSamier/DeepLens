@@ -35,6 +35,7 @@ export class TreeSitterParser {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private ParserClass: any = undefined;
     private lib: TreeSitterLib | undefined = undefined;
+    private parserCache: Map<string, unknown> = new Map();
     private readonly extensionPath: string = '';
     private readonly logger: Logger | undefined = undefined;
 
@@ -154,8 +155,7 @@ export class TreeSitterParser {
         try {
             this.logDebugStart(langId, filePath);
 
-            const parser = new this.ParserClass();
-            parser.setLanguage(lang);
+            const parser = this.getOrCreateParser(langId, lang);
             const content = await fs.promises.readFile(filePath, 'utf8');
             const tree = parser.parse(content);
             const items: SearchableItem[] = [];
@@ -170,6 +170,27 @@ export class TreeSitterParser {
             this.log(`Error tree-sitter parsing ${filePath}: ${error}`);
             return [];
         }
+    }
+
+    private getOrCreateParser(
+        langId: string,
+        lang: unknown,
+    ): { setLanguage: (lang: unknown) => void; parse: (content: string) => { rootNode: unknown; delete: () => void } } {
+        const cached = this.parserCache.get(langId);
+        if (cached) {
+            return cached as {
+                setLanguage: (lang: unknown) => void;
+                parse: (content: string) => { rootNode: unknown; delete: () => void };
+            };
+        }
+
+        const parser = new this.ParserClass() as {
+            setLanguage: (language: unknown) => void;
+            parse: (content: string) => { rootNode: unknown; delete: () => void };
+        };
+        parser.setLanguage(lang);
+        this.parserCache.set(langId, parser);
+        return parser;
     }
 
     private async ensureLanguageLoaded(langId: string): Promise<unknown> {

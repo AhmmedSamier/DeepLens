@@ -18,7 +18,7 @@ const workerLogger: Logger = {
 const parser = new TreeSitterParser(extensionPath, workerLogger);
 let isInitialized = false;
 
-parentPort.on('message', async (message: { filePaths: string[] }) => {
+parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: number }) => {
     try {
         if (!isInitialized) {
             await parser.init();
@@ -26,7 +26,7 @@ parentPort.on('message', async (message: { filePaths: string[] }) => {
         }
 
         const { filePaths } = message;
-        const BATCH_SIZE = 10; // Sub-batching within the worker for more frequent updates
+        const BATCH_SIZE = message.chunkSize ?? 25;
 
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const chunk = filePaths.slice(i, i + BATCH_SIZE);
