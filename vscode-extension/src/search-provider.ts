@@ -931,6 +931,11 @@ export class SearchProvider {
         setBurstTimeout: (t: NodeJS.Timeout) => void,
         setFuzzyTimeout: (t: NodeJS.Timeout) => void,
     ): Promise<void> {
+        // Cancel in-flight deep searches as soon as input changes.
+        // This ensures stale requests are terminated immediately instead of waiting
+        // for the next debounced fuzzy phase.
+        this.cancelSearch();
+
         // Parse scope from query
         const { scope, text } = this.parseQuery(query);
 
