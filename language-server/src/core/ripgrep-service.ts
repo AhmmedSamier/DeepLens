@@ -109,16 +109,44 @@ export class RipgrepService {
 
         const allResults: RgMatch[] = [];
 
-        // Process batches sequentially to respect maxResults
-        for (const batch of batches) {
-            if (allResults.length >= maxResults || token?.isCancellationRequested) break;
+        const maxWorkers = Math.min(4, Math.max(2, batches.length >= 4 ? 4 : 2));
+        let nextBatch = 0;
 
-            try {
-                const batchResults = await this.runRgBatch(baseArgs, batch, maxResults - allResults.length, token);
-                allResults.push(...batchResults);
-            } catch {
-                // Ignore batch failure
+        const runWorker = async (): Promise<void> => {
+            while (nextBatch < batches.length) {
+                if (allResults.length >= maxResults || token?.isCancellationRequested) {
+                    return;
+                }
+
+                const batchIndex = nextBatch;
+                nextBatch++;
+
+                const remaining = maxResults - allResults.length;
+                if (remaining <= 0) {
+                    return;
+                }
+
+                try {
+                    const batchResults = await this.runRgBatch(baseArgs, batches[batchIndex], remaining, token);
+                    if (batchResults.length > 0) {
+                        allResults.push(...batchResults);
+                    }
+                } catch {
+                    // Ignore batch failure
+                }
             }
+        };
+
+        const workers: Promise<void>[] = [];
+        const workerCount = Math.min(maxWorkers, batches.length);
+        for (let i = 0; i < workerCount; i++) {
+            workers.push(runWorker());
+        }
+
+        await Promise.all(workers);
+
+        if (allResults.length > maxResults) {
+            return allResults.slice(0, maxResults);
         }
 
         return allResults;
