@@ -1496,40 +1496,56 @@ export class SearchProvider {
      * Get welcome items for empty state
      */
     private getWelcomeItems(): SearchResultItem[] {
-        const items = [
-            ['/all', 'Search Everything', 'Type to search classes, files, symbols, and more', SearchScope.EVERYTHING],
-            ['/t', 'Search Classes', 'Find classes, interfaces, and enums (/t)', SearchScope.TYPES],
-            ['/f', 'Search Files', 'Find files by name or path (/f)', SearchScope.FILES],
-            ['/s', 'Search Symbols', 'Find methods, functions, and variables (/s)', SearchScope.SYMBOLS],
-            ['/txt', 'Search Text', 'Find text content across all files (/txt)', SearchScope.TEXT],
-        ] as const;
+        const welcomeCommands = ['/all', '/t', '/f', '/s', '/txt'];
+        const items: SearchResultItem[] = [];
 
-        const iconMap = new Map<SearchScope, string>([
-            [SearchScope.EVERYTHING, 'search'],
-            [SearchScope.TYPES, this.ICON_CLASS],
-            [SearchScope.FILES, 'file'],
-            [SearchScope.SYMBOLS, 'symbol-method'],
-            [SearchScope.TEXT, 'whole-word'],
-        ]);
+        for (const cmdId of welcomeCommands) {
+            const cmd = this.slashCommandService.getCommand(cmdId);
+            if (!cmd) {
+                continue;
+            }
 
-        return items.map(([cmd, name, detail, scope]) => {
+            const shortcut = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
+            // Palette: Use dynamic description with shortcut for better discoverability
+            const detail = `${cmd.description}${shortcut}`;
+            // Palette: Use "Name (/cmd)" format for label
+            const label = `${this.getWelcomeLabel(cmd)} (${cmd.name})`;
+
             const item = this.resultToQuickPickItem({
                 item: {
-                    id: `slash-cmd:${cmd}`,
-                    name,
+                    id: `slash-cmd:${cmd.id}`,
+                    name: label,
                     type: SearchItemType.COMMAND,
                     filePath: '',
-                    detail,
+                    detail: detail,
                 },
                 score: 1,
-                scope,
+                scope: cmd.scope,
             });
 
-            const icon = iconMap.get(scope) || 'lightbulb';
-            item.iconPath = new vscode.ThemeIcon(icon, new vscode.ThemeColor('textLink.foreground'));
+            item.iconPath = new vscode.ThemeIcon(cmd.icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
-            return item;
-        });
+            items.push(item);
+        }
+
+        return items;
+    }
+
+    private getWelcomeLabel(cmd: SlashCommand): string {
+        switch (cmd.scope) {
+            case SearchScope.EVERYTHING:
+                return 'Search Everything';
+            case SearchScope.TYPES:
+                return 'Search Classes';
+            case SearchScope.FILES:
+                return 'Search Files';
+            case SearchScope.SYMBOLS:
+                return 'Search Symbols';
+            case SearchScope.TEXT:
+                return 'Search Text';
+            default:
+                return cmd.description;
+        }
     }
 
     /**
