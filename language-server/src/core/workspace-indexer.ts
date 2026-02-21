@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
+import { pLimit } from './p-limit';
 import { SearchableItem, SearchItemType } from './types';
 
 export class CancellationError extends Error {
@@ -1314,40 +1315,4 @@ export class WorkspaceIndexer {
         }
         this.workers = [];
     }
-}
-
-/**
- * Simple concurrency limiter for Promise execution
- */
-function pLimit(concurrency: number) {
-    const queue: (() => void)[] = [];
-    let activeCount = 0;
-
-    const next = () => {
-        activeCount--;
-        if (queue.length > 0) {
-            queue.shift()();
-        }
-    };
-
-    const run = async <T>(fn: () => Promise<T>, resolve: (val: T) => void, reject: (err: unknown) => void) => {
-        activeCount++;
-        const result = (async () => fn())();
-        try {
-            const res = await result;
-            resolve(res);
-        } catch (err) {
-            reject(err);
-        }
-        next();
-    };
-
-    const enqueue = <T>(fn: () => Promise<T>, resolve: (val: T) => void, reject: (err: unknown) => void) => {
-queue.push(() => run(fn, resolve, reject));
-        if (activeCount < concurrency && queue.length > 0) {
-            queue.shift()();
-        }
-    };
-
-    return <T>(fn: () => Promise<T>) => new Promise<T>((resolve, reject) => enqueue(fn, resolve, reject));
 }
