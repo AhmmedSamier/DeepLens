@@ -3,6 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 import { SymbolProvider } from './providers/symbol-provider';
 import { SearchEngine } from './search-engine';
+import { ISearchProvider } from './types';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
 describe('SearchEngine', () => {
@@ -246,5 +247,60 @@ describe('SearchEngine', () => {
 
         expect(results.length).toBe(1);
         expect(results[0].item.name).toBe('File2.ts');
+    });
+
+    it('should cache modified scope indices for a short TTL', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+
+        let callCount = 0;
+        const mockGitProvider = {
+            getModifiedFiles: async () => {
+                callCount++;
+                const filePath = path.normalize('/src/File2.ts');
+                return new Set([process.platform === 'win32' ? filePath.toLowerCase() : filePath]);
+            },
+        };
+        (engine as any).gitProvider = mockGitProvider;
+
+        await engine.search({ query: 'File', scope: SearchScope.MODIFIED });
+        await engine.search({ query: 'File', scope: SearchScope.MODIFIED });
+
+        expect(callCount).toBe(1);
+    });
+
+    it('should execute providers concurrently', async () => {
+        const engine = new SearchEngine();
+        const fileItem = createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts');
+        engine.setItems([fileItem]);
+
+        const createDelayedProvider = (id: string): ISearchProvider => ({
+            id,
+            priority: 1,
+            search: async () => {
+                await new Promise((resolve) => setTimeout(resolve, 40));
+                return [
+                    {
+                        item: fileItem,
+                        score: id === 'p1' ? 1 : 0.9,
+                        scope: SearchScope.FILES,
+                    },
+                ];
+            },
+        });
+
+        engine.registerProvider(createDelayedProvider('p1'));
+        engine.registerProvider(createDelayedProvider('p2'));
+
+        const start = Date.now();
+        const results = await engine.search({ query: 'File', scope: SearchScope.EVERYTHING, maxResults: 10 });
+        const durationMs = Date.now() - start;
+
+        expect(results.length).toBeGreaterThanOrEqual(2);
+        expect(durationMs).toBeLessThan(75);
     });
 });
