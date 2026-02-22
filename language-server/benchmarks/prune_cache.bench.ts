@@ -21,15 +21,18 @@ export async function runPruneCacheBenchmarks() {
 
     await engine.setItems(items);
 
-    await benchmark("Remove 1000 items (Incremental Pruning)", async () => {
-        // We need to re-add some items to remove them again if we want to run multiple iterations
-        // But the benchmark utility runs it N times.
-        // For pruning, maybe just one big run is better to see the cost.
-        for (let i = 0; i < 1000; i++) {
-             engine.removeItemsByFile(`/src/FileNumber${i}.ts`);
-        }
-    }, 1);
+    const filesToRemove: string[] = [];
+    for (let i = 0; i < 1000; i++) {
+        filesToRemove.push(`/src/FileNumber${i}.ts`);
+    }
+
+    await benchmark(
+        'Remove 1000 items (Incremental Pruning)',
+        async () => {
+            engine.removeItemsByFiles(filesToRemove);
+        },
+        1,
+    );
 
     console.log('');
 }
-

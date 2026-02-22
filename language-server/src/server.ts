@@ -94,6 +94,8 @@ let isInitialized = false;
 let isShuttingDown = false;
 let fileLogger: (msg: string) => void = () => {};
 let parentProcessMonitor: NodeJS.Timeout | null = null;
+let pendingRemovedFilePaths: Set<string> = new Set();
+let removeBatchTimer: NodeJS.Timeout | null = null;
 
 connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
@@ -223,7 +225,6 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     documents.listen(connection);
 
-    // Wire up search engine to indexer
     workspaceIndexer.onItemsAdded(async (items) => {
         try {
             await searchEngine.addItems(items);
@@ -232,7 +233,21 @@ connection.onInitialize(async (params: InitializeParams) => {
         }
     });
 
-    workspaceIndexer.onItemsRemoved((filePath) => searchEngine.removeItemsByFile(filePath));
+    workspaceIndexer.onItemsRemoved((filePath) => {
+        pendingRemovedFilePaths.add(filePath);
+        if (!removeBatchTimer) {
+            removeBatchTimer = setTimeout(() => {
+                if (pendingRemovedFilePaths.size === 0) {
+                    removeBatchTimer = null;
+                    return;
+                }
+                const files = Array.from(pendingRemovedFilePaths);
+                pendingRemovedFilePaths = new Set();
+                removeBatchTimer = null;
+                searchEngine.removeItemsByFiles(files);
+            }, 10);
+        }
+    });
 
     if (config.isActivityTrackingEnabled()) {
         searchEngine.setActivityCallback(

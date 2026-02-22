@@ -6,6 +6,14 @@
 
 DeepLens provides a powerful, unified search experience across your entire workspace, powered by a high-performance standalone search engine. Quickly find types, symbols, files, and even API endpoints with lightning-fast fuzzy matching and activity-based ranking.
 
+## 🧱 Repository Overview
+
+This repository contains all core DeepLens components:
+
+- **VS Code Extension** (`vscode-extension/`): Main UI, commands, and client-side integration.
+- **Language Server** (`language-server/`): High-performance standalone search and indexing engine, shared across clients.
+- **Visual Studio Extension** (`visual-studio-extension/`): Visual Studio 2026 integration that communicates with the same language server.
+
 ## 🌟 Key Features
 
 ### 🔍 **Search Everywhere**

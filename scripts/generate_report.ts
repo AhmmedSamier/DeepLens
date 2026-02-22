@@ -10,6 +10,12 @@ function formatDuration(ms: number): string {
     return `${(ms / 1000).toFixed(2)}s`;
 }
 
+function formatMb(value: unknown): string {
+    if (typeof value === 'number') return value.toFixed(2);
+    if (typeof value === 'string') return value;
+    return '';
+}
+
 function generateTable(title: string, data: any[]): string {
     if (!data || data.length === 0) return `\n### ${title}\n\nNo data available.\n`;
 
@@ -19,6 +25,35 @@ function generateTable(title: string, data: any[]): string {
 
     for (const item of data) {
         markdown += `| ${item.name} | ${formatDuration(item.avgMs)} | ${formatDuration(item.totalMs)} |\n`;
+    }
+
+    return markdown;
+}
+
+function generateMemoryTable(title: string, data: any[]): string {
+    if (!data || data.length === 0) return `\n### ${title} (Memory)\n\nNo data available.\n`;
+
+    let markdown = `\n### ${title} (Memory)\n\n`;
+    markdown += `| Stage | RSS (MB) | Heap Total (MB) | Heap Used (MB) | External (MB) | Extra |\n`;
+    markdown += `| :--- | ---: | ---: | ---: | ---: | :--- |\n`;
+
+    for (const item of data) {
+        const memory = item.memory || {};
+        const extra = item.extra || {};
+
+        const rss = formatMb(memory.rss ?? memory.rssMb ?? memory.rssMB);
+        const heapTotal = formatMb(memory.heapTotal ?? memory.heapTotalMb ?? memory.heapTotalMB);
+        const heapUsed = formatMb(memory.heapUsed ?? memory.heapUsedMb ?? memory.heapUsedMB);
+        const external = formatMb(memory.external ?? memory.externalMb ?? memory.externalMB);
+
+        let extraDisplay = '';
+        if (extra && typeof extra === 'object' && Object.keys(extra).length > 0) {
+            extraDisplay = Object.entries(extra)
+                .map(([key, value]) => `${key}: ${String(value)}`)
+                .join('<br>');
+        }
+
+        markdown += `| ${item.name} | ${rss} | ${heapTotal} | ${heapUsed} | ${external} | ${extraDisplay} |\n`;
     }
 
     return markdown;
@@ -55,6 +90,34 @@ async function main() {
         }
     } else {
         reportParts.push(`\n### VS Code Extension\n\nNo benchmark results found at ${vscodePath}.\n`);
+    }
+
+    const lsMemoryPath = path.join(benchmarkDir, 'language-server-memory.json');
+    if (fs.existsSync(lsMemoryPath)) {
+        try {
+            const lsMemoryData = JSON.parse(fs.readFileSync(lsMemoryPath, 'utf8'));
+            reportParts.push(generateMemoryTable('Language Server', lsMemoryData));
+        } catch (e) {
+            console.error(`Error reading ${lsMemoryPath}:`, e);
+            reportParts.push(`\n### Language Server (Memory)\n\nError reading data.\n`);
+        }
+    } else {
+        reportParts.push(`\n### Language Server (Memory)\n\nNo memory benchmark results found at ${lsMemoryPath}.\n`);
+    }
+
+    const vscodeMemoryPath = path.join(benchmarkDir, 'vscode-extension-memory.json');
+    if (fs.existsSync(vscodeMemoryPath)) {
+        try {
+            const vscodeMemoryData = JSON.parse(fs.readFileSync(vscodeMemoryPath, 'utf8'));
+            reportParts.push(generateMemoryTable('VS Code Extension', vscodeMemoryData));
+        } catch (e) {
+            console.error(`Error reading ${vscodeMemoryPath}:`, e);
+            reportParts.push(`\n### VS Code Extension (Memory)\n\nError reading data.\n`);
+        }
+    } else {
+        reportParts.push(
+            `\n### VS Code Extension (Memory)\n\nNo memory benchmark results found at ${vscodeMemoryPath}.\n`,
+        );
     }
 
     const finalReport = reportParts.join('');

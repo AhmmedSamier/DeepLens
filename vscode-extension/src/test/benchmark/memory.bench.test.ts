@@ -49,14 +49,17 @@ suite('Extension Memory Benchmark', () => {
     });
 
     suiteTeardown(() => {
-        const outputPath = process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, 'vscode-memory-benchmarks.json');
+        const baseOutput =
+            process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, 'vscode-memory-benchmarks.json');
+        const memoryOutputPath =
+            process.env.BENCHMARK_MEMORY_OUTPUT || path.join(path.dirname(baseOutput), 'vscode-extension-memory.json');
         try {
-            const dir = path.dirname(outputPath);
+            const dir = path.dirname(memoryOutputPath);
             if (!fs.existsSync(dir)) {
                 fs.mkdirSync(dir, { recursive: true });
             }
-            fs.writeFileSync(outputPath, JSON.stringify(results, null, 2));
-            console.log(`Memory Benchmark results saved to ${outputPath}`);
+            fs.writeFileSync(memoryOutputPath, JSON.stringify(results, null, 2));
+            console.log(`Memory Benchmark results saved to ${memoryOutputPath}`);
         } catch (error) {
             console.error(`Failed to save benchmark results: ${error}`);
         }
@@ -112,8 +115,8 @@ suite('Extension Memory Benchmark', () => {
         const afterMemory = getMemoryUsage();
         console.log('Memory After Typing:', afterMemory);
 
-        // Check streamingResults size (Internal check)
-        const streamingResultsSize = searchProvider.streamingResults.size;
+        // Check streamingResults size (internal check, if available in this version)
+        const streamingResultsSize = (searchProvider as any).streamingResults?.size ?? 0;
         console.log('Streaming Results Map Size:', streamingResultsSize);
 
         results.push({

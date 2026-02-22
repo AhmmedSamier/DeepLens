@@ -20,6 +20,7 @@ if ! bun run benchmark; then
 fi
 
 echo "Running Memory Benchmark..."
+export BENCHMARK_OUTPUT="$ROOT_DIR/benchmark-results/language-server-memory.json"
 if ! bun run benchmark:memory; then
     echo "Language Server Memory Benchmark failed!"
     EXIT_CODE=1
