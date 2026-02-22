@@ -67,6 +67,10 @@ export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchRe
     'deeplens/getRecentItems',
 );
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
+export const ClearHistoryRequest = new RequestType0<void, void>('deeplens/clearHistory');
+export const RemoveHistoryItemRequest = new RequestType<{ itemId: string }, void, void>(
+    'deeplens/removeHistoryItem',
+);
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
 export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
@@ -514,6 +518,16 @@ connection.onRequest(RecordActivityRequest, (params) => {
             activityTracker.recordAccess(item);
         }
     }
+});
+
+connection.onRequest(ClearHistoryRequest, async () => {
+    if (!isInitialized || !activityTracker) return;
+    await activityTracker.clearAll();
+});
+
+connection.onRequest(RemoveHistoryItemRequest, async (params) => {
+    if (!isInitialized || !activityTracker) return;
+    await activityTracker.removeItem(params.itemId);
 });
 
 connection.onRequest(RebuildIndexRequest, async (params) => {

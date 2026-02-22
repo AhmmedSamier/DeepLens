@@ -3,7 +3,7 @@
  * Optimized to avoid O(N^2) queue shifting for large task lists
  */
 export function pLimit(concurrency: number) {
-    const queue: ((() => void) | undefined)[] = [];
+    const queue: Array<(() => void) | null> = [];
     let head = 0;
     let activeCount = 0;
 
@@ -13,8 +13,7 @@ export function pLimit(concurrency: number) {
         // Process next item in queue
         if (head < queue.length) {
             const fn = queue[head];
-            // Clear reference to allow GC
-            queue[head] = undefined;
+            queue[head] = null;
             head++;
 
             // fn should be defined because we only increment head after reading

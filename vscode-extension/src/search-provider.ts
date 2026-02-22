@@ -28,8 +28,8 @@ export class SearchProvider {
     private lastQueryId = 0;
     private lastAutoRebuildTime = 0;
     private currentQuickPick: vscode.QuickPick<SearchResultItem> | null = null;
-    private readonly streamingResults: Map<number, SearchResult[]> = new Map();
     private searchCts: vscode.CancellationTokenSource | null = null;
+    private burstSearchCts: vscode.CancellationTokenSource | null = null;
     private lastTitle = '';
     private feedbackTimeout: NodeJS.Timeout | null = null;
 
@@ -119,7 +119,6 @@ export class SearchProvider {
         this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
 
-        // Set up activity tracking in search engine if enabled (only for local engines)
         if (activityTracker && config.isActivityTrackingEnabled() && 'setActivityCallback' in searchEngine) {
             (
                 searchEngine as unknown as { setActivityCallback: (cb: (id: string) => number, weight: number) => void }
@@ -127,28 +126,6 @@ export class SearchProvider {
                 (itemId: string) => activityTracker.getActivityScore(itemId),
                 config.getActivityWeight(),
             );
-        }
-
-        // Initialize streaming results listener
-        if (this.searchEngine instanceof DeepLensLspClient) {
-            this.searchEngine.onStreamResult.event((params) => {
-                const { requestId, result } = params;
-                if (requestId !== undefined && requestId === this.lastQueryId && this.currentQuickPick) {
-                    let results = this.streamingResults.get(requestId) || [];
-
-                    // Avoid duplicates (though the server should handle this)
-                    if (!results.some((r) => r.item.id === result.item.id)) {
-                        results.push(result);
-                        this.streamingResults.set(requestId, results);
-
-                        // Update UI incrementally if this is still the active search
-                        if (requestId === this.lastQueryId) {
-                            this.currentQuickPick.items = results.map((r) => this.resultToQuickPickItem(r));
-                            this.updateTitle(this.currentQuickPick, results.length);
-                        }
-                    }
-                }
-            });
         }
     }
 
@@ -375,6 +352,11 @@ export class SearchProvider {
             this.searchCts.dispose();
             this.searchCts = null;
         }
+        if (this.burstSearchCts) {
+            this.burstSearchCts.cancel();
+            this.burstSearchCts.dispose();
+            this.burstSearchCts = null;
+        }
     }
 
     /**
@@ -396,8 +378,8 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            // Use persisted scope
-            this.currentScope = this.userSelectedScope;
+            this.currentScope = SearchScope.EVERYTHING;
+            this.userSelectedScope = SearchScope.EVERYTHING;
         } else {
             this.currentScope = scope;
             this.userSelectedScope = scope;
@@ -499,12 +481,14 @@ export class SearchProvider {
      * Clear recent history
      */
     private async performClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
+        if (this.searchEngine instanceof DeepLensLspClient) {
+            await this.searchEngine.clearHistory();
+        }
         if (this.activityTracker) {
             await this.activityTracker.clearAll();
-            this.showFeedback('Recent history cleared');
-            // Refresh history (which should now be empty and show welcome items)
-            await this.showRecentHistory(quickPick);
         }
+        this.showFeedback('Recent history cleared');
+        await this.showRecentHistory(quickPick);
     }
 
     /**
@@ -560,6 +544,7 @@ export class SearchProvider {
         let burstTimeout: NodeJS.Timeout | undefined;
         let fuzzyTimeout: NodeJS.Timeout | undefined;
         let previewTimeout: NodeJS.Timeout | undefined;
+        let queryTimeout: NodeJS.Timeout | undefined;
         let accepted = false;
         let lastActiveItemId: string | null = null;
         let userHasNavigated = false;
@@ -569,6 +554,7 @@ export class SearchProvider {
             if (burstTimeout) clearTimeout(burstTimeout);
             if (fuzzyTimeout) clearTimeout(fuzzyTimeout);
             if (previewTimeout) clearTimeout(previewTimeout);
+            if (queryTimeout) clearTimeout(queryTimeout);
         };
 
         quickPick.onDidChangeValue((query) => {
@@ -576,12 +562,14 @@ export class SearchProvider {
             // Reset navigation tracking when query changes
             userHasNavigated = false;
             lastActiveItemId = null;
-            this.handleQueryChange(
-                quickPick,
-                query,
-                (bt) => (burstTimeout = bt),
-                (ft) => (fuzzyTimeout = ft),
-            );
+            queryTimeout = setTimeout(() => {
+                this.handleQueryChange(
+                    quickPick,
+                    query,
+                    (bt) => (burstTimeout = bt),
+                    (ft) => (fuzzyTimeout = ft),
+                );
+            }, 60);
         });
 
         quickPick.onDidChangeActive((items) => {
@@ -669,12 +657,9 @@ export class SearchProvider {
                 });
             }
 
-            // Clear decorations
             vscode.window.visibleTextEditors.forEach((editor) => {
                 editor.setDecorations(this.matchDecorationType, []);
             });
-
-            this.streamingResults.clear();
             this.currentQuickPick = null;
 
             quickPick.dispose();
@@ -737,11 +722,7 @@ export class SearchProvider {
         }
 
         if (tooltip === this.TOOLTIP_REMOVE_HISTORY) {
-            if (this.activityTracker) {
-                await this.activityTracker.removeItem(result.item.id);
-                this.showFeedback('Item removed from history');
-                await this.showRecentHistory(quickPick);
-            }
+            await this.handleRemoveHistoryItemClick(quickPick, result);
             return;
         }
 
@@ -762,6 +743,20 @@ export class SearchProvider {
         }
     }
 
+    private async handleRemoveHistoryItemClick(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        result: SearchResult,
+    ): Promise<void> {
+        if (this.searchEngine instanceof DeepLensLspClient) {
+            await this.searchEngine.removeHistoryItem(result.item.id);
+        }
+        if (this.activityTracker) {
+            await this.activityTracker.removeItem(result.item.id);
+        }
+        this.showFeedback('Item removed from history');
+        await this.showRecentHistory(quickPick);
+    }
+
     private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
         this.userSelectedScope = SearchScope.EVERYTHING;
         this.currentScope = SearchScope.EVERYTHING;
@@ -778,6 +773,7 @@ export class SearchProvider {
 
         quickPick.placeholder = this.getPlaceholder();
         this.updateFilterButtons(quickPick);
+        this.updateTitle(quickPick, quickPick.items.length);
 
         const { text } = this.parseQuery(quickPick.value);
         const queryId = ++this.lastQueryId;
@@ -931,92 +927,144 @@ export class SearchProvider {
         setBurstTimeout: (t: NodeJS.Timeout) => void,
         setFuzzyTimeout: (t: NodeJS.Timeout) => void,
     ): Promise<void> {
-        // Cancel in-flight deep searches as soon as input changes.
-        // This ensures stale requests are terminated immediately instead of waiting
-        // for the next debounced fuzzy phase.
         this.cancelSearch();
 
-        // Parse scope from query
         const { scope, text } = this.parseQuery(query);
 
-        // Auto-switch scope and remove prefix if a command is typed
-        if (scope) {
-            this.userSelectedScope = scope;
-            this.currentScope = scope;
-            this.updateFilterButtons(quickPick);
-            quickPick.placeholder = this.getPlaceholder();
-
-            // Remove the command prefix from the input box
-            // This will trigger onDidChangeValue again with the clean text
-            quickPick.value = text;
+        if (this.handleScopeChangeFromQuery(quickPick, scope, text)) {
             return;
         }
 
-        // Update current scope: use parsed scope if available, otherwise user selection
-        // In this path (scope undefined), we rely on userSelectedScope
-        const previousScope = this.currentScope;
-        this.currentScope = this.userSelectedScope;
+        this.ensureScopeFromUserSelection(quickPick);
 
-        // Update UI if scope changed
-        if (previousScope !== this.currentScope) {
-            this.updateFilterButtons(quickPick);
-            quickPick.placeholder = this.getPlaceholder();
-        }
-
-        // Check if user is typing a slash command
-        // We show the list if the query starts with /, # or > and we haven't matched a full scope yet
-        if (query.startsWith('/') || query.startsWith('#') || query.startsWith('>')) {
-            this.suggestSlashCommands(quickPick, query);
-            if (quickPick.items.length > 0) {
-                return;
-            }
+        if (this.trySuggestSlashCommands(quickPick, query)) {
+            return;
         }
 
         const trimmedQuery = text.trim();
         const queryId = ++this.lastQueryId;
 
         if (!trimmedQuery) {
-            await this.showRecentHistory(quickPick);
-            if (queryId === this.lastQueryId) {
-                quickPick.busy = false;
-                this.updateFilterButtons(quickPick);
-            }
+            await this.showRecentHistoryAndResetState(quickPick, queryId);
             return;
         }
 
-        // Start busy indicator for deep scan
+        const burstToken = this.prepareBurstToken();
+
         quickPick.busy = true;
         this.updateFilterButtons(quickPick);
 
-        // PHASE 0: Absolute Instant (Immediate exact-name hits)
-        // PHASE 0: Absolute Instant (Immediate exact-name hits)
-        if (this.currentScope !== SearchScope.COMMANDS) {
-            try {
-                const instantResults = await this.searchEngine.burstSearch(
-                    {
-                        query: trimmedQuery,
-                        scope: this.currentScope,
-                        maxResults: 5,
-                        requestId: queryId,
-                    },
-                    undefined,
-                ); // No token for burst search as it should be instant
+        await this.runInstantBurstPhase(quickPick, trimmedQuery, queryId, burstToken);
+        this.scheduleBurstPhase(quickPick, trimmedQuery, queryId, setBurstTimeout, burstToken);
+        this.scheduleFuzzyPhase(quickPick, text, queryId, setFuzzyTimeout);
+    }
 
-                if (queryId !== this.lastQueryId) {
-                    return;
-                }
-
-                if (instantResults.length > 0) {
-                    quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
-                    this.updateTitle(quickPick, instantResults.length);
-                }
-                // Don't clear items here - let history stay until we have real results (avoid flicker)
-            } catch (error) {
-                console.error(`Phase 0 search error: ${error}`);
-            }
+    private handleScopeChangeFromQuery(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        scope: SearchScope | undefined,
+        text: string,
+    ): boolean {
+        if (!scope) {
+            return false;
         }
 
-        // PHASE 1: Quick Burst (Wait 10ms for prefix/multichar)
+        this.userSelectedScope = scope;
+        this.currentScope = scope;
+        this.updateFilterButtons(quickPick);
+        quickPick.placeholder = this.getPlaceholder();
+        quickPick.value = text;
+
+        return true;
+    }
+
+    private ensureScopeFromUserSelection(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        const previousScope = this.currentScope;
+        this.currentScope = this.userSelectedScope;
+
+        if (previousScope !== this.currentScope) {
+            this.updateFilterButtons(quickPick);
+            quickPick.placeholder = this.getPlaceholder();
+        }
+    }
+
+    private trySuggestSlashCommands(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        query: string,
+    ): boolean {
+        if (!query.startsWith('/') && !query.startsWith('#') && !query.startsWith('>')) {
+            return false;
+        }
+
+        this.suggestSlashCommands(quickPick, query);
+        return quickPick.items.length > 0;
+    }
+
+    private async showRecentHistoryAndResetState(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        queryId: number,
+    ): Promise<void> {
+        await this.showRecentHistory(quickPick);
+        if (queryId === this.lastQueryId) {
+            quickPick.busy = false;
+            this.updateFilterButtons(quickPick);
+        }
+    }
+
+    private prepareBurstToken(): vscode.CancellationToken | undefined {
+        if (this.currentScope === SearchScope.COMMANDS) {
+            return undefined;
+        }
+
+        if (this.burstSearchCts) {
+            this.burstSearchCts.cancel();
+            this.burstSearchCts.dispose();
+        }
+
+        this.burstSearchCts = new vscode.CancellationTokenSource();
+        return this.burstSearchCts.token;
+    }
+
+    private async runInstantBurstPhase(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        trimmedQuery: string,
+        queryId: number,
+        burstToken: vscode.CancellationToken | undefined,
+    ): Promise<void> {
+        if (this.currentScope === SearchScope.COMMANDS) {
+            return;
+        }
+
+        try {
+            const instantResults = await this.searchEngine.burstSearch(
+                {
+                    query: trimmedQuery,
+                    scope: this.currentScope,
+                    maxResults: 5,
+                    requestId: queryId,
+                },
+                burstToken,
+            );
+
+            if (queryId !== this.lastQueryId) {
+                return;
+            }
+
+            if (instantResults.length > 0) {
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
+                this.updateTitle(quickPick, instantResults.length);
+            }
+        } catch (error) {
+            console.error(`Phase 0 search error: ${error}`);
+        }
+    }
+
+    private scheduleBurstPhase(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        trimmedQuery: string,
+        queryId: number,
+        setBurstTimeout: (t: NodeJS.Timeout) => void,
+        burstToken: vscode.CancellationToken | undefined,
+    ): void {
         setBurstTimeout(
             setTimeout(async () => {
                 if (queryId !== this.lastQueryId) {
@@ -1035,14 +1083,13 @@ export class SearchProvider {
                             maxResults: 15,
                             requestId: queryId,
                         },
-                        undefined,
+                        burstToken,
                     );
 
                     if (queryId !== this.lastQueryId) {
                         return;
                     }
 
-                    // Update if we have more results
                     if (burstResults.length > 0) {
                         quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
                         this.updateTitle(quickPick, burstResults.length);
@@ -1052,15 +1099,21 @@ export class SearchProvider {
                 }
             }, 10),
         );
+    }
 
-        // PHASE 2: Deep Fuzzy Search (Stabilized results)
+    private scheduleFuzzyPhase(
+        quickPick: vscode.QuickPick<SearchResultItem>,
+        text: string,
+        queryId: number,
+        setFuzzyTimeout: (t: NodeJS.Timeout) => void,
+    ): void {
         setFuzzyTimeout(
             setTimeout(async () => {
                 if (queryId !== this.lastQueryId) {
                     return;
                 }
                 try {
-                    await this.performSearch(quickPick, text, queryId); // Use text (parsed) instead of raw query
+                    await this.performSearch(quickPick, text, queryId);
                 } finally {
                     if (queryId === this.lastQueryId) {
                         quickPick.busy = false;
@@ -1131,6 +1184,7 @@ export class SearchProvider {
 
                 quickPick.placeholder = this.getPlaceholder();
                 this.updateFilterButtons(quickPick);
+                this.updateTitle(quickPick, quickPick.items.length);
 
                 // Re-run search with new filter
                 // We use parseQuery to ensure we handle the (potentially updated) text correctly
@@ -1176,8 +1230,6 @@ export class SearchProvider {
             requestId: queryId,
         };
 
-        this.streamingResults.set(queryId, []);
-
         const startTime = Date.now();
         let results: SearchResult[] = [];
 
@@ -1197,7 +1249,6 @@ export class SearchProvider {
         const duration = Date.now() - startTime;
 
         if (queryId !== this.lastQueryId) {
-            this.streamingResults.delete(queryId);
             return [];
         }
 
@@ -1243,9 +1294,6 @@ export class SearchProvider {
             } else {
                 quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
                 this.updateTitle(quickPick, results.length, duration);
-            }
-            if (queryId === this.lastQueryId) {
-                this.streamingResults.delete(queryId); // Done with streaming for this query
             }
         }
     }
@@ -1369,6 +1417,7 @@ export class SearchProvider {
 
             this.updateFilterButtons(quickPick);
             quickPick.placeholder = this.getPlaceholder();
+            this.updateTitle(quickPick, quickPick.items.length);
             const queryId = ++this.lastQueryId;
             this.performSearch(quickPick, text, queryId);
             return true;

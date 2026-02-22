@@ -28,7 +28,6 @@ export class DeepLensLspClient implements ISearchProvider {
         message?: string;
         percentage?: number;
     }>();
-    public onStreamResult = new vscode.EventEmitter<{ requestId?: number; result: SearchResult }>();
     public onRipgrepUnavailable = new vscode.EventEmitter<void>();
 
     constructor(context: vscode.ExtensionContext) {
@@ -87,7 +86,6 @@ export class DeepLensLspClient implements ISearchProvider {
 
         this.client = new LanguageClient('deeplensLS', 'DeepLens Language Server', serverOptions, clientOptions);
 
-        // Handle server progress reporting via global notification
         this.client.onNotification(
             'deeplens/progress',
             (params: { token: string | number; message?: string; percentage?: number }) => {
@@ -95,12 +93,6 @@ export class DeepLensLspClient implements ISearchProvider {
             },
         );
 
-        // Handle streamed search results
-        this.client.onNotification('deeplens/streamResult', (params: { requestId?: number; result: SearchResult }) => {
-            this.onStreamResult.fire(params);
-        });
-
-        // T013: Handle ripgrep unavailable notification
         this.client.onNotification(RipgrepUnavailableNotification, () => {
             this.onRipgrepUnavailable.fire();
         });
@@ -197,6 +189,32 @@ export class DeepLensLspClient implements ISearchProvider {
         }
     }
 
+    async clearHistory(): Promise<void> {
+        if (!this.isReady()) return;
+        const client = this.client;
+        if (!client) return;
+        try {
+            await client.sendRequest('deeplens/clearHistory');
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens clearHistory error:', error);
+            }
+        }
+    }
+
+    async removeHistoryItem(itemId: string): Promise<void> {
+        if (!this.isReady()) return;
+        const client = this.client;
+        if (!client) return;
+        try {
+            await client.sendRequest('deeplens/removeHistoryItem', { itemId });
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens removeHistoryItem error:', error);
+            }
+        }
+    }
+
     async recordActivity(itemId: string): Promise<void> {
         if (!this.isReady()) return;
         const client = this.client;
@@ -270,7 +288,6 @@ export class DeepLensLspClient implements ISearchProvider {
         this.disposeTrackedDisposables();
 
         this.onProgress.dispose();
-        this.onStreamResult.dispose();
     }
 
     private async waitForStartCompletion(): Promise<void> {

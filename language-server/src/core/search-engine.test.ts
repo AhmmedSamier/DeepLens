@@ -6,15 +6,33 @@ import { SearchEngine } from './search-engine';
 import { ISearchProvider } from './types';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
-describe('SearchEngine', () => {
-    const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
+const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
+    id,
+    name,
+    type,
+    filePath: path.normalize(`/${relativePath}`),
+    relativeFilePath: relativePath,
+    fullName: name,
+});
+
+function createDelayedProvider(id: string, fileItem: SearchableItem): ISearchProvider {
+    return {
         id,
-        name,
-        type,
-        filePath: path.normalize(`/${relativePath}`),
-        relativeFilePath: relativePath,
-        fullName: name,
-    });
+        priority: 1,
+        search: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 40));
+            return [
+                {
+                    item: fileItem,
+                    score: id === 'p1' ? 1 : 0.9,
+                    scope: SearchScope.FILES,
+                },
+            ];
+        },
+    };
+}
+
+describe('SearchEngine', () => {
 
     it('should find items by name', async () => {
         const engine = new SearchEngine();
@@ -202,7 +220,9 @@ describe('SearchEngine', () => {
         expect(results.length).toBe(1);
         expect(results[0].item.name).toBe('File1.ts');
     });
+});
 
+describe('SearchEngine scopes and providers', () => {
     it('should return symbols for OPEN scope when providers are registered', async () => {
         const engine = new SearchEngine();
         engine.registerProvider(new SymbolProvider(engine));
@@ -230,7 +250,6 @@ describe('SearchEngine', () => {
         ];
         engine.setItems(items);
 
-        // Mock GitProvider
         const mockGitProvider = {
             getModifiedFiles: async () => {
                 const filePath = path.normalize('/src/File2.ts');
@@ -278,23 +297,8 @@ describe('SearchEngine', () => {
         const fileItem = createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts');
         engine.setItems([fileItem]);
 
-        const createDelayedProvider = (id: string): ISearchProvider => ({
-            id,
-            priority: 1,
-            search: async () => {
-                await new Promise((resolve) => setTimeout(resolve, 40));
-                return [
-                    {
-                        item: fileItem,
-                        score: id === 'p1' ? 1 : 0.9,
-                        scope: SearchScope.FILES,
-                    },
-                ];
-            },
-        });
-
-        engine.registerProvider(createDelayedProvider('p1'));
-        engine.registerProvider(createDelayedProvider('p2'));
+        engine.registerProvider(createDelayedProvider('p1', fileItem));
+        engine.registerProvider(createDelayedProvider('p2', fileItem));
 
         const start = Date.now();
         const results = await engine.search({ query: 'File', scope: SearchScope.EVERYTHING, maxResults: 10 });
