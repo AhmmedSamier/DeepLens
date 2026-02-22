@@ -93,8 +93,6 @@ export interface SearchOptions {
     maxResults?: number;
     /** File patterns to exclude */
     excludePatterns?: string[];
-    /** File extensions to include */
-    fileExtensions?: string[];
     /** Request ID for streaming correlation */
     requestId?: number;
 }

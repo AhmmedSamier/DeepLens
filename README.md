@@ -116,9 +116,6 @@ Customize DeepLens to fit your workflow in VS Code Settings:
     // Respect .gitignore files when indexing (highly recommended)
     "deeplens.respectGitignore": true,
 
-    // File extensions to index for search
-    "deeplens.fileExtensions": ["ts", "tsx", "js", "jsx", "py", "java", "cs", "cpp", "c", "h", "go", "rb", "php", "txt", "md", "json", "xml", "yaml", "yml"],
-
     // Enable personalized results based on your usage activity
     "deeplens.activity.enabled": true,
 

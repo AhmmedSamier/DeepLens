@@ -1,4 +1,7 @@
 import * as path from 'node:path';
+import * as process from 'node:process';
+
+declare const __dirname: string;
 import { runActivityTrackerBenchmarks } from './activity-tracker.bench';
 import { runActivityBenchmarks } from './activity.bench';
 import { runConcurrencyBenchmarks } from './concurrency.bench';
@@ -6,7 +9,6 @@ import { runEndpointBenchmarks } from './endpoint_search.bench';
 import { runGitProviderBenchmarks } from './git-provider.bench';
 import { runIncrementalBenchmarks } from './incremental.bench';
 import { runIndexingBatchBenchmarks } from './indexing-batch.bench';
-import { runIndexingFileExtensionsBenchmarks } from './indexing-extensions.bench';
 import { runIndexingDensityBenchmarks } from './indexing-density.bench';
 import { runIndexingScalingBenchmarks } from './indexing-scaling.bench';
 import { runIndexingBenchmark } from './indexing.bench';
@@ -35,7 +37,6 @@ async function main() {
     await runIndexingScalingBenchmarks();
     await runIndexingBatchBenchmarks();
     await runIndexingDensityBenchmarks();
-    await runIndexingFileExtensionsBenchmarks();
     await runIncrementalBenchmarks();
     await runActivityTrackerBenchmarks();
 
