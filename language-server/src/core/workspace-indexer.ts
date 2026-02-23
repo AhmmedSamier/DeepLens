@@ -82,7 +82,13 @@ export class WorkspaceIndexer {
     public async warmup(): Promise<void> {
         if (this.workersInitialized) return;
         this.log('Warming up indexing workers...');
-        this.getWorkers();
+        const workers = this.getWorkers();
+
+        // Send an empty batch to trigger WASM initialization in the background
+        // while the main thread continues with other tasks.
+        for (const worker of workers) {
+            worker.postMessage({ filePaths: [] });
+        }
     }
 
     private getWorkers(): Worker[] {

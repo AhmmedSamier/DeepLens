@@ -30,16 +30,19 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const chunk = filePaths.slice(i, i + BATCH_SIZE);
-            const chunkItems: SearchableItem[] = [];
 
-            for (const filePath of chunk) {
-                try {
-                    const items = await parser.parseFile(filePath);
-                    chunkItems.push(...items);
-                } catch {
-                    // Skip
-                }
-            }
+            // Parallelize file reading and parsing within the chunk
+            const results = await Promise.all(
+                chunk.map(async (filePath) => {
+                    try {
+                        return await parser.parseFile(filePath);
+                    } catch {
+                        return [];
+                    }
+                }),
+            );
+
+            const chunkItems = results.flat();
 
             // Send back chunk result immediately to keep main thread unblocked but processing
             parentPort?.postMessage({
