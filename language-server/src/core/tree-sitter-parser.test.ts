@@ -2,7 +2,6 @@ import { describe, expect, it, mock } from 'bun:test';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 
-// Mock vscode
 mock.module('vscode', () => ({
     Uri: {
         file: (p: string) => ({ fsPath: p, scheme: 'file' }),
@@ -18,6 +17,21 @@ import { SearchItemType } from './types';
 describe('TreeSitterParser', () => {
     const extensionPath = path.resolve(__dirname, '../../');
     const parser = new TreeSitterParser(extensionPath);
+
+    it('should throw error when parsing before initialization', async () => {
+        const uninitParser = new TreeSitterParser(extensionPath);
+
+        const testFilePath = path.join(__dirname, 'TestUninit.cs');
+        fs.writeFileSync(testFilePath, 'public class Test {}');
+
+        try {
+            await expect(uninitParser.parseFile(testFilePath)).resolves.toEqual([]);
+        } finally {
+            if (fs.existsSync(testFilePath)) {
+                fs.unlinkSync(testFilePath);
+            }
+        }
+    });
 
     it('should detect ASP.NET endpoints in C# code', async () => {
         await parser.init();

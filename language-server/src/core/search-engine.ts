@@ -337,20 +337,32 @@ export class SearchEngine implements ISearchProvider {
 
     /**
      * Remove items from a specific file and update hot-arrays incrementally
-     * Optimized: Uses in-place compaction to avoid allocating new arrays.
      */
     removeItemsByFile(filePath: string): void {
-        this.invalidateDerivedCaches();
-        const count = this.items.length;
-        const write = this.compactItems(filePath, count);
-        this.truncateArrays(write, count, filePath);
+        this.removeItemsByFiles([filePath]);
     }
 
-    private compactItems(filePath: string, count: number): number {
+    /**
+     * Remove items for multiple files in a single pass
+     * This is significantly faster when pruning many files at once.
+     */
+    removeItemsByFiles(filePaths: string[]): void {
+        if (filePaths.length === 0 || this.items.length === 0) {
+            return;
+        }
+
+        this.invalidateDerivedCaches();
+        const removalSet = new Set(filePaths);
+        const count = this.items.length;
+        const write = this.compactItems(removalSet, count);
+        this.truncateArrays(write, count, removalSet);
+    }
+
+    private compactItems(removalSet: Set<string>, count: number): number {
         let write = 0;
         for (let read = 0; read < count; read++) {
             const item = this.items[read];
-            if (item.filePath === filePath) {
+            if (removalSet.has(item.filePath)) {
                 this.releasePrepared(this.preparedNames[read]);
                 this.releasePrepared(this.preparedFullNames[read]);
                 this.releasePrepared(this.preparedPaths[read]);
@@ -382,7 +394,7 @@ export class SearchEngine implements ISearchProvider {
         this.preparedPatterns[write] = this.preparedPatterns[read];
     }
 
-    private truncateArrays(write: number, count: number, filePath: string): void {
+    private truncateArrays(write: number, count: number, removedFilePaths: Set<string>): void {
         // Truncate arrays if items were removed
         if (write < count) {
             this.items.length = write;
@@ -395,8 +407,8 @@ export class SearchEngine implements ISearchProvider {
             this.preparedPaths.length = write;
             this.preparedPatterns.length = write;
 
-            // Update file paths cache (filter out the removed file)
-            this.filePaths = this.filePaths.filter((p) => p !== filePath);
+            // Update file paths cache (filter out removed files)
+            this.filePaths = this.filePaths.filter((p) => !removedFilePaths.has(p));
 
             // Rebuild scope indices
             this.rebuildScopeIndices();
@@ -1701,22 +1713,19 @@ export class SearchEngine implements ISearchProvider {
         const targetLen = context.itemLengths[i];
         const diff = Math.abs(context.queryLen - targetLen);
 
-        // Optimization: If length is similar enough, process it immediately (skipping startsWith check).
-        if (diff <= context.queryLen * 2) {
-            return true;
-        }
-
-        // If length is wildly different, only process if it's a prefix match.
-        // This requires accessing the prepared object, which is expensive, but rare (only for distant matches).
-        const pName = context.preparedNames[i];
-        if (pName) {
-            const targetLower = (pName as ExtendedPrepared)._targetLower;
-            if (targetLower && targetLower.startsWith(context.queryLower)) {
-                return true;
+        // Relaxed threshold: Only skip if diff is more than twice the query length
+        if (diff > context.queryLen * 2) {
+            // Exception: If the query is a prefix of the target, always process it.
+            // We check this ONLY if length check failed, to avoid expensive string op on the hot path.
+            const pName = context.preparedNames[i];
+            if (pName) {
+                const targetLower = (pName as ExtendedPrepared)._targetLower;
+                return !!(targetLower && targetLower.startsWith(context.queryLower));
             }
+            return false;
         }
 
-        return false;
+        return true;
     }
 
     private calculateSearchScore(
@@ -2041,11 +2050,11 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    burstSearch(
+    async burstSearch(
         options: SearchOptions,
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
-    ): SearchResult[] {
+    ): Promise<SearchResult[]> {
         const { query, scope, maxResults = 10 } = options;
         if (!query || query.trim().length === 0) {
             return [];
@@ -2063,12 +2072,11 @@ export class SearchEngine implements ISearchProvider {
         const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
         const queryLower = normalizedQuery.toLowerCase();
 
-        // Pass indices for burst match
         let indices: number[] | undefined;
         if (scope === SearchScope.OPEN) {
             indices = this.getIndicesForOpenFiles();
         } else if (scope === SearchScope.MODIFIED) {
-            return [];
+            indices = await this.getIndicesForModifiedFiles();
         } else {
             indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
         }

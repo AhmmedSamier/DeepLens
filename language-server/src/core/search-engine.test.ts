@@ -6,15 +6,33 @@ import { SearchEngine } from './search-engine';
 import { ISearchProvider } from './types';
 import { SearchItemType, SearchScope, SearchableItem } from './types';
 
-describe('SearchEngine', () => {
-    const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
+const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
+    id,
+    name,
+    type,
+    filePath: path.normalize(`/${relativePath}`),
+    relativeFilePath: relativePath,
+    fullName: name,
+});
+
+function createDelayedProvider(id: string, fileItem: SearchableItem): ISearchProvider {
+    return {
         id,
-        name,
-        type,
-        filePath: path.normalize(`/${relativePath}`),
-        relativeFilePath: relativePath,
-        fullName: name,
-    });
+        priority: 1,
+        search: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 40));
+            return [
+                {
+                    item: fileItem,
+                    score: id === 'p1' ? 1 : 0.9,
+                    scope: SearchScope.FILES,
+                },
+            ];
+        },
+    };
+}
+
+describe('SearchEngine', () => {
 
     it('should find items by name', async () => {
         const engine = new SearchEngine();
@@ -72,21 +90,21 @@ describe('SearchEngine', () => {
         }
     });
 
-    it('should handle filename:line pattern in burstSearch', () => {
+    it('should handle filename:line pattern in burstSearch', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
         ];
         engine.setItems(items);
 
-        const results = engine.burstSearch({
+        const results = await engine.burstSearch({
             query: 'EmployeeService:50',
             scope: SearchScope.EVERYTHING,
         });
 
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].item.name).toBe('EmployeeService.cs');
-        expect(results[0].item.line).toBe(49); // 0-indexed
+        expect(results[0].item.line).toBe(49);
     });
 
     it('should not break on simple search without line number', async () => {
@@ -202,7 +220,9 @@ describe('SearchEngine', () => {
         expect(results.length).toBe(1);
         expect(results[0].item.name).toBe('File1.ts');
     });
+});
 
+describe('SearchEngine scopes and providers', () => {
     it('should return symbols for OPEN scope when providers are registered', async () => {
         const engine = new SearchEngine();
         engine.registerProvider(new SymbolProvider(engine));
@@ -230,7 +250,6 @@ describe('SearchEngine', () => {
         ];
         engine.setItems(items);
 
-        // Mock GitProvider
         const mockGitProvider = {
             getModifiedFiles: async () => {
                 const filePath = path.normalize('/src/File2.ts');
@@ -273,28 +292,39 @@ describe('SearchEngine', () => {
         expect(callCount).toBe(1);
     });
 
+    it('should handle MODIFIED scope in burstSearch', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+
+        const mockGitProvider = {
+            getModifiedFiles: async () => {
+                const filePath = path.normalize('/src/File2.ts');
+                return new Set([process.platform === 'win32' ? filePath.toLowerCase() : filePath]);
+            },
+        };
+
+        (engine as any).gitProvider = mockGitProvider;
+
+        const results = await engine.burstSearch({
+            query: 'File',
+            scope: SearchScope.MODIFIED,
+        });
+
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('File2.ts');
+    });
+
     it('should execute providers concurrently', async () => {
         const engine = new SearchEngine();
         const fileItem = createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts');
         engine.setItems([fileItem]);
 
-        const createDelayedProvider = (id: string): ISearchProvider => ({
-            id,
-            priority: 1,
-            search: async () => {
-                await new Promise((resolve) => setTimeout(resolve, 40));
-                return [
-                    {
-                        item: fileItem,
-                        score: id === 'p1' ? 1 : 0.9,
-                        scope: SearchScope.FILES,
-                    },
-                ];
-            },
-        });
-
-        engine.registerProvider(createDelayedProvider('p1'));
-        engine.registerProvider(createDelayedProvider('p2'));
+        engine.registerProvider(createDelayedProvider('p1', fileItem));
+        engine.registerProvider(createDelayedProvider('p2', fileItem));
 
         const start = Date.now();
         const results = await engine.search({ query: 'File', scope: SearchScope.EVERYTHING, maxResults: 10 });

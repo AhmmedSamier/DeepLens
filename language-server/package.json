@@ -1,6 +1,6 @@
 {
     "name": "deeplens-language-server",
-    "version": "1.5.5",
+    "version": "1.5.7",
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
@@ -28,6 +28,7 @@
         "tree-sitter-ruby": "^0.23.1",
         "tree-sitter-typescript": "^0.23.2",
         "vscode-languageserver": "^9.0.1",
+        "vscode-languageserver-protocol": "^3.17.5",
         "vscode-languageserver-textdocument": "^1.0.12",
         "web-tree-sitter": "^0.26.3"
     },

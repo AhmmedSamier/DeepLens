@@ -97,6 +97,10 @@ export class ActivityTracker {
      * Record access to an item
      */
     recordAccess(item: SearchableItem): void {
+        this.initPromise.then(() => this.doRecordAccess(item)).catch(() => {});
+    }
+
+    private doRecordAccess(item: SearchableItem): void {
         const now = Date.now();
         const existing = this.activities.get(item.id);
         let record: ActivityRecord;
@@ -104,7 +108,7 @@ export class ActivityTracker {
         if (existing) {
             existing.lastAccessed = now;
             existing.accessCount += 1;
-            existing.item = item; // Update item metadata
+            existing.item = item;
             record = existing;
         } else {
             record = {
@@ -121,7 +125,6 @@ export class ActivityTracker {
             this.maxAccessCount = record.accessCount;
         }
 
-        // Update score only for this item
         record.score = this.calculateScore(record, this.maxAccessCount);
     }
 

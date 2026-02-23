@@ -16,19 +16,19 @@ describe("Recent History", () => {
         fs.rmSync(tempDir, { recursive: true, force: true });
     });
 
-    test('ActivityTracker returns recent items sorted by score', () => {
+    test('ActivityTracker returns recent items sorted by score', async () => {
         const tracker = new ActivityTracker(tempDir);
+        await tracker.waitForLoaded();
 
         tracker.recordAccess({ id: 'itemA', name: 'A', type: SearchItemType.FILE, filePath: 'a.ts' });
         tracker.recordAccess({ id: 'itemB', name: 'B', type: SearchItemType.FILE, filePath: 'b.ts' });
         tracker.recordAccess({ id: 'itemC', name: 'C', type: SearchItemType.FILE, filePath: 'c.ts' });
-        tracker.recordAccess({ id: 'itemC', name: 'C', type: SearchItemType.FILE, filePath: 'c.ts' }); // Record C twice
+        tracker.recordAccess({ id: 'itemC', name: 'C', type: SearchItemType.FILE, filePath: 'c.ts' });
+
+        await new Promise((r) => setTimeout(r, 10));
 
         const recent = tracker.getRecentItemIds(3);
 
-        // Item C should be first (most frequent)
-        // Item A second
-        // Item B third
         expect(recent[0]).toBe('itemC');
     });
 

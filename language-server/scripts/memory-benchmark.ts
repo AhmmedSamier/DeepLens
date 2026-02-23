@@ -1,23 +1,29 @@
 
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { SearchEngine } from '../src/core/search-engine';
 import { SearchItemType } from '../src/core/types';
 
 function getMemoryUsage() {
     const used = process.memoryUsage();
     return {
-        rss: `${Math.round(used.rss / 1024 / 1024 * 100) / 100} MB`,
-        heapTotal: `${Math.round(used.heapTotal / 1024 / 1024 * 100) / 100} MB`,
-        heapUsed: `${Math.round(used.heapUsed / 1024 / 1024 * 100) / 100} MB`,
-        external: `${Math.round(used.external / 1024 / 1024 * 100) / 100} MB`,
+        rss: Math.round((used.rss / 1024 / 1024) * 100) / 100,
+        heapTotal: Math.round((used.heapTotal / 1024 / 1024) * 100) / 100,
+        heapUsed: Math.round((used.heapUsed / 1024 / 1024) * 100) / 100,
+        external: Math.round((used.external / 1024 / 1024) * 100) / 100,
     };
 }
 
 async function runMemoryBenchmark() {
-    console.log("=== Memory Benchmark ===");
-    console.log("Initial Memory:", getMemoryUsage());
+    const snapshots: { name: string; memory: ReturnType<typeof getMemoryUsage> }[] = [];
+
+    console.log('=== Memory Benchmark ===');
+    const initial = getMemoryUsage();
+    console.log('Initial Memory (MB):', initial);
+    snapshots.push({ name: 'Initial', memory: initial });
 
     const engine = new SearchEngine();
-    const itemCount = 15000; // Simulate a large repo (15k files + symbols -> ~75k items)
+    const itemCount = 15000;
     const items: any[] = [];
 
 
@@ -69,7 +75,9 @@ async function runMemoryBenchmark() {
     }
 
     console.log(`Items generated. Count: ${items.length}`);
-    console.log("Memory before indexing:", getMemoryUsage());
+    const beforeIndexing = getMemoryUsage();
+    console.log('Memory before indexing (MB):', beforeIndexing);
+    snapshots.push({ name: 'Before Indexing', memory: beforeIndexing });
 
     const start = Date.now();
     await engine.setItems(items);
@@ -77,14 +85,31 @@ async function runMemoryBenchmark() {
 
 
     console.log(`Indexing took ${duration}ms`);
-    console.log("Memory after indexing:", getMemoryUsage());
+    const afterIndexing = getMemoryUsage();
+    console.log('Memory after indexing (MB):', afterIndexing);
+    snapshots.push({ name: 'After Indexing', memory: afterIndexing });
 
     if (global.gc) {
         global.gc();
-        console.log("Memory after GC:", getMemoryUsage());
+        const afterGc = getMemoryUsage();
+        console.log('Memory after GC (MB):', afterGc);
+        snapshots.push({ name: 'After GC', memory: afterGc });
     }
 
-    console.log("Benchmark complete.");
+    const outputPath =
+        process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, '../benchmarks/memory-benchmark.json');
+    try {
+        const dir = path.dirname(outputPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+        fs.writeFileSync(outputPath, JSON.stringify(snapshots, null, 2));
+        console.log(`Memory benchmark results saved to ${outputPath}`);
+    } catch (error) {
+        console.error('Failed to save memory benchmark results:', error);
+    }
+
+    console.log('Benchmark complete.');
 }
 
 runMemoryBenchmark().catch(console.error);

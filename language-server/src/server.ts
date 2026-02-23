@@ -67,6 +67,10 @@ export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchRe
     'deeplens/getRecentItems',
 );
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
+export const ClearHistoryRequest = new RequestType0<void, void>('deeplens/clearHistory');
+export const RemoveHistoryItemRequest = new RequestType<{ itemId: string }, void, void>(
+    'deeplens/removeHistoryItem',
+);
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
 export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
@@ -90,6 +94,8 @@ let isInitialized = false;
 let isShuttingDown = false;
 let fileLogger: (msg: string) => void = () => {};
 let parentProcessMonitor: NodeJS.Timeout | null = null;
+let pendingRemovedFilePaths: Set<string> = new Set();
+let removeBatchTimer: NodeJS.Timeout | null = null;
 
 connection.onInitialize(async (params: InitializeParams) => {
     const capabilities = params.capabilities;
@@ -219,7 +225,6 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     documents.listen(connection);
 
-    // Wire up search engine to indexer
     workspaceIndexer.onItemsAdded(async (items) => {
         try {
             await searchEngine.addItems(items);
@@ -228,7 +233,21 @@ connection.onInitialize(async (params: InitializeParams) => {
         }
     });
 
-    workspaceIndexer.onItemsRemoved((filePath) => searchEngine.removeItemsByFile(filePath));
+    workspaceIndexer.onItemsRemoved((filePath) => {
+        pendingRemovedFilePaths.add(filePath);
+        if (!removeBatchTimer) {
+            removeBatchTimer = setTimeout(() => {
+                if (pendingRemovedFilePaths.size === 0) {
+                    removeBatchTimer = null;
+                    return;
+                }
+                const files = Array.from(pendingRemovedFilePaths);
+                pendingRemovedFilePaths = new Set();
+                removeBatchTimer = null;
+                searchEngine.removeItemsByFiles(files);
+            }, 10);
+        }
+    });
 
     if (config.isActivityTrackingEnabled()) {
         searchEngine.setActivityCallback(
@@ -514,6 +533,16 @@ connection.onRequest(RecordActivityRequest, (params) => {
             activityTracker.recordAccess(item);
         }
     }
+});
+
+connection.onRequest(ClearHistoryRequest, async () => {
+    if (!isInitialized || !activityTracker) return;
+    await activityTracker.clearAll();
+});
+
+connection.onRequest(RemoveHistoryItemRequest, async (params) => {
+    if (!isInitialized || !activityTracker) return;
+    await activityTracker.removeItem(params.itemId);
 });
 
 connection.onRequest(RebuildIndexRequest, async (params) => {

@@ -274,11 +274,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     codeLensProvider.reloadConfig();
                 }
 
-                // Re-index workspace if exclude patterns or file extensions changed
-                if (
-                    event.affectsConfiguration('deeplens.excludePatterns') ||
-                    event.affectsConfiguration('deeplens.fileExtensions')
-                ) {
+                if (event.affectsConfiguration('deeplens.excludePatterns')) {
                     indexWorkspace();
                 }
             }

@@ -6,7 +6,7 @@
         "type": "git",
         "url": "https://github.com/AhmmedSamier/DeepLens.git"
     },
-    "version": "1.5.5",
+    "version": "1.5.7",
     "publisher": "AhmedSamir",
     "icon": "icon.png",
     "engines": {
@@ -115,31 +115,6 @@
                     "minimum": 0,
                     "maximum": 1,
                     "description": "How much activity affects results (0=none, 0.5=balanced, 1=only activity)"
-                },
-                "deeplens.fileExtensions": {
-                    "type": "array",
-                    "default": [
-                        "ts",
-                        "tsx",
-                        "js",
-                        "jsx",
-                        "py",
-                        "java",
-                        "cs",
-                        "cpp",
-                        "c",
-                        "h",
-                        "go",
-                        "rb",
-                        "php",
-                        "txt",
-                        "md",
-                        "json",
-                        "xml",
-                        "yaml",
-                        "yml"
-                    ],
-                    "description": "File extensions to index for search"
                 },
                 "deeplens.codeLens.enabled": {
                     "type": "boolean",

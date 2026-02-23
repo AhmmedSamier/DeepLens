@@ -24,7 +24,7 @@ describe("pLimit", () => {
         const results = await Promise.all([
             limit(async () => 1),
             limit(async () => 2),
-            limit(async () => 3)
+            limit(async () => 3),
         ]);
         expect(results).toEqual([1, 2, 3]);
     });
@@ -32,9 +32,12 @@ describe("pLimit", () => {
     test("handles errors correctly", async () => {
         const limit = pLimit(1);
         try {
-            await limit(async () => { throw new Error("fail"); });
-        } catch (e: any) {
-            expect(e.message).toBe("fail");
+            await limit(async () => {
+                throw new Error("fail");
+            });
+        } catch (e) {
+            const error = e as Error;
+            expect(error.message).toBe("fail");
         }
     });
 
