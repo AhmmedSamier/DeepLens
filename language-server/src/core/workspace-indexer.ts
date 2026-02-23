@@ -40,6 +40,7 @@ interface WorkspaceSymbolScanResult {
 export class WorkspaceIndexer {
     private static readonly WORKSPACE_SYMBOL_TIMEOUT_MS = 1200;
     private static readonly WORKSPACE_SYMBOL_COVERAGE_THRESHOLD = 0.6;
+    private static readonly STRING_CACHE_MAX_SIZE = 10000;
     private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
     private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
 
@@ -58,7 +59,6 @@ export class WorkspaceIndexer {
     private workers: Worker[] = [];
     private workersInitialized: boolean = false;
 
-    // Batched git check queue
     private readonly gitCheckQueue: Map<string, Set<string>> = new Map();
     private readonly gitCheckResolvers: Map<string, ((ignored: boolean) => void)[]> = new Map();
     private gitCheckTimer: NodeJS.Timeout | null = null;
@@ -1294,13 +1294,25 @@ export class WorkspaceIndexer {
     }
 
     /**
-     * Intern a string to save memory
+     * Intern a string to save memory with LRU eviction
      */
     private intern(str: string): string {
+        return this.getCachedString(str);
+    }
+
+    private getCachedString(str: string): string {
         const cached = this.stringCache.get(str);
         if (cached) {
             return cached;
         }
+
+        if (this.stringCache.size >= WorkspaceIndexer.STRING_CACHE_MAX_SIZE) {
+            const firstKey = this.stringCache.keys().next().value;
+            if (firstKey !== undefined) {
+                this.stringCache.delete(firstKey);
+            }
+        }
+
         this.stringCache.set(str, str);
         return str;
     }
@@ -1367,6 +1379,14 @@ export class WorkspaceIndexer {
      * Dispose resources
      */
     dispose(): void {
+        if (this.gitCheckTimer) {
+            clearTimeout(this.gitCheckTimer);
+            this.gitCheckTimer = null;
+        }
+        if (this.watcherCooldownTimer) {
+            clearTimeout(this.watcherCooldownTimer);
+            this.watcherCooldownTimer = null;
+        }
         this.fileWatcher?.dispose();
         for (const worker of this.workers) {
             worker.terminate();

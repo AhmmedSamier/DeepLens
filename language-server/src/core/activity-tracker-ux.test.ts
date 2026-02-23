@@ -11,11 +11,12 @@ describe('ActivityTracker UX', () => {
         },
     };
 
-    beforeEach(() => {
+    beforeEach(async () => {
         tracker = new ActivityTracker(mockStorage);
+        await tracker.waitForLoaded();
     });
 
-    it('should add relative time to item details', () => {
+    it('should add relative time to item details', async () => {
         const item = {
             id: 'test-1',
             name: 'test.ts',
@@ -25,6 +26,7 @@ describe('ActivityTracker UX', () => {
         };
 
         tracker.recordAccess(item);
+        await new Promise((r) => setTimeout(r, 10));
 
         const recentItems = tracker.getRecentItems(1);
         expect(recentItems.length).toBe(1);
@@ -34,7 +36,7 @@ describe('ActivityTracker UX', () => {
         expect(recentItem.detail).toContain('Recently opened');
     });
 
-    it('should handle items without existing detail', () => {
+    it('should handle items without existing detail', async () => {
         const item = {
             id: 'test-2',
             name: 'test2.ts',
@@ -44,6 +46,7 @@ describe('ActivityTracker UX', () => {
         };
 
         tracker.recordAccess(item);
+        await new Promise((r) => setTimeout(r, 10));
 
         const recentItems = tracker.getRecentItems(1);
         expect(recentItems.length).toBe(1);
@@ -51,7 +54,4 @@ describe('ActivityTracker UX', () => {
         const recentItem = recentItems[0].item;
         expect(recentItem.detail).toBe('Accessed just now');
     });
-
-    // We can't easily mock Date.now() in bun test without external libraries or prototype manipulation
-    // so we skip testing precise time ranges (minutes/hours) and trust the logic is standard.
 });

@@ -40,7 +40,7 @@ describe('SearchEngine', () => {
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
             createTestItem('2', 'UserService.cs', SearchItemType.FILE, 'src/UserService.cs'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         const results = await engine.search({
             query: 'Employee',
@@ -56,7 +56,7 @@ describe('SearchEngine', () => {
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         const results = await engine.search({
             query: 'empserv',
@@ -73,7 +73,7 @@ describe('SearchEngine', () => {
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
             createTestItem('2', 'EmployeeService', SearchItemType.CLASS, 'src/EmployeeService.cs'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         const results = await engine.search({
             query: 'EmployeeService:200',
@@ -90,21 +90,21 @@ describe('SearchEngine', () => {
         }
     });
 
-    it('should handle filename:line pattern in burstSearch', () => {
+    it('should handle filename:line pattern in burstSearch', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
-        const results = engine.burstSearch({
+        const results = await engine.burstSearch({
             query: 'EmployeeService:50',
             scope: SearchScope.EVERYTHING,
         });
 
         expect(results.length).toBeGreaterThan(0);
         expect(results[0].item.name).toBe('EmployeeService.cs');
-        expect(results[0].item.line).toBe(49); // 0-indexed
+        expect(results[0].item.line).toBe(49);
     });
 
     it('should not break on simple search without line number', async () => {
@@ -112,7 +112,7 @@ describe('SearchEngine', () => {
         const items: SearchableItem[] = [
             createTestItem('1', 'EmployeeService.cs', SearchItemType.FILE, 'src/EmployeeService.cs'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         const results = await engine.search({
             query: 'EmployeeService',
@@ -130,7 +130,7 @@ describe('SearchEngine', () => {
             createTestItem('2', 'Class1', SearchItemType.CLASS, 'src/File1.ts'),
             createTestItem('3', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         engine.removeItemsByFile(path.normalize('/src/File1.ts'));
 
@@ -140,13 +140,13 @@ describe('SearchEngine', () => {
         expect(results[0].item.name).toBe('File2.ts');
     });
 
-    it('should deduplicate prepared strings', () => {
+    it('should deduplicate prepared strings', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'CommonName', SearchItemType.CLASS, 'src/File1.ts'),
             createTestItem('2', 'CommonName', SearchItemType.INTERFACE, 'src/File2.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         // Access private members via casting to any
         const preparedNames = (engine as any).preparedNames;
@@ -156,14 +156,14 @@ describe('SearchEngine', () => {
         expect(preparedNames[0]).toBe(preparedNames[1]);
     });
 
-    it('should prune cache immediately after removing items', () => {
+    it('should prune cache immediately after removing items', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
             createTestItem('1', 'UniqueName1', SearchItemType.CLASS, 'src/File1.ts'),
             createTestItem('2', 'UniqueName2', SearchItemType.INTERFACE, 'src/File2.ts'),
             createTestItem('3', 'UniqueName3', SearchItemType.ENUM, 'src/File3.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         const preparedCache = (engine as any).preparedCache as Map<string, any>;
         const initialCacheSize = preparedCache.size;
@@ -187,7 +187,7 @@ describe('SearchEngine', () => {
             createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
             createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
         engine.setActiveFiles([path.normalize('/src/File1.ts')]);
 
         const results = await engine.search({
@@ -209,7 +209,7 @@ describe('SearchEngine', () => {
             relativeFilePath: 'src/File1.ts',
             fullName: 'File1.ts',
         };
-        engine.setItems([item]);
+        await engine.setItems([item]);
         engine.setActiveFiles([path.normalize('/src/File1.ts')]);
 
         const results = await engine.search({
@@ -230,7 +230,7 @@ describe('SearchEngine scopes and providers', () => {
             createTestItem('1', 'ClassOne', SearchItemType.CLASS, 'src/File1.ts'),
             createTestItem('2', 'ClassTwo', SearchItemType.CLASS, 'src/File2.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
         engine.setActiveFiles([path.normalize('/src/File1.ts')]);
 
         const results = await engine.search({
@@ -248,7 +248,7 @@ describe('SearchEngine scopes and providers', () => {
             createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
             createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         const mockGitProvider = {
             getModifiedFiles: async () => {
@@ -274,7 +274,7 @@ describe('SearchEngine scopes and providers', () => {
             createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
             createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
         ];
-        engine.setItems(items);
+        await engine.setItems(items);
 
         let callCount = 0;
         const mockGitProvider = {
@@ -292,10 +292,36 @@ describe('SearchEngine scopes and providers', () => {
         expect(callCount).toBe(1);
     });
 
+    it('should handle MODIFIED scope in burstSearch', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        engine.setItems(items);
+
+        const mockGitProvider = {
+            getModifiedFiles: async () => {
+                const filePath = path.normalize('/src/File2.ts');
+                return new Set([process.platform === 'win32' ? filePath.toLowerCase() : filePath]);
+            },
+        };
+
+        (engine as any).gitProvider = mockGitProvider;
+
+        const results = await engine.burstSearch({
+            query: 'File',
+            scope: SearchScope.MODIFIED,
+        });
+
+        expect(results.length).toBe(1);
+        expect(results[0].item.name).toBe('File2.ts');
+    });
+
     it('should execute providers concurrently', async () => {
         const engine = new SearchEngine();
         const fileItem = createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts');
-        engine.setItems([fileItem]);
+        await engine.setItems([fileItem]);
 
         engine.registerProvider(createDelayedProvider('p1', fileItem));
         engine.registerProvider(createDelayedProvider('p2', fileItem));
