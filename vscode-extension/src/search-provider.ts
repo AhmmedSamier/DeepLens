@@ -262,26 +262,26 @@ export class SearchProvider {
     private getPlaceholder(): string {
         switch (this.currentScope) {
             case SearchScope.OPEN:
-                return 'Open Files: Type to search in currently open files...';
+                return 'Open Files: Search in currently open files...';
             case SearchScope.MODIFIED:
-                return 'Modified: Type to search in modified/untracked files...';
+                return 'Modified: Search in modified/untracked files...';
             case SearchScope.TYPES:
-                return 'Classes: Type to search in classes only...';
+                return 'Classes: Search types, interfaces, and enums...';
             case SearchScope.SYMBOLS:
-                return 'Symbols: Type to search in symbols only...';
+                return 'Symbols: Search methods and variables...';
             case SearchScope.FILES:
-                return 'Files: Type to search in file names only...';
+                return 'Files: Search files by name...';
             case SearchScope.TEXT:
-                return 'Text: Type to search for text content...';
+                return 'Text: Search for text content...';
             case SearchScope.COMMANDS:
-                return 'Commands: Type to search in commands only...';
+                return 'Commands: Search and execute commands...';
             case SearchScope.PROPERTIES:
-                return 'Properties: Type to search in properties only...';
+                return 'Properties: Search properties and fields...';
             case SearchScope.ENDPOINTS:
-                return 'Endpoints: Type to search in endpoints only...';
+                return 'Endpoints: Search API endpoints...';
             case SearchScope.EVERYTHING:
             default:
-                return 'Global: Type to search everywhere (classes, files, symbols...)';
+                return 'Global: Search everywhere (classes, files, symbols...)';
         }
     }
 
