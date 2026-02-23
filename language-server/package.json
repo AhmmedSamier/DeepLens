@@ -1,6 +1,6 @@
 {
     "name": "deeplens-language-server",
-    "version": "1.5.7",
+    "version": "1.5.8",
     "description": "Language Server for DeepLens",
     "main": "src/server.ts",
     "scripts": {
