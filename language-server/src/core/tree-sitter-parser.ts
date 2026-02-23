@@ -69,7 +69,8 @@ export class TreeSitterParser {
             // eslint-disable-next-line @typescript-eslint/no-require-imports
             const libraryModule = require('web-tree-sitter');
             this.lib = libraryModule as TreeSitterLib;
-            this.ParserClass = this.lib;
+            // The library export might be the Parser constructor itself (older versions/types)
+            this.ParserClass = this.lib as unknown as ParserConstructor;
 
             if (this.lib.Parser) {
                 this.ParserClass = this.lib.Parser;
