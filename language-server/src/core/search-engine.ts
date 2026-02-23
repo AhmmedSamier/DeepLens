@@ -2039,11 +2039,11 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    burstSearch(
+    async burstSearch(
         options: SearchOptions,
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
-    ): SearchResult[] {
+    ): Promise<SearchResult[]> {
         const { query, scope, maxResults = 10 } = options;
         if (!query || query.trim().length === 0) {
             return [];
@@ -2061,12 +2061,11 @@ export class SearchEngine implements ISearchProvider {
         const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
         const queryLower = normalizedQuery.toLowerCase();
 
-        // Pass indices for burst match
         let indices: number[] | undefined;
         if (scope === SearchScope.OPEN) {
             indices = this.getIndicesForOpenFiles();
         } else if (scope === SearchScope.MODIFIED) {
-            return [];
+            indices = await this.getIndicesForModifiedFiles();
         } else {
             indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
         }

@@ -20,22 +20,30 @@ interface TreeSitterNode {
     parent: TreeSitterNode | null;
 }
 
+interface Parser {
+    setLanguage: (language: unknown) => void;
+    parse: (content: string) => { rootNode: unknown; delete: () => void };
+}
+
+interface ParserConstructor {
+    new (): Parser;
+    init: (options?: { locateFile?: () => string }) => Promise<void>;
+}
+
 interface TreeSitterLib {
     init: (options?: { locateFile?: () => string }) => Promise<void>;
     Language: {
         load: (path: string) => Promise<unknown>;
     };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    Parser?: any;
+    Parser?: ParserConstructor;
 }
 
 export class TreeSitterParser {
     private isInitialized: boolean = false;
     private readonly languages: Map<string, unknown> = new Map();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    private ParserClass: any = undefined;
+    private ParserClass: ParserConstructor | undefined = undefined;
     private lib: TreeSitterLib | undefined = undefined;
-    private parserCache: Map<string, unknown> = new Map();
+    private parserCache: Map<string, Parser> = new Map();
     private readonly extensionPath: string = '';
     private readonly logger: Logger | undefined = undefined;
 
@@ -172,22 +180,17 @@ export class TreeSitterParser {
         }
     }
 
-    private getOrCreateParser(
-        langId: string,
-        lang: unknown,
-    ): { setLanguage: (lang: unknown) => void; parse: (content: string) => { rootNode: unknown; delete: () => void } } {
+    private getOrCreateParser(langId: string, lang: unknown): Parser {
         const cached = this.parserCache.get(langId);
         if (cached) {
-            return cached as {
-                setLanguage: (lang: unknown) => void;
-                parse: (content: string) => { rootNode: unknown; delete: () => void };
-            };
+            return cached;
         }
 
-        const parser = new this.ParserClass() as {
-            setLanguage: (language: unknown) => void;
-            parse: (content: string) => { rootNode: unknown; delete: () => void };
-        };
+        if (!this.ParserClass) {
+            throw new Error('TreeSitterParser not initialized. Call init() before parsing.');
+        }
+
+        const parser = new this.ParserClass();
         parser.setLanguage(lang);
         this.parserCache.set(langId, parser);
         return parser;
