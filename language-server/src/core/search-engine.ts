@@ -148,6 +148,7 @@ export class SearchEngine implements ISearchProvider {
     private itemTypeIds: Uint8Array = new Uint8Array(0);
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
+    private itemNameLengths: Uint16Array = new Uint16Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedPaths: (Fuzzysort.Prepared | null)[] = [];
@@ -233,6 +234,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
         this.itemNameBitflags = new Uint32Array(items.length);
+        this.itemNameLengths = new Uint16Array(items.length);
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.itemIndexById.clear();
@@ -270,6 +272,10 @@ export class SearchEngine implements ISearchProvider {
             const newNameBitflags = new Uint32Array(newCapacity);
             newNameBitflags.set(this.itemNameBitflags);
             this.itemNameBitflags = newNameBitflags;
+
+            const newNameLengths = new Uint16Array(newCapacity);
+            newNameLengths.set(this.itemNameLengths);
+            this.itemNameLengths = newNameLengths;
         }
 
         // Append items
@@ -450,11 +456,13 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds[write] = this.itemTypeIds[read];
         this.itemBitflags[write] = this.itemBitflags[read];
         this.itemNameBitflags[write] = this.itemNameBitflags[read];
+        this.itemNameLengths[write] = this.itemNameLengths[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
         this.preparedPaths[write] = this.preparedPaths[read];
         this.preparedPatterns[write] = this.preparedPatterns[read];
     }
+
 
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
@@ -510,6 +518,7 @@ export class SearchEngine implements ISearchProvider {
         const { nameFlags, aggregateFlags } = this.computeItemBitflags(item);
         this.itemNameBitflags[index] = nameFlags;
         this.itemBitflags[index] = aggregateFlags;
+        this.itemNameLengths[index] = item.name.length;
 
         this.updateFileCache(item);
         this.populateParallelArrays(item);
@@ -702,6 +711,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds = new Uint8Array(0);
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
+        this.itemNameLengths = new Uint16Array(0);
         this.preparedNames = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
@@ -752,6 +762,7 @@ export class SearchEngine implements ISearchProvider {
         size += this.itemTypeIds.byteLength;
         size += this.itemBitflags.byteLength;
         size += this.itemNameBitflags.byteLength;
+        size += this.itemNameLengths.byteLength;
         size += this.preparedNames.length * 8;
         size += this.preparedFullNames.length * 8;
         size += this.preparedPaths.length * 8;
@@ -1648,6 +1659,7 @@ export class SearchEngine implements ISearchProvider {
             itemTypeIds: this.itemTypeIds,
             itemBitflags: this.itemBitflags,
             itemNameBitflags: this.itemNameBitflags,
+            itemLengths: this.itemNameLengths,
             preparedNames: this.preparedNames,
             preparedFullNames: this.preparedFullNames,
             preparedPaths: this.preparedPaths,
@@ -1744,18 +1756,20 @@ export class SearchEngine implements ISearchProvider {
 
         // T005: Character-count distance guard (per research.md §2)
         // Skip items that are mathematically too distant in length to yield a quality fuzzy match
-        const pName = context.preparedNames[i];
-        if (pName) {
-            const targetLen = pName.target.length;
-            const diff = Math.abs(context.queryLen - targetLen);
+        // Optimization: Use parallel array for length check to avoid object access
+        const targetLen = context.itemLengths[i];
+        const diff = Math.abs(context.queryLen - targetLen);
 
-            // Relaxed threshold: Only skip if diff is more than twice the query length
-            if (diff > context.queryLen * 2) {
-                // Exception: If the query is a prefix of the target, always process it.
-                // We check this ONLY if length check failed, to avoid expensive string op on the hot path.
+        // Relaxed threshold: Only skip if diff is more than twice the query length
+        if (diff > context.queryLen * 2) {
+            // Exception: If the query is a prefix of the target, always process it.
+            // We check this ONLY if length check failed, to avoid expensive string op on the hot path.
+            const pName = context.preparedNames[i];
+            if (pName) {
                 const targetLower = (pName as ExtendedPrepared)._targetLower;
                 return !!(targetLower && targetLower.startsWith(context.queryLower));
             }
+            return false;
         }
 
         return true;
