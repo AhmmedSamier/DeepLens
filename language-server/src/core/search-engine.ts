@@ -1702,15 +1702,12 @@ export class SearchEngine implements ISearchProvider {
             const targetLen = pName.target.length;
             const diff = Math.abs(context.queryLen - targetLen);
 
-            // Exception: If the query is a prefix of the target, always process it
-            const targetLower = (pName as ExtendedPrepared)._targetLower;
-            if (targetLower && targetLower.startsWith(context.queryLower)) {
-                return true;
-            }
-
             // Relaxed threshold: Only skip if diff is more than twice the query length
             if (diff > context.queryLen * 2) {
-                return false;
+                // Exception: If the query is a prefix of the target, always process it.
+                // We check this ONLY if length check failed, to avoid expensive string op on the hot path.
+                const targetLower = (pName as ExtendedPrepared)._targetLower;
+                return !!(targetLower && targetLower.startsWith(context.queryLower));
             }
         }
 
