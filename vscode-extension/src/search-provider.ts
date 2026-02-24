@@ -33,6 +33,17 @@ export class SearchProvider {
     private lastTitle = '';
     private feedbackTimeout: NodeJS.Timeout | null = null;
 
+    private readonly PRO_TIPS = [
+        { label: 'Search Symbols', detail: "Type '#' to find methods and variables" },
+        { label: 'Run Commands', detail: "Type '>' to execute VS Code commands" },
+        { label: 'Find Modified Files', detail: "Type '/m' to see changed files" },
+        { label: 'Search Open Files', detail: "Type '/o' to search only open tabs" },
+        { label: 'Search Types', detail: "Type '/t' to find classes and interfaces" },
+        { label: 'Search Text', detail: "Type '/txt' to search file content" },
+        { label: 'Find Endpoints', detail: "Type '/e' to search API routes" },
+    ];
+    private currentTipIndex = 0;
+
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = 'Active: ';
     private readonly INACTIVE_PREFIX = '';
@@ -118,6 +129,10 @@ export class SearchProvider {
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
+
+        // Start with a random tip
+        // eslint-disable-next-line sonarjs/pseudo-random
+        this.currentTipIndex = Math.floor(Math.random() * this.PRO_TIPS.length);
 
         if (activityTracker && config.isActivityTrackingEnabled() && 'setActivityCallback' in searchEngine) {
             (
@@ -524,6 +539,9 @@ export class SearchProvider {
                 items.push(this.getClearHistoryItem());
             }
 
+            // Add Pro Tip
+            items.push(this.getProTipItem());
+
             quickPick.items = items;
 
             // Update title with scope reference even in history
@@ -608,6 +626,12 @@ export class SearchProvider {
         quickPick.onDidAccept(async () => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
+                // Handle Pro Tip Cycling
+                if (selected.result.item.id === 'command:next-tip') {
+                    this.cycleProTip(quickPick);
+                    return;
+                }
+
                 // Handle Clear History
                 if (selected.result.item.id === 'command:clear-history') {
                     this.promptClearHistory(quickPick);
@@ -987,10 +1011,7 @@ export class SearchProvider {
         }
     }
 
-    private trySuggestSlashCommands(
-        quickPick: vscode.QuickPick<SearchResultItem>,
-        query: string,
-    ): boolean {
+    private trySuggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): boolean {
         if (!query.startsWith('/') && !query.startsWith('#') && !query.startsWith('>')) {
             return false;
         }
@@ -1577,7 +1598,46 @@ export class SearchProvider {
             items.push(item);
         }
 
+        // Add Pro Tip
+        items.push(this.getProTipItem());
+
         return items;
+    }
+
+    private getProTipItem(): SearchResultItem {
+        const tip = this.PRO_TIPS[this.currentTipIndex];
+        return {
+            label: `$(light-bulb) Pro Tip: ${tip.label}`,
+            description: tip.detail,
+            detail: 'Select to see another tip',
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:next-tip',
+                    name: 'Next Tip',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+    }
+
+    private cycleProTip(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        this.currentTipIndex = (this.currentTipIndex + 1) % this.PRO_TIPS.length;
+
+        const newItems = [...quickPick.items];
+        const tipIndex = newItems.findIndex((i) => i.result.item.id === 'command:next-tip');
+
+        if (tipIndex !== -1) {
+            newItems[tipIndex] = this.getProTipItem();
+            quickPick.items = newItems;
+
+            // Keep focus on the tip item so user can spam Enter to cycle
+            quickPick.activeItems = [newItems[tipIndex]];
+        }
     }
 
     private getWelcomeLabel(cmd: SlashCommand): string {
@@ -1915,8 +1975,7 @@ export class SearchProvider {
         }
 
         if (item.column !== undefined) {
-            const length =
-                highlights && highlights.length > 0 ? highlights[0][1] - highlights[0][0] : item.name.length;
+            const length = highlights && highlights.length > 0 ? highlights[0][1] - highlights[0][0] : item.name.length;
 
             return new vscode.Range(
                 new vscode.Position(item.line || 0, item.column),
@@ -1994,10 +2053,7 @@ export class SearchProvider {
         const startColumn = Math.min(index, lineText.length);
         const endColumn = Math.min(startColumn + name.length, lineText.length);
 
-        return new vscode.Range(
-            new vscode.Position(item.line, startColumn),
-            new vscode.Position(item.line, endColumn),
-        );
+        return new vscode.Range(new vscode.Position(item.line, startColumn), new vscode.Position(item.line, endColumn));
     }
 }
 
