@@ -158,9 +158,11 @@ export class SearchEngine implements ISearchProvider {
     private inactiveFileItems: SearchableItem[] = [];
     private filePriorityCacheDirty = true;
 
-    // Cache for normalized paths to avoid redundant string allocations/replacements
-    private lastRelativePath: string | null = null;
-    private lastNormalizedPath: string | null = null;
+    // 1-Item Caches for Path Normalization
+    private lastNormalizeInput: string | null = null;
+    private lastNormalizeOutput: string | null = null;
+    private lastRelativeInput: string | null = null;
+    private lastRelativeOutput: string | null = null;
 
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
@@ -244,6 +246,12 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCache.clear();
         this.filePaths = [];
         this.invalidateDerivedCaches();
+
+        this.lastNormalizeInput = null;
+        this.lastNormalizeOutput = null;
+        this.lastRelativeInput = null;
+        this.lastRelativeOutput = null;
+
         for (const item of items) {
             this.itemsMap.set(item.id, item);
         }
@@ -569,14 +577,15 @@ export class SearchEngine implements ISearchProvider {
      */
     private populateParallelArrays(item: SearchableItem): void {
         let normalizedPath: string | null = null;
-
         if (item.relativeFilePath) {
-            if (item.relativeFilePath === this.lastRelativePath) {
-                normalizedPath = this.lastNormalizedPath;
+            if (item.relativeFilePath === this.lastRelativeInput) {
+                normalizedPath = this.lastRelativeOutput;
             } else {
                 normalizedPath = item.relativeFilePath.replaceAll('\\', '/');
-                this.lastRelativePath = item.relativeFilePath;
-                this.lastNormalizedPath = normalizedPath;
+                this.lastRelativeInput = item.relativeFilePath;
+                this.lastRelativeOutput = normalizedPath;
+            }
+        }
             }
         }
 
@@ -740,6 +749,11 @@ export class SearchEngine implements ISearchProvider {
         this.activeFileItems = [];
         this.inactiveFileItems = [];
         this.invalidateDerivedCaches();
+
+        this.lastNormalizeInput = null;
+        this.lastNormalizeOutput = null;
+        this.lastRelativeInput = null;
+        this.lastRelativeOutput = null;
     }
 
     /**
@@ -969,8 +983,17 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private normalizePath(filePath: string): string {
+        if (filePath === this.lastNormalizeInput) {
+            return this.lastNormalizeOutput!;
+        }
+
         const normalized = path.normalize(filePath);
-        return this.isWindows ? normalized.toLowerCase() : normalized;
+        const result = this.isWindows ? normalized.toLowerCase() : normalized;
+
+        this.lastNormalizeInput = filePath;
+        this.lastNormalizeOutput = result;
+
+        return result;
     }
 
     private isActive(filePath: string): boolean {
@@ -1357,78 +1380,32 @@ export class SearchEngine implements ISearchProvider {
         context: TextScanContext,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        const matches = this.getAllMatches(buffer, bufferOffset, context.queryRegexGlobal);
-
-        // Fast path: No matches in this chunk
-        if (matches.length === 0) {
-            return this.advanceLinesWithoutMatches(buffer, bufferOffset, startLineIndex);
-        }
-
-        return this.processLinesWithMatches(buffer, bufferOffset, matches, startLineIndex, context);
-    }
-
-    private getAllMatches(buffer: string, bufferOffset: number, regex: RegExp): number[] {
-        // Optimization: Scan buffer for matches using RegExp first
-        // avoiding repeated toLowerCase() allocations for every line
-        const matches: number[] = [];
-        let m;
-
-        // If bufferOffset > 0, we are scanning a slice effectively, but regex runs on string from start?
-        // buffer argument is the FULL string chunk passed to this function.
-        // But we should only look at matches AFTER bufferOffset.
-        // regex.lastIndex works if we use 'g'.
+        const regex = context.queryRegexGlobal;
         regex.lastIndex = bufferOffset;
-        while ((m = regex.exec(buffer)) !== null) {
-            matches.push(m.index);
-        }
-        return matches;
-    }
 
-    private advanceLinesWithoutMatches(
-        buffer: string,
-        bufferOffset: number,
-        startLineIndex: number,
-    ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let lastIndex = bufferOffset;
-        let newlineIndex;
-        let lineIndex = startLineIndex;
-        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            lastIndex = newlineIndex + 1;
-            lineIndex++;
-        }
-        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
-        return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
-    }
-
-    private processLinesWithMatches(
-        buffer: string,
-        bufferOffset: number,
-        matches: number[],
-        startLineIndex: number,
-        context: TextScanContext,
-    ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let currentMatchIdx = 0;
+        let match = regex.exec(buffer);
         let lastIndex = bufferOffset;
         let newlineIndex;
         let lineIndex = startLineIndex;
 
         while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            // Check if we have matches in [lastIndex, newlineIndex)
-            // Skip matches that are before lastIndex (shouldn't happen if we consume correctly)
-            while (currentMatchIdx < matches.length && matches[currentMatchIdx] < lastIndex) {
-                currentMatchIdx++;
+            // Check if we have a match in this line?
+            // Match index must be >= lastIndex AND < newlineIndex.
+
+            // Ensure match is caught up to current position
+            while (match && match.index < lastIndex) {
+                match = regex.exec(buffer);
             }
 
-            if (currentMatchIdx < matches.length && matches[currentMatchIdx] < newlineIndex) {
+            if (match && match.index < newlineIndex) {
                 // Found a match in this line!
-                const matchIndex = matches[currentMatchIdx];
                 const line = buffer.slice(lastIndex, newlineIndex);
 
                 // Only process once per line
                 const hitLimit = this.processSingleLine(
                     line,
                     lineIndex,
-                    matchIndex - lastIndex, // Relative match index
+                    match.index - lastIndex, // Relative match index
                     context,
                 );
 
@@ -1436,9 +1413,9 @@ export class SearchEngine implements ISearchProvider {
                     return { newBuffer: '', newLineIndex: lineIndex + 1, hitLimit: true };
                 }
 
-                // Skip all other matches in this line
-                while (currentMatchIdx < matches.length && matches[currentMatchIdx] < newlineIndex) {
-                    currentMatchIdx++;
+                // Advance past all matches in this line
+                while (match && match.index < newlineIndex) {
+                    match = regex.exec(buffer);
                 }
             }
 
@@ -1732,7 +1709,7 @@ export class SearchEngine implements ISearchProvider {
     ): void {
         const typeId = context.itemTypeIds[i];
 
-        // Early exit: Check if query characters are present
+        // Early exit: Check if query characters are present (bitflag screening)
         if (!this.shouldProcessItem(i, typeId, context)) {
             return;
         }
@@ -1836,6 +1813,21 @@ export class SearchEngine implements ISearchProvider {
             return -Infinity;
         }
 
+        // Fast path: check for exact match or prefix before expensive fuzzy
+        const targetLower = (pName as ExtendedPrepared)._targetLower;
+        if (targetLower) {
+            if (targetLower === context.queryLower) {
+                return 1.0;
+            }
+            if (targetLower.startsWith(context.queryLower)) {
+                return 0.95;
+            }
+            // Substring check for better pre-filter
+            if (targetLower.includes(context.queryLower)) {
+                return 0.8;
+            }
+        }
+
         const res = Fuzzysort.single(context.query, pName);
         return res && res.score > context.MIN_SCORE ? res.score : -Infinity;
     }
@@ -1846,6 +1838,20 @@ export class SearchEngine implements ISearchProvider {
             return -Infinity;
         }
 
+        // Fast path: check exact/prefix before expensive fuzzy
+        const targetLower = (pFull as ExtendedPrepared)._targetLower;
+        if (targetLower) {
+            if (targetLower === context.queryLower) {
+                return 0.9;
+            }
+            if (targetLower.startsWith(context.queryLower)) {
+                return 0.85;
+            }
+            if (targetLower.includes(context.queryLower)) {
+                return 0.7;
+            }
+        }
+
         const res = Fuzzysort.single(context.query, pFull);
         return res ? res.score * 0.9 : -Infinity;
     }
@@ -1854,6 +1860,20 @@ export class SearchEngine implements ISearchProvider {
         const pPath = context.preparedPaths[i];
         if (!pPath || context.queryLen > pPath.target.length) {
             return -Infinity;
+        }
+
+        // Fast path: check exact/prefix before expensive fuzzy
+        const targetLower = (pPath as ExtendedPrepared)._targetLower;
+        if (targetLower) {
+            if (targetLower === context.queryLower) {
+                return 0.8;
+            }
+            if (targetLower.startsWith(context.queryLower)) {
+                return 0.75;
+            }
+            if (targetLower.includes(context.queryLower)) {
+                return 0.6;
+            }
         }
 
         const res = Fuzzysort.single(context.query, pPath);

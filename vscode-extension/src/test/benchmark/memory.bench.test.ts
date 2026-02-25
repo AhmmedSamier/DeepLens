@@ -49,8 +49,7 @@ suite('Extension Memory Benchmark', () => {
     });
 
     suiteTeardown(() => {
-        const baseOutput =
-            process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, 'vscode-memory-benchmarks.json');
+        const baseOutput = process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, 'vscode-memory-benchmarks.json');
         const memoryOutputPath =
             process.env.BENCHMARK_MEMORY_OUTPUT || path.join(path.dirname(baseOutput), 'vscode-extension-memory.json');
         try {

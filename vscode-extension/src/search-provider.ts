@@ -61,6 +61,20 @@ export class SearchProvider {
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
+    private readonly CMD_NEXT_TIP = 'command:next-tip';
+
+    private currentTipIndex = 0;
+    private readonly TIPS = [
+        "Type '/t' to search specifically for classes and types",
+        "Type '/f' to find files by name",
+        "Use '/s' to search for symbols",
+        "Double-press 'Shift' to open DeepLens anytime",
+        "Type '/cmd' to run VS Code commands",
+        'DeepLens learns from your activity to rank results',
+        "Use '/m' to see modified files",
+        "Use '/e' to find API endpoints",
+        "Type '/txt' for full text search across your workspace",
+    ];
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
         iconPath: new vscode.ThemeIcon('stop-circle'),
@@ -524,6 +538,9 @@ export class SearchProvider {
                 items.push(this.getClearHistoryItem());
             }
 
+            // Add Pro Tip
+            items.push(this.getTipItem());
+
             quickPick.items = items;
 
             // Update title with scope reference even in history
@@ -626,6 +643,14 @@ export class SearchProvider {
 
                 // Handle Empty State Actions
                 if (await this.handleEmptyStateAction(selected, quickPick)) {
+                    return;
+                }
+
+                // Handle Pro Tip cycling
+                if (selected.result.item.id === this.CMD_NEXT_TIP) {
+                    this.currentTipIndex = (this.currentTipIndex + 1) % this.TIPS.length;
+                    // Refresh the view to show new tip
+                    await this.showRecentHistory(quickPick);
                     return;
                 }
 
@@ -987,10 +1012,7 @@ export class SearchProvider {
         }
     }
 
-    private trySuggestSlashCommands(
-        quickPick: vscode.QuickPick<SearchResultItem>,
-        query: string,
-    ): boolean {
+    private trySuggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): boolean {
         if (!query.startsWith('/') && !query.startsWith('#') && !query.startsWith('>')) {
             return false;
         }
@@ -1386,6 +1408,30 @@ export class SearchProvider {
         };
     }
 
+    /**
+     * Get Pro Tip item
+     */
+    private getTipItem(): SearchResultItem {
+        const tip = this.TIPS[this.currentTipIndex];
+        return {
+            label: `💡 Pro Tip: ${tip}`,
+            description: 'Click for next tip',
+            iconPath: new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground')),
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: this.CMD_NEXT_TIP,
+                    name: 'Pro Tip',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+    }
+
     private async handleEmptyStateAction(
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
@@ -1576,6 +1622,9 @@ export class SearchProvider {
             item.alwaysShow = true;
             items.push(item);
         }
+
+        // Add Pro Tip
+        items.push(this.getTipItem());
 
         return items;
     }
@@ -1915,8 +1964,7 @@ export class SearchProvider {
         }
 
         if (item.column !== undefined) {
-            const length =
-                highlights && highlights.length > 0 ? highlights[0][1] - highlights[0][0] : item.name.length;
+            const length = highlights && highlights.length > 0 ? highlights[0][1] - highlights[0][0] : item.name.length;
 
             return new vscode.Range(
                 new vscode.Position(item.line || 0, item.column),
@@ -1994,10 +2042,7 @@ export class SearchProvider {
         const startColumn = Math.min(index, lineText.length);
         const endColumn = Math.min(startColumn + name.length, lineText.length);
 
-        return new vscode.Range(
-            new vscode.Position(item.line, startColumn),
-            new vscode.Position(item.line, endColumn),
-        );
+        return new vscode.Range(new vscode.Position(item.line, startColumn), new vscode.Position(item.line, endColumn));
     }
 }
 

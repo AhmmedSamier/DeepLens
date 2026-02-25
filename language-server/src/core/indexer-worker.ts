@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { SearchableItem } from './types';
 
@@ -30,21 +31,22 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
             const chunk = filePaths.slice(i, i + BATCH_SIZE);
+            const limit = pLimit(BATCH_SIZE);
 
-            // Parallelize file reading and parsing within the chunk
             const results = await Promise.all(
-                chunk.map(async (filePath) => {
-                    try {
-                        return await parser.parseFile(filePath);
-                    } catch {
-                        return [];
-                    }
-                }),
+                chunk.map((filePath) =>
+                    limit(async () => {
+                        try {
+                            return await parser.parseFile(filePath);
+                        } catch {
+                            return [];
+                        }
+                    }),
+                ),
             );
 
             const chunkItems = results.flat();
 
-            // Send back chunk result immediately to keep main thread unblocked but processing
             parentPort?.postMessage({
                 type: 'result',
                 items: chunkItems,
