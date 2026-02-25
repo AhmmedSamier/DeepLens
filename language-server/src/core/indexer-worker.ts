@@ -27,50 +27,33 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
-        // Use chunkSize as concurrency limit
         const BATCH_SIZE = message.chunkSize ?? 25;
-        const limit = pLimit(BATCH_SIZE);
 
-        let processedCount = 0;
-        let batchBuffer: SearchableItem[] = [];
-        let batchCount = 0;
+        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
+            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+            const limit = pLimit(BATCH_SIZE);
 
-        const sendBatch = (isFinal: boolean) => {
-            if (batchCount > 0 || isFinal) {
-                parentPort?.postMessage({
-                    type: 'result',
-                    items: batchBuffer,
-                    count: batchCount,
-                    isPartial: !isFinal,
-                });
-                batchBuffer = [];
-                batchCount = 0;
-            }
-        };
-
-        await Promise.all(
-            filePaths.map((filePath) =>
-                limit(async () => {
-                    try {
-                        const items = await parser.parseFile(filePath);
-                        batchBuffer.push(...items);
-                    } catch {
-                        // ignore error
-                    } finally {
-                        processedCount++;
-                        batchCount++;
-
-                        // Check if we should flush intermediate batch
-                        if (batchCount >= BATCH_SIZE && processedCount < filePaths.length) {
-                            sendBatch(false);
+            const results = await Promise.all(
+                chunk.map((filePath) =>
+                    limit(async () => {
+                        try {
+                            return await parser.parseFile(filePath);
+                        } catch {
+                            return [];
                         }
-                    }
-                }),
-            ),
-        );
+                    }),
+                ),
+            );
 
-        // Always send final batch to signal completion (!isPartial)
-        sendBatch(true);
+            const chunkItems = results.flat();
+
+            parentPort?.postMessage({
+                type: 'result',
+                items: chunkItems,
+                count: chunk.length,
+                isPartial: i + BATCH_SIZE < filePaths.length,
+            });
+        }
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
