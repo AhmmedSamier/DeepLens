@@ -127,8 +127,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Status Bar Item
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusItem.name = 'DeepLens Index Status'; // Palette: Accessibility name
     statusItem.text = '$(database) DeepLens';
-    statusItem.tooltip = 'DeepLens Index Status';
+    statusItem.tooltip = 'DeepLens Index Status (Click for stats)';
     statusItem.command = 'deeplens.showIndexStats';
     statusItem.show();
     context.subscriptions.push(statusItem);
@@ -211,12 +212,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
             statusItem.text = `${icon} DeepLens${percentageText}`;
             if (e.message) {
-                statusItem.tooltip = `DeepLens: ${e.message}`;
+                statusItem.tooltip = `DeepLens: ${e.message} (Click for stats)`;
             }
             statusItem.color = color;
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
-            statusItem.tooltip = 'DeepLens Index Status';
+            statusItem.tooltip = 'DeepLens Index Status (Click for stats)';
             statusItem.color = '#cccccc'; // Gray for normal state
         }
     });

@@ -173,22 +173,77 @@ export class SearchProvider {
         const dimmedColor = new vscode.ThemeColor('descriptionForeground');
 
         const buttonConfigs = [
-            { scope: SearchScope.EVERYTHING, icon: 'search', label: 'All', shortcut: '/all' },
-            { scope: SearchScope.OPEN, icon: 'book', label: 'Open Files', shortcut: '/o' },
-            { scope: SearchScope.MODIFIED, icon: 'git-merge', label: 'Modified', shortcut: '/m' },
-            { scope: SearchScope.TYPES, icon: this.ICON_CLASS, label: 'Classes', shortcut: '/t' },
-            { scope: SearchScope.SYMBOLS, icon: 'symbol-method', label: 'Symbols', shortcut: '/s or #' },
-            { scope: SearchScope.FILES, icon: 'file', label: 'Files', shortcut: '/f' },
-            { scope: SearchScope.TEXT, icon: 'whole-word', label: 'Text', shortcut: '/txt' },
-            { scope: SearchScope.COMMANDS, icon: 'run', label: 'Commands', shortcut: '/cmd or >' },
-            { scope: SearchScope.PROPERTIES, icon: 'symbol-property', label: 'Properties', shortcut: '/p' },
-            { scope: SearchScope.ENDPOINTS, icon: 'globe', label: 'Endpoints', shortcut: '/e' },
+            {
+                scope: SearchScope.EVERYTHING,
+                icon: 'search',
+                label: 'All',
+                shortcut: '/all',
+                desc: 'Search everywhere',
+            },
+            {
+                scope: SearchScope.OPEN,
+                icon: 'book',
+                label: 'Open Files',
+                shortcut: '/o',
+                desc: 'Search open editors',
+            },
+            {
+                scope: SearchScope.MODIFIED,
+                icon: 'git-merge',
+                label: 'Modified',
+                shortcut: '/m',
+                desc: 'Search modified files',
+            },
+            {
+                scope: SearchScope.TYPES,
+                icon: this.ICON_CLASS,
+                label: 'Classes',
+                shortcut: '/t',
+                desc: 'Search types & interfaces',
+            },
+            {
+                scope: SearchScope.SYMBOLS,
+                icon: 'symbol-method',
+                label: 'Symbols',
+                shortcut: '/s or #',
+                desc: 'Search methods & variables',
+            },
+            { scope: SearchScope.FILES, icon: 'file', label: 'Files', shortcut: '/f', desc: 'Search files by name' },
+            {
+                scope: SearchScope.TEXT,
+                icon: 'whole-word',
+                label: 'Text',
+                shortcut: '/txt',
+                desc: 'Search file content',
+            },
+            {
+                scope: SearchScope.COMMANDS,
+                icon: 'run',
+                label: 'Commands',
+                shortcut: '/cmd or >',
+                desc: 'Run VS Code commands',
+            },
+            {
+                scope: SearchScope.PROPERTIES,
+                icon: 'symbol-property',
+                label: 'Properties',
+                shortcut: '/p',
+                desc: 'Search properties',
+            },
+            {
+                scope: SearchScope.ENDPOINTS,
+                icon: 'globe',
+                label: 'Endpoints',
+                shortcut: '/e',
+                desc: 'Search API endpoints',
+            },
         ];
 
         for (const config of buttonConfigs) {
             this.filterButtons.set(config.scope, {
                 iconPath: new vscode.ThemeIcon(config.icon, dimmedColor),
-                tooltip: `${this.INACTIVE_PREFIX}${config.label} (${config.shortcut})`,
+                // Palette: Enhanced tooltip with description for better accessibility
+                tooltip: `${this.INACTIVE_PREFIX}${config.label} (${config.shortcut}) - ${config.desc}`,
             });
         }
     }
@@ -1470,15 +1525,17 @@ export class SearchProvider {
      */
     private getEmptyStateItems(query: string): SearchResultItem[] {
         const isGlobalScope = this.currentScope === SearchScope.EVERYTHING;
+        // Palette: Use scope-specific message
+        const scopeName = this.getScopeName(this.currentScope);
         const detail = isGlobalScope
             ? `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`
-            : 'Try switching to Global search or check for typos';
+            : `Try switching to Global search to find items outside of ${scopeName}.`;
 
         const items: SearchResultItem[] = [];
 
         // 1. Header Item (Informational)
         items.push({
-            label: `No results found for '${query}'`,
+            label: `No ${scopeName} found for '${query}'`,
             description: '',
             detail: detail,
             alwaysShow: true,
@@ -1563,11 +1620,37 @@ export class SearchProvider {
         return items;
     }
 
+    private getScopeName(scope: SearchScope): string {
+        switch (scope) {
+            case SearchScope.FILES:
+                return 'files';
+            case SearchScope.TYPES:
+                return 'classes/types';
+            case SearchScope.SYMBOLS:
+                return 'symbols';
+            case SearchScope.TEXT:
+                return 'text matches';
+            case SearchScope.COMMANDS:
+                return 'commands';
+            case SearchScope.ENDPOINTS:
+                return 'endpoints';
+            case SearchScope.PROPERTIES:
+                return 'properties';
+            case SearchScope.OPEN:
+                return 'open files';
+            case SearchScope.MODIFIED:
+                return 'modified files';
+            default:
+                return 'results';
+        }
+    }
+
     /**
      * Get welcome items for empty state
      */
     private getWelcomeItems(): SearchResultItem[] {
-        const welcomeCommands = ['/all', '/t', '/f', '/s', '/txt'];
+        // Palette: Added /cmd and /e to improve discoverability
+        const welcomeCommands = ['/all', '/t', '/f', '/s', '/txt', '/cmd', '/e'];
         const items: SearchResultItem[] = [];
 
         for (const cmdId of welcomeCommands) {
