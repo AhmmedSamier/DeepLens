@@ -233,8 +233,8 @@ export class SearchEngine implements ISearchProvider {
      */
     async setItems(items: SearchableItem[]): Promise<void> {
         ensureBitflagsInitialized();
-        this.lastRelativePath = null;
-        this.lastNormalizedPath = null;
+        this.lastRelativeInput = null;
+        this.lastRelativeOutput = null;
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
@@ -584,8 +584,6 @@ export class SearchEngine implements ISearchProvider {
                 normalizedPath = item.relativeFilePath.replaceAll('\\', '/');
                 this.lastRelativeInput = item.relativeFilePath;
                 this.lastRelativeOutput = normalizedPath;
-            }
-        }
             }
         }
 
