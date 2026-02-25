@@ -1704,7 +1704,7 @@ export class SearchEngine implements ISearchProvider {
     ): void {
         const typeId = context.itemTypeIds[i];
 
-        // Early exit: Check if query characters are present
+        // Early exit: Check if query characters are present (bitflag screening)
         if (!this.shouldProcessItem(i, typeId, context)) {
             return;
         }
@@ -1808,6 +1808,21 @@ export class SearchEngine implements ISearchProvider {
             return -Infinity;
         }
 
+        // Fast path: check for exact match or prefix before expensive fuzzy
+        const targetLower = (pName as ExtendedPrepared)._targetLower;
+        if (targetLower) {
+            if (targetLower === context.queryLower) {
+                return 1.0;
+            }
+            if (targetLower.startsWith(context.queryLower)) {
+                return 0.95;
+            }
+            // Substring check for better pre-filter
+            if (targetLower.includes(context.queryLower)) {
+                return 0.8;
+            }
+        }
+
         const res = Fuzzysort.single(context.query, pName);
         return res && res.score > context.MIN_SCORE ? res.score : -Infinity;
     }
@@ -1818,6 +1833,20 @@ export class SearchEngine implements ISearchProvider {
             return -Infinity;
         }
 
+        // Fast path: check exact/prefix before expensive fuzzy
+        const targetLower = (pFull as ExtendedPrepared)._targetLower;
+        if (targetLower) {
+            if (targetLower === context.queryLower) {
+                return 0.9;
+            }
+            if (targetLower.startsWith(context.queryLower)) {
+                return 0.85;
+            }
+            if (targetLower.includes(context.queryLower)) {
+                return 0.7;
+            }
+        }
+
         const res = Fuzzysort.single(context.query, pFull);
         return res ? res.score * 0.9 : -Infinity;
     }
@@ -1826,6 +1855,20 @@ export class SearchEngine implements ISearchProvider {
         const pPath = context.preparedPaths[i];
         if (!pPath || context.queryLen > pPath.target.length) {
             return -Infinity;
+        }
+
+        // Fast path: check exact/prefix before expensive fuzzy
+        const targetLower = (pPath as ExtendedPrepared)._targetLower;
+        if (targetLower) {
+            if (targetLower === context.queryLower) {
+                return 0.8;
+            }
+            if (targetLower.startsWith(context.queryLower)) {
+                return 0.75;
+            }
+            if (targetLower.includes(context.queryLower)) {
+                return 0.6;
+            }
         }
 
         const res = Fuzzysort.single(context.query, pPath);
