@@ -34,16 +34,14 @@ export class SearchProvider {
     private feedbackTimeout: NodeJS.Timeout | null = null;
 
     private readonly PRO_TIPS = [
-        { label: 'Search Symbols', detail: "Type '#' or '/s' to find methods and variables" },
-        { label: 'Run Commands', detail: "Type '>' or '/cmd' to execute VS Code commands" },
+        // Palette: Helpful tips for user onboarding
+        { label: 'Search Symbols', detail: "Type '#' to find methods and variables" },
+        { label: 'Run Commands', detail: "Type '>' to execute VS Code commands" },
         { label: 'Find Modified Files', detail: "Type '/m' to see changed files" },
         { label: 'Search Open Files', detail: "Type '/o' to search only open tabs" },
         { label: 'Search Types', detail: "Type '/t' to find classes and interfaces" },
         { label: 'Search Text', detail: "Type '/txt' to search file content" },
         { label: 'Find Endpoints', detail: "Type '/e' to search API routes" },
-        { label: 'Find Files', detail: "Type '/f' to find files by name" },
-        { label: 'Quick Open', detail: "Double-press 'Shift' to open DeepLens anytime" },
-        { label: 'Smart Ranking', detail: 'DeepLens learns from your activity to rank results' },
     ];
     private currentTipIndex = 0;
 
@@ -75,7 +73,6 @@ export class SearchProvider {
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
-    private readonly CMD_NEXT_TIP = 'command:next-tip';
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
         iconPath: new vscode.ThemeIcon('stop-circle'),
@@ -525,11 +522,8 @@ export class SearchProvider {
                 return;
             }
 
-            // Add Tip at the top
-            const finalItems = [this.getTipItem()];
-
             // Map results to QuickPick items
-            const historyItems = results.map((r) => this.resultToQuickPickItem(r));
+            const items = results.map((r) => this.resultToQuickPickItem(r));
 
             // Add remove button to history items
             const removeButton = {
@@ -537,18 +531,19 @@ export class SearchProvider {
                 tooltip: this.TOOLTIP_REMOVE_HISTORY,
             };
 
-            for (const item of historyItems) {
+            for (const item of items) {
                 item.buttons = [...(item.buttons || []), removeButton];
             }
 
-            finalItems.push(...historyItems);
-
             // Add Clear History item if we have tracking enabled
             if (this.activityTracker) {
-                finalItems.push(this.getClearHistoryItem());
+                items.push(this.getClearHistoryItem());
             }
 
-            quickPick.items = finalItems;
+            // Add Pro Tip
+            items.push(this.getProTipItem());
+
+            quickPick.items = items;
 
             // Update title with scope reference even in history
             this.updateTitle(quickPick, 0);
@@ -571,7 +566,6 @@ export class SearchProvider {
         let queryTimeout: NodeJS.Timeout | undefined;
         let accepted = false;
         let lastActiveItemId: string | null = null;
-        let lastActiveIndex = -1;
         let userHasNavigated = false;
 
         // Cleanup timeouts on hide
@@ -587,7 +581,6 @@ export class SearchProvider {
             // Reset navigation tracking when query changes
             userHasNavigated = false;
             lastActiveItemId = null;
-            lastActiveIndex = -1;
             queryTimeout = setTimeout(() => {
                 this.handleQueryChange(
                     quickPick,
@@ -604,21 +597,6 @@ export class SearchProvider {
             const item = items[0];
             if (item) {
                 const currentItemId = item.result.item.id;
-                const currentIndex = quickPick.items.indexOf(item);
-
-                // Skip the tip item (at index 0) during keyboard navigation
-                if (currentIndex === 0 && quickPick.items.length > 1) {
-                    if (lastActiveIndex === -1 || lastActiveIndex === 1) {
-                        // Just opened or moving up from index 1 -> go to bottom
-                        quickPick.activeItems = [quickPick.items[quickPick.items.length - 1]];
-                    } else {
-                        // Moving down from bottom -> go to index 1
-                        quickPick.activeItems = [quickPick.items[1]];
-                    }
-                    return;
-                }
-
-                lastActiveIndex = currentIndex;
 
                 // Only preview if user has actually navigated (not just auto-focus on first result)
                 // We detect navigation by checking if the active item changed from a previous value
@@ -673,14 +651,6 @@ export class SearchProvider {
 
                 // Handle Empty State Actions
                 if (await this.handleEmptyStateAction(selected, quickPick)) {
-                    return;
-                }
-
-                // Handle Pro Tip cycling
-                if (selected.result.item.id === this.CMD_NEXT_TIP) {
-                    this.currentTipIndex = (this.currentTipIndex + 1) % this.TIPS.length;
-                    // Refresh the view to show new tip
-                    await this.showRecentHistory(quickPick);
                     return;
                 }
 
@@ -1438,30 +1408,6 @@ export class SearchProvider {
         };
     }
 
-    /**
-     * Get Tip item
-     */
-    private getTipItem(): SearchResultItem {
-        const tip = this.PRO_TIPS[this.currentTipIndex];
-        return {
-            label: `$(light-bulb) Pro Tip: ${tip.label}`,
-            description: tip.detail,
-            detail: 'Select to see another tip',
-            alwaysShow: true,
-            result: {
-                item: {
-                    id: 'command:next-tip',
-                    name: 'Next Tip',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        };
-    }
-
     private async handleEmptyStateAction(
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
@@ -1530,10 +1476,7 @@ export class SearchProvider {
 
         const items: SearchResultItem[] = [];
 
-        // 1. Tip Item (at the very top)
-        items.push(this.getTipItem());
-
-        // 2. Header Item (Informational)
+        // 1. Header Item (Informational)
         items.push({
             label: `No results found for '${query}'`,
             description: '',
@@ -1656,8 +1599,31 @@ export class SearchProvider {
             items.push(item);
         }
 
-        // Add Tip at the top
-        return [this.getTipItem(), ...items];
+        // Add Pro Tip
+        items.push(this.getProTipItem());
+
+        return items;
+    }
+
+    private getProTipItem(): SearchResultItem {
+        const tip = this.PRO_TIPS[this.currentTipIndex];
+        return {
+            label: `$(light-bulb) Pro Tip: ${tip.label}`,
+            description: tip.detail,
+            detail: 'Select to see another tip',
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:next-tip',
+                    name: 'Next Tip',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
     }
 
     private cycleProTip(quickPick: vscode.QuickPick<SearchResultItem>): void {
@@ -1667,7 +1633,7 @@ export class SearchProvider {
         const tipIndex = newItems.findIndex((i) => i.result.item.id === 'command:next-tip');
 
         if (tipIndex !== -1) {
-            newItems[tipIndex] = this.getTipItem();
+            newItems[tipIndex] = this.getProTipItem();
             quickPick.items = newItems;
 
             // Keep focus on the tip item so user can spam Enter to cycle
