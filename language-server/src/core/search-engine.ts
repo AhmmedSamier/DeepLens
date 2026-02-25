@@ -174,20 +174,16 @@ export class SearchEngine implements ISearchProvider {
     private readonly fileToItemIndices: Map<string, number[]> = new Map();
     private readonly itemIndexById: Map<string, number> = new Map();
 
-    private modifiedIndicesCache:
-        | {
-              indices: number[];
-              expiresAt: number;
-          }
-        | null = null;
+    private modifiedIndicesCache: {
+        indices: number[];
+        expiresAt: number;
+    } | null = null;
 
-    private lastQueryMemo:
-        | {
-              scope: SearchScope;
-              query: string;
-              topIndices: number[];
-          }
-        | null = null;
+    private lastQueryMemo: {
+        scope: SearchScope;
+        query: string;
+        topIndices: number[];
+    } | null = null;
 
     public itemsMap: Map<string, SearchableItem> = new Map();
     private readonly fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
@@ -236,6 +232,9 @@ export class SearchEngine implements ISearchProvider {
      * Set the searchable items and update hot-arrays
      */
     async setItems(items: SearchableItem[]): Promise<void> {
+        ensureBitflagsInitialized();
+        this.lastRelativeInput = null;
+        this.lastRelativeOutput = null;
         this.items = items;
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
@@ -263,6 +262,7 @@ export class SearchEngine implements ISearchProvider {
      * Add items to the search index and update hot-arrays incrementally
      */
     async addItems(items: SearchableItem[]): Promise<void> {
+        ensureBitflagsInitialized();
         this.invalidateDerivedCaches();
         // Pre-calculate start index for new items
         const startIndex = this.items.length;
@@ -359,6 +359,7 @@ export class SearchEngine implements ISearchProvider {
      * Optimized to use "Swap and Pop" strategy (fill gaps with items from the end)
      * and incremental index updates to avoid O(N) rebuilds.
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     removeItemsByFiles(filePaths: string[]): void {
         if (filePaths.length === 0 || this.items.length === 0) {
             return;
@@ -474,7 +475,6 @@ export class SearchEngine implements ISearchProvider {
         this.preparedPaths[write] = this.preparedPaths[read];
         this.preparedPatterns[write] = this.preparedPatterns[read];
     }
-
 
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort
@@ -842,6 +842,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
+        ensureBitflagsInitialized();
         const { query, scope, maxResults = 20 } = options;
 
         if (!query || query.trim().length === 0) {
@@ -1486,6 +1487,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     public async performSymbolSearch(context: SearchContext): Promise<SearchResult[]> {
+        ensureBitflagsInitialized();
         let indices: number[] | undefined;
 
         if (context.scope === SearchScope.OPEN) {
@@ -1515,6 +1517,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     public async performFileSearch(context: SearchContext): Promise<SearchResult[]> {
+        ensureBitflagsInitialized();
         let indices: number[] | undefined;
 
         if (context.scope === SearchScope.OPEN) {
@@ -2069,8 +2072,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private calculateBitflags(str: string): number {
-        ensureBitflagsInitialized();
-
         // Optimization: Single pass using lookup table for BMP characters
         const len = str.length;
         let bitflags = 0;
@@ -2135,6 +2136,7 @@ export class SearchEngine implements ISearchProvider {
         onResultOrToken?: ((result: SearchResult) => void) | CancellationToken,
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
+        ensureBitflagsInitialized();
         const { query, scope, maxResults = 10 } = options;
         if (!query || query.trim().length === 0) {
             return [];
