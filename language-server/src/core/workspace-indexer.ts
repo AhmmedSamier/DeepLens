@@ -99,7 +99,7 @@ export class WorkspaceIndexer {
         let workerCount = this.config.getIndexWorkerCount();
         if (workerCount <= 0) {
             const cpuCount = os.cpus().length;
-            workerCount = Math.max(1, Math.min(cpuCount - 1, 20));
+            workerCount = Math.max(1, Math.min(cpuCount - 1, 8));
         }
 
         const possibleScripts = [
@@ -203,7 +203,6 @@ export class WorkspaceIndexer {
             return;
         }
 
-        const startTime = Date.now();
         this.indexing = true;
         this.cancellationToken = { cancelled: false };
         this.stringCache.clear();
@@ -227,12 +226,10 @@ export class WorkspaceIndexer {
 
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
-            const scanStartTime = Date.now();
             await this.indexFiles((items) => {
                 fileItems.push(...items);
                 this.fireItemsAdded(items);
             });
-            const scanDuration = Date.now() - scanStartTime;
 
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
@@ -240,7 +237,6 @@ export class WorkspaceIndexer {
             this.log(`Step 3/4: Extracting symbols from ${fileItems.length} files...`);
             let reportedStepProgress = 0;
 
-            const extractStartTime = Date.now();
             await this.indexSymbols(fileItems, (message, totalPercentage) => {
                 if (totalPercentage === undefined) {
                     progressCallback?.(message);
@@ -256,7 +252,6 @@ export class WorkspaceIndexer {
                     progressCallback?.(message);
                 }
             });
-            const extractDuration = Date.now() - extractStartTime;
 
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
@@ -265,10 +260,7 @@ export class WorkspaceIndexer {
             progressCallback?.('Finalizing...', 10);
             this.setupFileWatchers();
 
-            const totalDuration = Date.now() - startTime;
-            this.log(
-                `Index Workspace complete. Files: ${fileItems.length}, Scan: ${scanDuration}ms, Extract: ${extractDuration}ms, Total: ${totalDuration}ms`,
-            );
+            this.log('Index Workspace complete.');
             this.lastIndexTimestamp = Date.now();
         } finally {
             this.indexing = false;
@@ -362,7 +354,7 @@ export class WorkspaceIndexer {
      * Process a list of file paths into searchable items in parallel
      */
     private async processFileList(files: string[], collector: (items: SearchableItem[]) => void): Promise<void> {
-        const CONCURRENCY = 100;
+        const CONCURRENCY = 50; // Reduced to 50 to avoid EMFILE on some systems
         const limit = pLimit(CONCURRENCY);
 
         let batch: SearchableItem[] = [];
@@ -611,11 +603,11 @@ export class WorkspaceIndexer {
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
         const totalFiles = fileItems.length;
-        let batchSize = 200;
+        let batchSize = 100;
         if (totalFiles >= 10000) {
-            batchSize = 500;
+            batchSize = 250;
         } else if (totalFiles >= 2500) {
-            batchSize = 300;
+            batchSize = 150;
         }
 
         const workers = this.getWorkers();
@@ -1022,7 +1014,7 @@ export class WorkspaceIndexer {
         let processed = 0;
         let nextReportingPercentage = 0;
 
-        const CONCURRENCY = 100;
+        const CONCURRENCY = 50;
         const limit = pLimit(CONCURRENCY);
 
         await Promise.all(

@@ -33,6 +33,18 @@ export class SearchProvider {
     private lastTitle = '';
     private feedbackTimeout: NodeJS.Timeout | null = null;
 
+    private readonly PRO_TIPS = [
+        // Palette: Helpful tips for user onboarding
+        { label: 'Search Symbols', detail: "Type '#' to find methods and variables" },
+        { label: 'Run Commands', detail: "Type '>' to execute VS Code commands" },
+        { label: 'Find Modified Files', detail: "Type '/m' to see changed files" },
+        { label: 'Search Open Files', detail: "Type '/o' to search only open tabs" },
+        { label: 'Search Types', detail: "Type '/t' to find classes and interfaces" },
+        { label: 'Search Text', detail: "Type '/txt' to search file content" },
+        { label: 'Find Endpoints', detail: "Type '/e' to search API routes" },
+    ];
+    private currentTipIndex = 0;
+
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = 'Active: ';
     private readonly INACTIVE_PREFIX = '';
@@ -61,20 +73,6 @@ export class SearchProvider {
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
-    private readonly CMD_NEXT_TIP = 'command:next-tip';
-
-    private currentTipIndex = 0;
-    private readonly TIPS = [
-        "Type '/t' to search specifically for classes and types",
-        "Type '/f' to find files by name",
-        "Use '/s' to search for symbols",
-        "Double-press 'Shift' to open DeepLens anytime",
-        "Type '/cmd' to run VS Code commands",
-        'DeepLens learns from your activity to rank results',
-        "Use '/m' to see modified files",
-        "Use '/e' to find API endpoints",
-        "Type '/txt' for full text search across your workspace",
-    ];
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
         iconPath: new vscode.ThemeIcon('stop-circle'),
@@ -132,6 +130,10 @@ export class SearchProvider {
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
+
+        // Start with a random tip
+        // eslint-disable-next-line sonarjs/pseudo-random
+        this.currentTipIndex = Math.floor(Math.random() * this.PRO_TIPS.length);
 
         if (activityTracker && config.isActivityTrackingEnabled() && 'setActivityCallback' in searchEngine) {
             (
@@ -539,7 +541,7 @@ export class SearchProvider {
             }
 
             // Add Pro Tip
-            items.push(this.getTipItem());
+            items.push(this.getProTipItem());
 
             quickPick.items = items;
 
@@ -625,6 +627,12 @@ export class SearchProvider {
         quickPick.onDidAccept(async () => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
+                // Handle Pro Tip Cycling
+                if (selected.result.item.id === 'command:next-tip') {
+                    this.cycleProTip(quickPick);
+                    return;
+                }
+
                 // Handle Clear History
                 if (selected.result.item.id === 'command:clear-history') {
                     this.promptClearHistory(quickPick);
@@ -643,14 +651,6 @@ export class SearchProvider {
 
                 // Handle Empty State Actions
                 if (await this.handleEmptyStateAction(selected, quickPick)) {
-                    return;
-                }
-
-                // Handle Pro Tip cycling
-                if (selected.result.item.id === this.CMD_NEXT_TIP) {
-                    this.currentTipIndex = (this.currentTipIndex + 1) % this.TIPS.length;
-                    // Refresh the view to show new tip
-                    await this.showRecentHistory(quickPick);
                     return;
                 }
 
@@ -1408,30 +1408,6 @@ export class SearchProvider {
         };
     }
 
-    /**
-     * Get Pro Tip item
-     */
-    private getTipItem(): SearchResultItem {
-        const tip = this.TIPS[this.currentTipIndex];
-        return {
-            label: `💡 Pro Tip: ${tip}`,
-            description: 'Click for next tip',
-            iconPath: new vscode.ThemeIcon('lightbulb', new vscode.ThemeColor('textLink.foreground')),
-            alwaysShow: true,
-            result: {
-                item: {
-                    id: this.CMD_NEXT_TIP,
-                    name: 'Pro Tip',
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        };
-    }
-
     private async handleEmptyStateAction(
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
@@ -1624,9 +1600,45 @@ export class SearchProvider {
         }
 
         // Add Pro Tip
-        items.push(this.getTipItem());
+        items.push(this.getProTipItem());
 
         return items;
+    }
+
+    private getProTipItem(): SearchResultItem {
+        const tip = this.PRO_TIPS[this.currentTipIndex];
+        return {
+            label: `$(light-bulb) Pro Tip: ${tip.label}`,
+            description: tip.detail,
+            detail: 'Select to see another tip',
+            alwaysShow: true,
+            result: {
+                item: {
+                    id: 'command:next-tip',
+                    name: 'Next Tip',
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '',
+                },
+                score: 0,
+                scope: SearchScope.COMMANDS,
+            },
+        };
+    }
+
+    private cycleProTip(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        this.currentTipIndex = (this.currentTipIndex + 1) % this.PRO_TIPS.length;
+
+        const newItems = [...quickPick.items];
+        const tipIndex = newItems.findIndex((i) => i.result.item.id === 'command:next-tip');
+
+        if (tipIndex !== -1) {
+            newItems[tipIndex] = this.getProTipItem();
+            quickPick.items = newItems;
+
+            // Keep focus on the tip item so user can spam Enter to cycle
+            quickPick.activeItems = [newItems[tipIndex]];
+        }
     }
 
     private getWelcomeLabel(cmd: SlashCommand): string {
