@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { SearchableItem } from './types';
 
@@ -26,32 +27,50 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+        // Use chunkSize as concurrency limit
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const limit = pLimit(BATCH_SIZE);
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        let processedCount = 0;
+        let batchBuffer: SearchableItem[] = [];
+        let batchCount = 0;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
+        const sendBatch = (isFinal: boolean) => {
+            if (batchCount > 0 || isFinal) {
+                parentPort?.postMessage({
+                    type: 'result',
+                    items: batchBuffer,
+                    count: batchCount,
+                    isPartial: !isFinal,
+                });
+                batchBuffer = [];
+                batchCount = 0;
+            }
+        };
+
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
                     try {
-                        return await parser.parseFile(filePath);
+                        const items = await parser.parseFile(filePath);
+                        batchBuffer.push(...items);
                     } catch {
-                        return [];
+                        // ignore error
+                    } finally {
+                        processedCount++;
+                        batchCount++;
+
+                        // Check if we should flush intermediate batch
+                        if (batchCount >= BATCH_SIZE && processedCount < filePaths.length) {
+                            sendBatch(false);
+                        }
                     }
                 }),
-            );
+            ),
+        );
 
-            const chunkItems = results.flat();
-
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+        // Always send final batch to signal completion (!isPartial)
+        sendBatch(true);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
