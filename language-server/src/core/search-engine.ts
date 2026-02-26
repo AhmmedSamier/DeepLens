@@ -1342,10 +1342,14 @@ export class SearchEngine implements ISearchProvider {
         startLineIndex: number,
         isWholeFile: boolean = false,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        const matches = this.getAllMatches(buffer, bufferOffset, context.queryRegexGlobal);
+        const regex = context.queryRegexGlobal;
+        regex.lastIndex = bufferOffset;
+
+        // Find first match
+        let nextMatch = regex.exec(buffer);
 
         // Fast path: No matches in this chunk
-        if (matches.length === 0) {
+        if (!nextMatch) {
             // Optimization: If scanning whole file and no matches found,
             // no need to calculate line indices or new buffer
             if (isWholeFile) {
@@ -1354,64 +1358,15 @@ export class SearchEngine implements ISearchProvider {
             return this.advanceLinesWithoutMatches(buffer, bufferOffset, startLineIndex);
         }
 
-        return this.processLinesWithMatches(buffer, bufferOffset, matches, startLineIndex, context);
-    }
-
-    private getAllMatches(buffer: string, bufferOffset: number, regex: RegExp): number[] {
-        // Optimization: Scan buffer for matches using RegExp first
-        // avoiding repeated toLowerCase() allocations for every line
-        const matches: number[] = [];
-        let m;
-
-        // If bufferOffset > 0, we are scanning a slice effectively, but regex runs on string from start?
-        // buffer argument is the FULL string chunk passed to this function.
-        // But we should only look at matches AFTER bufferOffset.
-        // regex.lastIndex works if we use 'g'.
-        regex.lastIndex = bufferOffset;
-        while ((m = regex.exec(buffer)) !== null) {
-            matches.push(m.index);
-        }
-        return matches;
-    }
-
-    private advanceLinesWithoutMatches(
-        buffer: string,
-        bufferOffset: number,
-        startLineIndex: number,
-    ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let lastIndex = bufferOffset;
-        let newlineIndex;
-        let lineIndex = startLineIndex;
-        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            lastIndex = newlineIndex + 1;
-            lineIndex++;
-        }
-        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
-        return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
-    }
-
-    private processLinesWithMatches(
-        buffer: string,
-        bufferOffset: number,
-        matches: number[],
-        startLineIndex: number,
-        context: TextScanContext,
-    ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let currentMatchIdx = 0;
         let lastIndex = bufferOffset;
         let newlineIndex;
         let lineIndex = startLineIndex;
 
         while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            // Check if we have matches in [lastIndex, newlineIndex)
-            // Skip matches that are before lastIndex (shouldn't happen if we consume correctly)
-            while (currentMatchIdx < matches.length && matches[currentMatchIdx] < lastIndex) {
-                currentMatchIdx++;
-            }
-
-            if (currentMatchIdx < matches.length && matches[currentMatchIdx] < newlineIndex) {
+            // Check if nextMatch is within this line [lastIndex, newlineIndex)
+            if (nextMatch && nextMatch.index < newlineIndex) {
                 // Found a match in this line!
-                const matchIndex = matches[currentMatchIdx];
+                const matchIndex = nextMatch.index;
                 const line = buffer.slice(lastIndex, newlineIndex);
 
                 // Only process once per line
@@ -1426,17 +1381,37 @@ export class SearchEngine implements ISearchProvider {
                     return { newBuffer: '', newLineIndex: lineIndex + 1, hitLimit: true };
                 }
 
-                // Skip all other matches in this line
-                while (currentMatchIdx < matches.length && matches[currentMatchIdx] < newlineIndex) {
-                    currentMatchIdx++;
-                }
+                // Skip remaining matches in this line and the newline itself
+                regex.lastIndex = newlineIndex + 1;
+                nextMatch = regex.exec(buffer);
+            }
+
+            if (!nextMatch) {
+                // No more matches in the rest of the buffer.
+                // We can delegate to advanceLinesWithoutMatches for the rest.
+                return this.advanceLinesWithoutMatches(buffer, lastIndex, lineIndex);
             }
 
             lastIndex = newlineIndex + 1;
             lineIndex++;
         }
 
-        // Keep remainder
+        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
+        return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+    }
+
+    private advanceLinesWithoutMatches(
+        buffer: string,
+        bufferOffset: number,
+        startLineIndex: number,
+    ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
+        let lastIndex = bufferOffset;
+        let newlineIndex;
+        let lineIndex = startLineIndex;
+        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
+            lastIndex = newlineIndex + 1;
+            lineIndex++;
+        }
         const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
         return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
     }
