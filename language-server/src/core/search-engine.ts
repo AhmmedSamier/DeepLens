@@ -1207,7 +1207,7 @@ export class SearchEngine implements ISearchProvider {
                 const content = await fs.promises.readFile(fileItem.filePath, 'utf8');
                 if (results.length >= maxResults) return;
 
-                const { newBuffer, newLineIndex } = this.processBufferLines(content, 0, context, 0);
+                const { newBuffer, newLineIndex } = this.processBufferLines(content, 0, context, 0, true);
 
                 if (newBuffer.length > 0) {
                     const match = queryRegex.exec(newBuffer);
@@ -1340,11 +1340,17 @@ export class SearchEngine implements ISearchProvider {
         bufferOffset: number,
         context: TextScanContext,
         startLineIndex: number,
+        isWholeFile: boolean = false,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
         const matches = this.getAllMatches(buffer, bufferOffset, context.queryRegexGlobal);
 
         // Fast path: No matches in this chunk
         if (matches.length === 0) {
+            // Optimization: If scanning whole file and no matches found,
+            // no need to calculate line indices or new buffer
+            if (isWholeFile) {
+                return { newBuffer: '', newLineIndex: startLineIndex, hitLimit: false };
+            }
             return this.advanceLinesWithoutMatches(buffer, bufferOffset, startLineIndex);
         }
 

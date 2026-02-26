@@ -77,4 +77,23 @@ describe('SearchEngine Stream Search', () => {
         expect(result.highlights).toBeDefined();
         expect(result.highlights[0]).toEqual([6, 9]);
     });
+
+    it('should return empty results if no match found (optimization path)', async () => {
+        const item: SearchableItem = {
+            id: '2',
+            name: 'test-file.ts',
+            type: SearchItemType.FILE,
+            filePath: filePath,
+            relativeFilePath: 'test-file.ts',
+        };
+        engine.setItems([item]);
+
+        const results = await engine.search({
+            query: 'nomatchstring',
+            scope: SearchScope.TEXT,
+            maxResults: 10,
+        });
+
+        expect(results.length).toBe(0);
+    });
 });
