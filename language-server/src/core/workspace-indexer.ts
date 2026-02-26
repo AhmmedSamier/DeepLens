@@ -333,7 +333,8 @@ export class WorkspaceIndexer {
                         }
 
                         const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
-                        folderResults.push(this.intern(fullPath));
+                        // Optimization: Do not intern file paths during discovery as they are unique per file
+                        folderResults.push(fullPath);
                     }
                     return folderResults;
                 } catch (error) {
@@ -379,15 +380,15 @@ export class WorkspaceIndexer {
                     }
 
                     const fileName = path.basename(filePath);
-                    const relativePath = this.intern(this.env.asRelativePath(filePath));
-                    const internedFilePath = this.intern(filePath);
+                    // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
+                    const relativePath = this.env.asRelativePath(filePath);
                     const internedFileName = this.intern(fileName);
 
                     batch.push({
                         id: `file:${filePath}`,
                         name: internedFileName,
                         type: SearchItemType.FILE,
-                        filePath: internedFilePath,
+                        filePath: filePath,
                         relativeFilePath: relativePath,
                         detail: relativePath,
                         fullName: relativePath,
@@ -1194,8 +1195,9 @@ export class WorkspaceIndexer {
         }
 
         const fileName = path.basename(filePath);
-        const relativePath = this.intern(this.env.asRelativePath(filePath));
-        const internedFilePath = this.intern(filePath);
+        // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
+        const relativePath = this.env.asRelativePath(filePath);
+        const internedFilePath = filePath;
         const internedFileName = this.intern(fileName);
 
         // Add file item
@@ -1239,8 +1241,9 @@ export class WorkspaceIndexer {
 
         // Re-add file item with updated size
         const fileName = path.basename(filePath);
-        const relativePath = this.intern(this.env.asRelativePath(filePath));
-        const internedFilePath = this.intern(filePath);
+        // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
+        const relativePath = this.env.asRelativePath(filePath);
+        const internedFilePath = filePath;
         const internedFileName = this.intern(fileName);
 
         const fileItem: SearchableItem = {
