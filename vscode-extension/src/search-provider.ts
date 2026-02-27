@@ -35,15 +35,17 @@ export class SearchProvider {
 
     private readonly PRO_TIPS = [
         // Palette: Helpful tips for user onboarding
-        { label: 'Search Symbols', detail: "Type '#' to find methods and variables" },
-        { label: 'Run Commands', detail: "Type '>' to execute VS Code commands" },
-        { label: 'Find Modified Files', detail: "Type '/m' to see changed files" },
-        { label: 'Search Open Files', detail: "Type '/o' to search only open tabs" },
-        { label: 'Search Types', detail: "Type '/t' to find classes and interfaces" },
-        { label: 'Search Text', detail: "Type '/txt' to search file content" },
-        { label: 'Find Endpoints', detail: "Type '/e' to search API routes" },
+        { label: 'Search Symbols', detail: "Type '#' to find methods and variables", action: '#' },
+        { label: 'Run Commands', detail: "Type '>' to execute VS Code commands", action: '> ' },
+        { label: 'Find Modified Files', detail: "Type '/m' to see changed files", action: '/m ' },
+        { label: 'Search Open Files', detail: "Type '/o' to search only open tabs", action: '/o ' },
+        { label: 'Search Types', detail: "Type '/t' to find classes and interfaces", action: '/t ' },
+        { label: 'Search Text', detail: "Type '/txt' to search file content", action: '/txt ' },
+        { label: 'Find Endpoints', detail: "Type '/e' to search API routes", action: '/e ' },
     ];
     private currentTipIndex = 0;
+
+    private readonly TOOLTIP_NEXT_TIP = 'Show next tip';
 
     // Visual prefixes for button tooltips
     private readonly ACTIVE_PREFIX = 'Active: ';
@@ -679,12 +681,22 @@ export class SearchProvider {
             });
         });
 
+        // eslint-disable-next-line sonarjs/cognitive-complexity
         quickPick.onDidAccept(async () => {
             const selected = quickPick.selectedItems[0];
             if (selected) {
                 // Handle Pro Tip Cycling
-                if (selected.result.item.id === 'command:next-tip') {
-                    this.cycleProTip(quickPick);
+                if (selected.result.item.id === 'command:try-tip') {
+                    const tip = this.PRO_TIPS[this.currentTipIndex];
+                    quickPick.value = tip.action;
+                    // Trigger search manually since we just set the value
+                    const { scope, text } = this.parseQuery(quickPick.value);
+                    if (scope) {
+                        this.currentScope = scope;
+                        this.updateFilterButtons(quickPick);
+                    }
+                    const queryId = ++this.lastQueryId;
+                    await this.performSearch(quickPick, text, queryId);
                     return;
                 }
 
@@ -820,6 +832,11 @@ export class SearchProvider {
 
         if (tooltip === this.TOOLTIP_SETTINGS) {
             vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+            return;
+        }
+
+        if (tooltip === this.TOOLTIP_NEXT_TIP) {
+            this.cycleProTip(quickPick);
         }
     }
 
@@ -1693,12 +1710,18 @@ export class SearchProvider {
         return {
             label: `$(light-bulb) Pro Tip: ${tip.label}`,
             description: tip.detail,
-            detail: 'Select to see another tip',
+            detail: 'Select to try • Click $(refresh) for next tip',
             alwaysShow: true,
+            buttons: [
+                {
+                    iconPath: new vscode.ThemeIcon('refresh'),
+                    tooltip: this.TOOLTIP_NEXT_TIP,
+                },
+            ],
             result: {
                 item: {
-                    id: 'command:next-tip',
-                    name: 'Next Tip',
+                    id: 'command:try-tip',
+                    name: 'Try Tip',
                     type: SearchItemType.COMMAND,
                     filePath: '',
                     detail: '',
@@ -1713,14 +1736,11 @@ export class SearchProvider {
         this.currentTipIndex = (this.currentTipIndex + 1) % this.PRO_TIPS.length;
 
         const newItems = [...quickPick.items];
-        const tipIndex = newItems.findIndex((i) => i.result.item.id === 'command:next-tip');
+        const tipIndex = newItems.findIndex((i) => i.result.item.id === 'command:try-tip');
 
         if (tipIndex !== -1) {
             newItems[tipIndex] = this.getProTipItem();
             quickPick.items = newItems;
-
-            // Keep focus on the tip item so user can spam Enter to cycle
-            quickPick.activeItems = [newItems[tipIndex]];
         }
     }
 
