@@ -110,7 +110,14 @@ describe('ActivityTracker', () => {
                 workspaceState: {
                     get: async () => {
                         await loadPromise;
-                        return { 'existing-item': { itemId: 'existing-item', lastAccessed: Date.now(), accessCount: 5, score: 0.5 } };
+                        return {
+                            'existing-item': {
+                                itemId: 'existing-item',
+                                lastAccessed: Date.now(),
+                                accessCount: 5,
+                                score: 0.5,
+                            },
+                        };
                     },
                     update: async () => {},
                 },

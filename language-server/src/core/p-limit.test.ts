@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test";
-import { pLimit } from "./p-limit";
+import { describe, expect, test } from 'bun:test';
+import { pLimit } from './p-limit';
 
-describe("pLimit", () => {
-    test("concurrency limit", async () => {
+describe('pLimit', () => {
+    test('concurrency limit', async () => {
         const limit = pLimit(2);
         let active = 0;
         let maxActive = 0;
@@ -10,7 +10,7 @@ describe("pLimit", () => {
         const task = async () => {
             active++;
             maxActive = Math.max(maxActive, active);
-            await new Promise(resolve => setTimeout(resolve, 10));
+            await new Promise((resolve) => setTimeout(resolve, 10));
             active--;
         };
 
@@ -19,29 +19,25 @@ describe("pLimit", () => {
         expect(maxActive).toBe(2);
     });
 
-    test("resolves values correctly", async () => {
+    test('resolves values correctly', async () => {
         const limit = pLimit(5);
-        const results = await Promise.all([
-            limit(async () => 1),
-            limit(async () => 2),
-            limit(async () => 3),
-        ]);
+        const results = await Promise.all([limit(async () => 1), limit(async () => 2), limit(async () => 3)]);
         expect(results).toEqual([1, 2, 3]);
     });
 
-    test("handles errors correctly", async () => {
+    test('handles errors correctly', async () => {
         const limit = pLimit(1);
         try {
             await limit(async () => {
-                throw new Error("fail");
+                throw new Error('fail');
             });
         } catch (e) {
             const error = e as Error;
-            expect(error.message).toBe("fail");
+            expect(error.message).toBe('fail');
         }
     });
 
-    test("processes large number of tasks (performance check)", async () => {
+    test('processes large number of tasks (performance check)', async () => {
         const limit = pLimit(50);
         const count = 10000;
         const start = performance.now();
