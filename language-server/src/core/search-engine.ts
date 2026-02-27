@@ -158,6 +158,10 @@ export class SearchEngine implements ISearchProvider {
     private inactiveFileItems: SearchableItem[] = [];
     private filePriorityCacheDirty = true;
 
+    // String normalization cache (1-item) for relativeFilePath
+    private lastRelativeInput: string | null = null;
+    private lastRelativeOutput: string | null = null;
+
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
@@ -235,6 +239,8 @@ export class SearchEngine implements ISearchProvider {
         this.fileItemByNormalizedPath.clear();
         this.itemIndexById.clear();
         this.preparedCache.clear();
+        this.lastRelativeInput = null;
+        this.lastRelativeOutput = null;
         this.filePaths = [];
         this.invalidateDerivedCaches();
         for (const item of items) {
@@ -559,7 +565,18 @@ export class SearchEngine implements ISearchProvider {
      * Populate parallel arrays with prepared data for an item
      */
     private populateParallelArrays(item: SearchableItem): void {
-        const normalizedPath = item.relativeFilePath ? item.relativeFilePath.replaceAll('\\', '/') : null;
+        let normalizedPath: string | null = null;
+
+        if (item.relativeFilePath) {
+            if (item.relativeFilePath === this.lastRelativeInput) {
+                normalizedPath = this.lastRelativeOutput;
+            } else {
+                normalizedPath = item.relativeFilePath.replaceAll('\\', '/');
+                this.lastRelativeInput = item.relativeFilePath;
+                this.lastRelativeOutput = normalizedPath;
+            }
+        }
+
         const shouldPrepareFullName = this.shouldProcessFullName(item);
 
         this.preparedNames.push(this.getPrepared(item.name));
@@ -717,6 +734,8 @@ export class SearchEngine implements ISearchProvider {
         this.fileToItemIndices.clear();
         this.itemIndexById.clear();
         this.preparedCache.clear();
+        this.lastRelativeInput = null;
+        this.lastRelativeOutput = null;
         this.activeFileItems = [];
         this.inactiveFileItems = [];
         this.invalidateDerivedCaches();
