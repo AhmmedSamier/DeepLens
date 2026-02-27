@@ -130,6 +130,10 @@ export async function activate(context: vscode.ExtensionContext) {
     statusItem.name = 'DeepLens Index Status'; // Palette: Accessibility name
     statusItem.text = '$(database) DeepLens';
     statusItem.tooltip = 'DeepLens Index Status (Click for stats)';
+    statusItem.accessibilityInformation = {
+        label: 'DeepLens Index Status, click to show statistics',
+        role: 'button',
+    };
     statusItem.command = 'deeplens.showIndexStats';
     statusItem.show();
     context.subscriptions.push(statusItem);
