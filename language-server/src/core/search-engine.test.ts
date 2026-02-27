@@ -3,8 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 import { SymbolProvider } from './providers/symbol-provider';
 import { SearchEngine } from './search-engine';
-import { ISearchProvider } from './types';
-import { SearchItemType, SearchScope, SearchableItem } from './types';
+import { ISearchProvider, SearchItemType, SearchScope, SearchableItem } from './types';
 
 const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
     id,
@@ -33,7 +32,6 @@ function createDelayedProvider(id: string, fileItem: SearchableItem): ISearchPro
 }
 
 describe('SearchEngine', () => {
-
     it('should find items by name', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [

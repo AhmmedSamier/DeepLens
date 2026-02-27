@@ -168,20 +168,16 @@ export class SearchEngine implements ISearchProvider {
     private readonly fileToItemIndices: Map<string, number[]> = new Map();
     private readonly itemIndexById: Map<string, number> = new Map();
 
-    private modifiedIndicesCache:
-        | {
-              indices: number[];
-              expiresAt: number;
-          }
-        | null = null;
+    private modifiedIndicesCache: {
+        indices: number[];
+        expiresAt: number;
+    } | null = null;
 
-    private lastQueryMemo:
-        | {
-              scope: SearchScope;
-              query: string;
-              topIndices: number[];
-          }
-        | null = null;
+    private lastQueryMemo: {
+        scope: SearchScope;
+        query: string;
+        topIndices: number[];
+    } | null = null;
 
     public itemsMap: Map<string, SearchableItem> = new Map();
     private readonly fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
@@ -462,7 +458,6 @@ export class SearchEngine implements ISearchProvider {
         this.preparedPaths[write] = this.preparedPaths[read];
         this.preparedPatterns[write] = this.preparedPatterns[read];
     }
-
 
     /**
      * Rebuild pre-filtered arrays for each search scope and pre-prepare fuzzysort

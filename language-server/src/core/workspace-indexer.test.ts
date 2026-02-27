@@ -1,7 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import * as path from 'node:path';
+import { describe, expect, it } from 'bun:test';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { TreeSitterParser } from './tree-sitter-parser';

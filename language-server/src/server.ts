@@ -68,9 +68,7 @@ export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchRe
 );
 export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
 export const ClearHistoryRequest = new RequestType0<void, void>('deeplens/clearHistory');
-export const RemoveHistoryItemRequest = new RequestType<{ itemId: string }, void, void>(
-    'deeplens/removeHistoryItem',
-);
+export const RemoveHistoryItemRequest = new RequestType<{ itemId: string }, void, void>('deeplens/removeHistoryItem');
 export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
 export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
 export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');

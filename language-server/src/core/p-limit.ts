@@ -37,13 +37,14 @@ export function pLimit(concurrency: number) {
     };
 
     // The returned function enqueues the task
-    return <T>(fn: () => Promise<T>) => new Promise<T>((resolve, reject) => {
-        if (activeCount < concurrency) {
-            // Can run immediately
-            run(fn, resolve, reject);
-        } else {
-            // Queue for later
-            queue.push(() => run(fn, resolve, reject));
-        }
-    });
+    return <T>(fn: () => Promise<T>) =>
+        new Promise<T>((resolve, reject) => {
+            if (activeCount < concurrency) {
+                // Can run immediately
+                run(fn, resolve, reject);
+            } else {
+                // Queue for later
+                queue.push(() => run(fn, resolve, reject));
+            }
+        });
 }
