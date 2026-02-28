@@ -286,8 +286,33 @@ export class RouteMatcher {
         const q = query.trim();
         if (q.includes('/') && !q.includes(' ') && q.length > 2) return true;
 
-        // Match "get api/..." or "post /api/..."
-        const methodMatch = /^(get|post|put|delete|patch|options|head|trace)\s+[/\w]/i.exec(q);
-        return !!methodMatch;
+        // Optimization: Replace regex matching with manual string slicing and char-code checking
+        const s = q.indexOf(' ');
+        if (s > 0) {
+            const m = q.slice(0, s).toUpperCase();
+            if (
+                m === 'GET' ||
+                m === 'POST' ||
+                m === 'PUT' ||
+                m === 'DELETE' ||
+                m === 'PATCH' ||
+                m === 'OPTIONS' ||
+                m === 'HEAD' ||
+                m === 'TRACE'
+            ) {
+                let i = s + 1;
+                while (i < q.length && q.charCodeAt(i) === 32) {
+                    i++; // skip additional spaces
+                }
+                if (i < q.length) {
+                    const c = q.charCodeAt(i);
+                    // 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
+                    if (c === 47 || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
     }
 }
