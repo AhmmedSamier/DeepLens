@@ -1728,6 +1728,11 @@ export class SearchEngine implements ISearchProvider {
     ): void {
         const typeId = context.itemTypeIds[i];
 
+        // Check if query characters exist in the item before doing any expensive scoring
+        if ((context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
+            return;
+        }
+
         // Calculate score using multiple strategies
         let score = this.calculateSearchScore(i, typeId, context);
         let resultScope: SearchScope | undefined;
@@ -1779,6 +1784,16 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
+        // Optimization: integer-based length difference check before string checks
+        if (context.itemLengths[i] < context.queryLen) {
+            return -Infinity;
+        }
+
+        // Optimization: Skip expensive matching if query characters are not present in the name bitflags
+        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const pName = context.preparedNames[i];
         if (!pName) {
             return -Infinity;
@@ -2148,8 +2163,14 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
+        const queryBitflags = this.calculateBitflags(queryLower);
         const processItem = (i: number) => {
             if (results.length >= maxResults) return;
+
+            // Optimization: Skip expensive matching if query characters are not present in the aggregate bitflags
+            if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) {
+                return;
+            }
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
