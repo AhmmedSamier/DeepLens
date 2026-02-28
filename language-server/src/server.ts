@@ -471,10 +471,10 @@ connection.onWorkspaceSymbol(async (params, token) => {
 });
 
 // Custom handlers
-connection.onRequest(BurstSearchRequest, (options, token) => {
+connection.onRequest(BurstSearchRequest, async (options, token) => {
     if (!isInitialized || isShuttingDown) return [];
     try {
-        return searchEngine.burstSearch(
+        return await searchEngine.burstSearch(
             options,
             (result) => {
                 if (!isShuttingDown && !token?.isCancellationRequested) {

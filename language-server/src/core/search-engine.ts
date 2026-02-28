@@ -354,20 +354,7 @@ export class SearchEngine implements ISearchProvider {
             return;
         }
 
-        const indicesToRemove: number[] = [];
-        const normalizedRemovedPaths = new Set<string>();
-
-        // 1. Identify all indices to remove using the reverse index
-        for (const filePath of filePaths) {
-            const normalized = this.normalizePath(filePath);
-            const indices = this.fileToItemIndices.get(normalized);
-            if (indices && indices.length > 0) {
-                if (!normalizedRemovedPaths.has(normalized)) {
-                    normalizedRemovedPaths.add(normalized);
-                    indicesToRemove.push(...indices);
-                }
-            }
-        }
+        const { indicesToRemove, normalizedRemovedPaths } = this.identifyIndicesToRemove(filePaths);
 
         if (indicesToRemove.length === 0) {
             return;
@@ -378,6 +365,64 @@ export class SearchEngine implements ISearchProvider {
 
         const count = this.items.length;
         const newCount = count - indicesToRemove.length;
+
+        // 2. Release resources for ALL removed items and update maps
+        for (const index of indicesToRemove) {
+            this.releaseItemResources(index);
+        }
+
+        // 3. Move fillers to gaps (Swap and Pop)
+        this.moveFillersToGaps(indicesToRemove, newCount, count);
+
+        // 4. Truncate arrays
+        this.truncateArrays(newCount, count, normalizedRemovedPaths);
+    }
+
+    private identifyIndicesToRemove(filePaths: string[]): {
+        indicesToRemove: number[];
+        normalizedRemovedPaths: Set<string>;
+    } {
+        const indicesToRemove: number[] = [];
+        const normalizedRemovedPaths = new Set<string>();
+
+        for (const filePath of filePaths) {
+            const normalized = this.normalizePath(filePath);
+            const indices = this.fileToItemIndices.get(normalized);
+            if (indices && indices.length > 0) {
+                if (!normalizedRemovedPaths.has(normalized)) {
+                    normalizedRemovedPaths.add(normalized);
+                    indicesToRemove.push(...indices);
+                }
+            }
+        }
+        return { indicesToRemove, normalizedRemovedPaths };
+    }
+
+    private releaseItemResources(index: number): void {
+        const item = this.items[index];
+        if (!item) return;
+
+        this.releasePrepared(this.preparedNames[index]);
+        this.releasePrepared(this.preparedFullNames[index]);
+        this.releasePrepared(this.preparedPaths[index]);
+
+        this.itemsMap.delete(item.id);
+        this.itemIndexById.delete(item.id);
+
+        if (item.type === SearchItemType.FILE) {
+            this.fileItemByNormalizedPath.delete(this.normalizePath(item.filePath));
+        }
+
+        // Remove from reverse index
+        const normalized = this.normalizePath(item.filePath);
+        const indices = this.fileToItemIndices.get(normalized);
+        if (indices) {
+            const idx = indices.indexOf(index);
+            if (idx !== -1) indices.splice(idx, 1);
+        }
+    }
+
+    private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
         const removedSet = new Set(indicesToRemove);
         const fillers: number[] = [];
@@ -389,32 +434,6 @@ export class SearchEngine implements ISearchProvider {
             }
         }
 
-        // 2. Release resources for ALL removed items and update maps
-        for (const index of indicesToRemove) {
-            const item = this.items[index];
-            if (!item) continue;
-
-            this.releasePrepared(this.preparedNames[index]);
-            this.releasePrepared(this.preparedFullNames[index]);
-            this.releasePrepared(this.preparedPaths[index]);
-
-            this.itemsMap.delete(item.id);
-            this.itemIndexById.delete(item.id);
-
-            if (item.type === SearchItemType.FILE) {
-                this.fileItemByNormalizedPath.delete(this.normalizePath(item.filePath));
-            }
-
-            // Remove from reverse index
-            const normalized = this.normalizePath(item.filePath);
-            const indices = this.fileToItemIndices.get(normalized);
-            if (indices) {
-                const idx = indices.indexOf(index);
-                if (idx !== -1) indices.splice(idx, 1);
-            }
-        }
-
-        // 3. Move fillers to gaps (Swap and Pop)
         for (let i = 0; i < gaps.length; i++) {
             const src = fillers[i];
             const dest = gaps[i];
@@ -432,8 +451,9 @@ export class SearchEngine implements ISearchProvider {
                 if (idx !== -1) indices[idx] = dest;
             }
         }
+    }
 
-        // 4. Truncate arrays
+    private truncateArrays(newCount: number, count: number, normalizedRemovedPaths: Set<string>): void {
         if (newCount < count) {
             this.items.length = newCount;
             this.itemTypeIds = this.itemTypeIds.slice(0, newCount);
@@ -449,7 +469,6 @@ export class SearchEngine implements ISearchProvider {
 
             // Rebuild scope indices (O(N) but fast)
             this.rebuildScopeIndices();
-            // SKIP rebuildFileIndices and rebuildItemIndexMap as they are updated incrementally
         }
     }
 
@@ -857,13 +876,8 @@ export class SearchEngine implements ISearchProvider {
         });
 
         // Use providers if any are registered, otherwise fallback to internal logic
-        // EXCEPT for scopes that require filtering indexed items directly (EVERYTHING, OPEN, MODIFIED)
-        if (
-            this.providers.length > 0 &&
-            scope !== SearchScope.EVERYTHING &&
-            scope !== SearchScope.OPEN &&
-            scope !== SearchScope.MODIFIED
-        ) {
+        // EXCEPT for scopes that require filtering indexed items directly (OPEN, MODIFIED)
+        if (this.providers.length > 0 && scope !== SearchScope.OPEN && scope !== SearchScope.MODIFIED) {
             return this.executeProviderSearch(context, maxResults, targetLine, onResult, cancellationToken);
         }
 
@@ -2135,56 +2149,19 @@ export class SearchEngine implements ISearchProvider {
         };
 
         const processItem = (i: number) => {
-            // Check max results break
             if (results.length >= maxResults) return;
 
-            // Optimization: Check parallel array match BEFORE accessing the full item object
-            // This prevents cache misses for non-matching items
             const prepared = this.preparedNames[i];
+            const item = this.items[i];
+            if (!item) return;
 
-            if (prepared) {
-                // Access internal lowercased string from Fuzzysort prepared object
-                // to avoid storing a duplicate array of strings
-                const cachedName = (prepared as unknown as ExtendedPrepared)._targetLower;
+            const nameLower = prepared
+                ? (prepared as unknown as ExtendedPrepared)._targetLower
+                : item.name.toLowerCase();
 
-                // Fast path: Exact match or prefix match
-                if (cachedName === queryLower || cachedName.startsWith(queryLower)) {
-                    const item = this.items[i];
-                    if (item) addResult(item, this.itemTypeIds[i], 1.0);
-                } else if (cachedName.includes(queryLower)) {
-                    // Fast path: Substring match (scored lower but still fast)
-                    const item = this.items[i];
-                    if (item) addResult(item, this.itemTypeIds[i], 0.8);
-                } else {
-                    // Check fullName if it exists and is different from name
-                    const item = this.items[i];
-                    if (item && item.fullName && item.fullName.length !== item.name.length) {
-                        const fullLower = item.fullName.toLowerCase();
-                        if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
-                            addResult(item, this.itemTypeIds[i], 0.9);
-                        } else if (fullLower.includes(queryLower)) {
-                            addResult(item, this.itemTypeIds[i], 0.7);
-                        }
-                    }
-                }
-            } else {
-                // Slow path (Fallback if cache missing)
-                const item = this.items[i];
-                if (item) {
-                    const name = item.name.toLowerCase();
-                    if (name === queryLower || name.startsWith(queryLower)) {
-                        addResult(item, this.itemTypeIds[i], 1.0);
-                    } else if (name.includes(queryLower)) {
-                        addResult(item, this.itemTypeIds[i], 0.8);
-                    } else if (item.fullName && item.fullName.length !== item.name.length) {
-                        const fullLower = item.fullName.toLowerCase();
-                        if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
-                            addResult(item, this.itemTypeIds[i], 0.9);
-                        } else if (fullLower.includes(queryLower)) {
-                            addResult(item, this.itemTypeIds[i], 0.7);
-                        }
-                    }
-                }
+            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower);
+            if (score > 0) {
+                addResult(item, this.itemTypeIds[i], score);
             }
         };
 
@@ -2194,71 +2171,90 @@ export class SearchEngine implements ISearchProvider {
                 processItem(index);
             }
         } else {
-            // EVERYTHING scope: Search in priority order to prevent symbols being shadowed by files
-            // Pass 1: Types (Classes, Interfaces, Enums) - Highest priority
-            const typeIndices = this.scopedIndices.get(SearchScope.TYPES);
-            if (typeIndices) {
-                for (const index of typeIndices) {
+            this.searchAllScopesInPriorityOrder(maxResults, processItem, results, token);
+        }
+
+        return results;
+    }
+
+    private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
+        // Fast path: Exact match or prefix match
+        if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
+            return 1.0;
+        }
+
+        // Fast path: Substring match (scored lower but still fast)
+        if (nameLower.includes(queryLower)) {
+            return 0.8;
+        }
+
+        // Check fullName if it exists and is different from name
+        if (fullName && fullName.length !== nameLower.length) {
+            const fullLower = fullName.toLowerCase();
+            if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
+                return 0.9;
+            }
+            if (fullLower.includes(queryLower)) {
+                return 0.7;
+            }
+        }
+
+        return 0;
+    }
+
+    private searchAllScopesInPriorityOrder(
+        maxResults: number,
+        processItem: (i: number) => void,
+        results: SearchResult[],
+        token?: CancellationToken,
+    ): void {
+        const priorityScopes = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
+
+        this.searchPriorityScopes(priorityScopes, maxResults, processItem, results, token);
+
+        // Pass 5: Everything else (e.g. Properties, Variables, Commands)
+        if (results.length < maxResults && !token?.isCancellationRequested) {
+            this.searchRemainingItems(priorityScopes, maxResults, processItem, results, token);
+        }
+    }
+
+    private searchPriorityScopes(
+        priorityScopes: SearchScope[],
+        maxResults: number,
+        processItem: (i: number) => void,
+        results: SearchResult[],
+        token?: CancellationToken,
+    ): void {
+        for (const scope of priorityScopes) {
+            if (results.length >= maxResults || token?.isCancellationRequested) return;
+            const indices = this.scopedIndices.get(scope);
+            if (indices) {
+                for (const index of indices) {
                     if (results.length >= maxResults || token?.isCancellationRequested) break;
                     processItem(index);
                 }
             }
+        }
+    }
 
-            // Pass 2: Symbols (Functions, Methods)
-            if (results.length < maxResults) {
-                const symbolIndices = this.scopedIndices.get(SearchScope.SYMBOLS);
-                if (symbolIndices) {
-                    for (const index of symbolIndices) {
-                        if (results.length >= maxResults || token?.isCancellationRequested) break;
-                        processItem(index);
-                    }
-                }
-            }
+    private searchRemainingItems(
+        priorityScopes: SearchScope[],
+        maxResults: number,
+        processItem: (i: number) => void,
+        results: SearchResult[],
+        token?: CancellationToken,
+    ): void {
+        const searchedIndices = new Set<number>();
+        priorityScopes.forEach((s) => {
+            this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
+        });
 
-            // Pass 3: Endpoints
-            if (results.length < maxResults) {
-                const endpointIndices = this.scopedIndices.get(SearchScope.ENDPOINTS);
-                if (endpointIndices) {
-                    for (const index of endpointIndices) {
-                        if (results.length >= maxResults || token?.isCancellationRequested) break;
-                        processItem(index);
-                    }
-                }
-            }
-
-            // Pass 4: Files
-            if (results.length < maxResults) {
-                const fileIndices = this.scopedIndices.get(SearchScope.FILES);
-                if (fileIndices) {
-                    for (const index of fileIndices) {
-                        if (results.length >= maxResults || token?.isCancellationRequested) break;
-                        processItem(index);
-                    }
-                }
-            }
-
-            // Pass 5: Everything else (e.g. Properties, Variables, Commands)
-            if (results.length < maxResults) {
-                const searchedIndices = new Set<number>();
-                [
-                    SearchScope.TYPES,
-                    SearchScope.SYMBOLS,
-                    SearchScope.ENDPOINTS,
-                    SearchScope.FILES,
-                ].forEach((s) => {
-                    this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
-                });
-
-                for (let i = 0; i < this.items.length; i++) {
-                    if (results.length >= maxResults || token?.isCancellationRequested) break;
-                    if (!searchedIndices.has(i)) {
-                        processItem(i);
-                    }
-                }
+        for (let i = 0; i < this.items.length; i++) {
+            if (results.length >= maxResults || token?.isCancellationRequested) break;
+            if (!searchedIndices.has(i)) {
+                processItem(i);
             }
         }
-
-        return results;
     }
 
     private parseQueryWithLineNumber(query: string): { effectiveQuery: string; targetLine?: number } {
