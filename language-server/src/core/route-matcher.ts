@@ -282,6 +282,7 @@ export class RouteMatcher {
     /**
      * Check if a query string looks like a concrete URL path
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     static isPotentialUrl(query: string): boolean {
         const q = query.trim();
         if (q.includes('/') && !q.includes(' ') && q.length > 2) return true;

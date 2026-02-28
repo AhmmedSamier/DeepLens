@@ -1180,7 +1180,7 @@ export class WorkspaceIndexer {
         }
 
         if (error instanceof Error) {
-            const match = error.message.match(/code\s+(\d+)/);
+            const match = /code\s+(\d+)/.exec(error.message);
             if (match) {
                 return Number.parseInt(match[1], 10);
             }
