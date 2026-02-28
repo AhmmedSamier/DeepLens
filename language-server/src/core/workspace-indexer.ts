@@ -1161,11 +1161,32 @@ export class WorkspaceIndexer {
                 this.resolveGitCheck(filePath, isIgnored);
             }
         } catch (error) {
-            console.error(`Git check-ignore batch failed for ${folder}:`, error);
+            const exitCode = WorkspaceIndexer.getGitExitCode(error);
+            if (exitCode !== 1) {
+                console.error(`Git check-ignore batch failed for ${folder}:`, error);
+            }
             for (const filePath of filesArray) {
                 this.resolveGitCheck(filePath, false);
             }
         }
+    }
+
+    private static getGitExitCode(error: unknown): number | undefined {
+        if (typeof error === 'object' && error !== null && 'code' in error) {
+            const code = (error as { code?: unknown }).code;
+            if (typeof code === 'number') {
+                return code;
+            }
+        }
+
+        if (error instanceof Error) {
+            const match = error.message.match(/code\s+(\d+)/);
+            if (match) {
+                return Number.parseInt(match[1], 10);
+            }
+        }
+
+        return undefined;
     }
 
     private resolveGitCheck(filePath: string, isIgnored: boolean) {
