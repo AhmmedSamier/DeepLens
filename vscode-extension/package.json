@@ -150,7 +150,7 @@
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
         "format": "prettier --write \"src/**/*.ts\" --cache",
-        "package": "vsce package --allow-missing-repository && bun run scripts/fix-vsix-permissions.ts",
+        "package": "vsce package && bun run scripts/fix-vsix-permissions.ts",
         "vsix": "bun run compile && bun run package",
         "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
         "test:coverage": "bun run compile && tsc -p . && nyc --reporter=lcov --report-dir=coverage node ./out/vscode-extension/src/test/runTest.js",

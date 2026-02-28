@@ -24,7 +24,7 @@ export class Config {
                 '**/obj/**',
                 '**/vendor/**',
             ],
-            maxResults: 20,
+            maxResults: 100,
 
             enableTextSearch: true,
             searchConcurrency: 60,
@@ -138,8 +138,8 @@ export class Config {
      * Get max results
      */
     getMaxResults(): number {
-        const value = this.get('maxResults', 20);
-        return this.validateNumber(value, 1, 1000, 20);
+        const value = this.get('maxResults', 100);
+        return this.validateNumber(value, 1, 1000, 100);
     }
 
     /**

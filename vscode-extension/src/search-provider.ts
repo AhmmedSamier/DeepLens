@@ -1133,7 +1133,7 @@ export class SearchProvider {
                 {
                     query: trimmedQuery,
                     scope: this.currentScope,
-                    maxResults: 5,
+                    maxResults: 10,
                     requestId: queryId,
                 },
                 burstToken,
@@ -1174,7 +1174,7 @@ export class SearchProvider {
                         {
                             query: trimmedQuery,
                             scope: this.currentScope,
-                            maxResults: 15,
+                            maxResults: 30,
                             requestId: queryId,
                         },
                         burstToken,

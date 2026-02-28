@@ -857,8 +857,13 @@ export class SearchEngine implements ISearchProvider {
         });
 
         // Use providers if any are registered, otherwise fallback to internal logic
-        // EXCEPT for scopes that require filtering indexed items directly (OPEN, MODIFIED)
-        if (this.providers.length > 0 && scope !== SearchScope.OPEN && scope !== SearchScope.MODIFIED) {
+        // EXCEPT for scopes that require filtering indexed items directly (EVERYTHING, OPEN, MODIFIED)
+        if (
+            this.providers.length > 0 &&
+            scope !== SearchScope.EVERYTHING &&
+            scope !== SearchScope.OPEN &&
+            scope !== SearchScope.MODIFIED
+        ) {
             return this.executeProviderSearch(context, maxResults, targetLine, onResult, cancellationToken);
         }
 
@@ -1163,7 +1168,7 @@ export class SearchEngine implements ISearchProvider {
                             fileItem.size = fileSize;
                         }
 
-                        if (fileSize > 5 * 1024 * 1024) return; // Skip files larger than 5MB still, but can be relaxed now
+                        if (fileSize > 20 * 1024 * 1024) return; // Increased to 20MB for better coverage
 
                         processedFiles++;
 
@@ -1709,11 +1714,6 @@ export class SearchEngine implements ISearchProvider {
     ): void {
         const typeId = context.itemTypeIds[i];
 
-        // Early exit: Check if query characters are present
-        if (!this.shouldProcessItem(i, typeId, context)) {
-            return;
-        }
-
         // Calculate score using multiple strategies
         let score = this.calculateSearchScore(i, typeId, context);
         let resultScope: SearchScope | undefined;
@@ -1729,45 +1729,6 @@ export class SearchEngine implements ISearchProvider {
         if (score > context.MIN_SCORE) {
             this.finalizeAndPushResult(i, score, resultScope, typeId, context, heap);
         }
-    }
-
-    private shouldProcessItem(
-        i: number,
-        typeId: number,
-        context: ReturnType<typeof this.prepareSearchContext>,
-    ): boolean {
-        // T004: Bitflag screening fires first (Audit: firing before fuzzysort/distance guards)
-        // Short-circuit if query characters are not present in Name, FullName, or Path
-        if ((context.queryBitflags & context.itemBitflags[i]) !== context.queryBitflags) {
-            // Special case: Check for potential URL/endpoint match
-            const pattern = context.preparedPatterns[i];
-            return (
-                context.isPotentialUrl &&
-                typeId === 11 /* ENDPOINT */ &&
-                pattern !== null &&
-                RouteMatcher.isMatchPattern(pattern, context.queryForUrlMatch)
-            );
-        }
-
-        // T005: Character-count distance guard (per research.md §2)
-        // Skip items that are mathematically too distant in length to yield a quality fuzzy match
-        // Optimization: Use parallel array for length check to avoid object access
-        const targetLen = context.itemLengths[i];
-        const diff = Math.abs(context.queryLen - targetLen);
-
-        // Relaxed threshold: Only skip if diff is more than twice the query length
-        if (diff > context.queryLen * 2) {
-            // Exception: If the query is a prefix of the target, always process it.
-            // We check this ONLY if length check failed, to avoid expensive string op on the hot path.
-            const pName = context.preparedNames[i];
-            if (pName) {
-                const targetLower = (pName as ExtendedPrepared)._targetLower;
-                return !!(targetLower && targetLower.startsWith(context.queryLower));
-            }
-            return false;
-        }
-
-        return true;
     }
 
     private calculateSearchScore(
@@ -1804,12 +1765,8 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pName = context.preparedNames[i];
-        if (!pName || context.queryLen > pName.target.length) {
+        if (!pName) {
             return -Infinity;
         }
 
@@ -1819,7 +1776,7 @@ export class SearchEngine implements ISearchProvider {
 
     private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
         const pFull = context.preparedFullNames[i];
-        if (!pFull || context.queryLen > pFull.target.length) {
+        if (!pFull) {
             return -Infinity;
         }
 
@@ -1829,7 +1786,7 @@ export class SearchEngine implements ISearchProvider {
 
     private tryFuzzyMatchPath(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
         const pPath = context.preparedPaths[i];
-        if (!pPath || context.queryLen > pPath.target.length) {
+        if (!pPath) {
             return -Infinity;
         }
 
@@ -2165,10 +2122,10 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const results: SearchResult[] = [];
 
-        const addResult = (item: SearchableItem, typeId: number) => {
+        const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0) => {
             const result: SearchResult = {
                 item,
-                score: this.applyItemTypeBoost(1, typeId),
+                score: this.applyItemTypeBoost(baseScore, typeId),
                 scope: ID_TO_SCOPE[typeId],
             };
             results.push(result);
@@ -2190,10 +2147,25 @@ export class SearchEngine implements ISearchProvider {
                 // to avoid storing a duplicate array of strings
                 const cachedName = (prepared as unknown as ExtendedPrepared)._targetLower;
 
-                // Fast path
+                // Fast path: Exact match or prefix match
                 if (cachedName === queryLower || cachedName.startsWith(queryLower)) {
                     const item = this.items[i];
-                    if (item) addResult(item, this.itemTypeIds[i]);
+                    if (item) addResult(item, this.itemTypeIds[i], 1.0);
+                } else if (cachedName.includes(queryLower)) {
+                    // Fast path: Substring match (scored lower but still fast)
+                    const item = this.items[i];
+                    if (item) addResult(item, this.itemTypeIds[i], 0.8);
+                } else {
+                    // Check fullName if it exists and is different from name
+                    const item = this.items[i];
+                    if (item && item.fullName && item.fullName.length !== item.name.length) {
+                        const fullLower = item.fullName.toLowerCase();
+                        if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
+                            addResult(item, this.itemTypeIds[i], 0.9);
+                        } else if (fullLower.includes(queryLower)) {
+                            addResult(item, this.itemTypeIds[i], 0.7);
+                        }
+                    }
                 }
             } else {
                 // Slow path (Fallback if cache missing)
@@ -2201,7 +2173,16 @@ export class SearchEngine implements ISearchProvider {
                 if (item) {
                     const name = item.name.toLowerCase();
                     if (name === queryLower || name.startsWith(queryLower)) {
-                        addResult(item, this.itemTypeIds[i]);
+                        addResult(item, this.itemTypeIds[i], 1.0);
+                    } else if (name.includes(queryLower)) {
+                        addResult(item, this.itemTypeIds[i], 0.8);
+                    } else if (item.fullName && item.fullName.length !== item.name.length) {
+                        const fullLower = item.fullName.toLowerCase();
+                        if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
+                            addResult(item, this.itemTypeIds[i], 0.9);
+                        } else if (fullLower.includes(queryLower)) {
+                            addResult(item, this.itemTypeIds[i], 0.7);
+                        }
                     }
                 }
             }
@@ -2213,9 +2194,67 @@ export class SearchEngine implements ISearchProvider {
                 processItem(index);
             }
         } else {
-            for (let i = 0; i < this.items.length; i++) {
-                if (results.length >= maxResults || token?.isCancellationRequested) break;
-                processItem(i);
+            // EVERYTHING scope: Search in priority order to prevent symbols being shadowed by files
+            // Pass 1: Types (Classes, Interfaces, Enums) - Highest priority
+            const typeIndices = this.scopedIndices.get(SearchScope.TYPES);
+            if (typeIndices) {
+                for (const index of typeIndices) {
+                    if (results.length >= maxResults || token?.isCancellationRequested) break;
+                    processItem(index);
+                }
+            }
+
+            // Pass 2: Symbols (Functions, Methods)
+            if (results.length < maxResults) {
+                const symbolIndices = this.scopedIndices.get(SearchScope.SYMBOLS);
+                if (symbolIndices) {
+                    for (const index of symbolIndices) {
+                        if (results.length >= maxResults || token?.isCancellationRequested) break;
+                        processItem(index);
+                    }
+                }
+            }
+
+            // Pass 3: Endpoints
+            if (results.length < maxResults) {
+                const endpointIndices = this.scopedIndices.get(SearchScope.ENDPOINTS);
+                if (endpointIndices) {
+                    for (const index of endpointIndices) {
+                        if (results.length >= maxResults || token?.isCancellationRequested) break;
+                        processItem(index);
+                    }
+                }
+            }
+
+            // Pass 4: Files
+            if (results.length < maxResults) {
+                const fileIndices = this.scopedIndices.get(SearchScope.FILES);
+                if (fileIndices) {
+                    for (const index of fileIndices) {
+                        if (results.length >= maxResults || token?.isCancellationRequested) break;
+                        processItem(index);
+                    }
+                }
+            }
+
+            // Pass 5: Everything else (e.g. Properties, Variables, Commands)
+            if (results.length < maxResults) {
+                const searchedIndices = new Set<number>();
+                [
+                    SearchScope.TYPES,
+                    SearchScope.SYMBOLS,
+                    SearchScope.ENDPOINTS,
+                    SearchScope.FILES,
+                ].forEach((s) => {
+                    this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
+                });
+
+                for (let i = 0; i < this.items.length; i++) {
+                    if (results.length >= maxResults || token?.isCancellationRequested) break;
+                    if (!searchedIndices.has(i)) {
+                        processItem(i);
+                    }
+                }
             }
         }
 

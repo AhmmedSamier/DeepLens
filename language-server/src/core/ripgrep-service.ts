@@ -77,8 +77,8 @@ export class RipgrepService {
             '--json',
             '-i',
             '-F', // Fixed strings (no regex)
-            '--max-count', // Note: this is per-file, but helps performance
-            maxResults.toString(),
+            '--max-count', // Per-file limit. Increased to ensure we don't miss matches in a single file
+            Math.max(500, maxResults).toString(),
             '--',
             query,
         ];
