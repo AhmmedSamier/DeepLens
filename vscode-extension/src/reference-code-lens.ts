@@ -20,7 +20,6 @@ enum CodeLensType {
     IMPLEMENTATION = 'implementation',
 }
 
-
 function isSymbolInformationArray(
     symbols: vscode.DocumentSymbol[] | vscode.SymbolInformation[],
 ): symbols is vscode.SymbolInformation[] {

@@ -590,6 +590,9 @@ export class SearchProvider {
 
             for (const item of items) {
                 item.buttons = [...(item.buttons || []), removeButton];
+
+                // Palette: Add visual indicator to clarify these are history items
+                item.description = item.description ? `$(history) Recent • ${item.description}` : `$(history) Recent`;
             }
 
             // Add Clear History item if we have tracking enabled
