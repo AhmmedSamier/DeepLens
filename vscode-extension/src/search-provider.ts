@@ -1875,8 +1875,7 @@ export class SearchProvider {
         }
 
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: label as any,
+            label,
             description,
             detail,
             iconPath: iconPath,
