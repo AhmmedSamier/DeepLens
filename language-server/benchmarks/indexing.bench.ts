@@ -1,24 +1,41 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
 import * as os from 'os';
-import { WorkspaceIndexer } from '../src/core/workspace-indexer';
+import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import { Config } from '../src/core/config';
+import { type IndexerEnvironment } from '../src/core/indexer-interfaces';
 import { TreeSitterParser } from '../src/core/tree-sitter-parser';
-import { IndexerEnvironment } from '../src/core/indexer-interfaces';
+import { WorkspaceIndexer } from '../src/core/workspace-indexer';
 import { benchmark } from './utils';
 
-export async function runIndexingBenchmark() {
-    console.log("=== Indexing Benchmarks ===");
+function createBenchmarkConfig(searchConcurrency: number): Config {
+    return new Config({
+        get: <T>(key: string, defaultValue?: T): T => {
+            if (key === 'excludePatterns') {
+                return [] as T;
+            }
+            if (key === 'searchConcurrency') {
+                return searchConcurrency as T;
+            }
+            if (key === 'respectGitignore') {
+                return false as T;
+            }
+            return defaultValue as T;
+        },
+    });
+}
+
+export async function runIndexingBenchmark(): Promise<void> {
+    console.log('=== Indexing Benchmarks ===');
 
     const extensionPath = path.resolve(__dirname, '..');
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deeplens-bench-'));
     console.log(`Using temp dir: ${tempDir}`);
 
-    // Generate files
-    const FILE_COUNT = 5000;
+    const fileCount = 5000;
 
-    console.log(`Generating ${FILE_COUNT} files...`);
-    for (let i = 0; i < FILE_COUNT; i++) {
+    console.log(`Generating ${fileCount} files...`);
+    for (let i = 0; i < fileCount; i++) {
         const content = `
         export class Class${i} {
             constructor() { console.log("Init ${i}"); }
@@ -29,68 +46,49 @@ export async function runIndexingBenchmark() {
         fs.writeFileSync(path.join(tempDir, `file_${i}.ts`), content);
     }
 
-    // Initialize git repo to avoid benchmark failures
-    const { execSync } = require('child_process');
     try {
         execSync('git init', { cwd: tempDir, stdio: 'ignore' });
         execSync('git add .', { cwd: tempDir, stdio: 'ignore' });
         execSync('git config user.email "bench@example.com"', { cwd: tempDir, stdio: 'ignore' });
         execSync('git config user.name "Bench"', { cwd: tempDir, stdio: 'ignore' });
         execSync('git commit -m "initial"', { cwd: tempDir, stdio: 'ignore' });
-    } catch (e) {
-        console.warn("Failed to initialize git repo in temp dir, falling back to non-git indexing:", e);
+    } catch (error) {
+        console.warn('Failed to initialize git repo in temp dir, continuing without git context:', error);
     }
 
-
-    // Mock Environment
     const env: IndexerEnvironment = {
         getWorkspaceFolders: () => [tempDir],
-        findFiles: async (include, exclude) => {
-             // Simple glob-like simulation or just return all files
-             return fs.readdirSync(tempDir).map(f => path.join(tempDir, f));
-        },
-        log: (msg) => {}, // Suppress logs
-        asRelativePath: (p) => path.relative(tempDir, p),
+        findFiles: async () => fs.readdirSync(tempDir).map((fileName) => path.join(tempDir, fileName)),
+        log: () => {},
+        asRelativePath: (filePath) => path.relative(tempDir, filePath),
         createFileSystemWatcher: () => ({ dispose: () => {} }),
-        executeWorkspaceSymbolProvider: async () => [], // Mock empty result
-        executeDocumentSymbolProvider: async () => []
+        executeWorkspaceSymbolProvider: async () => [],
+        executeDocumentSymbolProvider: async () => [],
     };
 
-    const config = new Config({
-        getConfiguration: (section) => {
-            if (section === 'deeplens') return {
-                get: (key: string) => {
-                    if (key === 'excludePatterns') return [];
-                    if (key === 'searchConcurrency') return 20;
-                    return undefined;
-                }
-            } as any;
-            return { get: () => undefined } as any;
-        }
-    } as any);
+    const config = createBenchmarkConfig(20);
 
     const parser = new TreeSitterParser(extensionPath);
     await parser.init();
 
     const indexer = new WorkspaceIndexer(config, parser, env, extensionPath);
 
-    // We need to wait a bit for workers to potentially warm up? No, they start on demand.
-
     try {
-        await benchmark(`Index ${FILE_COUNT} files`, async () => {
-             // Force re-index
-             await indexer.indexWorkspace((msg, inc) => {});
-        }, 3);
-
-    } catch (e) {
-        console.error("Benchmark failed:", e);
+        await benchmark(
+            `Index ${fileCount} files`,
+            async () => {
+                await indexer.indexWorkspace();
+            },
+            3,
+        );
+    } catch (error) {
+        console.error('Benchmark failed:', error);
     } finally {
         indexer.dispose();
         fs.rmSync(tempDir, { recursive: true, force: true });
     }
 }
 
-// Auto-run if executed directly
 if (require.main === module) {
     runIndexingBenchmark();
 }

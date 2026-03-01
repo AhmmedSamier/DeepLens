@@ -285,35 +285,57 @@ export class RouteMatcher {
     // eslint-disable-next-line sonarjs/cognitive-complexity
     static isPotentialUrl(query: string): boolean {
         const q = query.trim();
-        if (q.includes('/') && !q.includes(' ') && q.length > 2) return true;
-
-        // Optimization: Replace regex matching with manual string slicing and char-code checking
-        const s = q.indexOf(' ');
-        if (s > 0) {
-            const m = q.slice(0, s).toUpperCase();
-            if (
-                m === 'GET' ||
-                m === 'POST' ||
-                m === 'PUT' ||
-                m === 'DELETE' ||
-                m === 'PATCH' ||
-                m === 'OPTIONS' ||
-                m === 'HEAD' ||
-                m === 'TRACE'
-            ) {
-                let i = s + 1;
-                while (i < q.length && q.charCodeAt(i) === 32) {
-                    i++; // skip additional spaces
-                }
-                if (i < q.length) {
-                    const c = q.charCodeAt(i);
-                    // 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
-                    if (c === 47 || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 95) {
-                        return true;
-                    }
-                }
-            }
+        if (q.includes('/') && !q.includes(' ') && q.length > 2) {
+            return true;
         }
-        return false;
+
+        const methodSeparator = q.indexOf(' ');
+        if (methodSeparator <= 0) {
+            return false;
+        }
+
+        const method = q.slice(0, methodSeparator).toUpperCase();
+        if (!RouteMatcher.isHttpMethod(method)) {
+            return false;
+        }
+
+        const pathStartIndex = RouteMatcher.skipSpaces(q, methodSeparator + 1);
+        if (pathStartIndex >= q.length) {
+            return false;
+        }
+
+        return RouteMatcher.isPotentialPathStartChar(q.charCodeAt(pathStartIndex));
+    }
+
+    private static isHttpMethod(method: string): boolean {
+        return (
+            method === 'GET' ||
+            method === 'POST' ||
+            method === 'PUT' ||
+            method === 'DELETE' ||
+            method === 'PATCH' ||
+            method === 'OPTIONS' ||
+            method === 'HEAD' ||
+            method === 'TRACE'
+        );
+    }
+
+    private static skipSpaces(value: string, start: number): number {
+        let index = start;
+        while (index < value.length && value.charCodeAt(index) === 32) {
+            index++;
+        }
+        return index;
+    }
+
+    private static isPotentialPathStartChar(charCode: number): boolean {
+        // 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
+        return (
+            charCode === 47 ||
+            (charCode >= 65 && charCode <= 90) ||
+            (charCode >= 97 && charCode <= 122) ||
+            (charCode >= 48 && charCode <= 57) ||
+            charCode === 95
+        );
     }
 }

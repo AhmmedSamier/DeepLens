@@ -19,6 +19,7 @@ export interface GitAPI {
 
 export class GitService {
     private gitChangeDebounce: NodeJS.Timeout | undefined;
+    private readonly repoListeners: vscode.Disposable[] = [];
     private readonly onRepoChange: () => Promise<void>;
 
     constructor(onRepoChange: () => Promise<void>) {
@@ -62,11 +63,14 @@ export class GitService {
         let lastHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
         logger.log(`Monitoring repository at ${repository.rootUri.fsPath} (Initial HEAD: ${lastHead})`);
 
-        repository.state.onDidChange(() => {
+        const stateDisposable = repository.state.onDidChange(() => {
             const currentHead = repository.state.HEAD?.commit || repository.state.HEAD?.name;
 
             if (currentHead !== lastHead) {
-                logger.log(`Git detected HEAD change in ${repository.rootUri.fsPath}: ${lastHead} -> ${currentHead}`);
+                const previousHead = lastHead;
+                logger.log(
+                    `Git detected HEAD change in ${repository.rootUri.fsPath}: ${previousHead} -> ${currentHead}`,
+                );
                 lastHead = currentHead;
 
                 if (this.gitChangeDebounce) {
@@ -75,18 +79,24 @@ export class GitService {
 
                 this.gitChangeDebounce = setTimeout(async () => {
                     logger.log(
-                        `[Git Event] Head moved from ${lastHead} to ${currentHead}. Triggering full workspace refresh.`,
+                        `[Git Event] Head moved from ${previousHead} to ${currentHead}. Triggering full workspace refresh.`,
                     );
                     await this.onRepoChange();
                     logger.log('[Git Event] Workspace refresh finished.');
                 }, 3000);
             }
         });
+
+        this.repoListeners.push(stateDisposable);
     }
 
     public dispose(): void {
         if (this.gitChangeDebounce) {
             clearTimeout(this.gitChangeDebounce);
         }
+        for (const disposable of this.repoListeners) {
+            disposable.dispose();
+        }
+        this.repoListeners.length = 0;
     }
 }

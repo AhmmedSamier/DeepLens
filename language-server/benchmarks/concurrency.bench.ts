@@ -1,5 +1,5 @@
 import { SearchEngine } from '../src/core/search-engine';
-import { SearchItemType, SearchScope } from '../src/core/types';
+import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
 export async function runConcurrencyBenchmarks() {
@@ -7,7 +7,7 @@ export async function runConcurrencyBenchmarks() {
 
     const engine = new SearchEngine();
     const itemCount = 20000;
-    const items: any[] = [];
+    const items: SearchableItem[] = [];
 
     for (let i = 0; i < itemCount; i++) {
         items.push({
@@ -24,7 +24,7 @@ export async function runConcurrencyBenchmarks() {
     const concurrentRequests = 10;
     
     await benchmark(`${concurrentRequests} Concurrent Searches`, async () => {
-        const promises: Promise<any>[] = [];
+        const promises: Promise<void>[] = [];
         for (let i = 0; i < concurrentRequests; i++) {
             promises.push(engine.search({ query: `Item${Math.floor(Math.random() * itemCount)}`, scope: SearchScope.EVERYTHING }));
         }

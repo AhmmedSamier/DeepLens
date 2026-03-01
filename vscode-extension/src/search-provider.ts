@@ -1678,21 +1678,27 @@ export class SearchProvider {
 
             const shortcut = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
             // Palette: Use dynamic description with shortcut for better discoverability
-            const detail = `${cmd.description}${shortcut}`;
-            // Palette: Use "Name (/cmd)" format for label
-            const label = `${this.getWelcomeLabel(cmd)} (${cmd.name})`;
+            const explanation = `${cmd.description}${shortcut}`;
+            // Palette: Clean label without command
+            const label = this.getWelcomeLabel(cmd);
 
+            // Create base item
             const item = this.resultToQuickPickItem({
                 item: {
                     id: `slash-cmd:${cmd.id}`,
                     name: label,
                     type: SearchItemType.COMMAND,
                     filePath: '',
-                    detail: detail,
+                    detail: '', // Keep empty so resultToQuickPickItem doesn't mess with it
                 },
                 score: 1,
                 scope: cmd.scope,
             });
+
+            // Palette: Move primary interaction trigger to description, explanation to detail
+            item.label = label;
+            item.description = cmd.name;
+            item.detail = explanation;
 
             item.iconPath = new vscode.ThemeIcon(cmd.icon, new vscode.ThemeColor('textLink.foreground'));
             item.alwaysShow = true;
@@ -1869,8 +1875,7 @@ export class SearchProvider {
         }
 
         return {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            label: label as any,
+            label,
             description,
             detail,
             iconPath: iconPath,

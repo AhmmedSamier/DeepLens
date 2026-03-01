@@ -48,10 +48,16 @@ export async function runIndexingScalingBenchmarks() {
 
     for (const concurrency of concurrencies) {
         const config = new Config({
-            getConfiguration: () => ({ 
-                get: (key: string) => key === 'searchConcurrency' ? concurrency : undefined 
-            } as any)
-        } as any);
+            get: <T>(key: string, defaultValue?: T): T => {
+                if (key === 'searchConcurrency') {
+                    return concurrency as T;
+                }
+                if (key === 'respectGitignore') {
+                    return false as T;
+                }
+                return defaultValue as T;
+            },
+        });
 
         const indexer = new WorkspaceIndexer(config, parser, env, extensionPath);
         

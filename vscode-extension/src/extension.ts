@@ -292,14 +292,6 @@ export async function activate(context: vscode.ExtensionContext) {
     });
     context.subscriptions.push(gitService);
     await gitService.setupGitListener(context);
-
-    // Register listener for disposal
-    context.subscriptions.push({
-        dispose: () => {
-            lspClient.stop();
-        },
-    });
-
     // Index commands initially
     await commandIndexer.indexCommands();
 

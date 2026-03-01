@@ -1,5 +1,5 @@
 import { SearchEngine } from '../src/core/search-engine';
-import { SearchItemType, SearchScope } from '../src/core/types';
+import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
 export async function runSearchBenchmarks() {
@@ -8,7 +8,7 @@ export async function runSearchBenchmarks() {
     const engine = new SearchEngine();
     const itemCount = 50000;
 
-    const items: any[] = [];
+    const items: SearchableItem[] = [];
 
     for (let i = 0; i < itemCount; i++) {
         items.push({
