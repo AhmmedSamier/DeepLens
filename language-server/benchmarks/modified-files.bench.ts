@@ -1,5 +1,5 @@
 import { SearchEngine } from '../src/core/search-engine';
-import { SearchItemType, SearchScope } from '../src/core/types';
+import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
 // Mock GitProvider
@@ -15,7 +15,12 @@ class MockGitProvider {
     }
 }
 
-export async function runModifiedFilesBenchmark() {
+interface ModifiedFileEngine {
+    gitProvider: MockGitProvider;
+    getIndicesForModifiedFiles(): Promise<Set<number>>;
+}
+
+export async function runModifiedFilesBenchmark(): Promise<void> {
     console.log("=== Modified Files Search Benchmark ===");
 
     const engine = new SearchEngine();
@@ -23,7 +28,7 @@ export async function runModifiedFilesBenchmark() {
     const modifiedCount = 100;
 
     // Setup items
-    const items: any[] = [];
+    const items: SearchableItem[] = [];
 
     for (let i = 0; i < itemCount; i++) {
         items.push({
@@ -42,7 +47,7 @@ export async function runModifiedFilesBenchmark() {
 
     // Setup Mock GitProvider with modified files
     // We pick files distributed across the index
-    const modifiedFiles = [];
+    const modifiedFiles: string[] = [];
     for (let i = 0; i < modifiedCount; i++) {
         // Pick every 500th file to be modified
         const index = i * 500;
@@ -53,10 +58,10 @@ export async function runModifiedFilesBenchmark() {
 
     // Inject mock provider
     const mockGitProvider = new MockGitProvider(modifiedFiles);
-    (engine as any).gitProvider = mockGitProvider;
+    const modifiedFileEngine = engine as unknown as ModifiedFileEngine;
+    modifiedFileEngine.gitProvider = mockGitProvider;
 
     // We can't easily isolate getIndicesForModifiedFiles because it is private.
-    // However, we can use 'any' cast to access it for benchmarking purposes,
     // or we can run a search with SearchScope.MODIFIED.
     // Running search includes performUnifiedSearch overhead, but since we have 100 items,
     // the dominant factor for O(N) getIndices vs O(M) getIndices should be visible.
@@ -64,7 +69,7 @@ export async function runModifiedFilesBenchmark() {
     // To be precise, let's measure getIndicesForModifiedFiles directly via cast.
 
     await benchmark("getIndicesForModifiedFiles (50k items, 100 modified)", async () => {
-        await (engine as any).getIndicesForModifiedFiles();
+        await modifiedFileEngine.getIndicesForModifiedFiles();
     }, 100);
 
     console.log("\n");

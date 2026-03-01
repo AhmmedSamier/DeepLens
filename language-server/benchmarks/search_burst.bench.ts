@@ -1,5 +1,5 @@
 import { SearchEngine } from '../src/core/search-engine';
-import { SearchItemType, SearchScope } from '../src/core/types';
+import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/types';
 import { benchmark, saveBenchmarks } from './utils';
 import * as path from 'node:path';
 
@@ -10,7 +10,7 @@ async function runBurstBenchmark() {
 
     // Generate 50,000 items
     const ITEM_COUNT = 50000;
-    const items: any[] = [];
+    const items: SearchableItem[] = [];
 
 
     // Create diverse items to fill arrays

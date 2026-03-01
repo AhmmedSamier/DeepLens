@@ -1,11 +1,25 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execSync } from 'node:child_process';
 import * as os from 'os';
 import { WorkspaceIndexer } from '../src/core/workspace-indexer';
 import { Config } from '../src/core/config';
 import { TreeSitterParser } from '../src/core/tree-sitter-parser';
 import { IndexerEnvironment } from '../src/core/indexer-interfaces';
 import { benchmark } from './utils';
+
+
+function initializeGitRepo(directory: string): void {
+    try {
+        execSync('git init', { cwd: directory, stdio: 'ignore' });
+        execSync('git add .', { cwd: directory, stdio: 'ignore' });
+        execSync('git config user.email "bench@example.com"', { cwd: directory, stdio: 'ignore' });
+        execSync('git config user.name "Bench"', { cwd: directory, stdio: 'ignore' });
+        execSync('git commit -m "initial"', { cwd: directory, stdio: 'ignore' });
+    } catch {
+        // Optional in constrained environments.
+    }
+}
 
 export async function runIndexingDensityBenchmarks() {
     console.log("=== Indexing Density Benchmarks ===");
@@ -15,14 +29,24 @@ export async function runIndexingDensityBenchmarks() {
     await parser.init();
 
     const config = new Config({
-        getConfiguration: () => ({ get: (key: string) => key === 'searchConcurrency' ? 50 : undefined } as any)
-    } as any);
+        get: <T>(key: string, defaultValue?: T): T => {
+            if (key === 'searchConcurrency') {
+                return 50 as T;
+            }
+            if (key === 'respectGitignore') {
+                return false as T;
+            }
+            return defaultValue as T;
+        },
+    });
 
     // Scenario 1: 2000 files with 1 symbol each
     const tempDir1 = fs.mkdtempSync(path.join(os.tmpdir(), 'deeplens-density1-'));
     for (let i = 0; i < 2000; i++) {
         fs.writeFileSync(path.join(tempDir1, `file_${i}.ts`), `export const a = 1;`);
     }
+    initializeGitRepo(tempDir1);
+
     const env1: IndexerEnvironment = {
         getWorkspaceFolders: () => [tempDir1],
         findFiles: async () => fs.readdirSync(tempDir1).map(f => path.join(tempDir1, f)),
@@ -43,6 +67,8 @@ export async function runIndexingDensityBenchmarks() {
         }
         fs.writeFileSync(path.join(tempDir2, `file_${i}.ts`), content);
     }
+    initializeGitRepo(tempDir2);
+
     const env2: IndexerEnvironment = {
         getWorkspaceFolders: () => [tempDir2],
         findFiles: async () => fs.readdirSync(tempDir2).map(f => path.join(tempDir2, f)),

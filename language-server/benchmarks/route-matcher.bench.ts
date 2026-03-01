@@ -1,5 +1,5 @@
 import { SearchEngine } from '../src/core/search-engine';
-import { SearchItemType, SearchScope } from '../src/core/types';
+import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
 export async function runRouteMatcherBenchmarks() {
@@ -9,7 +9,7 @@ export async function runRouteMatcherBenchmarks() {
     const itemCount = 50000;
 
     // Setup items with many endpoints
-    const items: any[] = [];
+    const items: SearchableItem[] = [];
 
     for (let i = 0; i < itemCount; i++) {
         // Mix of files and endpoints
