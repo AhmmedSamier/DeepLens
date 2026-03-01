@@ -1,8 +1,13 @@
-import { ActivityTracker } from '../src/core/activity-tracker';
-import { SearchItemType, SearchableItem } from '../src/core/types';
+import { ActivityTracker, type ActivityRecord } from '../src/core/activity-tracker';
+import { SearchItemType, type SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
-export async function runActivityBenchmarks() {
+interface BenchmarkActivityTracker {
+    activities: Map<string, ActivityRecord>;
+    recalculateAllScores(): void;
+}
+
+export async function runActivityBenchmarks(): Promise<void> {
     console.log('--- Activity Tracker Benchmarks ---');
 
     const mockStorage = {
@@ -18,7 +23,8 @@ export async function runActivityBenchmarks() {
     // Populate tracker
     console.log(`Populating tracker with ${itemCount} items...`);
     // Manually accessing private 'activities' map for setup speed
-    const activitiesMap = (tracker as any).activities;
+    const benchmarkTracker = tracker as unknown as BenchmarkActivityTracker;
+    const activitiesMap = benchmarkTracker.activities;
 
     for (let i = 0; i < itemCount; i++) {
         const item: SearchableItem = {
@@ -33,12 +39,12 @@ export async function runActivityBenchmarks() {
             lastAccessed: Date.now(),
             accessCount: Math.floor(Math.random() * 100) + 1,
             score: 0,
-            item: item
+            item,
         });
     }
 
     await benchmark(`recalculateAllScores (N=${itemCount})`, () => {
-        (tracker as any).recalculateAllScores();
+        benchmarkTracker.recalculateAllScores();
     }, 20);
 
     tracker.dispose();

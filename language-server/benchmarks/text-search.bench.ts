@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { SearchEngine } from '../src/core/search-engine';
 import { Config } from '../src/core/config';
-import { SearchItemType, SearchScope } from '../src/core/types';
+import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
 export async function runTextSearchBenchmarks() {
@@ -26,7 +26,7 @@ export async function runTextSearchBenchmarks() {
     if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
 
     const fileCount = 100;
-    const items: any[] = [];
+    const items: SearchableItem[] = [];
 
 
     // Create files
