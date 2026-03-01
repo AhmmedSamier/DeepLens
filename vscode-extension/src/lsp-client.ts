@@ -22,6 +22,7 @@ export class DeepLensLspClient implements ISearchProvider {
     private readonly context: vscode.ExtensionContext;
     private isStopping = false;
     private startPromise: Promise<void> | null = null;
+    private stopPromise: Promise<void> | null = null;
     private disposables: vscode.Disposable[] = [];
     public onProgress = new vscode.EventEmitter<{
         state: 'start' | 'report' | 'end';
@@ -280,18 +281,28 @@ export class DeepLensLspClient implements ISearchProvider {
     }
 
     async stop(): Promise<void> {
-        this.isStopping = true;
+        if (this.stopPromise) {
+            await this.stopPromise;
+            return;
+        }
 
-        await this.waitForStartCompletion();
-        await this.stopClientInstance();
+        this.stopPromise = (async () => {
+            this.isStopping = true;
 
-        this.disposeTrackedDisposables();
+            await this.waitForStartCompletion();
+            await this.stopClientInstance();
 
-        this.onProgress.dispose();
+            this.disposeTrackedDisposables();
+
+            this.onProgress.dispose();
+            this.onRipgrepUnavailable.dispose();
+        })();
+
+        await this.stopPromise;
     }
 
     private async waitForStartCompletion(): Promise<void> {
-        if (this.startPromise === undefined) {
+        if (this.startPromise === null) {
             return;
         }
 

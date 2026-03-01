@@ -20,6 +20,13 @@ enum CodeLensType {
     IMPLEMENTATION = 'implementation',
 }
 
+
+function isSymbolInformationArray(
+    symbols: vscode.DocumentSymbol[] | vscode.SymbolInformation[],
+): symbols is vscode.SymbolInformation[] {
+    return symbols.length > 0 && 'containerName' in symbols[0];
+}
+
 /**
  * CodeLens provider that shows reference and implementation counts above symbols
  * Similar to JetBrains Rider's "Code Vision" feature
@@ -74,9 +81,8 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             // Check if we got DocumentSymbol[] (hierarchy) or SymbolInformation[] (flat)
             if (symbols.length > 0 && 'children' in symbols[0]) {
                 this.collectSymbols(symbols as vscode.DocumentSymbol[], codeLenses, document);
-            } else if (symbols.length > 0 && 'containerName' in symbols[0]) {
-                // Handle flat SymbolInformation[]
-                this.collectFlatSymbols(symbols as unknown as vscode.SymbolInformation[], codeLenses, document);
+            } else if (isSymbolInformationArray(symbols)) {
+                this.collectFlatSymbols(symbols, codeLenses, document);
             }
         } catch (error) {
             console.error('[DeepLens] Error getting document symbols:', error);

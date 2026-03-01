@@ -2,6 +2,7 @@ import * as assert from 'node:assert';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { SearchOptions, SearchScope } from '../../../../language-server/src/core/types';
 
 const results: { name: string; avgMs: number; totalMs: number }[] = [];
 
@@ -54,25 +55,40 @@ suite('Extension Performance Test Suite', () => {
     });
 
     test('Command Execution: deeplens.search', async () => {
-        // Wait for extension to be ready
         const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
         await extension?.activate();
-
-        // Allow some time for language server to start
-        await new Promise((r) => setTimeout(r, 2000));
 
         await benchmark(
             'Execute Search Command',
             async () => {
-                // We just trigger the command, we can't easily measure until results appear without more complex hooks
-                // But checking that the command triggers without error is a start.
-                // In a real scenario, we might want to expose an API to wait for search completion.
                 await vscode.commands.executeCommand('deeplens.search');
-
-                // Close the quick pick if possible (Escape)
                 await vscode.commands.executeCommand('workbench.action.closeQuickOpen');
             },
             5,
+        );
+    });
+
+    test('Search Request Latency: deeplens/search', async () => {
+        const extension = vscode.extensions.getExtension('AhmedSamir.deeplens');
+        assert.ok(extension, 'Extension should be present');
+        const api = extension.isActive ? extension.exports : await extension.activate();
+
+        // Allow the LSP process to start and complete initialization.
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+
+        const options: SearchOptions = {
+            query: 'test',
+            maxResults: 50,
+            scope: SearchScope.EVERYTHING,
+        };
+
+        await benchmark(
+            'Search Request Latency',
+            async () => {
+                const results = await api.lspClient.search(options);
+                assert.ok(Array.isArray(results), 'Search should return an array');
+            },
+            10,
         );
     });
 });
