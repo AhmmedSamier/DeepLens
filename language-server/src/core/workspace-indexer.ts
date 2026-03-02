@@ -1059,18 +1059,22 @@ export class WorkspaceIndexer {
         const pattern = `**/*`;
 
         this.fileWatcher = this.env.createFileSystemWatcher(pattern, (filePath, type) => {
-            switch (type) {
-                case 'create':
-                    this.handleFileCreated(filePath);
-                    break;
-                case 'change':
-                    this.handleFileChanged(filePath);
-                    break;
-                case 'delete':
-                    this.handleFileDeleted(filePath);
-                    break;
-            }
+            void this.processFileEvent(filePath, type);
         });
+    }
+
+    public async processFileEvent(filePath: string, type: 'create' | 'change' | 'delete'): Promise<void> {
+        switch (type) {
+            case 'create':
+                await this.handleFileCreated(filePath);
+                break;
+            case 'change':
+                await this.handleFileChanged(filePath);
+                break;
+            case 'delete':
+                this.handleFileDeleted(filePath);
+                break;
+        }
     }
 
     /**
@@ -1228,6 +1232,7 @@ export class WorkspaceIndexer {
             name: internedFileName,
             type: SearchItemType.FILE,
             filePath: internedFilePath,
+            relativeFilePath: relativePath,
             detail: relativePath,
             fullName: relativePath,
             size: await this.getFileSize(filePath),
@@ -1273,6 +1278,7 @@ export class WorkspaceIndexer {
             name: internedFileName,
             type: SearchItemType.FILE,
             filePath: internedFilePath,
+            relativeFilePath: relativePath,
             detail: relativePath,
             fullName: relativePath,
             size: await this.getFileSize(filePath),

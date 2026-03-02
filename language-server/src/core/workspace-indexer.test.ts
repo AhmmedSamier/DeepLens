@@ -4,6 +4,7 @@ import { describe, expect, it } from 'bun:test';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
 import { TreeSitterParser } from './tree-sitter-parser';
+import { SearchItemType } from './types';
 import { WorkspaceIndexer } from './workspace-indexer';
 
 class TestWorkspaceIndexer extends WorkspaceIndexer {
@@ -146,6 +147,41 @@ describe('WorkspaceIndexer', () => {
         expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(true);
     });
 
+    describe('file event updates', () => {
+        it('should include relativeFilePath when creating a file item', async () => {
+            const customConfig = new Config();
+            customConfig.update({ respectGitignore: false });
+            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+            const addedItems: any[] = [];
+
+            indexer.onItemsAdded((items) => addedItems.push(...items));
+
+            await indexer.processFileEvent('/root/src/new-file.ts', 'create');
+
+            const fileItem = addedItems.find(
+                (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/new-file.ts',
+            );
+            expect(fileItem).toBeDefined();
+            expect(fileItem.relativeFilePath).toBe('src/new-file.ts');
+        });
+
+        it('should include relativeFilePath when changing a file item', async () => {
+            const customConfig = new Config();
+            customConfig.update({ respectGitignore: false });
+            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+            const addedItems: any[] = [];
+
+            indexer.onItemsAdded((items) => addedItems.push(...items));
+
+            await indexer.processFileEvent('/root/src/updated-file.ts', 'change');
+
+            const fileItem = addedItems.find(
+                (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/updated-file.ts',
+            );
+            expect(fileItem).toBeDefined();
+            expect(fileItem.relativeFilePath).toBe('src/updated-file.ts');
+        });
+    });
     describe('dispose', () => {
         it('should clear timers on dispose', () => {
             const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
