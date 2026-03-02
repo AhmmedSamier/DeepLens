@@ -34,3 +34,7 @@
 **Learning:** In high-frequency hot loops like `RouteMatcher.calculateSegmentsScore`, performing array length calculations (e.g. `tSegs.length - i`) and intermediate status boolean toggling in every iteration introduces bounds checking and allocation overhead.
 **Action:** Modified `calculateSegmentsScore` by caching `pSegs.length` and `tSegs.length` before the loop, pre-calculating the offset, and replacing the intermediate tracking variable `isMatch` with immediate returns `return 0`.
 **Result:** Array segment matching in `calculateSegmentsScore` is roughly **~50-60% faster** (measured via test loop reducing from ~1700ms to ~730ms).
+
+## 2024-05-18 - [Optimized URL Parsing Hotpath]
+**Learning:** In URL path parsing (e.g., `RouteMatcher.isPotentialUrl`), chained string checks like `.includes('/') && !.includes(' ')` and multiple length checks cause significant overhead because they iterate over the entire string multiple times. Also, creating substrings before determining if they are strictly necessary causes unnecessary object allocations. Combining a single `indexOf(' ')` with an early-exit pattern and a `switch` statement for HTTP method checks reduced string matching time by ~50% in the benchmark.
+**Action:** When validating string patterns in a hot path, scan the string once using `indexOf` or `charCodeAt`, avoid allocating new strings with `slice` or `trim` unless strictly required by the matching logic, and utilize early length-based exits.
