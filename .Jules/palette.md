@@ -13,3 +13,7 @@
 ## 2025-02-16 - Command visibility in welcome screens
 **Learning:** "Welcome" or "Help" items in a QuickPick often hide critical information (like keyboard shortcuts) in `detail` text which is visually secondary. Users might miss the shortcut if it's buried in a long sentence.
 **Action:** Move the primary interaction trigger (the command itself, e.g. `/all`) to the `description` field for immediate visibility and scanability, while keeping the explanation in `detail`.
+
+## 2025-03-02 - [Example-Driven Placeholders]
+**Learning:** Generic instructional placeholders (e.g., "Search for types...") in empty search states are less helpful than specific, example-driven placeholders (e.g., "Try 'UserService', 'IConfig'..."). The latter reduces cognitive load and gives users an immediate idea of what queries work best for the selected search scope.
+**Action:** Always prefer example-driven copy over generic instructions in search or empty state placeholders across the application to improve discoverability and usability.
