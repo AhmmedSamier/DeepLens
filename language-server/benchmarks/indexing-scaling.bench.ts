@@ -14,8 +14,8 @@ export async function runIndexingScalingBenchmarks() {
     const extensionPath = path.resolve(__dirname, '..');
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deeplens-scaling-bench-'));
     
-    // Generate 2000 files for a decent load
-    const FILE_COUNT = 2000;
+    // Align with the baseline indexing benchmark size.
+    const FILE_COUNT = 5000;
     for (let i = 0; i < FILE_COUNT; i++) {
         fs.writeFileSync(path.join(tempDir, `file_${i}.ts`), `export class Class${i} { method() {} }`);
     }

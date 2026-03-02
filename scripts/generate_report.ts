@@ -20,11 +20,11 @@ function generateTable(title: string, data: any[]): string {
     if (!data || data.length === 0) return `\n### ${title}\n\nNo data available.\n`;
 
     let markdown = `\n### ${title}\n\n`;
-    markdown += `| Benchmark | Average Time | Total Time |\n`;
-    markdown += `| :--- | :---: | :---: |\n`;
+    markdown += `| Benchmark | Average Time | Total Time | Min Time | Max Time | P95 | Std Dev |\n`;
+    markdown += `| :--- | :---: | :---: | :---: | :---: | :---: | :---: |\n`;
 
     for (const item of data) {
-        markdown += `| ${item.name} | ${formatDuration(item.avgMs)} | ${formatDuration(item.totalMs)} |\n`;
+        markdown += `| ${item.name} | ${formatDuration(item.avgMs)} | ${formatDuration(item.totalMs)} | ${formatDuration(item.minMs ?? 0)} | ${formatDuration(item.maxMs ?? 0)} | ${formatDuration(item.p95Ms ?? 0)} | ${formatDuration(item.stdDevMs ?? 0)} |\n`;
     }
 
     return markdown;
