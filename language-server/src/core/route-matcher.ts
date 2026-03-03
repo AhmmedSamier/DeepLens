@@ -198,7 +198,8 @@ export class RouteMatcher {
                 if (closeIdx !== -1) {
                     const paramContent = cleanTemplate.slice(i + 1, closeIdx);
                     // Replace {*slug} (catch-all) with (.*)
-                    if (paramContent.charCodeAt(0) === 42) { // '*'
+                    if (paramContent.charCodeAt(0) === 42) {
+                        // '*'
                         hasCatchAll = true;
                         pattern += '(.*)';
                     } else {
@@ -239,7 +240,9 @@ export class RouteMatcher {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = templateSegments.map((s) => s.toLowerCase());
-            const isParameter = templateSegments.map((s) => s.startsWith('{') && s.endsWith('}'));
+            const isParameter = templateSegments.map(
+                (s) => s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125,
+            ); // 123 is '{', 125 is '}'
 
             cached = {
                 regex: exactRegex,
@@ -301,10 +304,11 @@ export class RouteMatcher {
                 const pSegLower = pSegsLower[pIndex];
                 if (pSegLower) {
                     const tSegLower = tSegsLower[tIndex];
-                    if (i === 1) { // isLast
+                    if (i === 1) {
+                        // isLast
                         if (tSegLower === pSegLower) {
                             score += 0.1;
-                        } else if (tSegLower.startsWith(pSegLower)) {
+                        } else if (tSegLower.indexOf(pSegLower) === 0) {
                             score += 0.05;
                         } else {
                             return 0;
@@ -315,7 +319,7 @@ export class RouteMatcher {
                         return 0;
                     }
                 } else {
-                     return 0;
+                    return 0;
                 }
             }
         }
