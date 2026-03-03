@@ -46,7 +46,7 @@ const ITEM_TYPE_BOOSTS: Record<SearchItemType, number> = {
     [SearchItemType.METHOD]: 1.25,
     [SearchItemType.PROPERTY]: 1.1,
     [SearchItemType.VARIABLE]: 1,
-    [SearchItemType.FILE]: 0.9,
+    [SearchItemType.FILE]: 1.3, // Boosted files to compete with top-level class symbols
     [SearchItemType.TEXT]: 0.7,
     [SearchItemType.COMMAND]: 1.2,
     [SearchItemType.ENDPOINT]: 1.4,
@@ -1726,6 +1726,11 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
+        const queryFlags = context.queryBitflags;
+        if (queryFlags !== 0 && (context.itemBitflags[i] & queryFlags) !== queryFlags) {
+            return;
+        }
+
         const typeId = context.itemTypeIds[i];
 
         // Calculate score using multiple strategies
@@ -1780,7 +1785,6 @@ export class SearchEngine implements ISearchProvider {
 
         return fuzzyScore;
     }
-
 
     private calculateLexicalScore(
         i: number,
@@ -2108,43 +2112,24 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        const normalizedQuery = effectiveQuery.replaceAll('\\', '/');
-        const queryLower = normalizedQuery.toLowerCase();
+        const queryLower = this.normalizeQuery(effectiveQuery);
 
-        let indices: number[] | undefined;
-        if (scope === SearchScope.OPEN) {
-            indices = this.getIndicesForOpenFiles();
-        } else if (scope === SearchScope.MODIFIED) {
-            indices = await this.getIndicesForModifiedFiles();
-        } else {
-            indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
-        }
+        const indices = await this.getSearchIndices(scope, cancellationToken);
 
-        let results: SearchResult[] = this.findBurstMatches(indices, queryLower, cancellationToken);
+        let results = this.findBurstMatches(indices, queryLower, cancellationToken);
 
-        if (
-            (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
-            RouteMatcher.isPotentialUrl(queryLower)
-        ) {
-            const preparedQuery = RouteMatcher.prepare(queryLower);
-            this.addUrlMatches(results, indices, preparedQuery);
-        }
+        results = await this.enrichResults(results, scope, queryLower, cancellationToken);
 
         if (this.getActivityScore) {
             this.applyPersonalizedBoosting(results);
         }
 
         if (targetLine !== undefined) {
-            results = results.map((r) => ({
-                ...r,
-                item: {
-                    ...r.item,
-                    line: targetLine,
-                },
-            }));
+            results = this.applyTargetLine(results, targetLine);
         }
 
-        const rankedResults = results.sort((a, b) => b.score - a.score).slice(0, maxResults);
+        results.sort((a, b) => b.score - a.score);
+        const rankedResults = results.slice(0, maxResults);
 
         if (onResult && !cancellationToken?.isCancellationRequested) {
             for (const result of rankedResults) {
@@ -2158,12 +2143,52 @@ export class SearchEngine implements ISearchProvider {
         return rankedResults;
     }
 
+    private normalizeQuery(effectiveQuery: string): string {
+        const normalized = effectiveQuery.replaceAll('\\', '/');
+        return normalized.toLowerCase();
+    }
+
+    private async getSearchIndices(scope: SearchScope, token?: CancellationToken): Promise<number[] | undefined> {
+        if (token?.isCancellationRequested) {
+            return undefined;
+        }
+
+        if (scope === SearchScope.OPEN) {
+            return this.getIndicesForOpenFiles();
+        } else if (scope === SearchScope.MODIFIED) {
+            return this.getIndicesForModifiedFiles();
+        } else {
+            return scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
+        }
+    }
+
+    private async enrichResults(
+        results: SearchResult[],
+        scope: SearchScope,
+        queryLower: string,
+        token?: CancellationToken,
+    ): Promise<SearchResult[]> {
+        if (
+            (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
+            RouteMatcher.isPotentialUrl(queryLower)
+        ) {
+            if (token?.isCancellationRequested) {
+                return results;
+            }
+            const preparedQuery = RouteMatcher.prepare(queryLower);
+            this.addUrlMatches(results, undefined, preparedQuery);
+        }
+
+        return results;
+    }
+
     private findBurstMatches(
         indices: number[] | undefined,
         queryLower: string,
         token?: CancellationToken,
     ): SearchResult[] {
         const results: SearchResult[] = [];
+        const queryFlags = this.calculateBitflags(queryLower);
 
         const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0) => {
             const result: SearchResult = {
@@ -2176,6 +2201,11 @@ export class SearchEngine implements ISearchProvider {
 
         const processItem = (i: number) => {
             if (token?.isCancellationRequested) return;
+
+            // Prune early via bitflags
+            if (queryFlags !== 0 && (this.itemBitflags[i] & queryFlags) !== queryFlags) {
+                return;
+            }
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
@@ -2204,34 +2234,75 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
-        // Fast path: Exact match or prefix match
+        const nameScore = this.calculateNameMatchScore(nameLower, queryLower);
+        if (nameScore > 0) {
+            return nameScore;
+        }
+
+        return this.calculateFullNameMatchScore(fullName, nameLower, queryLower);
+    }
+
+    private calculateNameMatchScore(nameLower: string, queryLower: string): number {
         if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
             return 1.0;
         }
 
-        // Fast path: Substring match (scored lower but still fast)
         if (nameLower.includes(queryLower)) {
             return 0.8;
         }
 
-        // Check fullName if it exists and is different from name
-        if (fullName && fullName.length !== nameLower.length) {
-            const fullLower = fullName.toLowerCase();
-            if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
-                return 0.9;
-            }
-            if (fullLower.includes(queryLower)) {
-                return 0.7;
+        if (queryLower.length > 2) {
+            const score = this.calculateDispersedMatch(nameLower, queryLower);
+            if (score > 0) {
+                return score;
             }
         }
 
         return 0;
     }
 
-    private searchAllScopesInPriorityOrder(
-        processItem: (i: number) => void,
-        token?: CancellationToken,
-    ): void {
+    private calculateFullNameMatchScore(fullName: string | undefined, nameLower: string, queryLower: string): number {
+        if (!fullName || fullName.length === nameLower.length) {
+            return 0;
+        }
+
+        const fullLower = fullName.toLowerCase();
+
+        if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
+            return 0.9;
+        }
+
+        if (fullLower.includes(queryLower)) {
+            return 0.7;
+        }
+
+        if (queryLower.length > 2) {
+            return this.calculateDispersedMatch(fullLower, queryLower, 0.4);
+        }
+
+        return 0;
+    }
+
+    private calculateDispersedMatch(text: string, query: string, baseScore: number = 0.5): number {
+        let qi = 0;
+        let contiguous = 0;
+
+        for (let ti = 0; ti < text.length; ti++) {
+            if (text[ti] === query[qi]) {
+                if (qi > 0 && ti > 0 && text[ti - 1] === query[qi - 1]) {
+                    contiguous++;
+                }
+                qi++;
+                if (qi === query.length) {
+                    return baseScore + (contiguous / query.length) * 0.2;
+                }
+            }
+        }
+
+        return 0;
+    }
+
+    private searchAllScopesInPriorityOrder(processItem: (i: number) => void, token?: CancellationToken): void {
         const priorityScopes = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
 
         this.searchPriorityScopes(priorityScopes, processItem, token);
