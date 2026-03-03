@@ -2101,7 +2101,7 @@ export class SearchEngine implements ISearchProvider {
             RouteMatcher.isPotentialUrl(queryLower)
         ) {
             const preparedQuery = RouteMatcher.prepare(queryLower);
-            this.addUrlMatches(results, indices, preparedQuery, maxResults);
+            this.addUrlMatches(results, indices, preparedQuery);
         }
 
         if (this.getActivityScore) {
