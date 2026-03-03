@@ -290,6 +290,28 @@ describe('SearchEngine scopes and providers', () => {
         expect(callCount).toBe(1);
     });
 
+
+    it('should prefer best-scoring result across all scopes in burstSearch', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            {
+                ...createTestItem('1', 'NoDirectMatch', SearchItemType.CLASS, 'src/MyZapType.ts'),
+                fullName: 'myzaptype',
+            },
+            createTestItem('2', 'zap', SearchItemType.COMMAND, 'src/zap.ts'),
+        ];
+        await engine.setItems(items);
+
+        const results = await engine.burstSearch({
+            query: 'zap',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].item.name).toBe('zap');
+    });
+
     it('should handle MODIFIED scope in burstSearch', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [

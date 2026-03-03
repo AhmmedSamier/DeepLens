@@ -2094,13 +2094,7 @@ export class SearchEngine implements ISearchProvider {
             indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
         }
 
-        let results: SearchResult[] = this.findBurstMatches(
-            indices,
-            queryLower,
-            maxResults,
-            onResult,
-            cancellationToken,
-        );
+        let results: SearchResult[] = this.findBurstMatches(indices, queryLower, cancellationToken);
 
         if (
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) &&
@@ -2124,14 +2118,23 @@ export class SearchEngine implements ISearchProvider {
             }));
         }
 
-        return results.sort((a, b) => b.score - a.score);
+        const rankedResults = results.sort((a, b) => b.score - a.score).slice(0, maxResults);
+
+        if (onResult && !cancellationToken?.isCancellationRequested) {
+            for (const result of rankedResults) {
+                if (cancellationToken?.isCancellationRequested) {
+                    break;
+                }
+                onResult(result);
+            }
+        }
+
+        return rankedResults;
     }
 
     private findBurstMatches(
         indices: number[] | undefined,
         queryLower: string,
-        maxResults: number,
-        onResult?: (result: SearchResult) => void,
         token?: CancellationToken,
     ): SearchResult[] {
         const results: SearchResult[] = [];
@@ -2143,13 +2146,10 @@ export class SearchEngine implements ISearchProvider {
                 scope: ID_TO_SCOPE[typeId],
             };
             results.push(result);
-            if (onResult && !token?.isCancellationRequested) {
-                onResult(result);
-            }
         };
 
         const processItem = (i: number) => {
-            if (results.length >= maxResults) return;
+            if (token?.isCancellationRequested) return;
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
@@ -2167,11 +2167,11 @@ export class SearchEngine implements ISearchProvider {
 
         if (indices) {
             for (const index of indices) {
-                if (results.length >= maxResults || token?.isCancellationRequested) break;
+                if (token?.isCancellationRequested) break;
                 processItem(index);
             }
         } else {
-            this.searchAllScopesInPriorityOrder(maxResults, processItem, results, token);
+            this.searchAllScopesInPriorityOrder(processItem, token);
         }
 
         return results;
@@ -2203,34 +2203,30 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private searchAllScopesInPriorityOrder(
-        maxResults: number,
         processItem: (i: number) => void,
-        results: SearchResult[],
         token?: CancellationToken,
     ): void {
         const priorityScopes = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
 
-        this.searchPriorityScopes(priorityScopes, maxResults, processItem, results, token);
+        this.searchPriorityScopes(priorityScopes, processItem, token);
 
         // Pass 5: Everything else (e.g. Properties, Variables, Commands)
-        if (results.length < maxResults && !token?.isCancellationRequested) {
-            this.searchRemainingItems(priorityScopes, maxResults, processItem, results, token);
+        if (!token?.isCancellationRequested) {
+            this.searchRemainingItems(priorityScopes, processItem, token);
         }
     }
 
     private searchPriorityScopes(
         priorityScopes: SearchScope[],
-        maxResults: number,
         processItem: (i: number) => void,
-        results: SearchResult[],
         token?: CancellationToken,
     ): void {
         for (const scope of priorityScopes) {
-            if (results.length >= maxResults || token?.isCancellationRequested) return;
+            if (token?.isCancellationRequested) return;
             const indices = this.scopedIndices.get(scope);
             if (indices) {
                 for (const index of indices) {
-                    if (results.length >= maxResults || token?.isCancellationRequested) break;
+                    if (token?.isCancellationRequested) break;
                     processItem(index);
                 }
             }
@@ -2239,9 +2235,7 @@ export class SearchEngine implements ISearchProvider {
 
     private searchRemainingItems(
         priorityScopes: SearchScope[],
-        maxResults: number,
         processItem: (i: number) => void,
-        results: SearchResult[],
         token?: CancellationToken,
     ): void {
         const searchedIndices = new Set<number>();
@@ -2250,7 +2244,7 @@ export class SearchEngine implements ISearchProvider {
         });
 
         for (let i = 0; i < this.items.length; i++) {
-            if (results.length >= maxResults || token?.isCancellationRequested) break;
+            if (token?.isCancellationRequested) break;
             if (!searchedIndices.has(i)) {
                 processItem(i);
             }
