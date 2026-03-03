@@ -31,25 +31,13 @@ export class MinHeap<T> {
     }
 
     getSorted(): T[] {
-        // Returns sorted descending (highest score first)
-        // Since it's a min-heap, popping gives us elements in ascending order.
-        // So we pop all, then reverse.
-        const result: T[] = [];
-        const originalHeap = [...this.heap];
-
-        // We destructively empty the heap to sort
-        while (this.heap.length > 0) {
-            const value = this.pop();
-            if (value === undefined) {
-                break;
-            }
-            result.push(value);
-        }
-
-        // Restore heap state
-        this.heap = originalHeap;
-
-        return result.reverse();
+        // ⚡ Bolt: Fast sorting optimization
+        // Using native Array.prototype.sort() on a shallow copy is measurably faster
+        // than manually popping and shifting elements down, as it leverages native V8 sorting
+        // and avoids repeated siftDown operations.
+        // Returns sorted descending (highest score first) by reversing the compare function arguments.
+        // eslint-disable-next-line sonarjs/arguments-order
+        return this.heap.slice().sort((a, b) => this.compare(b, a));
     }
 
     private pop(): T | undefined {
