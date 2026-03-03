@@ -17,6 +17,84 @@ let activityTracker: ActivityTracker;
 let commandIndexer: CommandIndexer;
 let gitService: GitService;
 
+
+const CALL_CHAIN_DEPTH = 4;
+
+interface CallNode {
+    readonly item: vscode.CallHierarchyItem;
+    readonly children: CallNode[];
+}
+
+async function buildIncomingCallTree(
+    item: vscode.CallHierarchyItem,
+    depth: number,
+    visited: Set<string>,
+): Promise<CallNode> {
+    if (depth <= 0) {
+        return { item, children: [] };
+    }
+
+    const key = `${item.uri.toString()}:${item.range.start.line}:${item.range.start.character}:${item.name}`;
+    if (visited.has(key)) {
+        return { item, children: [] };
+    }
+
+    visited.add(key);
+
+    const incoming =
+        (await vscode.commands.executeCommand<vscode.CallHierarchyIncomingCall[]>(
+            'vscode.provideIncomingCalls',
+            item,
+        )) || [];
+
+    const children = await Promise.all(
+        incoming.map(async (entry) => buildIncomingCallTree(entry.from, depth - 1, visited)),
+    );
+
+    visited.delete(key);
+    return { item, children };
+}
+
+function renderCallTree(node: CallNode, level: number, lines: string[]): void {
+    const indent = '  '.repeat(level);
+    const location = `${node.item.uri.fsPath}:${node.item.selectionRange.start.line + 1}`;
+    lines.push(`${indent}- ${node.item.name} (${location})`);
+
+    for (const child of node.children) {
+        renderCallTree(child, level + 1, lines);
+    }
+}
+
+async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolName?: string): Promise<void> {
+    const roots =
+        (await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>(
+            'vscode.prepareCallHierarchy',
+            uri,
+            position,
+        )) || [];
+
+    if (roots.length === 0) {
+        vscode.window.showInformationMessage('DeepLens: No call hierarchy information is available for this symbol.');
+        return;
+    }
+
+    const root = roots[0];
+    const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
+    const lines: string[] = [
+        `# Call Chain: ${symbolName || root.name}`,
+        '',
+        `Incoming call chain (depth ${CALL_CHAIN_DEPTH})`,
+        '',
+    ];
+    renderCallTree(tree, 0, lines);
+
+    const doc = await vscode.workspace.openTextDocument({
+        language: 'markdown',
+        content: lines.join('\n'),
+    });
+    await vscode.window.showTextDocument(doc, { preview: false });
+}
+
 /**
  * Extension activation
  */
@@ -123,7 +201,15 @@ export async function activate(context: vscode.ExtensionContext) {
         vscode.window.showInformationMessage('DeepLens: Index cache cleared.');
     });
 
-    context.subscriptions.push(searchCommand, rebuildCommand, clearCacheCommand);
+    // Show call hierarchy chain from CodeLens
+    const showCallChainCommand = vscode.commands.registerCommand(
+        'deeplens.showCallChain',
+        async (uri: vscode.Uri, position: vscode.Position, symbolName?: string) => {
+            await showCallChain(uri, position, symbolName);
+        },
+    );
+
+    context.subscriptions.push(searchCommand, rebuildCommand, clearCacheCommand, showCallChainCommand);
 
     // Status Bar Item
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
