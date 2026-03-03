@@ -1750,7 +1750,10 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
-        return this.calculateFuzzyScore(i, typeId, context);
+        const fuzzyScore = this.calculateFuzzyScore(i, typeId, context);
+        const lexicalScore = this.calculateLexicalScore(i, typeId, context);
+
+        return lexicalScore > fuzzyScore ? lexicalScore : fuzzyScore;
     }
 
     private calculateFuzzyScore(
@@ -1776,6 +1779,29 @@ export class SearchEngine implements ISearchProvider {
         }
 
         return fuzzyScore;
+    }
+
+
+    private calculateLexicalScore(
+        i: number,
+        typeId: number,
+        context: ReturnType<typeof this.prepareSearchContext>,
+    ): number {
+        const item = context.items[i];
+        if (!item) {
+            return -Infinity;
+        }
+
+        const queryLower = context.queryLower;
+        const nameLower = item.name.toLowerCase();
+        let lexicalScore = this.calculateMatchScore(nameLower, item.fullName, queryLower);
+
+        if (lexicalScore <= context.MIN_SCORE) {
+            return -Infinity;
+        }
+
+        lexicalScore *= ID_TO_BOOST[typeId] || 1;
+        return lexicalScore;
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
