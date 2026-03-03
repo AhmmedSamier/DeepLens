@@ -55,6 +55,9 @@ async function buildIncomingCallTree(
     return { item, children };
 }
 
+// escapeHtml is used when rendering CallHierarchyItem data in the call-chain webview.
+// Inputs originate from language-server-provided symbol names and file paths, and output stays
+// inside this extension-owned webview, so a minimal five-character replacement is sufficient.
 function escapeHtml(value: string): string {
     return value
         .replaceAll('&', '&amp;')
@@ -154,17 +157,24 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
             return;
         }
 
-        const parsed = JSON.parse(decodeURIComponent(message.location)) as {
-            uri: string;
-            line: number;
-            character: number;
-        };
-        const targetUri = vscode.Uri.parse(parsed.uri);
-        const pos = new vscode.Position(parsed.line, parsed.character);
-        await vscode.window.showTextDocument(targetUri, {
-            preview: false,
-            selection: new vscode.Range(pos, pos),
-        });
+        try {
+            const parsed = JSON.parse(decodeURIComponent(message.location)) as {
+                uri: string;
+                line: number;
+                character: number;
+            };
+            const targetUri = vscode.Uri.parse(parsed.uri);
+            const pos = new vscode.Position(parsed.line, parsed.character);
+            await vscode.window.showTextDocument(targetUri, {
+                preview: false,
+                selection: new vscode.Range(pos, pos),
+            });
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            logger.error(`Failed to navigate from call chain webview: ${message}`);
+            vscode.window.showErrorMessage('DeepLens: Failed to navigate to call chain location.');
+            return;
+        }
     });
 }
 
