@@ -55,14 +55,35 @@ async function buildIncomingCallTree(
     return { item, children };
 }
 
-function renderCallTree(node: CallNode, level: number, lines: string[]): void {
-    const indent = '  '.repeat(level);
-    const location = `${node.item.uri.fsPath}:${node.item.selectionRange.start.line + 1}`;
-    lines.push(`${indent}- ${node.item.name} (${location})`);
+function escapeHtml(value: string): string {
+    return value
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+}
 
-    for (const child of node.children) {
-        renderCallTree(child, level + 1, lines);
-    }
+function renderCallTree(node: CallNode, level: number): string {
+    const location = `${node.item.uri.fsPath}:${node.item.selectionRange.start.line + 1}`;
+    const payload = encodeURIComponent(
+        JSON.stringify({
+            uri: node.item.uri.toString(),
+            line: node.item.selectionRange.start.line,
+            character: node.item.selectionRange.start.character,
+        }),
+    );
+    const childrenMarkup = node.children.map((child) => renderCallTree(child, level + 1)).join('');
+
+    return `
+        <li>
+            <button class="node level-${level}" data-location="${payload}">
+                <span class="name">${escapeHtml(node.item.name)}</span>
+                <span class="meta">${escapeHtml(location)}</span>
+            </button>
+            ${childrenMarkup.length > 0 ? `<ul>${childrenMarkup}</ul>` : ''}
+        </li>
+    `;
 }
 
 async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolName?: string): Promise<void> {
@@ -80,19 +101,71 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
 
     const root = roots[0];
     const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
-    const lines: string[] = [
-        `# Call Chain: ${symbolName || root.name}`,
-        '',
-        `Incoming call chain (depth ${CALL_CHAIN_DEPTH})`,
-        '',
-    ];
-    renderCallTree(tree, 0, lines);
+    const panel = vscode.window.createWebviewPanel(
+        'deeplensCallChain',
+        `DeepLens Call Chain: ${symbolName || root.name}`,
+        vscode.ViewColumn.Beside,
+        {
+            enableScripts: true,
+        },
+    );
 
-    const doc = await vscode.workspace.openTextDocument({
-        language: 'markdown',
-        content: lines.join('\n'),
+    const treeMarkup = `<ul class="tree">${renderCallTree(tree, 0)}</ul>`;
+
+    panel.webview.html = `
+        <!DOCTYPE html>
+        <html lang="en">
+            <head>
+                <meta charset="UTF-8" />
+                <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+                <title>Call Chain</title>
+                <style>
+                    body { font-family: var(--vscode-font-family); color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); padding: 12px; }
+                    .header { margin-bottom: 12px; }
+                    .tree, .tree ul { list-style: none; padding-left: 14px; margin: 0; }
+                    .tree li { margin: 4px 0; }
+                    .node { width: 100%; text-align: left; border: 1px solid transparent; background: transparent; color: inherit; cursor: pointer; border-radius: 4px; padding: 4px 6px; display: flex; justify-content: space-between; gap: 8px; }
+                    .node:hover { background: var(--vscode-list-hoverBackground); border-color: var(--vscode-list-hoverBackground); }
+                    .name { font-weight: 600; }
+                    .meta { opacity: 0.8; font-family: var(--vscode-editor-font-family); }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h2>Call Chain: ${escapeHtml(symbolName || root.name)}</h2>
+                    <p>Incoming call chain (depth ${CALL_CHAIN_DEPTH}). Click any node to navigate.</p>
+                </div>
+                ${treeMarkup}
+                <script>
+                    const vscodeApi = acquireVsCodeApi();
+                    document.querySelectorAll('.node').forEach((node) => {
+                        node.addEventListener('click', () => {
+                            const location = node.getAttribute('data-location');
+                            vscodeApi.postMessage({ type: 'navigate', location });
+                        });
+                    });
+                </script>
+            </body>
+        </html>
+    `;
+
+    panel.webview.onDidReceiveMessage(async (message) => {
+        if (message.type !== 'navigate' || typeof message.location !== 'string') {
+            return;
+        }
+
+        const parsed = JSON.parse(decodeURIComponent(message.location)) as {
+            uri: string;
+            line: number;
+            character: number;
+        };
+        const targetUri = vscode.Uri.parse(parsed.uri);
+        const pos = new vscode.Position(parsed.line, parsed.character);
+        await vscode.window.showTextDocument(targetUri, {
+            preview: false,
+            selection: new vscode.Range(pos, pos),
+        });
     });
-    await vscode.window.showTextDocument(doc, { preview: false });
 }
 
 /**
