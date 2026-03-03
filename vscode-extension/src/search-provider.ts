@@ -335,26 +335,26 @@ export class SearchProvider {
     private getPlaceholder(): string {
         switch (this.currentScope) {
             case SearchScope.OPEN:
-                return 'Open Files: Search in currently open files...';
+                return "Open Files: Try 'index.ts', 'styles.css', or 'README'...";
             case SearchScope.MODIFIED:
-                return 'Modified: Search in modified/untracked files...';
+                return "Modified: Try 'app.ts', 'main.go', or 'config.json'...";
             case SearchScope.TYPES:
-                return 'Classes: Search types, interfaces, and enums...';
+                return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
             case SearchScope.SYMBOLS:
-                return 'Symbols: Search methods and variables...';
+                return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
             case SearchScope.FILES:
-                return 'Files: Search files by name...';
+                return "Files: Try 'app.ts', 'components/Button', or 'index.html'...";
             case SearchScope.TEXT:
-                return 'Text: Search for text content...';
+                return "Text: Try 'async function', 'TODO:', or 'extends Component'...";
             case SearchScope.COMMANDS:
-                return 'Commands: Search and execute commands...';
+                return "Commands: Try 'format', 'settings', or 'restart'...";
             case SearchScope.PROPERTIES:
-                return 'Properties: Search properties and fields...';
+                return "Properties: Try 'length', 'name', or 'isActive'...";
             case SearchScope.ENDPOINTS:
-                return 'Endpoints: Search API endpoints...';
+                return "Endpoints: Try 'GET /api/users', '/auth/login', or 'POST'...";
             case SearchScope.EVERYTHING:
             default:
-                return 'Global: Search everywhere (classes, files, symbols...)';
+                return "Global: Try 'UserService', 'app.ts', 'GET /api', or '/t'...";
         }
     }
 
