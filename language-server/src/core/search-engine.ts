@@ -100,6 +100,7 @@ const ID_TO_SCOPE = [
 // Precompute bitflags table for O(1) lookup for the Basic Multilingual Plane (BMP)
 // Maps char code (0-65535) to a bitmask.
 const CHAR_TO_BITFLAG = new Uint32Array(65536);
+const DYNAMIC_CHAR_FLAGS = (1 << 26) | (1 << 30); // FLAG_DIGIT | FLAG_PUNCTUATION
 let areBitflagsInitialized = false;
 
 function ensureBitflagsInitialized(): void {
@@ -1727,7 +1728,8 @@ export class SearchEngine implements ISearchProvider {
         heap: MinHeap<SearchResult>,
     ): void {
         const queryFlags = context.queryBitflags;
-        if (queryFlags !== 0 && (context.itemBitflags[i] & queryFlags) !== queryFlags) {
+        const maskedQueryFlags = queryFlags & ~DYNAMIC_CHAR_FLAGS;
+        if (queryFlags !== 0 && (context.itemBitflags[i] & maskedQueryFlags) !== maskedQueryFlags) {
             return;
         }
 
@@ -2176,7 +2178,7 @@ export class SearchEngine implements ISearchProvider {
                 return results;
             }
             const preparedQuery = RouteMatcher.prepare(queryLower);
-            this.addUrlMatches(results, undefined, preparedQuery);
+            this.addUrlMatches(results, undefined, preparedQuery, undefined, token);
         }
 
         return results;
@@ -2203,7 +2205,8 @@ export class SearchEngine implements ISearchProvider {
             if (token?.isCancellationRequested) return;
 
             // Prune early via bitflags
-            if (queryFlags !== 0 && (this.itemBitflags[i] & queryFlags) !== queryFlags) {
+            const maskedQueryFlags = queryFlags & ~DYNAMIC_CHAR_FLAGS;
+            if (queryFlags !== 0 && (this.itemBitflags[i] & maskedQueryFlags) !== maskedQueryFlags) {
                 return;
             }
 
@@ -2235,11 +2238,8 @@ export class SearchEngine implements ISearchProvider {
 
     private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
         const nameScore = this.calculateNameMatchScore(nameLower, queryLower);
-        if (nameScore > 0) {
-            return nameScore;
-        }
-
-        return this.calculateFullNameMatchScore(fullName, nameLower, queryLower);
+        const fullNameScore = this.calculateFullNameMatchScore(fullName, nameLower, queryLower);
+        return Math.max(nameScore, fullNameScore);
     }
 
     private calculateNameMatchScore(nameLower: string, queryLower: string): number {
@@ -2262,7 +2262,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private calculateFullNameMatchScore(fullName: string | undefined, nameLower: string, queryLower: string): number {
-        if (!fullName || fullName.length === nameLower.length) {
+        if (!fullName || fullName === nameLower) {
             return 0;
         }
 
@@ -2367,39 +2367,43 @@ export class SearchEngine implements ISearchProvider {
         indices: number[] | undefined,
         queryOrPrepared: string | PreparedPath,
         maxResults?: number,
+        token?: CancellationToken,
     ): void {
         const existingIds = new Set(results.map((r) => r.item.id));
+        const len = this.items.length;
 
-        const checkItem = (i: number) => {
-            if (maxResults && results.length >= maxResults) return;
+        const checkItem = (i: number): boolean => {
+            if (maxResults && results.length >= maxResults) return false;
+            if (token?.isCancellationRequested) return false;
 
             const item = this.items[i];
-            if (item.type === SearchItemType.ENDPOINT && !existingIds.has(item.id)) {
-                const pattern = this.preparedPatterns[i];
-                const score = pattern
-                    ? RouteMatcher.scoreMatchPattern(pattern, queryOrPrepared)
-                    : RouteMatcher.scoreMatch(item.name, queryOrPrepared);
-
-                if (score > 0) {
-                    results.push({
-                        item,
-                        score,
-                        scope: SearchScope.ENDPOINTS,
-                    });
-                    existingIds.add(item.id);
-                }
+            if (item.type !== SearchItemType.ENDPOINT || existingIds.has(item.id)) {
+                return true;
             }
+
+            const pattern = this.preparedPatterns[i];
+            const score = pattern
+                ? RouteMatcher.scoreMatchPattern(pattern, queryOrPrepared)
+                : RouteMatcher.scoreMatch(item.name, queryOrPrepared);
+
+            if (score > 0) {
+                results.push({
+                    item,
+                    score,
+                    scope: SearchScope.ENDPOINTS,
+                });
+                existingIds.add(item.id);
+            }
+            return true;
         };
 
         if (indices) {
             for (const i of indices) {
-                if (maxResults && results.length >= maxResults) break;
-                checkItem(i);
+                if (!checkItem(i)) break;
             }
         } else {
-            for (let i = 0; i < this.items.length; i++) {
-                if (maxResults && results.length >= maxResults) break;
-                checkItem(i);
+            for (let i = 0; i < len; i++) {
+                if (!checkItem(i)) break;
             }
         }
     }
