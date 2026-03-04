@@ -175,9 +175,7 @@ async function buildCallTreeFromReferences(
     };
 }
 
-async function loadReferenceDocuments(
-    references: vscode.Location[],
-): Promise<Map<string, vscode.TextDocument>> {
+async function loadReferenceDocuments(references: vscode.Location[]): Promise<Map<string, vscode.TextDocument>> {
     const refUriStrings = [...new Set(references.map((r) => r.uri.toString()))];
     const textDocuments = new Map<string, vscode.TextDocument>();
 
@@ -201,7 +199,10 @@ function processReference(
     textDocuments: Map<string, vscode.TextDocument>,
     rootUri: vscode.Uri,
     rootRange: vscode.Range,
-): { key: string; value: { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range } } | null {
+): {
+    key: string;
+    value: { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range };
+} | null {
     const refUriStr = ref.uri.toString();
 
     if (refUriStr === rootUri.toString() && ref.range.isEqual(rootRange)) {
@@ -276,8 +277,10 @@ function matchMethodPattern(lineText: string): RegExpExecArray | null {
     // These patterns are used to detect C# method signatures.
     // They are intentionally complex to match various C# method declaration styles.
     /* eslint-disable sonarjs/slow-regex, sonarjs/regex-complexity */
-    const standardMethodPattern = /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial|readonly|extern|new|sealed)\s+(?:async\s+)?(?:void|int|string|bool|Task|List<[^>]+>|IEnumerable<[^>]+>|IList<[^>]+>|Dictionary<[^,]+,[^>]+>|var|[\w<>[\],\s]+\??)\s+(\w+)\s*\(/;
-    const genericMethodPattern = /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial)\s+(\w+)\s*<[^>]+>\s*\(/;
+    const standardMethodPattern =
+        /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial|readonly|extern|new|sealed)\s+(?:async\s+)?(?:void|int|string|bool|Task|List<[^>]+>|IEnumerable<[^>]+>|IList<[^>]+>|Dictionary<[^,]+,[^>]+>|var|[\w<>[\],\s]+\??)\s+(\w+)\s*\(/;
+    const genericMethodPattern =
+        /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial)\s+(\w+)\s*<[^>]+>\s*\(/;
     const simplifiedPattern = /(\w+)\s*<[^>]+>\s*\([^)]*\)\s*\{/;
     /* eslint-enable sonarjs/slow-regex, sonarjs/regex-complexity */
 
@@ -429,7 +432,7 @@ function renderCallTree(node: CallNode, level: number): string {
 
     return `
         <li>
-            <button class="node level-${level}" data-location="${payload}">
+            <button class="node level-${level}" data-location="${payload}" aria-label="Navigate to ${escapeHtml(node.item.name)} at ${escapeHtml(location)}">
                 <span class="name">${escapeHtml(node.item.name)}</span>
                 <span class="meta">${escapeHtml(location)}</span>
             </button>
@@ -452,7 +455,7 @@ function renderRefCallTree(node: RefCallNode, level: number): string {
 
     return `
         <li>
-            <button class="node level-${level}" data-location="${payload}">
+            <button class="node level-${level}" data-location="${payload}" aria-label="Navigate to ${escapeHtml(node.name)} at ${escapeHtml(location)}">
                 <span class="name">${escapeHtml(node.name)}</span>
                 <span class="meta">${escapeHtml(location)}</span>
             </button>

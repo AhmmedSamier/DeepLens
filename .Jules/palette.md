@@ -1,23 +1,3 @@
-## 2024-02-13 - Auto-select recovery action on empty search
-**Learning:** When a search returns no results, users often want to try a broader search or a different tool immediately. Auto-selecting the "Switch Scope" or "Native Search" action reduces friction significantly by allowing them to just press Enter, instead of navigating down the list.
-**Action:** For empty states in QuickPicks, identify the primary recovery action and set `activeItems` to pre-select it, while keeping the "No results" message visible but passive.
-
-## 2024-02-14 - Direct manipulation in search history
-**Learning:** Users often have "polluted" search history (e.g., opened a wrong file) and want to clean it up without wiping everything. Adding a direct "Remove" action on individual history items empowers users to curate their workspace context.
-**Action:** When displaying recent history or suggestion lists, consider adding granular management actions (like remove/delete) directly on the items via `QuickInputButton`.
-
-## 2025-02-15 - Inline examples for slash commands
-**Learning:** Slash commands can be abstract. Showing a concrete example inline (e.g., "Try: /t User") significantly reduces the cognitive load of remembering syntax.
-**Action:** Check for unused metadata in command definitions (like 'example' or 'usage') and expose it in the UI description/detail fields.
-
-## 2025-02-16 - Command visibility in welcome screens
-**Learning:** "Welcome" or "Help" items in a QuickPick often hide critical information (like keyboard shortcuts) in `detail` text which is visually secondary. Users might miss the shortcut if it's buried in a long sentence.
-**Action:** Move the primary interaction trigger (the command itself, e.g. `/all`) to the `description` field for immediate visibility and scanability, while keeping the explanation in `detail`.
-
-## 2025-03-02 - [Example-Driven Placeholders]
-**Learning:** Generic instructional placeholders (e.g., "Search for types...") in empty search states are less helpful than specific, example-driven placeholders (e.g., "Try 'UserService', 'IConfig'..."). The latter reduces cognitive load and gives users an immediate idea of what queries work best for the selected search scope.
-**Action:** Always prefer example-driven copy over generic instructions in search or empty state placeholders across the application to improve discoverability and usability.
-
-## 2025-03-05 - Prevent Dead Clicks in QuickPick Informational Items
-**Learning:** VS Code QuickPick lists do not support non-interactive "disabled" items; all items are selectable. Purely informational items (like a status header or stats) will cause a "dead click" if a user selects them, as the menu just silently closes without feedback.
-**Action:** Always make informational QuickPick items actionable (e.g., by adding a "Copy to clipboard" functionality and description) to provide utility and prevent user confusion when clicked.
+## 2025-03-04 - Improve Webview Navigation Accessibility
+**Learning:** In custom VS Code webviews (like the Call Chain visualizer), generated HTML elements need explicit ARIA labels because they don't benefit from standard VS Code UI component accessibility features out-of-the-box. Screen readers will read the inner text sequentially, which may not convey the action clearly.
+**Action:** Always add descriptive `aria-label` attributes to interactive elements (like `<button>`) within generated HTML for webviews to provide clear context (e.g., "Navigate to [Method] at [Location]") instead of relying solely on the text content.
