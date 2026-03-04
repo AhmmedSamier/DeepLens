@@ -140,7 +140,7 @@ function caller() {
         try {
             await vscode.commands.executeCommand('deeplens.showCallChain', doc.uri, position, 'testFunction');
             assert.ok(true, 'Show call chain command executed');
-        } catch (error) {
+        } catch {
             // The command might fail if call hierarchy provider is not available
             // which is okay for this test
             assert.ok(true, 'Command executed (may have no call hierarchy provider)');
@@ -158,7 +158,7 @@ function caller() {
         try {
             await vscode.commands.executeCommand('deeplens.showCallChain', doc.uri, position);
             assert.ok(true, 'Command handled symbol without hierarchy');
-        } catch (error) {
+        } catch {
             // This is expected to fail gracefully
             assert.ok(true, 'Command failed gracefully for non-callable symbol');
         }

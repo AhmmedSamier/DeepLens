@@ -175,6 +175,63 @@ async function buildCallTreeFromReferences(
     };
 }
 
+async function loadReferenceDocuments(
+    references: vscode.Location[],
+): Promise<Map<string, vscode.TextDocument>> {
+    const refUriStrings = [...new Set(references.map((r) => r.uri.toString()))];
+    const textDocuments = new Map<string, vscode.TextDocument>();
+
+    for (const uriStr of refUriStrings) {
+        const refUri = references.find((r) => r.uri.toString() === uriStr)?.uri;
+        if (refUri) {
+            try {
+                const doc = await vscode.workspace.openTextDocument(refUri);
+                textDocuments.set(uriStr, doc);
+            } catch (e) {
+                logger.error(`Failed to open document ${refUri}: ${e}`);
+            }
+        }
+    }
+
+    return textDocuments;
+}
+
+function processReference(
+    ref: vscode.Location,
+    textDocuments: Map<string, vscode.TextDocument>,
+    rootUri: vscode.Uri,
+    rootRange: vscode.Range,
+): { key: string; value: { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range } } | null {
+    const refUriStr = ref.uri.toString();
+
+    if (refUriStr === rootUri.toString() && ref.range.isEqual(rootRange)) {
+        return null;
+    }
+
+    let methodName = `call at line ${ref.range.start.line + 1}`;
+    let methodStartPos = ref.range.start;
+    const doc = textDocuments.get(refUriStr);
+    if (doc) {
+        const enclosingMethod = findEnclosingMethodInfo(doc, ref.range.start);
+        if (enclosingMethod) {
+            methodName = enclosingMethod.name;
+            methodStartPos = enclosingMethod.startPosition;
+        }
+    }
+
+    const key = `${refUriStr}:${methodStartPos.line}:${methodStartPos.character}`;
+    return {
+        key,
+        value: {
+            name: methodName,
+            uri: ref.uri,
+            range: new vscode.Range(methodStartPos, methodStartPos),
+            selectionRange: new vscode.Range(methodStartPos, methodStartPos),
+            callSite: ref.range,
+        },
+    };
+}
+
 async function findAllCallers(
     references: vscode.Location[],
     rootUri: vscode.Uri,
@@ -191,52 +248,48 @@ async function findAllCallers(
         { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }
     >();
 
-    const refUriStrings = [...new Set(references.map((r) => r.uri.toString()))];
-    const textDocuments = new Map<string, vscode.TextDocument>();
-
-    for (const uriStr of refUriStrings) {
-        const refUri = references.find((r) => r.uri.toString() === uriStr)?.uri;
-        if (refUri) {
-            try {
-                const doc = await vscode.workspace.openTextDocument(refUri);
-                textDocuments.set(uriStr, doc);
-            } catch (e) {
-                logger.error(`Failed to open document ${refUri}: ${e}`);
-            }
-        }
-    }
+    const textDocuments = await loadReferenceDocuments(references);
 
     for (const ref of references) {
-        const refUriStr = ref.uri.toString();
-
-        if (refUriStr === rootUri.toString() && ref.range.isEqual(rootRange)) {
-            continue;
-        }
-
-        let methodName = `call at line ${ref.range.start.line + 1}`;
-        let methodStartPos = ref.range.start;
-        const doc = textDocuments.get(refUriStr);
-        if (doc) {
-            const enclosingMethod = findEnclosingMethodInfo(doc, ref.range.start);
-            if (enclosingMethod) {
-                methodName = enclosingMethod.name;
-                methodStartPos = enclosingMethod.startPosition;
-            }
-        }
-
-        const enclosingKey = `${refUriStr}:${methodStartPos.line}:${methodStartPos.character}`;
-        if (!callerMap.has(enclosingKey)) {
-            callerMap.set(enclosingKey, {
-                name: methodName,
-                uri: ref.uri,
-                range: new vscode.Range(methodStartPos, methodStartPos),
-                selectionRange: new vscode.Range(methodStartPos, methodStartPos),
-                callSite: ref.range,
-            });
+        const result = processReference(ref, textDocuments, rootUri, rootRange);
+        if (result && !callerMap.has(result.key)) {
+            callerMap.set(result.key, result.value);
         }
     }
 
     return callerMap;
+}
+
+function shouldSkipLine(lineText: string): boolean {
+    return lineText === '' || lineText === '{' || lineText === '}';
+}
+
+function isCommentLine(lineText: string): boolean {
+    return lineText.startsWith('//') || lineText.startsWith('/*') || lineText.startsWith('*');
+}
+
+function isDeclarationBoundary(lineText: string): boolean {
+    return lineText.includes('class ') || lineText.includes('interface ') || lineText.includes('namespace ');
+}
+
+function matchMethodPattern(lineText: string): RegExpExecArray | null {
+    // These patterns are used to detect C# method signatures.
+    // They are intentionally complex to match various C# method declaration styles.
+    /* eslint-disable sonarjs/slow-regex, sonarjs/regex-complexity */
+    const standardMethodPattern = /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial|readonly|extern|new|sealed)\s+(?:async\s+)?(?:void|int|string|bool|Task|List<[^>]+>|IEnumerable<[^>]+>|IList<[^>]+>|Dictionary<[^,]+,[^>]+>|var|[\w<>[\],\s]+\??)\s+(\w+)\s*\(/;
+    const genericMethodPattern = /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial)\s+(\w+)\s*<[^>]+>\s*\(/;
+    const simplifiedPattern = /(\w+)\s*<[^>]+>\s*\([^)]*\)\s*\{/;
+    /* eslint-enable sonarjs/slow-regex, sonarjs/regex-complexity */
+
+    const methodPatterns = [standardMethodPattern, genericMethodPattern, simplifiedPattern];
+
+    for (const pattern of methodPatterns) {
+        const match = pattern.exec(lineText);
+        if (match) {
+            return match;
+        }
+    }
+    return null;
 }
 
 function findEnclosingMethodInfo(
@@ -249,28 +302,20 @@ function findEnclosingMethodInfo(
         const line = doc.lineAt(i);
         const lineText = line.text.trim();
 
-        if (lineText === '' || lineText === '{' || lineText === '}') {
+        if (shouldSkipLine(lineText)) {
             continue;
         }
 
-        const methodPatterns = [
-            /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial|readonly|extern|new|sealed|abstract)\s+(?:async\s+)?(?:void|int|string|bool|Task|List<[^>]+>|IEnumerable<[^>]+>|IList<[^>]+>|Dictionary<[^,]+,[^>]+>|var|[\w<>\[\],\s]+\??)\s+(\w+)\s*\(/,
-            /(?:public|private|protected|internal|static|virtual|override|async|abstract|partial)\s+(\w+)\s*<[^>]+>\s*\(/,
-            /(\w+)\s*<[^>]+>\s*\([^)]*\)\s*\{/,
-        ];
-
-        for (const pattern of methodPatterns) {
-            const match = lineText.match(pattern);
-            if (match) {
-                return { name: match[1], startPosition: new vscode.Position(i, 0) };
-            }
+        const match = matchMethodPattern(lineText);
+        if (match) {
+            return { name: match[1], startPosition: new vscode.Position(i, 0) };
         }
 
-        if (lineText.startsWith('//') || lineText.startsWith('/*') || lineText.startsWith('*')) {
+        if (isCommentLine(lineText)) {
             continue;
         }
 
-        if (lineText.includes('class ') || lineText.includes('interface ') || lineText.includes('namespace ')) {
+        if (isDeclarationBoundary(lineText)) {
             break;
         }
     }
