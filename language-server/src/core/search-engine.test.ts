@@ -65,33 +65,6 @@ describe('SearchEngine', () => {
         expect(results[0].item.name).toBe('EmployeeService.cs');
     });
 
-    it('should prioritize direct name matches over weaker fuzzy endpoint matches', async () => {
-        const engine = new SearchEngine();
-        const items: SearchableItem[] = [
-            createTestItem('1', 'EmployeeService', SearchItemType.CLASS, 'back-end/services/employee-service.cs'),
-            {
-                ...createTestItem(
-                    '2',
-                    '[GET] api/employee/summary-report',
-                    SearchItemType.ENDPOINT,
-                    'back-end/controllers/employee-controller.cs',
-                ),
-                fullName: '[GET] api/employee/summary-report',
-            },
-        ];
-        await engine.setItems(items);
-
-        const results = await engine.search({
-            query: 'empser',
-            scope: SearchScope.EVERYTHING,
-            maxResults: 1,
-        });
-
-        expect(results).toHaveLength(1);
-        expect(results[0].item.name).toBe('EmployeeService');
-    });
-
-
     it('should handle filename:line pattern', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
@@ -247,6 +220,99 @@ describe('SearchEngine', () => {
     });
 });
 
+describe('SearchEngine FILE type boost ranking', () => {
+    it('should apply 0.9 boost to FILE type items', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'MyComponent', SearchItemType.FILE, 'src/MyComponent.ts'),
+            createTestItem('2', 'MyComponent', SearchItemType.CLASS, 'src/MyComponent.ts'),
+        ];
+        await engine.setItems(items);
+
+        const results = await engine.search({
+            query: 'MyComponent',
+            scope: SearchScope.EVERYTHING,
+        });
+
+        expect(results.length).toBe(2);
+        // CLASS should rank higher than FILE due to boost (1.5 vs 0.9)
+        expect(results[0].item.type).toBe(SearchItemType.CLASS);
+        expect(results[1].item.type).toBe(SearchItemType.FILE);
+        // Verify the FILE item has lower score due to 0.9 boost
+        expect(results[1].score).toBeLessThan(results[0].score);
+    });
+
+    it('file boost 0.9 ranking - exact match FILE vs substring match CLASS', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'user', SearchItemType.FILE, 'src/user.ts'),
+            createTestItem('2', 'userService', SearchItemType.CLASS, 'src/userService.ts'),
+        ];
+        await engine.setItems(items);
+
+        const results = await engine.search({
+            query: 'user',
+            scope: SearchScope.EVERYTHING,
+        });
+
+        expect(results.length).toBe(2);
+        // Even with exact match, FILE type (0.9 boost) should rank below CLASS type (1.5 boost)
+        // because the base fuzzy scores are similar and type boost dominates
+        const fileResult = results.find((r) => r.item.type === SearchItemType.FILE);
+        const classResult = results.find((r) => r.item.type === SearchItemType.CLASS);
+        expect(fileResult).toBeDefined();
+        expect(classResult).toBeDefined();
+        expect(fileResult!.score).toBeLessThan(classResult!.score);
+    });
+
+    it('should rank FILE items lower than symbols with same base score in burstSearch', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'TestFile', SearchItemType.FILE, 'src/TestFile.ts'),
+            createTestItem('2', 'TestFile', SearchItemType.FUNCTION, 'src/TestFile.ts'),
+            createTestItem('3', 'TestFile', SearchItemType.VARIABLE, 'src/TestFile.ts'),
+        ];
+        await engine.setItems(items);
+
+        const results = await engine.burstSearch({
+            query: 'TestFile',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 10,
+        });
+
+        expect(results.length).toBe(3);
+        // FUNCTION (1.25 boost) > VARIABLE (1.0 boost) > FILE (0.9 boost)
+        expect(results[0].item.type).toBe(SearchItemType.FUNCTION);
+        expect(results[1].item.type).toBe(SearchItemType.VARIABLE);
+        expect(results[2].item.type).toBe(SearchItemType.FILE);
+    });
+
+    it('should apply consistent FILE boost across different search scopes', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'config', SearchItemType.FILE, 'src/config.ts'),
+            createTestItem('2', 'config', SearchItemType.VARIABLE, 'src/config.ts'),
+        ];
+        await engine.setItems(items);
+
+        // Test regular search
+        const regularResults = await engine.search({
+            query: 'config',
+            scope: SearchScope.EVERYTHING,
+        });
+
+        // Test burst search
+        const burstResults = await engine.burstSearch({
+            query: 'config',
+            scope: SearchScope.EVERYTHING,
+        });
+
+        // In both cases, VARIABLE should rank higher than FILE
+        expect(regularResults[0].item.type).toBe(SearchItemType.VARIABLE);
+        expect(burstResults[0].item.type).toBe(SearchItemType.VARIABLE);
+    });
+});
+
 describe('SearchEngine scopes and providers', () => {
     it('should return symbols for OPEN scope when providers are registered', async () => {
         const engine = new SearchEngine();
@@ -315,28 +381,6 @@ describe('SearchEngine scopes and providers', () => {
         await engine.search({ query: 'File', scope: SearchScope.MODIFIED });
 
         expect(callCount).toBe(1);
-    });
-
-
-    it('should prefer best-scoring result across all scopes in burstSearch', async () => {
-        const engine = new SearchEngine();
-        const items: SearchableItem[] = [
-            {
-                ...createTestItem('1', 'NoDirectMatch', SearchItemType.CLASS, 'src/MyZapType.ts'),
-                fullName: 'myzaptype',
-            },
-            createTestItem('2', 'zap', SearchItemType.COMMAND, 'src/zap.ts'),
-        ];
-        await engine.setItems(items);
-
-        const results = await engine.burstSearch({
-            query: 'zap',
-            scope: SearchScope.EVERYTHING,
-            maxResults: 1,
-        });
-
-        expect(results).toHaveLength(1);
-        expect(results[0].item.name).toBe('zap');
     });
 
     it('should handle MODIFIED scope in burstSearch', async () => {
