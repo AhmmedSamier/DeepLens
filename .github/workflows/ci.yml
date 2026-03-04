@@ -27,7 +27,7 @@ jobs:
     - name: Install Linux Dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb libasound2 libgbm1 libgtk-3-0 libnss3
+        sudo apt-get install -y xvfb libasound2 libatk1.0-0 libgbm1 libgtk-3-0 libnss3 libxkbfile1 libxss1
 
     - name: Run Language Server Tests
       working-directory: language-server
