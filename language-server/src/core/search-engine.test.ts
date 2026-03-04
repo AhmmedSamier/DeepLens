@@ -65,6 +65,33 @@ describe('SearchEngine', () => {
         expect(results[0].item.name).toBe('EmployeeService.cs');
     });
 
+    it('should prioritize direct name matches over weaker fuzzy endpoint matches', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'EmployeeService', SearchItemType.CLASS, 'back-end/services/employee-service.cs'),
+            {
+                ...createTestItem(
+                    '2',
+                    '[GET] api/employee/summary-report',
+                    SearchItemType.ENDPOINT,
+                    'back-end/controllers/employee-controller.cs',
+                ),
+                fullName: '[GET] api/employee/summary-report',
+            },
+        ];
+        await engine.setItems(items);
+
+        const results = await engine.search({
+            query: 'empser',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].item.name).toBe('EmployeeService');
+    });
+
+
     it('should handle filename:line pattern', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
@@ -288,6 +315,28 @@ describe('SearchEngine scopes and providers', () => {
         await engine.search({ query: 'File', scope: SearchScope.MODIFIED });
 
         expect(callCount).toBe(1);
+    });
+
+
+    it('should prefer best-scoring result across all scopes in burstSearch', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            {
+                ...createTestItem('1', 'NoDirectMatch', SearchItemType.CLASS, 'src/MyZapType.ts'),
+                fullName: 'myzaptype',
+            },
+            createTestItem('2', 'zap', SearchItemType.COMMAND, 'src/zap.ts'),
+        ];
+        await engine.setItems(items);
+
+        const results = await engine.burstSearch({
+            query: 'zap',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 1,
+        });
+
+        expect(results).toHaveLength(1);
+        expect(results[0].item.name).toBe('zap');
     });
 
     it('should handle MODIFIED scope in burstSearch', async () => {
