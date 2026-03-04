@@ -17,7 +17,6 @@ let activityTracker: ActivityTracker;
 let commandIndexer: CommandIndexer;
 let gitService: GitService;
 
-
 const CALL_CHAIN_DEPTH = 4;
 
 interface CallNode {
@@ -84,10 +83,7 @@ async function buildIncomingCallTree(
     return { item, callSite: effectiveCallSite, children };
 }
 
-function buildSymbolMap(
-    uri: vscode.Uri,
-    symbols: SymbolInfo[] | null,
-): Map<string, SymbolInfo> {
+function buildSymbolMap(uri: vscode.Uri, symbols: SymbolInfo[] | null): Map<string, SymbolInfo> {
     const symbolMap = new Map<string, SymbolInfo>();
 
     if (!symbols) {
@@ -120,20 +116,14 @@ async function buildCallTreeFromReferences(
     }
 
     const references =
-        (await vscode.commands.executeCommand<vscode.Location[]>(
-            'vscode.executeReferenceProvider',
-            uri,
-            position,
-        )) || [];
+        (await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', uri, position)) ||
+        [];
 
     if (references.length === 0) {
         return null;
     }
 
-    const symbols = await vscode.commands.executeCommand<SymbolInfo[]>(
-        'vscode.executeDocumentSymbolProvider',
-        uri,
-    );
+    const symbols = await vscode.commands.executeCommand<SymbolInfo[]>('vscode.executeDocumentSymbolProvider', uri);
 
     const symbolMap = buildSymbolMap(uri, symbols);
 
@@ -160,7 +150,10 @@ async function buildCallTreeFromReferences(
         }
         visited.add(key);
 
-        const grandChildren = depth > 1 ? await buildCallerChildrenForCaller(caller.uri, caller.selectionRange.start, depth - 1, visited) : [];
+        const grandChildren =
+            depth > 1
+                ? await buildCallerChildrenForCaller(caller.uri, caller.selectionRange.start, depth - 1, visited)
+                : [];
         children.push({
             name: caller.name,
             uri: caller.uri,
@@ -187,14 +180,22 @@ async function findAllCallers(
     rootUri: vscode.Uri,
     rootSymbols: SymbolInfo[] | null,
     rootRange: vscode.Range,
-): Promise<Map<string, { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }>> {
-    const callerMap = new Map<string, { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }>();
+): Promise<
+    Map<
+        string,
+        { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }
+    >
+> {
+    const callerMap = new Map<
+        string,
+        { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }
+    >();
 
-    const refUriStrings = [...new Set(references.map(r => r.uri.toString()))];
+    const refUriStrings = [...new Set(references.map((r) => r.uri.toString()))];
     const textDocuments = new Map<string, vscode.TextDocument>();
 
     for (const uriStr of refUriStrings) {
-        const refUri = references.find(r => r.uri.toString() === uriStr)?.uri;
+        const refUri = references.find((r) => r.uri.toString() === uriStr)?.uri;
         if (refUri) {
             try {
                 const doc = await vscode.workspace.openTextDocument(refUri);
@@ -238,7 +239,10 @@ async function findAllCallers(
     return callerMap;
 }
 
-function findEnclosingMethodInfo(doc: vscode.TextDocument, position: vscode.Position): { name: string; startPosition: vscode.Position } | null {
+function findEnclosingMethodInfo(
+    doc: vscode.TextDocument,
+    position: vscode.Position,
+): { name: string; startPosition: vscode.Position } | null {
     const lineNum = position.line;
 
     for (let i = lineNum; i >= 0; i--) {
@@ -285,20 +289,14 @@ async function buildCallerChildrenForCaller(
     }
 
     const references =
-        (await vscode.commands.executeCommand<vscode.Location[]>(
-            'vscode.executeReferenceProvider',
-            uri,
-            position,
-        )) || [];
+        (await vscode.commands.executeCommand<vscode.Location[]>('vscode.executeReferenceProvider', uri, position)) ||
+        [];
 
     if (references.length === 0) {
         return [];
     }
 
-    const symbols = await vscode.commands.executeCommand<SymbolInfo[]>(
-        'vscode.executeDocumentSymbolProvider',
-        uri,
-    );
+    const symbols = await vscode.commands.executeCommand<SymbolInfo[]>('vscode.executeDocumentSymbolProvider', uri);
 
     const rootRange = new vscode.Range(position, position);
     const callers = await findAllCallers(references, uri, symbols, rootRange);
@@ -318,7 +316,12 @@ async function buildCallerChildrenForCaller(
         }
         visited.add(key);
 
-        const grandChildren = await buildCallerChildrenForCaller(caller.uri, caller.selectionRange.start, depth - 1, visited);
+        const grandChildren = await buildCallerChildrenForCaller(
+            caller.uri,
+            caller.selectionRange.start,
+            depth - 1,
+            visited,
+        );
         children.push({
             name: caller.name,
             uri: caller.uri,
@@ -344,11 +347,7 @@ function findEnclosingSymbol(
         if (range.contains(position)) {
             if (
                 !enclosing ||
-                range.contains(
-                    'selectionRange' in enclosing
-                        ? enclosing.selectionRange
-                        : enclosing.location.range,
-                )
+                range.contains('selectionRange' in enclosing ? enclosing.selectionRange : enclosing.location.range)
             ) {
                 enclosing = symbol;
             }
@@ -438,7 +437,9 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         if (useRefFallback) {
             refTree = await buildCallTreeFromReferences(uri, position, CALL_CHAIN_DEPTH, new Set<string>());
             if (!refTree) {
-                vscode.window.showInformationMessage('DeepLens: No call hierarchy information is available for this symbol.');
+                vscode.window.showInformationMessage(
+                    'DeepLens: No call hierarchy information is available for this symbol.',
+                );
                 return;
             }
             treeMarkup = `<ul class="tree">${renderRefCallTree(refTree, 0)}</ul>`;
@@ -451,15 +452,15 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         }
 
         const panel = vscode.window.createWebviewPanel(
-        'deeplensCallChain',
-        `DeepLens Call Chain: ${title}`,
-        vscode.ViewColumn.Beside,
-        {
-            enableScripts: true,
-        },
-    );
+            'deeplensCallChain',
+            `DeepLens Call Chain: ${title}`,
+            vscode.ViewColumn.Beside,
+            {
+                enableScripts: true,
+            },
+        );
 
-    panel.webview.html = `
+        panel.webview.html = `
         <!DOCTYPE html>
         <html lang="en">
             <head>
@@ -520,31 +521,31 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         </html>
     `;
 
-    panel.webview.onDidReceiveMessage(async (message) => {
-        if (message.type !== 'navigate' || typeof message.location !== 'string') {
-            return;
-        }
+        panel.webview.onDidReceiveMessage(async (message) => {
+            if (message.type !== 'navigate' || typeof message.location !== 'string') {
+                return;
+            }
 
-        try {
-            const parsed = JSON.parse(decodeURIComponent(message.location)) as {
-                uri: string;
-                line: number;
-                character: number;
-            };
-            const targetUri = vscode.Uri.parse(parsed.uri);
-            const pos = new vscode.Position(parsed.line, parsed.character);
-            const doc = await vscode.workspace.openTextDocument(targetUri);
-            await vscode.window.showTextDocument(doc, {
-                viewColumn: vscode.ViewColumn.One,
-                preserveFocus: false,
-                selection: new vscode.Range(pos, pos),
-            });
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            logger.error(`Failed to navigate from call chain webview: ${message}`);
-            return;
-        }
-    });
+            try {
+                const parsed = JSON.parse(decodeURIComponent(message.location)) as {
+                    uri: string;
+                    line: number;
+                    character: number;
+                };
+                const targetUri = vscode.Uri.parse(parsed.uri);
+                const pos = new vscode.Position(parsed.line, parsed.character);
+                const doc = await vscode.workspace.openTextDocument(targetUri);
+                await vscode.window.showTextDocument(doc, {
+                    viewColumn: vscode.ViewColumn.One,
+                    preserveFocus: false,
+                    selection: new vscode.Range(pos, pos),
+                });
+            } catch (error) {
+                const message = error instanceof Error ? error.message : String(error);
+                logger.error(`Failed to navigate from call chain webview: ${message}`);
+                return;
+            }
+        });
     } catch (err) {
         vscode.window.showErrorMessage('DeepLens: Failed to show call chain.');
         console.error('showCallChain error', err);
