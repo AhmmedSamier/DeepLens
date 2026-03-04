@@ -151,6 +151,7 @@ export async function activate(context: vscode.ExtensionContext) {
         const items: vscode.QuickPickItem[] = [
             {
                 label: `$(database) Index Status`,
+                description: 'Copy to clipboard',
                 detail: `${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
                 alwaysShow: true,
             },
@@ -176,12 +177,21 @@ export async function activate(context: vscode.ExtensionContext) {
         });
 
         if (selection) {
-            if (selection.label === '$(refresh) Rebuild Index') {
-                vscode.commands.executeCommand('deeplens.rebuildIndex');
+            if (selection.label === '$(database) Index Status') {
+                const statsText = `DeepLens Stats: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`;
+                try {
+                    await vscode.env.clipboard.writeText(statsText);
+                    vscode.window.showInformationMessage('Index statistics copied to clipboard');
+                } catch (error) {
+                    logger.error('Failed to copy index statistics to clipboard', error);
+                    vscode.window.showErrorMessage('Failed to copy index statistics to clipboard');
+                }
+            } else if (selection.label === '$(refresh) Rebuild Index') {
+                await vscode.commands.executeCommand('deeplens.rebuildIndex');
             } else if (selection.label === '$(trash) Clear Cache') {
-                vscode.commands.executeCommand('deeplens.clearIndexCache');
+                await vscode.commands.executeCommand('deeplens.clearIndexCache');
             } else if (selection.label === '$(settings-gear) Configure Settings') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
             }
         }
     });

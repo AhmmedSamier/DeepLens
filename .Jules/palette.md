@@ -17,3 +17,7 @@
 ## 2025-03-02 - [Example-Driven Placeholders]
 **Learning:** Generic instructional placeholders (e.g., "Search for types...") in empty search states are less helpful than specific, example-driven placeholders (e.g., "Try 'UserService', 'IConfig'..."). The latter reduces cognitive load and gives users an immediate idea of what queries work best for the selected search scope.
 **Action:** Always prefer example-driven copy over generic instructions in search or empty state placeholders across the application to improve discoverability and usability.
+
+## 2025-03-05 - Prevent Dead Clicks in QuickPick Informational Items
+**Learning:** VS Code QuickPick lists do not support non-interactive "disabled" items; all items are selectable. Purely informational items (like a status header or stats) will cause a "dead click" if a user selects them, as the menu just silently closes without feedback.
+**Action:** Always make informational QuickPick items actionable (e.g., by adding a "Copy to clipboard" functionality and description) to provide utility and prevent user confusion when clicked.

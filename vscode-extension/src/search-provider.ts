@@ -896,7 +896,7 @@ export class SearchProvider {
                 name: primaryAlias,
                 type: SearchItemType.COMMAND,
                 filePath: '',
-                detail: isRecent ? `↺ Recent • ${description}` : description,
+                detail: isRecent ? `$(history) Recent • ${description}` : description,
                 containerName: this.getCategoryLabel(cmd.category),
             },
             score: score,
