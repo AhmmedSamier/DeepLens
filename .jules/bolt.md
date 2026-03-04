@@ -46,3 +46,7 @@
 ## 2025-02-13 - [V8 String Method Performance in Hot Loops]
 **Learning:** `String.prototype.indexOf(X) === 0` is approximately 15x faster than `String.prototype.startsWith(X)` when executed millions of times in V8 hot paths (like search engine match scoring). Similarly, array mapping with `.charCodeAt()` boolean checks is faster than using `.startsWith()` and `.endsWith()`.
 **Action:** When optimizing high-frequency search or matching loops in V8 (Node/VS Code), prefer using `indexOf` and `charCodeAt` over higher-level string methods like `startsWith`, `endsWith`, and `includes` to eliminate allocation and dispatch overhead.
+
+## 2026-03-05 - [SearchEngine] Bitflag Optimization in Hot Loop
+**Learning:** In the `calculateSearchScore` method, candidate items were being evaluated via fuzzysort even when their `itemBitflags` clearly indicated they lacked characters present in the `queryBitflags`. Missing this pre-check caused significant overhead on deep fuzzy matching for irrelevant candidates.
+**Action:** Added a fast O(1) bitwise pre-check (`(itemBitflags & queryBitflags) !== queryBitflags`) at the very top of `calculateSearchScore` to instantly eliminate impossible candidates before invoking `calculateFuzzyScore`.

@@ -1750,6 +1750,11 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
+        // Fast path: bitflag check to quickly eliminate candidates that don't have all characters
+        if ((context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         return this.calculateFuzzyScore(i, typeId, context);
     }
 
