@@ -446,16 +446,11 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         } else {
             const root = roots[0];
             const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
-        treeMarkup = `<ul class="tree">${renderCallTree(tree, 0)}</ul>`;
-        title = symbolName || root.name;
-    }
-    } catch (err) {
-        vscode.window.showErrorMessage('DeepLens: Failed to show call chain.');
-        console.error('showCallChain error', err);
-        return;
-    }
+            treeMarkup = `<ul class="tree">${renderCallTree(tree, 0)}</ul>`;
+            title = symbolName || root.name;
+        }
 
-    const panel = vscode.window.createWebviewPanel(
+        const panel = vscode.window.createWebviewPanel(
         'deeplensCallChain',
         `DeepLens Call Chain: ${title}`,
         vscode.ViewColumn.Beside,
@@ -550,6 +545,11 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
             return;
         }
     });
+    } catch (err) {
+        vscode.window.showErrorMessage('DeepLens: Failed to show call chain.');
+        console.error('showCallChain error', err);
+        return;
+    }
 }
 
 /**
