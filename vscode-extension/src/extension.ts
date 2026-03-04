@@ -76,7 +76,7 @@ async function buildIncomingCallTree(
 
     const children = await Promise.all(
         expandedEntries.map(async ({ entry, callSite }) => {
-            return buildIncomingCallTree(entry.from, depth - 1, visited, callSite);
+            return buildIncomingCallTree(entry.from, depth - 1, new Set(visited), callSite);
         }),
     );
 
@@ -200,6 +200,7 @@ async function findAllCallers(
                 const doc = await vscode.workspace.openTextDocument(refUri);
                 textDocuments.set(uriStr, doc);
             } catch (e) {
+                logger.error(`Failed to open document ${refUri}: ${e}`);
             }
         }
     }
@@ -341,8 +342,14 @@ function findEnclosingSymbol(
     for (const [, symbol] of symbolMap) {
         const range = 'selectionRange' in symbol ? symbol.selectionRange : symbol.location.range;
         if (range.contains(position)) {
-            const enclosingRange = 'selectionRange' in enclosing ? enclosing.selectionRange : enclosing.location.range;
-            if (!enclosing || range.contains(enclosingRange)) {
+            if (
+                !enclosing ||
+                range.contains(
+                    'selectionRange' in enclosing
+                        ? enclosing.selectionRange
+                        : enclosing.location.range,
+                )
+            ) {
                 enclosing = symbol;
             }
         }
@@ -411,35 +418,41 @@ function renderRefCallTree(node: RefCallNode, level: number): string {
 }
 
 async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolName?: string): Promise<void> {
-    const roots =
-        (await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>(
-            'vscode.prepareCallHierarchy',
-            uri,
-            position,
-        )) || [];
+    try {
+        const roots =
+            (await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>(
+                'vscode.prepareCallHierarchy',
+                uri,
+                position,
+            )) || [];
 
-    let treeMarkup: string;
-    let title: string;
-    let useRefFallback = false;
+        let treeMarkup: string;
+        let title: string;
+        let useRefFallback = false;
 
-    if (roots.length === 0) {
-        useRefFallback = true;
-    }
-
-    let refTree: RefCallNode | null = null;
-    if (useRefFallback) {
-        refTree = await buildCallTreeFromReferences(uri, position, CALL_CHAIN_DEPTH, new Set<string>());
-        if (!refTree) {
-            vscode.window.showInformationMessage('DeepLens: No call hierarchy information is available for this symbol.');
-            return;
+        if (roots.length === 0) {
+            useRefFallback = true;
         }
-        treeMarkup = `<ul class="tree">${renderRefCallTree(refTree, 0)}</ul>`;
-        title = symbolName || refTree.name || 'Call Chain';
-    } else {
-        const root = roots[0];
-        const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
+
+        let refTree: RefCallNode | null = null;
+        if (useRefFallback) {
+            refTree = await buildCallTreeFromReferences(uri, position, CALL_CHAIN_DEPTH, new Set<string>());
+            if (!refTree) {
+                vscode.window.showInformationMessage('DeepLens: No call hierarchy information is available for this symbol.');
+                return;
+            }
+            treeMarkup = `<ul class="tree">${renderRefCallTree(refTree, 0)}</ul>`;
+            title = symbolName || refTree.name || 'Call Chain';
+        } else {
+            const root = roots[0];
+            const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
         treeMarkup = `<ul class="tree">${renderCallTree(tree, 0)}</ul>`;
         title = symbolName || root.name;
+    }
+    } catch (err) {
+        vscode.window.showErrorMessage('DeepLens: Failed to show call chain.');
+        console.error('showCallChain error', err);
+        return;
     }
 
     const panel = vscode.window.createWebviewPanel(
@@ -534,7 +547,6 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             logger.error(`Failed to navigate from call chain webview: ${message}`);
-            vscode.window.showErrorMessage('DeepLens: Failed to navigate to call chain location.');
             return;
         }
     });
@@ -650,7 +662,22 @@ export async function activate(context: vscode.ExtensionContext) {
     const showCallChainCommand = vscode.commands.registerCommand(
         'deeplens.showCallChain',
         async (uri: vscode.Uri, position: vscode.Position, symbolName?: string) => {
-            await showCallChain(uri, position, symbolName);
+            let targetUri = uri;
+            let targetPosition = position;
+
+            if (!targetUri || !targetPosition) {
+                const activeEditor = vscode.window.activeTextEditor;
+                if (!activeEditor) {
+                    vscode.window.showWarningMessage(
+                        'DeepLens: Please open a file and place cursor on a symbol to show call chain.',
+                    );
+                    return;
+                }
+                targetUri = activeEditor.document.uri;
+                targetPosition = activeEditor.selection.active;
+            }
+
+            await showCallChain(targetUri, targetPosition, symbolName);
         },
     );
 
