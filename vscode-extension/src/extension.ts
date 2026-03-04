@@ -187,11 +187,11 @@ export async function activate(context: vscode.ExtensionContext) {
                     vscode.window.showErrorMessage('Failed to copy index statistics to clipboard');
                 }
             } else if (selection.label === '$(refresh) Rebuild Index') {
-                vscode.commands.executeCommand('deeplens.rebuildIndex');
+                await vscode.commands.executeCommand('deeplens.rebuildIndex');
             } else if (selection.label === '$(trash) Clear Cache') {
-                vscode.commands.executeCommand('deeplens.clearIndexCache');
+                await vscode.commands.executeCommand('deeplens.clearIndexCache');
             } else if (selection.label === '$(settings-gear) Configure Settings') {
-                vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+                await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
             }
         }
     });
