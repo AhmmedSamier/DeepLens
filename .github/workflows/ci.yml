@@ -20,8 +20,6 @@ jobs:
         bun-version: latest
 
     - name: Install Dependencies
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: |
         cd language-server && bun install --frozen-lockfile
         cd ../vscode-extension && bun install --frozen-lockfile

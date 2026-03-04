@@ -2189,13 +2189,15 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Check fullName if it exists and is different from name
-        if (fullName && fullName.length !== nameLower.length) {
+        if (fullName) {
             const fullLower = fullName.toLowerCase();
-            if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
-                return 0.9;
-            }
-            if (fullLower.indexOf(queryLower) !== -1) {
-                return 0.7;
+            if (fullLower !== nameLower) {
+                if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
+                    return 0.9;
+                }
+                if (fullLower.indexOf(queryLower) !== -1) {
+                    return 0.7;
+                }
             }
         }
 
