@@ -2179,23 +2179,25 @@ export class SearchEngine implements ISearchProvider {
 
     private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
         // Fast path: Exact match or prefix match
-        if (nameLower === queryLower || nameLower.startsWith(queryLower)) {
+        if (nameLower === queryLower || nameLower.indexOf(queryLower) === 0) {
             return 1.0;
         }
 
         // Fast path: Substring match (scored lower but still fast)
-        if (nameLower.includes(queryLower)) {
+        if (nameLower.indexOf(queryLower) !== -1) {
             return 0.8;
         }
 
         // Check fullName if it exists and is different from name
-        if (fullName && fullName.length !== nameLower.length) {
+        if (fullName) {
             const fullLower = fullName.toLowerCase();
-            if (fullLower === queryLower || fullLower.startsWith(queryLower)) {
-                return 0.9;
-            }
-            if (fullLower.includes(queryLower)) {
-                return 0.7;
+            if (fullLower !== nameLower) {
+                if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
+                    return 0.9;
+                }
+                if (fullLower.indexOf(queryLower) !== -1) {
+                    return 0.7;
+                }
             }
         }
 

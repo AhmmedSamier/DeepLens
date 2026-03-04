@@ -42,6 +42,10 @@
             {
                 "command": "deeplens.showIndexStats",
                 "title": "DeepLens: Show Index Statistics"
+            },
+            {
+                "command": "deeplens.showCallChain",
+                "title": "DeepLens: Show Call Chain Visualizer"
             }
         ],
         "keybindings": [
@@ -136,6 +140,11 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Enable native file icons in search results"
+                },
+                "deeplens.codeLens.showCallChain": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Show a Call Chain Visualizer code lens for methods and functions"
                 }
             }
         }

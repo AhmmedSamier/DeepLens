@@ -18,6 +18,7 @@ const SUPPORTED_SYMBOL_KINDS = new Set([
 enum CodeLensType {
     REFERENCE = 'reference',
     IMPLEMENTATION = 'implementation',
+    CALL_CHAIN = 'callChain',
 }
 
 function isSymbolInformationArray(
@@ -36,6 +37,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
 
     private enabled: boolean = true;
     private showImplementations: boolean = true;
+    private showCallChain: boolean = true;
     private minRefsToShow: number = 0;
 
     constructor() {
@@ -49,6 +51,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         const config = vscode.workspace.getConfiguration('deeplens');
         this.enabled = config.get<boolean>('codeLens.enabled', true);
         this.showImplementations = config.get<boolean>('codeLens.showImplementations', true);
+        this.showCallChain = config.get<boolean>('codeLens.showCallChain', true);
         this.minRefsToShow = config.get<number>('codeLens.minRefsToShow', 0);
         this._onDidChangeCodeLenses.fire();
     }
@@ -168,6 +171,21 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
             (implLens as CodeLensWithSymbol).type = CodeLensType.IMPLEMENTATION;
             codeLenses.push(implLens);
         }
+
+        // 3. Call Chain Lens
+        if (this.showCallChain && this.supportsCallChain(symbol.kind)) {
+            const callChainLens = new vscode.CodeLens(range, {
+                title: 'visualize call chain',
+                command: 'deeplens.showCallChain',
+                arguments: [document.uri, position, symbol.name],
+                tooltip: `Visualize call hierarchy for ${symbol.name}`,
+            });
+            codeLenses.push(callChainLens);
+        }
+    }
+
+    private supportsCallChain(kind: vscode.SymbolKind): boolean {
+        return kind === vscode.SymbolKind.Method || kind === vscode.SymbolKind.Function;
     }
 
     private canHaveImplementations(kind: vscode.SymbolKind): boolean {
@@ -200,6 +218,9 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
 
         try {
             const isReference = type === CodeLensType.REFERENCE;
+            if (type === CodeLensType.CALL_CHAIN) {
+                return codeLens;
+            }
             const command = isReference ? 'vscode.executeReferenceProvider' : 'vscode.executeImplementationProvider';
 
             // Fetch locations using VSCode's built-in provider
