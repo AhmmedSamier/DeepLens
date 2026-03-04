@@ -188,7 +188,7 @@ async function findAllCallers(
     rootSymbols: SymbolInfo[] | null,
     rootRange: vscode.Range,
 ): Promise<Map<string, { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }>> {
-    const callerMap = new Map<string, { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range }>();
+    const callerMap = new Map<string, { name: string; uri: vscode.Uri; range: vscode.Range; selectionRange: vscode.Range; callSite: vscode.Range }>();
 
     const refUriStrings = [...new Set(references.map(r => r.uri.toString()))];
     const textDocuments = new Map<string, vscode.TextDocument>();
@@ -341,7 +341,8 @@ function findEnclosingSymbol(
     for (const [, symbol] of symbolMap) {
         const range = 'selectionRange' in symbol ? symbol.selectionRange : symbol.location.range;
         if (range.contains(position)) {
-            if (!enclosing || range.contains(enclosing.selectionRange || enclosing.location.range)) {
+            const enclosingRange = 'selectionRange' in enclosing ? enclosing.selectionRange : enclosing.location.range;
+            if (!enclosing || range.contains(enclosingRange)) {
                 enclosing = symbol;
             }
         }
