@@ -1,3 +1,7 @@
 ## 2025-03-04 - Improve Webview Navigation Accessibility
 **Learning:** In custom VS Code webviews (like the Call Chain visualizer), generated HTML elements need explicit ARIA labels because they don't benefit from standard VS Code UI component accessibility features out-of-the-box. Screen readers will read the inner text sequentially, which may not convey the action clearly.
 **Action:** Always add descriptive `aria-label` attributes to interactive elements (like `<button>`) within generated HTML for webviews to provide clear context (e.g., "Navigate to [Method] at [Location]") instead of relying solely on the text content.
+
+## 2025-03-05 - Improve Webview Keyboard Accessibility
+**Learning:** In custom VS Code webviews, the default `:hover` states on interactive elements (like `<button>`) do not automatically translate to keyboard focus states. Users navigating with a keyboard (Tab) get no visual indication of the currently focused element, creating a severe accessibility issue.
+**Action:** Always add explicit `:focus-visible` CSS rules alongside `:hover` rules in custom webview CSS, utilizing standard VS Code CSS variables (e.g., `--vscode-focusBorder` and `--vscode-list-hoverBackground`) to provide clear visual feedback during keyboard navigation.
