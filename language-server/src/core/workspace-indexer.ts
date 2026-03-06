@@ -1343,10 +1343,18 @@ export class WorkspaceIndexer {
             return cached;
         }
 
+        // ⚡ Bolt: Fast LRU Eviction Optimization
+        // Evicting a batch of items instead of a single item at a time when cache is full
+        // drastically reduces the overhead of Map re-hashing and iterator creation in hot loops.
         if (this.stringCache.size >= WorkspaceIndexer.STRING_CACHE_MAX_SIZE) {
-            const firstKey = this.stringCache.keys().next().value;
-            if (firstKey !== undefined) {
-                this.stringCache.delete(firstKey);
+            const iterator = this.stringCache.keys();
+            // Evict 10% of the cache (or at least 1) to avoid constant capacity bumping
+            const evictionCount = Math.max(1, Math.floor(WorkspaceIndexer.STRING_CACHE_MAX_SIZE * 0.1));
+            for (let i = 0; i < evictionCount; i++) {
+                const next = iterator.next();
+                if (!next.done && next.value != null) {
+                    this.stringCache.delete(next.value);
+                }
             }
         }
 
