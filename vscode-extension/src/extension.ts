@@ -810,6 +810,10 @@ export async function activate(context: vscode.ExtensionContext) {
         if (e.state === 'start') {
             statusItem.text = '$(sync~spin) DeepLens';
             statusItem.tooltip = 'DeepLens is indexing your workspace...';
+            statusItem.accessibilityInformation = {
+                label: 'DeepLens is indexing your workspace, click for stats',
+                role: 'button',
+            };
             statusItem.color = '#ff9900'; // Orange for indexing
         } else if (e.state === 'report') {
             const percentageText = typeof e.percentage === 'number' ? ` (${e.percentage}%)` : '';
@@ -835,11 +839,24 @@ export async function activate(context: vscode.ExtensionContext) {
             statusItem.text = `${icon} DeepLens${percentageText}`;
             if (e.message) {
                 statusItem.tooltip = `DeepLens: ${e.message} (Click for stats)`;
+                statusItem.accessibilityInformation = {
+                    label: `DeepLens: ${e.message}${percentageText}, click for stats`,
+                    role: 'button',
+                };
+            } else {
+                statusItem.accessibilityInformation = {
+                    label: `DeepLens indexing${percentageText}, click for stats`,
+                    role: 'button',
+                };
             }
             statusItem.color = color;
         } else if (e.state === 'end') {
             statusItem.text = '$(database) DeepLens';
             statusItem.tooltip = 'DeepLens Index Status (Click for stats)';
+            statusItem.accessibilityInformation = {
+                label: 'DeepLens Index Status, click to show statistics',
+                role: 'button',
+            };
             statusItem.color = '#cccccc'; // Gray for normal state
         }
     });
