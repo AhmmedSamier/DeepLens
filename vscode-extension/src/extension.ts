@@ -844,6 +844,7 @@ export async function activate(context: vscode.ExtensionContext) {
                     role: 'button',
                 };
             } else {
+                statusItem.tooltip = `DeepLens indexing${percentageText} (Click for stats)`;
                 statusItem.accessibilityInformation = {
                     label: `DeepLens indexing${percentageText}, click for stats`,
                     role: 'button',
