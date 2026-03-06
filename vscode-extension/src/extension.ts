@@ -546,6 +546,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
                     .tree > li::before, .tree > li::after { display: none; }
                     .node { width: 100%; text-align: left; border: 1px solid transparent; background: transparent; color: inherit; cursor: pointer; border-radius: 4px; padding: 4px 6px; display: flex; justify-content: space-between; gap: 8px; position: relative; z-index: 1; }
                     .node:hover { background: var(--vscode-list-hoverBackground); border-color: var(--vscode-list-hoverBackground); }
+                    .node:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; background: var(--vscode-list-hoverBackground); border-color: var(--vscode-list-hoverBackground); }
                     .name { font-weight: 600; }
                     .meta { opacity: 0.8; font-family: var(--vscode-editor-font-family); }
                 </style>
