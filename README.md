@@ -33,6 +33,7 @@ DeepLens features an intuitive command-line style interface within the search ba
 - **Filter with ease**: Type `/t ` for types, `/f ` for files, or `/txt ` for text search.
 - **Quick History**: DeepLens remembers your recent searches and frequently visited files, making it easy to jump back into context.
 - **History Management**: Easily clear your search history directly from the search interface.
+- **Interactive Pro Tips**: Discover advanced search features and keyboard shortcuts with actionable tips directly in the search interface.
 
 ### 💎 **Rider-style CodeVision**
 
@@ -42,6 +43,15 @@ DeepLens brings professional IDE features to VS Code with integrated CodeLens co
 - **Implementation Tracking**: Quickly see how many classes implement an interface or override a virtual method (`Ctrl+F12`).
 - **Quick Navigation**: Click the counts to peek or jump to references/implementations.
 - **Smart Filtering**: Configurable to hide counts for simple items to reduce noise.
+
+### 🧬 **Call Chain Visualizer**
+
+Understand complex execution flows at a glance. DeepLens can visualize the call chain for any method or function, showing both callers and callees in an interactive tree view.
+
+- **Visual Hierarchy**: See exactly who calls your function and what your function calls.
+- **Deep Exploration**: Navigate through multiple levels of the call stack without leaving your current context.
+- **Interactive Navigation**: Click any node in the visualizer to jump directly to that point in the source code.
+- **Language Support**: Optimized for C#, TypeScript, and Java.
 
 ### 🌐 **Specialized Endpoint Search**
 
@@ -59,9 +69,11 @@ DeepLens automatically extracts and indexes API endpoints (like `GET /api/users`
 - **Activity Ranking**: DeepLens learns which files you work on most and boosts them in search results.
 - **File Icons**: VS Code–style file icons in search results, matching the Explorer visual style.
 
-### 🚀 **Performance First**
+### 🚀 **Performance First (Bolt Engine)**
 
+- **High-Speed Search**: The "Bolt" search engine is optimized for high-performance with bitflag pre-checks, fast-path scoring, and minimized object allocations.
 - **Tree-sitter Powered**: Uses native Tree-sitter parsers for C#, TypeScript, JavaScript, Python, Go, Java, and more for near-instant indexing.
+- **Efficient Indexing**: Uses a `WorkspaceIndexer` with fast LRU cache eviction and multi-threaded indexing workers to handle large codebases without blocking.
 - **Git Aware**: Automatically respects your `.gitignore` and detects branch switches to keep the index fresh.
 - **Persistence**: Caches indices across sessions for instant startup.
 - **High Concurrency**: Tuned for multi-core systems to index large repositories in seconds.
@@ -84,6 +96,7 @@ Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for:
 | `DeepLens: Rebuild Index`       | Manually trigger a full re-index of the workspace |
 | `DeepLens: Clear Index Cache`   | Clear the local index cache and rebuild           |
 | `DeepLens: Show Index Statistics` | View detailed stats and manage the search index |
+| `DeepLens: Show Call Chain Visualizer` | Show the call chain for the current function |
 
 ## ⚙️ Configuration
 
@@ -97,6 +110,8 @@ Customize DeepLens to fit your workflow in VS Code Settings:
     // Maximum number of search results to display
     "deeplens.maxResults": 20,
 
+    // Number of background indexing workers (0 = auto)
+    "deeplens.indexWorkerCount": 0,
 
     // Enable full-text search across files
     "deeplens.enableTextSearch": true,
@@ -106,6 +121,9 @@ Customize DeepLens to fit your workflow in VS Code Settings:
 
     // Show implementation counts above classes, interfaces and methods
     "deeplens.codeLens.showImplementations": true,
+
+    // Show a Call Chain Visualizer code lens for methods and functions
+    "deeplens.codeLens.showCallChain": true,
 
     // Minimum number of references to display code lens (0 = show all)
     "deeplens.codeLens.minRefsToShow": 0,
@@ -120,7 +138,10 @@ Customize DeepLens to fit your workflow in VS Code Settings:
     "deeplens.activity.enabled": true,
 
     // Personalization: How much your usage affects results (0-1)
-    "deeplens.activity.weight": 0.3
+    "deeplens.activity.weight": 0.3,
+
+    // Enable native file icons in search results (Experimental)
+    "deeplens.experimental.enableFileIcons": false
 }
 ```
 
