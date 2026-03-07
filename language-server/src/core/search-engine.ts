@@ -996,13 +996,19 @@ export class SearchEngine implements ISearchProvider {
 
     private getIndicesForOpenFiles(): number[] {
         const indices: number[] = [];
-        const count = this.items.length;
-        for (let i = 0; i < count; i++) {
-            if (this.isActive(this.items[i].filePath)) {
-                indices.push(i);
+        // ⚡ Bolt: Fast open files filtering
+        // Replaces an O(N) iteration over all items with an O(K) lookup
+        // using the reverse index (where K is the number of active files).
+        for (const filePath of this.activeFiles) {
+            const itemIndices = this.fileToItemIndices.get(filePath);
+            if (itemIndices) {
+                for (let i = 0; i < itemIndices.length; i++) {
+                    indices.push(itemIndices[i]);
+                }
             }
         }
-        return indices;
+        // Ensure indices are sorted ascending to preserve search ranking assumptions
+        return indices.sort((a, b) => a - b);
     }
 
     private async getIndicesForModifiedFiles(): Promise<number[]> {
