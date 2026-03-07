@@ -1,0 +1,23 @@
+--- visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/ToolWindows/SearchControl.xaml
++++ visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/ToolWindows/SearchControl.xaml
+@@ -231,6 +231,7 @@
+                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                         Content="&#xE711;"
+                         ToolTip="Clear search"
++                        AutomationProperties.Name="Clear search"
+                         Visibility="{Binding SearchQuery, Converter={StaticResource StringToVisibilityConverter}}" />
+                 </Grid>
+             </Border>
+@@ -374,10 +375,12 @@
+                                 <Button
+                                     Command="{Binding CopyPathCommand}"
+                                     Content="&#xE8C8;"
++                                    AutomationProperties.Name="Copy Path"
+                                     Style="{StaticResource ActionButtonStyle}"
+                                     ToolTip="Copy Path" />
+                                 <Button
+                                     Command="{Binding RevealInExplorerCommand}"
+                                     Content="&#xE838;"
++                                    AutomationProperties.Name="Open Folder"
+                                     Style="{StaticResource ActionButtonStyle}"
+                                     ToolTip="Open Folder" />
