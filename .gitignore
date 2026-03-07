@@ -30,3 +30,7 @@ bun.lockb
 coverage/
 .nyc_output/
 .scannerwork/
+# Patch and diff artifacts
+*.patch
+*.diff
+*.orig
