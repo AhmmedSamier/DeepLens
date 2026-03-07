@@ -4,9 +4,24 @@ This document provides essential information for AI agents working on the DeepLe
 
 ## Project Overview
 
-- **vscode-extension**: Main entry point for VS Code, handles UI, client-side logic, and VS Code API integration.
-- **language-server**: Core search engine and workspace indexing using Tree-sitter and ripgrep. It runs as a separate process.
+- **vscode-extension**: Main entry point for VS Code, handles UI, commands, and client-side integration (including Call Chain Visualizer and CodeVision).
+- **language-server**: Core search engine ("Bolt") and workspace indexing using Tree-sitter and ripgrep. It runs as a separate process.
 - **visual-studio-extension**: Visual Studio 2026 integration (C# codebase) that communicates with the same Language Server.
+
+## ⚡ Bolt Search Engine
+
+The "Bolt" engine is the heart of DeepLens, optimized for high-performance indexing and search:
+- **Bitflag Pre-checking**: Uses fast bitmask operations to filter candidates before expensive scoring.
+- **Path Cache**: 1-item cache for path normalization to reduce string allocations in hot loops.
+- **Fast-Path Matching**: Optimized for exact and prefix matches to return results instantly.
+- **Minimized Object Allocations**: Uses `fuzzysort` efficiently and avoids object creation in scoring loops.
+
+## 🧬 Call Chain Visualizer
+
+The Call Chain Visualizer is a client-side feature in the VS Code extension that helps understand complex execution flows:
+- **Standard Hierarchy**: Uses `vscode.prepareCallHierarchy` and `vscode.provideIncomingCalls`.
+- **Reference Fallback**: If call hierarchy is unavailable, it falls back to a reference-based traversal for languages like C#.
+- **Interactive Webview**: Renders an interactive tree view with navigation links to source code.
 
 ## Build & Development Commands
 
@@ -98,20 +113,40 @@ bun run test           # Run all integration tests
 - `language-server/src/core/providers/`: Different search providers (File, Symbol, Recent).
 - `language-server/src/core/tree-sitter-parser.ts`: Handles multi-language parsing using WASM Tree-sitter.
 - `vscode-extension/src/lsp-client.ts`: Handles JSON-RPC communication with the language server.
-- `vscode-extension/src/search-provider.ts`: Manages the QuickPick UI and result streaming.
+- `vscode-extension/src/search-provider.ts`: Manages the QuickPick UI, result streaming, and "Pro Tips" empty state.
+- `vscode-extension/src/file-icon-provider.ts`: Detects file types and assigns VSCode-style icons for search results.
 
 ## Core Logic & Workers
 
 - **Workspace Indexer**: Uses `indexer-worker.ts` via Node.js `worker_threads` to parse files in parallel without blocking the main LSP thread.
+- **Fast LRU Eviction**: Indexer uses an optimized LRU cache with fast eviction to keep memory usage stable in massive solutions.
+- **Incremental Events**: Consistently handles incremental file events (`onDidChange`, `onDidCreate`, `onDidDelete`) to keep the search index in sync with disk.
 - **Tree-sitter**: WASM-based parsers are loaded dynamically. New languages must be added to `tree-sitter-parser.ts` and `scripts/setup-parsers.ts`.
 - **Ripgrep**: Used for high-performance text search via `@vscode/ripgrep`.
 
 ## Communication Protocol
-The extension and server communicate via custom LSP requests:
-- `deeplens/burstSearch`: High-speed streaming search.
-- `deeplens/rebuildIndex`: Force a full re-index.
-- `deeplens/progress`: Server-to-client notifications for indexing progress.
+The extension and server communicate via custom JSON-RPC requests over IPC:
+
+### Core Search Requests
+- `deeplens/search`: Standard fuzzy search (returns all at once).
+- `deeplens/burstSearch`: High-speed streaming search (returns initial batch and streams the rest).
+- `deeplens/resolveItems`: Get full details for a list of search item IDs.
+
+### History & Activity
+- `deeplens/getRecentItems`: Retrieve recently accessed items.
+- `deeplens/recordActivity`: Notify the server that an item was accessed.
+- `deeplens/clearHistory`: Wipe all search and access history.
+- `deeplens/removeHistoryItem`: Remove a specific item from history.
+- `deeplens/setActiveFiles`: Update the list of files currently open in the editor (boosts relevance).
+
+### Index Management
+- `deeplens/rebuildIndex`: Trigger a full workspace re-index.
+- `deeplens/clearCache`: Clear the persistent index cache on disk.
 - `deeplens/indexStats`: Returns counts of files, symbols, and cache size.
+
+### Notifications
+- `deeplens/progress`: Server-to-client notifications for indexing status (start, report, end).
+- `deeplens/ripgrepUnavailable`: Notification when ripgrep binary is not found.
 
 ## Verification Checklist
 1. Run `bun run compile` in `vscode-extension` to verify both server and extension build correctly.
