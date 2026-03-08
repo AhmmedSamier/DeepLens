@@ -231,6 +231,7 @@
                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                         Content="&#xE711;"
                         ToolTip="Clear search"
+                        AutomationProperties.Name="Clear search"
                         Visibility="{Binding SearchQuery, Converter={StaticResource StringToVisibilityConverter}}" />
                 </Grid>
             </Border>
@@ -372,11 +373,13 @@
                                 <Button
                                     Command="{Binding CopyPathCommand}"
                                     Content="&#xE8C8;"
+                                    AutomationProperties.Name="Copy Path"
                                     Style="{StaticResource ActionButtonStyle}"
                                     ToolTip="Copy Path" />
                                 <Button
                                     Command="{Binding RevealInExplorerCommand}"
                                     Content="&#xE838;"
+                                    AutomationProperties.Name="Open Folder"
                                     Style="{StaticResource ActionButtonStyle}"
                                     ToolTip="Open Folder" />
                             </StackPanel>
