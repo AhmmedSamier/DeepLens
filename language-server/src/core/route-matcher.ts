@@ -171,10 +171,11 @@ export class RouteMatcher {
 
         // ⚡ Bolt: Fast method extraction
         // Replaces regex matching and replacement for method extraction which is ~3x slower.
-        if (template.charCodeAt(0) === 91) { // '['
-            const closeIdx = template.indexOf(']');
+        const trimmedTemplate = template.trim();
+        if (trimmedTemplate.charCodeAt(0) === 91) { // '['
+            const closeIdx = trimmedTemplate.indexOf(']');
             if (closeIdx > 1) {
-                method = template.slice(1, closeIdx);
+                method = trimmedTemplate.slice(1, closeIdx);
                 // Fast path for checking if method is all uppercase
                 for (let i = 0; i < method.length; i++) {
                     const code = method.charCodeAt(i);
@@ -186,10 +187,10 @@ export class RouteMatcher {
 
                 if (method) {
                     let start = closeIdx + 1;
-                    while (start < template.length && template.charCodeAt(start) === 32) { // ' '
+                    while (start < trimmedTemplate.length && trimmedTemplate.charCodeAt(start) === 32) { // ' '
                         start++;
                     }
-                    cleanTemplate = template.slice(start);
+                    cleanTemplate = trimmedTemplate.slice(start);
                 }
             }
         }
