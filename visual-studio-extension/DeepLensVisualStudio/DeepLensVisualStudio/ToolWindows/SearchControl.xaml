@@ -212,7 +212,9 @@
                         CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                         FontSize="14"
                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
-                        Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}" />
+                        Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                        AutomationProperties.Name="Search query"
+                        ToolTip="Search for classes, symbols, files, text, or endpoints" />
 
                     <!--  Clear Button  -->
                     <Button
@@ -241,6 +243,7 @@
                 x:Name="ResultsList"
                 Grid.Row="2"
                 Margin="10,5,10,0"
+                AutomationProperties.Name="Search Results"
                 Background="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBackgroundKey}}"
                 BorderThickness="0"
                 ItemContainerStyle="{StaticResource ResultItemStyle}"
