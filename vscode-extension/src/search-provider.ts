@@ -1555,11 +1555,9 @@ export class SearchProvider {
 
         // 1. Header Item (Informational)
         items.push({
-            label: `No ${scopeName} found for '${query}'`,
-            description: '',
-            detail: detail,
+            label: `No ${scopeName} found for '${query}' - ${detail}`,
             alwaysShow: true,
-            iconPath: new vscode.ThemeIcon('info', new vscode.ThemeColor('descriptionForeground')),
+            kind: vscode.QuickPickItemKind.Separator,
             result: {
                 item: {
                     id: this.ID_EMPTY_STATE,
