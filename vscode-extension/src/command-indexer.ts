@@ -18,6 +18,11 @@ export class CommandIndexer {
     // Performance impact: ~10% faster command id parsing by reducing string allocations.
     private static readonly PREFIX_REGEX = /^(?:workbench\.action\.|editor\.action\.|vscode\.)/;
 
+    // ⚡ Bolt: Fast regex replacements
+    // Using a cached global regex with .replace() is faster than .replaceAll() which
+    // incurs overhead validating the presence of the global flag.
+    private static readonly CAPITAL_LETTER_REGEX = /([A-Z])/g;
+
     private readonly config: Config;
     private commandItems: SearchableItem[] = [];
     private preparedItems: PreparedCommand[] = [];
@@ -100,7 +105,7 @@ export class CommandIndexer {
         const parts = title.split('.');
         return parts
             .map((part) => {
-                const words = part.replaceAll(/([A-Z])/g, ' $1').trim();
+                const words = part.replace(CommandIndexer.CAPITAL_LETTER_REGEX, ' $1').trim();
                 return words.charAt(0).toUpperCase() + words.slice(1);
             })
             .join(' ');
