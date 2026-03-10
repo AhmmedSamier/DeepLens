@@ -2352,7 +2352,7 @@ export class SearchEngine implements ISearchProvider {
     }
 }
 
-function escapeRegExp(str: string): string {
+export function escapeRegExp(str: string): string {
     // ⚡ Bolt: Fast regex escaping optimization
     // Replacing `.replace` with a global regex and manual string slicing and charCodeAt checking
     // is ~3-4x faster than using `.replace` with a regex.
