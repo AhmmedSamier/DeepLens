@@ -29,12 +29,19 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         const results: string[] = [];
         for (const folder of this.workspaceFolders) {
             const absoluteInclude = path.isAbsolute(include) ? include : path.join(folder, include);
-            const globPattern = absoluteInclude.replaceAll('\\', '/');
+            // ⚡ Bolt: Fast backslash normalization optimization
+            // Replacing with regex + early indexOf check is much faster than replaceAll
+            const globPattern = absoluteInclude.indexOf('\\') !== -1
+                ? absoluteInclude.replace(/\\/g, '/')
+                : absoluteInclude;
 
-            const ignorePattern = exclude ? exclude.replaceAll('\\', '/') : undefined;
+            let ignorePattern: string | null = null;
+            if (exclude) {
+                ignorePattern = exclude.indexOf('\\') !== -1 ? exclude.replace(/\\/g, '/') : exclude;
+            }
 
             const files = await glob(globPattern, {
-                ignore: ignorePattern,
+                ignore: ignorePattern ? ignorePattern : undefined,
                 cwd: folder,
                 absolute: true,
                 nodir: true,
