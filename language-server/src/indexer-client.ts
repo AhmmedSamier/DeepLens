@@ -19,8 +19,12 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
     }
 
     async findFiles(include: string, exclude: string): Promise<string[]> {
+        const normalizedExclude = exclude
+            ? (exclude.indexOf('\\') !== -1 ? exclude.replace(/\\/g, '/') : exclude)
+            : null;
+
         if (include === '**/*') {
-            const fastFiles = await this.findFilesWithRipgrep(exclude);
+            const fastFiles = await this.findFilesWithRipgrep(normalizedExclude);
             if (fastFiles.length > 0) {
                 return fastFiles;
             }
@@ -35,13 +39,8 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
                 ? absoluteInclude.replace(/\\/g, '/')
                 : absoluteInclude;
 
-            let ignorePattern: string | null = null;
-            if (exclude) {
-                ignorePattern = exclude.indexOf('\\') !== -1 ? exclude.replace(/\\/g, '/') : exclude;
-            }
-
             const files = await glob(globPattern, {
-                ignore: ignorePattern ? ignorePattern : undefined,
+                ignore: normalizedExclude ? normalizedExclude : undefined,
                 cwd: folder,
                 absolute: true,
                 nodir: true,
@@ -52,7 +51,7 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         return results;
     }
 
-    private async findFilesWithRipgrep(exclude: string): Promise<string[]> {
+    private async findFilesWithRipgrep(exclude: string | null): Promise<string[]> {
         const results: string[] = [];
         const excludes = this.parseExcludePatterns(exclude);
 
@@ -68,7 +67,7 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         return results;
     }
 
-    private parseExcludePatterns(exclude: string): string[] {
+    private parseExcludePatterns(exclude: string | null): string[] {
         if (!exclude || !exclude.startsWith('{') || !exclude.endsWith('}')) {
             return [];
         }
