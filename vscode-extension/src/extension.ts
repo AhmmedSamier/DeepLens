@@ -786,10 +786,14 @@ export async function activate(context: vscode.ExtensionContext) {
 
         const items: vscode.QuickPickItem[] = [
             {
-                label: `$(database) Index Status`,
-                description: 'Copy to clipboard',
-                detail: `${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
+                label: `$(database) Index Status: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
+                kind: vscode.QuickPickItemKind.Separator,
                 alwaysShow: true,
+            },
+            {
+                label: '$(copy) Copy Statistics to Clipboard',
+                description: 'Copy detailed index status',
+                picked: false,
             },
             {
                 label: '$(refresh) Rebuild Index',
@@ -813,7 +817,7 @@ export async function activate(context: vscode.ExtensionContext) {
         });
 
         if (selection) {
-            if (selection.label === '$(database) Index Status') {
+            if (selection.label === '$(copy) Copy Statistics to Clipboard') {
                 const statsText = `DeepLens Stats: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`;
                 try {
                     await vscode.env.clipboard.writeText(statsText);
