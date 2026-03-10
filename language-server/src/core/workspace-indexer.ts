@@ -1241,6 +1241,10 @@ export class WorkspaceIndexer {
             return;
         }
 
+        if (filePath.endsWith('.cs') && this.isLikelyGeneratedCSharpPath(filePath)) {
+            return;
+        }
+
         const fileName = path.basename(filePath);
         // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
         const relativePath = this.env.asRelativePath(filePath);
@@ -1279,6 +1283,10 @@ export class WorkspaceIndexer {
         }
 
         if (await this.isGitIgnored(filePath)) {
+            return;
+        }
+
+        if (filePath.endsWith('.cs') && this.isLikelyGeneratedCSharpPath(filePath)) {
             return;
         }
 
