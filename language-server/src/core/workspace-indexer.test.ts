@@ -181,6 +181,32 @@ describe('WorkspaceIndexer', () => {
             expect(fileItem).toBeDefined();
             expect(fileItem.relativeFilePath).toBe('src/updated-file.ts');
         });
+
+        it('should skip likely generated C# files when creating', async () => {
+            const customConfig = new Config();
+            customConfig.update({ respectGitignore: false });
+            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+            const addedItems: any[] = [];
+
+            indexer.onItemsAdded((items) => addedItems.push(...items));
+
+            await indexer.processFileEvent('/root/obj/Debug/net8.0/SomeFile.g.cs', 'create');
+
+            expect(addedItems).toHaveLength(0);
+        });
+
+        it('should skip likely generated C# files when changing', async () => {
+            const customConfig = new Config();
+            customConfig.update({ respectGitignore: false });
+            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+            const addedItems: any[] = [];
+
+            indexer.onItemsAdded((items) => addedItems.push(...items));
+
+            await indexer.processFileEvent('/root/generated/SomeFile.Designer.cs', 'change');
+
+            expect(addedItems).toHaveLength(0);
+        });
     });
     describe('dispose', () => {
         it('should clear timers on dispose', () => {
