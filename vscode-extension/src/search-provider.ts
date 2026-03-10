@@ -1403,12 +1403,17 @@ export class SearchProvider {
         query: string,
         duration: number,
     ): void {
-        quickPick.items = this.getEmptyStateItems(query);
+        const { items, prompt } = this.getEmptyStateItems(query);
+        quickPick.items = items;
 
-        // Update title explicitly for empty state
-        // This ensures screen readers announce "No results found" immediately
-        const durationText = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
-        quickPick.title = `DeepLens - No results found — Search took ${durationText}`;
+        if (prompt) {
+            // Provide guidance in the input field placeholder briefly or update title
+            // A common way to show 'detail' for empty states is in the title
+            quickPick.title = `DeepLens - No results found — ${prompt}`;
+        } else {
+            const durationText = duration >= 1000 ? `${(duration / 1000).toFixed(2)}s` : `${duration}ms`;
+            quickPick.title = `DeepLens - No results found — Search took ${durationText}`;
+        }
 
         // Auto-select the best recovery action
         // Prioritize switching scope, then native search
@@ -1543,7 +1548,7 @@ export class SearchProvider {
     /**
      * Get empty state items when no results are found
      */
-    private getEmptyStateItems(query: string): SearchResultItem[] {
+    private getEmptyStateItems(query: string): { items: SearchResultItem[]; prompt?: string } {
         const isGlobalScope = this.currentScope === SearchScope.EVERYTHING;
         // Palette: Use scope-specific message
         const scopeName = this.getScopeName(this.currentScope);
@@ -1555,7 +1560,7 @@ export class SearchProvider {
 
         // 1. Header Item (Informational)
         items.push({
-            label: `No ${scopeName} found for '${query}' - ${detail}`,
+            label: `No ${scopeName} found for '${query}'`,
             alwaysShow: true,
             kind: vscode.QuickPickItemKind.Separator,
             result: {
@@ -1635,7 +1640,7 @@ export class SearchProvider {
             this.CMD_SETTINGS,
         );
 
-        return items;
+        return { items, prompt: detail };
     }
 
     private getScopeName(scope: SearchScope): string {
