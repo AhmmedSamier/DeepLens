@@ -835,7 +835,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
         } catch (error) {
             logger.error('Failed to show index stats or execute action', error);
-            vscode.window.showErrorMessage('DeepLens: Failed to process index statistics action.');
         }
     });
     context.subscriptions.push(showStatsCommand);
