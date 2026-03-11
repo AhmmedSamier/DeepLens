@@ -2366,34 +2366,40 @@ export class SearchEngine implements ISearchProvider {
     }
 }
 
-function escapeRegExp(string: string): string {
+export function escapeRegExp(str: string): string {
     // ⚡ Bolt: Fast regex escaping optimization
-    // Manual loop with charCodeAt and slice is up to 3-4x faster than .replace
-    // as it avoids regex compilation, execution overhead, and reduces string allocations.
+    // Replacing `.replace` with a global regex and manual string slicing and charCodeAt checking
+    // is ~3-4x faster than using `.replace` with a regex.
     let result = '';
-    let lastIndex = 0;
-
-    for (let i = 0; i < string.length; i++) {
-        const code = string.charCodeAt(i);
+    let last = 0;
+    for (let i = 0; i < str.length; i++) {
+        const charCode = str.charCodeAt(i);
         if (
-            code === 46 || // period
-            code === 42 || // asterisk
-            code === 43 || // plus
-            code === 63 || // question mark
-            code === 94 || // caret
-            code === 36 || // dollar
-            code === 123 || // left brace
-            code === 125 || // right brace
-            code === 40 || // left paren
-            code === 41 || // right paren
-            code === 124 || // pipe
-            code === 91 || // left bracket
-            code === 93 || // right bracket
-            code === 92 // backslash
+            charCode === 46 ||
+            charCode === 42 ||
+            charCode === 43 ||
+            charCode === 63 ||
+            charCode === 94 ||
+            charCode === 36 ||
+            charCode === 123 ||
+            charCode === 125 ||
+            charCode === 40 ||
+            charCode === 41 ||
+            charCode === 124 ||
+            charCode === 91 ||
+            charCode === 93 ||
+            charCode === 92
         ) {
-            result += string.slice(lastIndex, i) + '\\' + string[i];
-            lastIndex = i + 1;
+            result += str.slice(last, i) + '\\' + str[i];
+            last = i + 1;
         }
+    }
+    if (last === 0) return str;
+    if (last < str.length) {
+        result += str.slice(last);
+    }
+    return result;
+}
     }
 
     if (lastIndex === 0) {
@@ -2401,4 +2407,40 @@ function escapeRegExp(string: string): string {
     }
 
     return result + string.slice(lastIndex);
+||||||| 56cde5a
+    // Using .replace with a global regex is ~30% faster than .replaceAll
+    return string.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+=======
+    // Replacing `.replace` with a global regex and manual string slicing and charCodeAt checking
+    // is ~3-4x faster than using `.replace` with a regex.
+    let result = '';
+    let last = 0;
+    for (let i = 0; i < str.length; i++) {
+        const charCode = str.charCodeAt(i);
+        if (
+            charCode === 46 ||
+            charCode === 42 ||
+            charCode === 43 ||
+            charCode === 63 ||
+            charCode === 94 ||
+            charCode === 36 ||
+            charCode === 123 ||
+            charCode === 125 ||
+            charCode === 40 ||
+            charCode === 41 ||
+            charCode === 124 ||
+            charCode === 91 ||
+            charCode === 93 ||
+            charCode === 92
+        ) {
+            result += str.slice(last, i) + '\\' + str[i];
+            last = i + 1;
+        }
+    }
+    if (last === 0) return str;
+    if (last < str.length) {
+        result += str.slice(last);
+    }
+    return result;
+>>>>>>> master
 }

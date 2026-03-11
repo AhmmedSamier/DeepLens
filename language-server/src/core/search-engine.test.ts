@@ -2,7 +2,7 @@
 import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 import { SymbolProvider } from './providers/symbol-provider';
-import { SearchEngine } from './search-engine';
+import { SearchEngine, escapeRegExp } from './search-engine';
 import { ISearchProvider, SearchItemType, SearchScope, SearchableItem } from './types';
 
 const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
@@ -12,6 +12,26 @@ const createTestItem = (id: string, name: string, type: SearchItemType, relative
     filePath: path.normalize(`/${relativePath}`),
     relativeFilePath: relativePath,
     fullName: name,
+});
+
+describe('escapeRegExp', () => {
+    it('escapes canonical regex meta characters accurately', () => {
+        expect(escapeRegExp('.*+?^${}()|[]\\')).toBe('\\.\\*\\+\\?\\^\\$\\{\\}\\(\\)\\|\\[\\]\\\\');
+    });
+
+    it('escapes adjacent metacharacters correctly', () => {
+        expect(escapeRegExp('.*+?')).toBe('\\.\\*\\+\\?');
+    });
+
+    it('escapes interspersed metacharacters and alphanumerics correctly', () => {
+        expect(escapeRegExp('a.b*c')).toBe('a\\.b\\*c');
+        expect(escapeRegExp('test(123)')).toBe('test\\(123\\)');
+    });
+
+    it('returns the same string for no-op inputs', () => {
+        expect(escapeRegExp('abc123')).toBe('abc123');
+        expect(escapeRegExp('')).toBe('');
+    });
 });
 
 function createDelayedProvider(id: string, fileItem: SearchableItem): ISearchProvider {
