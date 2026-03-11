@@ -797,7 +797,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 },
                 {
                     label: '$(copy) Copy Statistics to Clipboard',
-                    description: 'Copy detailed index status',
+                    description: 'Copy index status summary',
                     picked: false,
                     action: 'copy',
                 },
