@@ -19,9 +19,10 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
     }
 
     async findFiles(include: string, exclude: string): Promise<string[]> {
-        const normalizedExclude = exclude
-            ? (exclude.indexOf('\\') !== -1 ? exclude.replace(/\\/g, '/') : exclude)
-            : null;
+        let normalizedExclude: string | null = null;
+        if (exclude) {
+            normalizedExclude = exclude.indexOf('\\') !== -1 ? exclude.replace(/\\/g, '/') : exclude;
+        }
 
         if (include === '**/*') {
             const fastFiles = await this.findFilesWithRipgrep(normalizedExclude);
@@ -35,9 +36,8 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
             const absoluteInclude = path.isAbsolute(include) ? include : path.join(folder, include);
             // ⚡ Bolt: Fast backslash normalization optimization
             // Replacing with regex + early indexOf check is much faster than replaceAll
-            const globPattern = absoluteInclude.indexOf('\\') !== -1
-                ? absoluteInclude.replace(/\\/g, '/')
-                : absoluteInclude;
+            const globPattern =
+                absoluteInclude.indexOf('\\') !== -1 ? absoluteInclude.replace(/\\/g, '/') : absoluteInclude;
 
             const files = await glob(globPattern, {
                 ignore: normalizedExclude ? normalizedExclude : undefined,

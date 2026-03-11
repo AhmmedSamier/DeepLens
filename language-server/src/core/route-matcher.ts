@@ -174,14 +174,16 @@ export class RouteMatcher {
         // ⚡ Bolt: Fast method extraction
         // Replaces regex matching and replacement for method extraction which is ~3x slower.
         const trimmedTemplate = template.trim();
-        if (trimmedTemplate.charCodeAt(0) === 91) { // '['
+        if (trimmedTemplate.charCodeAt(0) === 91) {
+            // '['
             const closeIdx = trimmedTemplate.indexOf(']');
             if (closeIdx > 1) {
                 method = trimmedTemplate.slice(1, closeIdx);
                 // Fast path for checking if method is all uppercase
                 for (let i = 0; i < method.length; i++) {
                     const code = method.charCodeAt(i);
-                    if (code < 65 || code > 90) { // Not A-Z
+                    if (code < 65 || code > 90) {
+                        // Not A-Z
                         method = undefined; // eslint-disable-line sonarjs/no-undefined-assignment
                         break;
                     }
@@ -189,7 +191,8 @@ export class RouteMatcher {
 
                 if (method) {
                     let start = closeIdx + 1;
-                    while (start < trimmedTemplate.length && trimmedTemplate.charCodeAt(start) === 32) { // ' '
+                    while (start < trimmedTemplate.length && trimmedTemplate.charCodeAt(start) === 32) {
+                        // ' '
                         start++;
                     }
                     cleanTemplate = trimmedTemplate.slice(start);
