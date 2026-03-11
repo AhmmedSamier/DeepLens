@@ -593,9 +593,10 @@ export class SearchEngine implements ISearchProvider {
                 // ⚡ Bolt: Fast backslash normalization optimization
                 // Replacing with regex + early indexOf check is much faster than replaceAll
                 // Performance impact: ~20% faster path normalization in hot loops.
-                normalizedPath = item.relativeFilePath.indexOf('\\') !== -1
-                    ? item.relativeFilePath.replace(/\\/g, '/')
-                    : item.relativeFilePath;
+                normalizedPath =
+                    item.relativeFilePath.indexOf('\\') !== -1
+                        ? item.relativeFilePath.replace(/\\/g, '/')
+                        : item.relativeFilePath;
                 this.lastRelativeInput = item.relativeFilePath;
                 this.lastRelativeOutput = normalizedPath;
             }
@@ -969,9 +970,8 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast backslash normalization optimization
         // Replacing with regex + early indexOf check is much faster than replaceAll
         // Performance impact: ~20% faster path normalization in hot loops.
-        const normalizedQuery = effectiveQuery.indexOf('\\') !== -1
-            ? effectiveQuery.replace(/\\/g, '/')
-            : effectiveQuery;
+        const normalizedQuery =
+            effectiveQuery.indexOf('\\') !== -1 ? effectiveQuery.replace(/\\/g, '/') : effectiveQuery;
 
         // 1. Filter and search
         let indices: number[] | undefined;
@@ -2106,9 +2106,8 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast backslash normalization optimization
         // Replacing with regex + early indexOf check is much faster than replaceAll
         // Performance impact: ~20% faster path normalization in hot loops.
-        const normalizedQuery = effectiveQuery.indexOf('\\') !== -1
-            ? effectiveQuery.replace(/\\/g, '/')
-            : effectiveQuery;
+        const normalizedQuery =
+            effectiveQuery.indexOf('\\') !== -1 ? effectiveQuery.replace(/\\/g, '/') : effectiveQuery;
         const queryLower = normalizedQuery.toLowerCase();
 
         let indices: number[] | undefined;
@@ -2400,4 +2399,8 @@ export function escapeRegExp(str: string): string {
         result += str.slice(last);
     }
     return result;
+}
+
+export function escapeRegex(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

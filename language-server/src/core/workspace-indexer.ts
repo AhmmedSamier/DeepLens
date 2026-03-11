@@ -415,19 +415,15 @@ export class WorkspaceIndexer {
         // ⚡ Bolt: Fast C# path check optimization
         // Normalizing path and doing split/basename is ~15% slower than using includes and custom slice logic
         const p = filePath.toLowerCase();
-        if (
-            p.includes('/obj/') ||
-            p.includes('\\obj\\') ||
-            p.includes('/generated/') ||
-            p.includes('\\generated\\')
-        ) {
+        if (p.includes('/obj/') || p.includes('\\obj\\') || p.includes('/generated/') || p.includes('\\generated\\')) {
             return true;
         }
 
         let fileNameStartIndex = 0;
         for (let i = p.length - 1; i >= 0; i--) {
             const c = p.charCodeAt(i);
-            if (c === 47 || c === 92) { // slash or backslash
+            if (c === 47 || c === 92) {
+                // slash or backslash
                 fileNameStartIndex = i + 1;
                 break;
             }
@@ -1102,9 +1098,7 @@ export class WorkspaceIndexer {
         // Normalize to forward slashes for matching
         // ⚡ Bolt: Fast backslash normalization optimization
         // Replacing with regex + early indexOf check is much faster than replaceAll
-        const normalizedPath = relativePath.indexOf('\\') !== -1
-            ? relativePath.replace(/\\/g, '/')
-            : relativePath;
+        const normalizedPath = relativePath.indexOf('\\') !== -1 ? relativePath.replace(/\\/g, '/') : relativePath;
 
         return this.excludeMatchers.some((matcher) => matcher.match(normalizedPath));
     }
