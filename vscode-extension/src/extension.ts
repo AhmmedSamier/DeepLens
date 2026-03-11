@@ -776,63 +776,71 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Register show index stats command
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
-        const stats = await lspClient.getIndexStats();
-        if (!stats) {
-            vscode.window.showErrorMessage('DeepLens: Could not retrieve index statistics.');
-            return;
-        }
+        try {
+            const stats = await lspClient.getIndexStats();
+            if (!stats) {
+                vscode.window.showErrorMessage('DeepLens: Could not retrieve index statistics.');
+                return;
+            }
 
-        const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
+            const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
 
-        const items: vscode.QuickPickItem[] = [
-            {
-                label: `$(database) Index Status: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
-                kind: vscode.QuickPickItemKind.Separator,
-                alwaysShow: true,
-            },
-            {
-                label: '$(copy) Copy Statistics to Clipboard',
-                description: 'Copy detailed index status',
-                picked: false,
-            },
-            {
-                label: '$(refresh) Rebuild Index',
-                description: 'Force a full re-index of the workspace',
-                picked: false,
-            },
-            {
-                label: '$(trash) Clear Cache',
-                description: 'Clear the persistent index cache',
-                picked: false,
-            },
-            {
-                label: '$(settings-gear) Configure Settings',
-                description: 'Open DeepLens extension settings',
-                picked: false,
-            },
-        ];
+            interface IndexActionItem extends vscode.QuickPickItem {
+                action?: 'copy' | 'rebuild' | 'clear' | 'settings';
+            }
 
-        const selection = await vscode.window.showQuickPick(items, {
-            placeHolder: 'DeepLens Index Statistics & Actions',
-        });
+            const items: IndexActionItem[] = [
+                {
+                    label: `$(database) Index Status: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
+                    kind: vscode.QuickPickItemKind.Separator,
+                    alwaysShow: true,
+                },
+                {
+                    label: '$(copy) Copy Statistics to Clipboard',
+                    description: 'Copy detailed index status',
+                    picked: false,
+                    action: 'copy',
+                },
+                {
+                    label: '$(refresh) Rebuild Index',
+                    description: 'Force a full re-index of the workspace',
+                    picked: false,
+                    action: 'rebuild',
+                },
+                {
+                    label: '$(trash) Clear Cache',
+                    description: 'Clear the persistent index cache',
+                    picked: false,
+                    action: 'clear',
+                },
+                {
+                    label: '$(settings-gear) Configure Settings',
+                    description: 'Open DeepLens extension settings',
+                    picked: false,
+                    action: 'settings',
+                },
+            ];
 
-        if (selection) {
-            if (selection.label === '$(copy) Copy Statistics to Clipboard') {
-                const statsText = `DeepLens Stats: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`;
-                try {
+            const selection = await vscode.window.showQuickPick(items, {
+                placeHolder: 'DeepLens Index Statistics & Actions',
+            });
+
+            if (selection && selection.action) {
+                if (selection.action === 'copy') {
+                    const statsText = `DeepLens Stats: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`;
                     await vscode.env.clipboard.writeText(statsText);
                     vscode.window.showInformationMessage('Index statistics copied to clipboard');
-                } catch (error) {
-                    logger.error('Failed to copy index statistics to clipboard', error);
-                    vscode.window.showErrorMessage('Failed to copy index statistics to clipboard');
+                } else if (selection.action === 'rebuild') {
+                    await vscode.commands.executeCommand('deeplens.rebuildIndex');
+                } else if (selection.action === 'clear') {
+                    await vscode.commands.executeCommand('deeplens.clearIndexCache');
+                } else if (selection.action === 'settings') {
+                    await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
                 }
-            } else if (selection.label === '$(refresh) Rebuild Index') {
-                await vscode.commands.executeCommand('deeplens.rebuildIndex');
-            } else if (selection.label === '$(trash) Clear Cache') {
-                await vscode.commands.executeCommand('deeplens.clearIndexCache');
-            } else if (selection.label === '$(settings-gear) Configure Settings') {
-                await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
             }
+        } catch (error) {
+            logger.error('Failed to show index stats or execute action', error);
+            vscode.window.showErrorMessage('DeepLens: Failed to process index statistics action.');
         }
     });
     context.subscriptions.push(showStatsCommand);
