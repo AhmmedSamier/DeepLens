@@ -793,30 +793,25 @@ export async function activate(context: vscode.ExtensionContext) {
                 {
                     label: `$(database) Index Status: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`,
                     kind: vscode.QuickPickItemKind.Separator,
-                    alwaysShow: true,
                 },
                 {
                     label: '$(copy) Copy Statistics to Clipboard',
                     description: 'Copy index status summary',
-                    picked: false,
                     action: 'copy',
                 },
                 {
                     label: '$(refresh) Rebuild Index',
                     description: 'Force a full re-index of the workspace',
-                    picked: false,
                     action: 'rebuild',
                 },
                 {
                     label: '$(trash) Clear Cache',
                     description: 'Clear the persistent index cache',
-                    picked: false,
                     action: 'clear',
                 },
                 {
                     label: '$(settings-gear) Configure Settings',
                     description: 'Open DeepLens extension settings',
-                    picked: false,
                     action: 'settings',
                 },
             ];
