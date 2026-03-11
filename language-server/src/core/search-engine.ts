@@ -2400,47 +2400,7 @@ export function escapeRegExp(str: string): string {
     }
     return result;
 }
-    }
 
-    if (lastIndex === 0) {
-        return string;
-    }
-
-    return result + string.slice(lastIndex);
-||||||| 56cde5a
-    // Using .replace with a global regex is ~30% faster than .replaceAll
-    return string.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
-=======
-    // Replacing `.replace` with a global regex and manual string slicing and charCodeAt checking
-    // is ~3-4x faster than using `.replace` with a regex.
-    let result = '';
-    let last = 0;
-    for (let i = 0; i < str.length; i++) {
-        const charCode = str.charCodeAt(i);
-        if (
-            charCode === 46 ||
-            charCode === 42 ||
-            charCode === 43 ||
-            charCode === 63 ||
-            charCode === 94 ||
-            charCode === 36 ||
-            charCode === 123 ||
-            charCode === 125 ||
-            charCode === 40 ||
-            charCode === 41 ||
-            charCode === 124 ||
-            charCode === 91 ||
-            charCode === 93 ||
-            charCode === 92
-        ) {
-            result += str.slice(last, i) + '\\' + str[i];
-            last = i + 1;
-        }
-    }
-    if (last === 0) return str;
-    if (last < str.length) {
-        result += str.slice(last);
-    }
-    return result;
->>>>>>> master
+export function escapeRegex(string: string): string {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
