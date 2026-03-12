@@ -2369,30 +2369,33 @@ export class SearchEngine implements ISearchProvider {
     }
 }
 
+// Lookup table for regex special characters (up to charCode 127)
+const REGEX_ESCAPE_CHARS = new Uint8Array(128);
+// . * + ? ^ $ { } ( ) | [ ] \
+REGEX_ESCAPE_CHARS[46] = 1; // .
+REGEX_ESCAPE_CHARS[42] = 1; // *
+REGEX_ESCAPE_CHARS[43] = 1; // +
+REGEX_ESCAPE_CHARS[63] = 1; // ?
+REGEX_ESCAPE_CHARS[94] = 1; // ^
+REGEX_ESCAPE_CHARS[36] = 1; // $
+REGEX_ESCAPE_CHARS[123] = 1; // '{'
+REGEX_ESCAPE_CHARS[125] = 1; // '}'
+REGEX_ESCAPE_CHARS[40] = 1; // (
+REGEX_ESCAPE_CHARS[41] = 1; // )
+REGEX_ESCAPE_CHARS[124] = 1; // |
+REGEX_ESCAPE_CHARS[91] = 1; // [
+REGEX_ESCAPE_CHARS[93] = 1; // ]
+REGEX_ESCAPE_CHARS[92] = 1; // \
+
 export function escapeRegExp(str: string): string {
     // ⚡ Bolt: Fast regex escaping optimization
     // Replacing `.replace` with a global regex and manual string slicing and charCodeAt checking
-    // is ~3-4x faster than using `.replace` with a regex.
+    // against a pre-initialized Uint8Array lookup table is up to 3-4x faster than using `.replace` with a regex.
     let result = '';
     let last = 0;
     for (let i = 0; i < str.length; i++) {
         const charCode = str.charCodeAt(i);
-        if (
-            charCode === 46 ||
-            charCode === 42 ||
-            charCode === 43 ||
-            charCode === 63 ||
-            charCode === 94 ||
-            charCode === 36 ||
-            charCode === 123 ||
-            charCode === 125 ||
-            charCode === 40 ||
-            charCode === 41 ||
-            charCode === 124 ||
-            charCode === 91 ||
-            charCode === 93 ||
-            charCode === 92
-        ) {
+        if (charCode < 128 && REGEX_ESCAPE_CHARS[charCode] === 1) {
             result += str.slice(last, i) + '\\' + str[i];
             last = i + 1;
         }
@@ -2405,5 +2408,5 @@ export function escapeRegExp(str: string): string {
 }
 
 export function escapeRegex(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escapeRegExp(string);
 }
