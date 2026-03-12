@@ -2369,20 +2369,20 @@ export class SearchEngine implements ISearchProvider {
 // Lookup table for regex special characters (up to charCode 127)
 const REGEX_ESCAPE_CHARS = new Uint8Array(128);
 // . * + ? ^ $ { } ( ) | [ ] \
-REGEX_ESCAPE_CHARS[46] = 1;
-REGEX_ESCAPE_CHARS[42] = 1;
-REGEX_ESCAPE_CHARS[43] = 1;
-REGEX_ESCAPE_CHARS[63] = 1;
-REGEX_ESCAPE_CHARS[94] = 1;
-REGEX_ESCAPE_CHARS[36] = 1;
-REGEX_ESCAPE_CHARS[123] = 1;
-REGEX_ESCAPE_CHARS[125] = 1;
-REGEX_ESCAPE_CHARS[40] = 1;
-REGEX_ESCAPE_CHARS[41] = 1;
-REGEX_ESCAPE_CHARS[124] = 1;
-REGEX_ESCAPE_CHARS[91] = 1;
-REGEX_ESCAPE_CHARS[93] = 1;
-REGEX_ESCAPE_CHARS[92] = 1;
+REGEX_ESCAPE_CHARS[46] = 1; // .
+REGEX_ESCAPE_CHARS[42] = 1; // *
+REGEX_ESCAPE_CHARS[43] = 1; // +
+REGEX_ESCAPE_CHARS[63] = 1; // ?
+REGEX_ESCAPE_CHARS[94] = 1; // ^
+REGEX_ESCAPE_CHARS[36] = 1; // $
+REGEX_ESCAPE_CHARS[123] = 1; // '{'
+REGEX_ESCAPE_CHARS[125] = 1; // '}'
+REGEX_ESCAPE_CHARS[40] = 1; // (
+REGEX_ESCAPE_CHARS[41] = 1; // )
+REGEX_ESCAPE_CHARS[124] = 1; // |
+REGEX_ESCAPE_CHARS[91] = 1; // [
+REGEX_ESCAPE_CHARS[93] = 1; // ]
+REGEX_ESCAPE_CHARS[92] = 1; // \
 
 export function escapeRegExp(str: string): string {
     // ⚡ Bolt: Fast regex escaping optimization
