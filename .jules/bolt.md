@@ -1,3 +1,7 @@
+## 2024-05-26 - [Fast Array Pre-allocation]
+**Learning:** In hot paths (like `RouteMatcher.precompute`), replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`) and a manual `for` loop is significantly faster. `Array.from({ length })` or `.map()` introduces overhead that can be avoided with manual looping.
+**Action:** When transforming arrays in hot loops where maximum performance is critical, prefer pre-allocating the target array using `new Array(length)` (disabling the `sonarjs/array-constructor` lint rule explicitly) and populating it with a manual `for` loop.
+
 ## 2024-05-25 - [Fast Regex Escaping]
 **Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing regex-based string replacements (e.g., `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) with a manual `for` loop that checks character boundaries using `charCodeAt` and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations.
 **Action:** When escaping characters or doing replacements in hot loops, prefer a manual loop using `charCodeAt` and `slice` over regex string replacement, as it provides measurable speed improvements.
