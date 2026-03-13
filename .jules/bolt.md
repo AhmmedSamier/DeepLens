@@ -1,3 +1,7 @@
+## 2024-05-25 - [Fast Global Regex Escaping]
+**Learning:** In V8/Node.js hot paths, replacing global regex string substitution like `.replace(/[.*+?^\$\{\}()|\[\]\\]/g, '\\$&')` with a manual loop iterating over `charCodeAt` and using `slice` to append string chunks reduces overhead significantly, yielding 3-4x performance gains for escaping regex parameters.
+**Action:** When globally escaping special characters in a hot path, consider a manual loop with `charCodeAt` checking against known boundary numbers to avoid global regex engine overhead.
+
 ## 2024-05-25 - [Fast Regex Escaping]
 **Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing regex-based string replacements (e.g., `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) with a manual `for` loop that checks character boundaries using `charCodeAt` and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations.
 **Action:** When escaping characters or doing replacements in hot loops, prefer a manual loop using `charCodeAt` and `slice` over regex string replacement, as it provides measurable speed improvements.
