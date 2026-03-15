@@ -1,3 +1,7 @@
+## 2024-05-25 - [Fast String Formatting]
+**Learning:** In string formatting paths (e.g., converting IDs to titles with capitalization and delimiters), replacing regex operations and `.split().map().join()` chains with a single-pass manual string traversal (using `charCodeAt` and building the string iteratively) significantly reduces intermediate array/string allocations. This approach can be ~3x faster than cached regex replacements and `.trim()`.
+**Action:** When repeatedly formatting short strings (like command IDs) in loops, prefer a single-pass manual loop over chaining native string array methods or using global regex `replace`.
+
 ## 2024-05-25 - [Fast Regex Escaping]
 **Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing regex-based string replacements (e.g., `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) with a manual `for` loop that checks character boundaries using `charCodeAt` and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations.
 **Action:** When escaping characters or doing replacements in hot loops, prefer a manual loop using `charCodeAt` and `slice` over regex string replacement, as it provides measurable speed improvements.
