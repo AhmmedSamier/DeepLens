@@ -273,9 +273,16 @@ export class RouteMatcher {
             // Splitting the pre-lowercased string is ~25% faster than mapping the array with toLowerCase().
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = cleanTemplate.length > 0 ? cleanTemplate.toLowerCase().split('/') : [];
-            const isParameter = templateSegments.map(
-                (s) => s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125,
-            ); // 123 is '{', 125 is '}'
+
+            // ⚡ Bolt: Fast array pre-allocation optimization
+            // Replacing Array.prototype.map() with a pre-allocated array and manual for-loop
+            // avoids closure allocation and function call overhead in this hot path.
+            // eslint-disable-next-line sonarjs/array-constructor
+            const isParameter = new Array<boolean>(templateSegments.length);
+            for (let j = 0; j < templateSegments.length; j++) {
+                const s = templateSegments[j];
+                isParameter[j] = s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+            } // 123 is '{', 125 is '}'
 
             cached = {
                 regex: exactRegex,
@@ -334,29 +341,32 @@ export class RouteMatcher {
                     return 0;
                 }
             } else {
-                const pSegLower = pSegsLower[pIndex];
-                if (pSegLower) {
-                    const tSegLower = tSegsLower[tIndex];
-                    if (i === 1) {
-                        // isLast
-                        if (tSegLower === pSegLower) {
-                            score += 0.1;
-                        } else if (tSegLower.indexOf(pSegLower) === 0) {
-                            score += 0.05;
-                        } else {
-                            return 0;
-                        }
-                    } else if (tSegLower === pSegLower) {
-                        score += 0.1;
-                    } else {
-                        return 0;
-                    }
-                } else {
-                    return 0;
-                }
+                const segmentScore = RouteMatcher.scoreStaticSegment(tSegsLower[tIndex], pSegsLower[pIndex], i === 1);
+                if (segmentScore === 0) return 0;
+                score += segmentScore;
             }
         }
         return score;
+    }
+
+    private static scoreStaticSegment(tSegLower: string, pSegLower: string, isLast: boolean): number {
+        if (!pSegLower) {
+            return 0;
+        }
+
+        if (isLast) {
+            if (tSegLower === pSegLower) {
+                return 0.1;
+            } else if (tSegLower.indexOf(pSegLower) === 0) {
+                return 0.05;
+            } else {
+                return 0;
+            }
+        } else if (tSegLower === pSegLower) {
+            return 0.1;
+        } else {
+            return 0;
+        }
     }
 
     /**
@@ -380,6 +390,10 @@ export class RouteMatcher {
             return q.indexOf('/') !== -1;
         }
 
+        return RouteMatcher.isValidMethodAndPath(q, methodSeparator, len);
+    }
+
+    private static isValidMethodAndPath(q: string, methodSeparator: number, len: number): boolean {
         // It has a space, check if the prefix looks like an HTTP method (length 3 to 7)
         if (methodSeparator < 3 || methodSeparator > 7) {
             return false;
