@@ -1,10 +1,6 @@
 ## 2024-05-25 - [Fast Global Regex Escaping]
-**Learning:** In V8/Node.js hot paths, replacing global regex string substitution like `.replace(/[.*+?^\$\{\}()|\[\]\\]/g, '\\$&')` with a manual loop iterating over `charCodeAt` and using `slice` to append string chunks reduces overhead significantly, yielding 3-4x performance gains for escaping regex parameters.
-**Action:** When globally escaping special characters in a hot path, consider a manual loop with `charCodeAt` checking against known boundary numbers to avoid global regex engine overhead.
-
-## 2024-05-25 - [Fast Regex Escaping]
-**Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing regex-based string replacements (e.g., `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) with a manual `for` loop that checks character boundaries using `charCodeAt` and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations.
-**Action:** When escaping characters or doing replacements in hot loops, prefer a manual loop using `charCodeAt` and `slice` over regex string replacement, as it provides measurable speed improvements.
+**Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing global regex string substitution like `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')` with a manual `for` loop that checks character boundaries using `charCodeAt` and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations.
+**Action:** When globally escaping special characters in a hot path, prefer a manual loop checking against known boundary numbers using `charCodeAt` and `slice` to avoid global regex engine overhead.
 
 ## 2024-05-24 - [Fast Backslash Normalization in Hot Paths]
 **Learning:** In hot paths (like path normalization during ingestion or search), replacing `.replaceAll('\\', '/')` with an early check `.indexOf('\\') !== -1` followed by `.replace(/\\/g, '/')` is roughly 20-30% faster in Node/V8 and Bun. The chained `replaceAll` or `split.join` incur extra overhead. Furthermore, for C#-generated file checks, `includes` checks coupled with custom reverse `charCodeAt` slicing avoids full string allocation and splitting, resulting in ~15% faster checks.
