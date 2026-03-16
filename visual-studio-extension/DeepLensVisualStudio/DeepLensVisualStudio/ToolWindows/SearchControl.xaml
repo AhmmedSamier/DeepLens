@@ -435,6 +435,26 @@
                 </ListBox.ItemTemplate>
             </ListBox>
 
+            <!-- Empty State Message -->
+            <StackPanel
+                Grid.Row="2"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Visibility="{Binding ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <TextBlock
+                    Text="No results found"
+                    FontSize="16"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    Text="Try adjusting your filters or search term."
+                    FontSize="13"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                    HorizontalAlignment="Center"
+                    Margin="0,4,0,0" />
+            </StackPanel>
+
             <!--  Status Bar (Sticky at Bottom)  -->
             <Border
                 Grid.Row="3"
