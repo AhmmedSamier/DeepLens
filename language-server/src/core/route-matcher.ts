@@ -274,9 +274,9 @@ export class RouteMatcher {
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = cleanTemplate.length > 0 ? cleanTemplate.toLowerCase().split('/') : [];
 
-            // ⚡ Bolt: Fast parameter check array allocation
-            // Replacing .map() with a pre-allocated array and manual loop
-            // is faster as it avoids function call and iterator creation overhead.
+            // ⚡ Bolt: Fast array pre-allocation optimization
+            // In hot paths, replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`)
+            // and a manual `for` loop is significantly faster.
             // eslint-disable-next-line sonarjs/array-constructor
             const isParameter = new Array<boolean>(templateSegments.length);
             for (let j = 0; j < templateSegments.length; j++) {
