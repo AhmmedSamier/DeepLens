@@ -786,7 +786,6 @@ export async function activate(context: vscode.ExtensionContext) {
             const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
 
             interface IndexActionItem extends vscode.QuickPickItem {
-                // eslint-disable-next-line sonarjs/max-union-size
                 action?: 'copy' | 'rebuild' | 'clear' | 'settings';
             }
 

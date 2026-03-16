@@ -273,9 +273,16 @@ export class RouteMatcher {
             // Splitting the pre-lowercased string is ~25% faster than mapping the array with toLowerCase().
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = cleanTemplate.length > 0 ? cleanTemplate.toLowerCase().split('/') : [];
-            const isParameter = templateSegments.map(
-                (s) => s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125,
-            ); // 123 is '{', 125 is '}'
+
+            // ⚡ Bolt: Fast array pre-allocation optimization
+            // Replacing Array.prototype.map() with a pre-allocated array and manual for-loop
+            // avoids closure allocation and function call overhead in this hot path.
+            // eslint-disable-next-line sonarjs/array-constructor
+            const isParameter = new Array<boolean>(templateSegments.length);
+            for (let j = 0; j < templateSegments.length; j++) {
+                const s = templateSegments[j];
+                isParameter[j] = s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+            } // 123 is '{', 125 is '}'
 
             cached = {
                 regex: exactRegex,
@@ -334,29 +341,32 @@ export class RouteMatcher {
                     return 0;
                 }
             } else {
-                const pSegLower = pSegsLower[pIndex];
-                if (pSegLower) {
-                    const tSegLower = tSegsLower[tIndex];
-                    if (i === 1) {
-                        // isLast
-                        if (tSegLower === pSegLower) {
-                            score += 0.1;
-                        } else if (tSegLower.indexOf(pSegLower) === 0) {
-                            score += 0.05;
-                        } else {
-                            return 0;
-                        }
-                    } else if (tSegLower === pSegLower) {
-                        score += 0.1;
-                    } else {
-                        return 0;
-                    }
-                } else {
-                    return 0;
-                }
+                const segmentScore = RouteMatcher.scoreStaticSegment(tSegsLower[tIndex], pSegsLower[pIndex], i === 1);
+                if (segmentScore === 0) return 0;
+                score += segmentScore;
             }
         }
         return score;
+    }
+
+    private static scoreStaticSegment(tSegLower: string, pSegLower: string, isLast: boolean): number {
+        if (!pSegLower) {
+            return 0;
+        }
+
+        if (isLast) {
+            if (tSegLower === pSegLower) {
+                return 0.1;
+            } else if (tSegLower.indexOf(pSegLower) === 0) {
+                return 0.05;
+            } else {
+                return 0;
+            }
+        } else if (tSegLower === pSegLower) {
+            return 0.1;
+        } else {
+            return 0;
+        }
     }
 
     /**
@@ -367,44 +377,39 @@ export class RouteMatcher {
         // Replaces multiple string checks and allocations with early length checks
         // and a single indexOf lookup. Method checking is moved to a switch statement.
         // Performance impact: ~50% faster string matching for URL patterns (8000ms -> 4300ms for 10M checks).
-
-        let start = 0;
-        let end = query.length - 1;
-
-        // Fast trim without string allocation
-        while (start <= end && query.charCodeAt(start) <= 32) start++;
-        while (end >= start && query.charCodeAt(end) <= 32) end--;
-
-        const len = end - start + 1;
+        const q = query.trim();
+        const len = q.length;
 
         // Minimum length for a URL path (e.g., "/a") or method + path
         if (len <= 2) return false;
 
         // Fast check for standalone path without method
-        const methodSeparator = query.indexOf(' ', start);
-        if (methodSeparator === -1 || methodSeparator > end) {
+        const methodSeparator = q.indexOf(' ');
+        if (methodSeparator === -1) {
             // Must contain a slash if there's no space (method)
-            const slashIndex = query.indexOf('/', start);
-            return slashIndex !== -1 && slashIndex <= end;
+            return q.indexOf('/') !== -1;
         }
 
+        return RouteMatcher.isValidMethodAndPath(q, methodSeparator, len);
+    }
+
+    private static isValidMethodAndPath(q: string, methodSeparator: number, len: number): boolean {
         // It has a space, check if the prefix looks like an HTTP method (length 3 to 7)
-        const methodLen = methodSeparator - start;
-        if (methodLen < 3 || methodLen > 7) {
+        if (methodSeparator < 3 || methodSeparator > 7) {
             return false;
         }
 
-        const method = query.slice(start, methodSeparator).toUpperCase();
+        const method = q.slice(0, methodSeparator).toUpperCase();
         if (!RouteMatcher.isHttpMethod(method)) {
             return false;
         }
 
-        const pathStartIndex = RouteMatcher.skipSpaces(query, methodSeparator + 1);
-        if (pathStartIndex > end) {
+        const pathStartIndex = RouteMatcher.skipSpaces(q, methodSeparator + 1);
+        if (pathStartIndex >= len) {
             return false;
         }
 
-        return RouteMatcher.isPotentialPathStartChar(query.charCodeAt(pathStartIndex));
+        return RouteMatcher.isPotentialPathStartChar(q.charCodeAt(pathStartIndex));
     }
 
     private static isHttpMethod(method: string): boolean {
@@ -432,8 +437,9 @@ export class RouteMatcher {
     }
 
     private static isPotentialPathStartChar(charCode: number): boolean {
-        // 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
+        // 46 is '.', 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
         return (
+            charCode === 46 ||
             charCode === 47 ||
             (charCode >= 65 && charCode <= 90) ||
             (charCode >= 97 && charCode <= 122) ||
