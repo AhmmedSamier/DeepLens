@@ -415,12 +415,6 @@ export class WorkspaceIndexer {
         // ⚡ Bolt: Fast C# path check optimization
         // Normalizing path and doing split/basename is ~15% slower than using includes and custom slice logic
         const p = filePath.toLowerCase();
-
-        // Fast early exit if it doesn't end with .cs (already checked by callers, but good for safety)
-        if (!p.endsWith('.cs')) {
-            return false;
-        }
-
         if (p.includes('/obj/') || p.includes('\\obj\\') || p.includes('/generated/') || p.includes('\\generated\\')) {
             return true;
         }
@@ -436,16 +430,13 @@ export class WorkspaceIndexer {
         }
 
         const fileName = p.slice(fileNameStartIndex);
-        const len = fileName.length;
-
-        // Fastest checks first based on length to avoid multiple endsWith calls
-        if (len >= 5 && fileName.endsWith('.g.cs')) return true;
-        if (len >= 7 && fileName.endsWith('.g.i.cs')) return true;
-        if (len >= 12 && fileName.endsWith('.designer.cs')) return true;
-        if (len >= 13 && fileName.endsWith('.generated.cs')) return true;
-        if (len >= 22 && fileName.endsWith('.assemblyattributes.cs')) return true;
-
-        return false;
+        return (
+            fileName.endsWith('.g.cs') ||
+            fileName.endsWith('.g.i.cs') ||
+            fileName.endsWith('.designer.cs') ||
+            fileName.endsWith('.generated.cs') ||
+            fileName.endsWith('.assemblyattributes.cs')
+        );
     }
 
     private async getFileSize(filePath: string): Promise<number | undefined> {

@@ -785,8 +785,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
             const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
 
+            type IndexAction = 'copy' | 'rebuild' | 'clear' | 'settings';
             interface IndexActionItem extends vscode.QuickPickItem {
-                action?: 'copy' | 'rebuild' | 'clear' | 'settings';
+                action?: IndexAction;
             }
 
             const items: IndexActionItem[] = [
