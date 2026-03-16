@@ -203,10 +203,10 @@
                         Stretch="Uniform" />
 
                     <!--  Search TextBox  -->
-                    <TextBox
+                    <Grid Grid.Column="1">
+                        <TextBox
                         Name="SearchTextBox"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
+                                                VerticalAlignment="Center"
                         Background="Transparent"
                         BorderThickness="0"
                         CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
@@ -215,6 +215,28 @@
                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                         AutomationProperties.Name="Search query"
                         ToolTip="Search for classes, symbols, files, text, or endpoints" />
+                        <TextBlock IsHitTestVisible="False"
+                                   AutomationProperties.Name=""
+                                   Text="Search (e.g., 'UserService', '/t', or '#')"
+                                   VerticalAlignment="Center"
+                                   Margin="2,0,0,0"
+                                   FontSize="14"
+                                   Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
 
                     <!--  Clear Button  -->
                     <Button
@@ -451,7 +473,8 @@
                             Height="10"
                             Maximum="100"
                             Minimum="0"
-                            Value="{Binding IndexingProgress}" />
+                            Value="{Binding IndexingProgress}"
+                            AutomationProperties.Name="Indexing Progress" />
                     </StackPanel>
                 </Grid>
             </Border>
