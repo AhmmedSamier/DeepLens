@@ -374,35 +374,44 @@ export class RouteMatcher {
         // Replaces multiple string checks and allocations with early length checks
         // and a single indexOf lookup. Method checking is moved to a switch statement.
         // Performance impact: ~50% faster string matching for URL patterns (8000ms -> 4300ms for 10M checks).
-        const q = query.trim();
-        const len = q.length;
+
+        let start = 0;
+        let end = query.length - 1;
+
+        // Fast trim without string allocation
+        while (start <= end && query.charCodeAt(start) <= 32) start++;
+        while (end >= start && query.charCodeAt(end) <= 32) end--;
+
+        const len = end - start + 1;
 
         // Minimum length for a URL path (e.g., "/a") or method + path
         if (len <= 2) return false;
 
         // Fast check for standalone path without method
-        const methodSeparator = q.indexOf(' ');
-        if (methodSeparator === -1) {
+        const methodSeparator = query.indexOf(' ', start);
+        if (methodSeparator === -1 || methodSeparator > end) {
             // Must contain a slash if there's no space (method)
-            return q.indexOf('/') !== -1;
+            const slashIndex = query.indexOf('/', start);
+            return slashIndex !== -1 && slashIndex <= end;
         }
 
         // It has a space, check if the prefix looks like an HTTP method (length 3 to 7)
-        if (methodSeparator < 3 || methodSeparator > 7) {
+        const methodLen = methodSeparator - start;
+        if (methodLen < 3 || methodLen > 7) {
             return false;
         }
 
-        const method = q.slice(0, methodSeparator).toUpperCase();
+        const method = query.slice(start, methodSeparator).toUpperCase();
         if (!RouteMatcher.isHttpMethod(method)) {
             return false;
         }
 
-        const pathStartIndex = RouteMatcher.skipSpaces(q, methodSeparator + 1);
-        if (pathStartIndex >= len) {
+        const pathStartIndex = RouteMatcher.skipSpaces(query, methodSeparator + 1);
+        if (pathStartIndex > end) {
             return false;
         }
 
-        return RouteMatcher.isPotentialPathStartChar(q.charCodeAt(pathStartIndex));
+        return RouteMatcher.isPotentialPathStartChar(query.charCodeAt(pathStartIndex));
     }
 
     private static isHttpMethod(method: string): boolean {
