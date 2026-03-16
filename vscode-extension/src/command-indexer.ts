@@ -131,7 +131,25 @@ export class CommandIndexer {
                 capitalizeNext = false;
             } else if (code >= 65 && code <= 90) {
                 // A-Z
-                result += ' ' + commandId[i];
+                // Add a space if transitioning from a lowercase letter
+                // or transitioning to a lowercase letter (e.g. acronyms like "myURLApp" -> "my URL App")
+                let addSpace = false;
+                if (i > startIdx) {
+                    const prevCode = commandId.charCodeAt(i - 1);
+                    if (prevCode >= 97 && prevCode <= 122) { // a-z
+                        addSpace = true;
+                    } else if (i < len - 1) {
+                        const nextCode = commandId.charCodeAt(i + 1);
+                        if (nextCode >= 97 && nextCode <= 122) { // a-z
+                            addSpace = true;
+                        }
+                    }
+                }
+
+                if (addSpace && result.length > 0 && result.charCodeAt(result.length - 1) !== 32) {
+                    result += ' ';
+                }
+                result += commandId[i];
             } else {
                 result += commandId[i];
             }
