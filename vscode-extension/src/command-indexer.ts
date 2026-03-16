@@ -13,6 +13,10 @@ interface PreparedCommand {
  * Indexes VS Code commands for search
  */
 export class CommandIndexer {
+    private static readonly WORKBENCH_PREFIX = 'workbench.action.';
+    private static readonly EDITOR_PREFIX = 'editor.action.';
+    private static readonly VSCODE_PREFIX = 'vscode.';
+
     private readonly config: Config;
     private commandItems: SearchableItem[] = [];
     private preparedItems: PreparedCommand[] = [];
@@ -92,12 +96,12 @@ export class CommandIndexer {
         // Replaces regex operations and .split().map().join() chains with a single-pass manual traversal.
         // This avoids creating intermediate arrays and strings, improving performance by ~3x.
         let startIdx = 0;
-        if (commandId.indexOf('workbench.action.') === 0) {
-            startIdx = 17;
-        } else if (commandId.indexOf('editor.action.') === 0) {
-            startIdx = 14;
-        } else if (commandId.indexOf('vscode.') === 0) {
-            startIdx = 7;
+        if (commandId.indexOf(CommandIndexer.WORKBENCH_PREFIX) === 0) {
+            startIdx = CommandIndexer.WORKBENCH_PREFIX.length;
+        } else if (commandId.indexOf(CommandIndexer.EDITOR_PREFIX) === 0) {
+            startIdx = CommandIndexer.EDITOR_PREFIX.length;
+        } else if (commandId.indexOf(CommandIndexer.VSCODE_PREFIX) === 0) {
+            startIdx = CommandIndexer.VSCODE_PREFIX.length;
         }
 
         const len = commandId.length;

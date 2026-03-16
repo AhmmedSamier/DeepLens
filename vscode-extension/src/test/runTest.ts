@@ -10,14 +10,7 @@ import * as path from 'node:path';
         await runTests({
             extensionDevelopmentPath,
             extensionTestsPath,
-            launchArgs: [
-                workspacePath,
-                '--no-sandbox',
-                '--disable-gpu',
-                '--headless',
-                '--disable-features=RendererCodeIntegrity',
-                '--disable-dev-shm-usage',
-            ],
+            launchArgs: [workspacePath, '--no-sandbox', '--disable-gpu', '--headless'],
             timeout: 120_000,
         }).catch((err) => {
             console.error('Failed to run tests', err);

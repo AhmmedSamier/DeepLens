@@ -203,40 +203,18 @@
                         Stretch="Uniform" />
 
                     <!--  Search TextBox  -->
-                    <Grid Grid.Column="1">
-                        <TextBlock
-                            IsHitTestVisible="False"
-                            VerticalAlignment="Center"
-                            FontSize="14"
-                            Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
-                            Text="Try 'UserService', 'IConfig', or '/t'... ">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Visibility" Value="Collapsed" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding Text.Length, ElementName=SearchTextBox}" Value="0">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                        <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="{x:Null}">
-                                            <Setter Property="Visibility" Value="Visible" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-
-                        <TextBox
-                            Name="SearchTextBox"
-                            VerticalAlignment="Center"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
-                            FontSize="14"
-                            Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
-                            Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                            AutomationProperties.Name="Search query"
-                            ToolTip="Try 'UserService', 'IConfig', or '/t'..." />
-                    </Grid>
+                    <TextBox
+                        Name="SearchTextBox"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                        FontSize="14"
+                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                        Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                        AutomationProperties.Name="Search query"
+                        ToolTip="Search for classes, symbols, files, text, or endpoints" />
 
                     <!--  Clear Button  -->
                     <Button
@@ -473,7 +451,6 @@
                             Height="10"
                             Maximum="100"
                             Minimum="0"
-                            AutomationProperties.Name="Indexing progress"
                             Value="{Binding IndexingProgress}" />
                     </StackPanel>
                 </Grid>
