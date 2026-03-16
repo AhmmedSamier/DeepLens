@@ -437,8 +437,9 @@ export class RouteMatcher {
     }
 
     private static isPotentialPathStartChar(charCode: number): boolean {
-        // 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
+        // 46 is '.', 47 is '/', 65-90 is A-Z, 97-122 is a-z, 48-57 is 0-9, 95 is '_'
         return (
+            charCode === 46 ||
             charCode === 47 ||
             (charCode >= 65 && charCode <= 90) ||
             (charCode >= 97 && charCode <= 122) ||
