@@ -278,7 +278,7 @@ export class RouteMatcher {
             // In hot paths, replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`)
             // and a manual `for` loop is significantly faster.
             // eslint-disable-next-line sonarjs/array-constructor
-            const isParameter = new Array(templateSegments.length);
+            const isParameter = new Array<boolean>(templateSegments.length);
             for (let j = 0; j < templateSegments.length; j++) {
                 const s = templateSegments[j];
                 isParameter[j] = s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125; // 123 is '{', 125 is '}'
