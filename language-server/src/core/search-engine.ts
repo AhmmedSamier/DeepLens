@@ -2405,5 +2405,5 @@ export function escapeRegExp(str: string): string {
 }
 
 export function escapeRegex(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return escapeRegExp(string);
 }
