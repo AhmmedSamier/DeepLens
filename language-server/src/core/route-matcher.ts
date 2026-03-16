@@ -377,25 +377,17 @@ export class RouteMatcher {
         // Replaces multiple string checks and allocations with early length checks
         // and a single indexOf lookup. Method checking is moved to a switch statement.
         // Performance impact: ~50% faster string matching for URL patterns (8000ms -> 4300ms for 10M checks).
-
-        let start = 0;
-        let end = query.length - 1;
-
-        // Fast trim without string allocation
-        while (start <= end && query.charCodeAt(start) <= 32) start++;
-        while (end >= start && query.charCodeAt(end) <= 32) end--;
-
-        const len = end - start + 1;
+        const q = query.trim();
+        const len = q.length;
 
         // Minimum length for a URL path (e.g., "/a") or method + path
         if (len <= 2) return false;
 
         // Fast check for standalone path without method
-        const methodSeparator = query.indexOf(' ', start);
-        if (methodSeparator === -1 || methodSeparator > end) {
+        const methodSeparator = q.indexOf(' ');
+        if (methodSeparator === -1) {
             // Must contain a slash if there's no space (method)
-            const slashIndex = query.indexOf('/', start);
-            return slashIndex !== -1 && slashIndex <= end;
+            return q.indexOf('/') !== -1;
         }
 
         return RouteMatcher.isValidMethodAndPath(q, methodSeparator, len);
@@ -403,22 +395,21 @@ export class RouteMatcher {
 
     private static isValidMethodAndPath(q: string, methodSeparator: number, len: number): boolean {
         // It has a space, check if the prefix looks like an HTTP method (length 3 to 7)
-        const methodLen = methodSeparator - start;
-        if (methodLen < 3 || methodLen > 7) {
+        if (methodSeparator < 3 || methodSeparator > 7) {
             return false;
         }
 
-        const method = query.slice(start, methodSeparator).toUpperCase();
+        const method = q.slice(0, methodSeparator).toUpperCase();
         if (!RouteMatcher.isHttpMethod(method)) {
             return false;
         }
 
-        const pathStartIndex = RouteMatcher.skipSpaces(query, methodSeparator + 1);
-        if (pathStartIndex > end) {
+        const pathStartIndex = RouteMatcher.skipSpaces(q, methodSeparator + 1);
+        if (pathStartIndex >= len) {
             return false;
         }
 
-        return RouteMatcher.isPotentialPathStartChar(query.charCodeAt(pathStartIndex));
+        return RouteMatcher.isPotentialPathStartChar(q.charCodeAt(pathStartIndex));
     }
 
     private static isHttpMethod(method: string): boolean {

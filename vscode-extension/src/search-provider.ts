@@ -510,23 +510,6 @@ export class SearchProvider {
      * Prompt for confirmation before clearing history
      */
     private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        const titleItem: SearchResultItem = {
-            label: 'Are you sure you want to clear recent history?',
-            alwaysShow: true,
-            kind: vscode.QuickPickItemKind.Separator,
-            result: {
-                item: {
-                    id: 'header:confirm-clear-history',
-                    name: 'Confirm Clear History',
-                    type: SearchItemType.TEXT,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 0,
-                scope: SearchScope.COMMANDS,
-            },
-        };
-
         const confirmItem: SearchResultItem = {
             label: 'Confirm Clear History',
             detail: 'This cannot be undone',
@@ -563,8 +546,8 @@ export class SearchProvider {
             },
         };
 
-        quickPick.items = [titleItem, confirmItem, cancelItem];
-        quickPick.title = 'Clear History';
+        quickPick.items = [confirmItem, cancelItem];
+        quickPick.title = 'Are you sure you want to clear recent history?';
     }
 
     /**
