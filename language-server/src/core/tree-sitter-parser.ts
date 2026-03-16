@@ -504,12 +504,21 @@ export class TreeSitterParser {
     private cleanCSharpString(text: string): string {
         let start = 0;
         // Skip opening quotes and prefixes like @ or $
-        while (start < text.length && '"@$'.includes(text[start])) {
-            start++;
+        // ⚡ Bolt: Fast string character check optimization
+        // Uses charCodeAt to avoid string allocation from text[start]
+        // and string allocation + full scan in '"@$'.includes()
+        while (start < text.length) {
+            const charCode = text.charCodeAt(start);
+            // 34 is '"', 64 is '@', 36 is '$'
+            if (charCode === 34 || charCode === 64 || charCode === 36) {
+                start++;
+            } else {
+                break;
+            }
         }
         let end = text.length;
         // Skip closing quotes
-        while (end > start && '"'.includes(text[end - 1])) {
+        while (end > start && text.charCodeAt(end - 1) === 34) {
             end--;
         }
         return text.slice(start, end);
