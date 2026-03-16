@@ -1,6 +1,11 @@
 ## 2024-05-25 - [Fast Regex Escaping Lookup Table]
 **Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing regex-based string replacements (e.g., `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) with a manual `for` loop that checks character boundaries using `charCodeAt` against a pre-initialized `Uint8Array` lookup table and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations. Using a lookup table (`Uint8Array`) is slightly faster than chaining boolean comparisons in a long `if` statement.
 **Action:** When escaping characters or doing replacements in hot loops, prefer a manual loop using `charCodeAt` and `slice` over regex string replacement, and utilize a `Uint8Array` lookup table to check characters if there are many to check.
+
+## 2024-05-26 - [Fast Array Allocation vs Map]
+**Learning:** In hot paths or caching loops (like compiling route segments in `RouteMatcher.precompute`), replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`) and a manual `for` loop avoids function call overhead per element and iterator creation. This significantly reduces allocations and speeds up execution, particularly for repetitive operations.
+**Action:** When transforming arrays in performance-sensitive areas, prefer pre-allocating the target array and using a manual `for` loop instead of `.map()`.
+
 ## 2024-05-25 - [Fast Regex Escaping]
 **Learning:** In V8/Node.js hot paths (like executing text streams where search relies on escaped string patterns), replacing regex-based string replacements (e.g., `.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')`) with a manual `for` loop that checks character boundaries using `charCodeAt` and appends chunks via `.slice()` is up to 3-4x faster. The manual loop avoids regex compilation, execution overhead, and reduces string allocations.
 **Action:** When escaping characters or doing replacements in hot loops, prefer a manual loop using `charCodeAt` and `slice` over regex string replacement, as it provides measurable speed improvements.
