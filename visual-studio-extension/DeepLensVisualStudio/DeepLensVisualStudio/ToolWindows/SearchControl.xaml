@@ -216,7 +216,6 @@
                         AutomationProperties.Name="Search query"
                         ToolTip="Search for classes, symbols, files, text, or endpoints" />
                         <TextBlock IsHitTestVisible="False"
-                                   AutomationProperties.Name=""
                                    Text="Search (e.g., 'UserService', '/t', or '#')"
                                    VerticalAlignment="Center"
                                    Margin="2,0,0,0"
