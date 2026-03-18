@@ -580,7 +580,25 @@ export class SearchProvider {
             }
 
             // Map results to QuickPick items
-            const items = results.map((r) => this.resultToQuickPickItem(r));
+            const items: SearchResultItem[] = [
+                {
+                    label: 'Recent History',
+                    kind: vscode.QuickPickItemKind.Separator,
+                    alwaysShow: true,
+                    result: {
+                        item: {
+                            id: 'empty-state-header',
+                            name: 'Recent History Header',
+                            type: SearchItemType.TEXT,
+                            filePath: '',
+                            detail: '',
+                        },
+                        score: 0,
+                        scope: SearchScope.COMMANDS,
+                    },
+                },
+                ...results.map((r) => this.resultToQuickPickItem(r)),
+            ];
 
             // Add remove button to history items
             const removeButton = {
@@ -589,10 +607,12 @@ export class SearchProvider {
             };
 
             for (const item of items) {
-                item.buttons = [...(item.buttons || []), removeButton];
+                if (item.kind !== vscode.QuickPickItemKind.Separator) {
+                    item.buttons = [...(item.buttons || []), removeButton];
 
-                // Palette: Add visual indicator to clarify these are history items
-                item.description = item.description ? `$(history) Recent • ${item.description}` : `$(history) Recent`;
+                    // Palette: Add visual indicator to clarify these are history items
+                    item.description = item.description ? `$(history) Recent • ${item.description}` : `$(history) Recent`;
+                }
             }
 
             // Add Clear History item if we have tracking enabled
