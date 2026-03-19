@@ -1,249 +1,270 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-import { describe, expect, it } from 'bun:test';
-import { Config } from './config';
-import { IndexerEnvironment } from './indexer-interfaces';
-import { TreeSitterParser } from './tree-sitter-parser';
-import { SearchItemType } from './types';
-import { WorkspaceIndexer } from './workspace-indexer';
+import { describe, expect, it } from "bun:test";
+import { Config } from "./config";
+import { IndexerEnvironment } from "./indexer-interfaces";
+import { TreeSitterParser } from "./tree-sitter-parser";
+import { SearchItemType } from "./types";
+import { WorkspaceIndexer } from "./workspace-indexer";
 
 class TestWorkspaceIndexer extends WorkspaceIndexer {
-    public gitResults: Record<string, { stdout?: string; error?: any }> = {};
+  public gitResults: Record<string, { stdout?: string; error?: any }> = {};
 
-    protected async execGit(args: string[], cwd: string, input?: string): Promise<string> {
-        const fullCommand = args.join(' ');
-        for (const key in this.gitResults) {
-            if (fullCommand.includes(key)) {
-                const res = this.gitResults[key];
-                if (res.error) throw res.error;
-                return res.stdout || '';
-            }
-        }
-        throw new Error(`Unexpected git command: ${fullCommand}`);
+  protected async execGit(args: string[], cwd: string, input?: string): Promise<string> {
+    const fullCommand = args.join(" ");
+    for (const key in this.gitResults) {
+      if (fullCommand.includes(key)) {
+        const res = this.gitResults[key];
+        if (res.error) throw res.error;
+        return res.stdout || "";
+      }
     }
+    throw new Error(`Unexpected git command: ${fullCommand}`);
+  }
 
-    public async checkIsGitIgnored(filePath: string): Promise<boolean> {
-        // @ts-expect-error - testing protected method
-        return this.isGitIgnored(filePath);
-    }
+  public async checkIsGitIgnored(filePath: string): Promise<boolean> {
+    // @ts-expect-error - testing protected method
+    return this.isGitIgnored(filePath);
+  }
 
-    public checkShouldExcludeFile(filePath: string): boolean {
-        // @ts-expect-error - testing protected method
-        return this.shouldExcludeFile(filePath);
-    }
+  public checkShouldExcludeFile(filePath: string): boolean {
+    // @ts-expect-error - testing protected method
+    return this.shouldExcludeFile(filePath);
+  }
 
-    public triggerUpdateExcludeMatchers(): void {
-        // @ts-expect-error - testing protected method
-        this.updateExcludeMatchers();
-    }
+  public triggerUpdateExcludeMatchers(): void {
+    // @ts-expect-error - testing protected method
+    this.updateExcludeMatchers();
+  }
 
-    public getGitCheckTimer(): NodeJS.Timeout | null {
-        // @ts-expect-error - testing protected property
-        return this.gitCheckTimer;
-    }
+  public getGitCheckTimer(): NodeJS.Timeout | null {
+    // @ts-expect-error - testing protected property
+    return this.gitCheckTimer;
+  }
 
-    public getWatcherCooldownTimer(): NodeJS.Timeout | null {
-        // @ts-expect-error - testing protected property
-        return this.watcherCooldownTimer;
-    }
+  public getWatcherCooldownTimer(): NodeJS.Timeout | null {
+    // @ts-expect-error - testing protected property
+    return this.watcherCooldownTimer;
+  }
 
-    public setGitCheckTimer(timer: NodeJS.Timeout | null): void {
-        // @ts-expect-error - testing protected property
-        this.gitCheckTimer = timer;
-    }
+  public setGitCheckTimer(timer: NodeJS.Timeout | null): void {
+    // @ts-expect-error - testing protected property
+    this.gitCheckTimer = timer;
+  }
 
-    public setWatcherCooldownTimer(timer: NodeJS.Timeout | null): void {
-        // @ts-expect-error - testing protected property
-        this.watcherCooldownTimer = timer;
-    }
+  public setWatcherCooldownTimer(timer: NodeJS.Timeout | null): void {
+    // @ts-expect-error - testing protected property
+    this.watcherCooldownTimer = timer;
+  }
 
-    public testIntern(str: string): string {
-        // @ts-expect-error - testing protected method
-        return this.intern(str);
-    }
+  public testIntern(str: string): string {
+    // @ts-expect-error - testing protected method
+    return this.intern(str);
+  }
 
-    public getStringCacheSize(): number {
-        // @ts-expect-error - testing protected property
-        return this.stringCache.size;
-    }
+  public getStringCacheSize(): number {
+    // @ts-expect-error - testing protected property
+    return this.stringCache.size;
+  }
 }
 
-describe('WorkspaceIndexer', () => {
-    // Mock dependencies
-    const mockConfig = new Config();
-    const mockEnv: IndexerEnvironment = {
-        getWorkspaceFolders: () => ['/root'],
-        findFiles: async () => [],
-        asRelativePath: (p) => p.replace('/root/', ''),
-        log: () => {},
+describe("WorkspaceIndexer", () => {
+  // Mock dependencies
+  const mockConfig = new Config();
+  const mockEnv: IndexerEnvironment = {
+    getWorkspaceFolders: () => ["/root"],
+    findFiles: async () => [],
+    asRelativePath: (p) => p.replace("/root/", ""),
+    log: () => {},
+  };
+
+  // We can cast mock to any because we won't strictly use all methods
+  const mockTreeSitter = {} as unknown as TreeSitterParser;
+
+  it("should return true if git check-ignore succeeds (exit code 0)", async () => {
+    const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+    // Mock git behavior: success = ignored
+    // Format: source \0 line \0 pattern \0 path \0
+    // We simulate that 'check-ignore' was called and returned this output
+    indexer.gitResults["check-ignore"] = {
+      stdout: ".gitignore\0" + "1\0*\0/root/ignored.txt\0",
     };
 
-    // We can cast mock to any because we won't strictly use all methods
-    const mockTreeSitter = {} as unknown as TreeSitterParser;
+    const result = await indexer.checkIsGitIgnored("/root/ignored.txt");
+    expect(result).toBe(true);
+  });
 
-    it('should return true if git check-ignore succeeds (exit code 0)', async () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+  it("should return false if git check-ignore fails (exit code 1)", async () => {
+    const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
-        // Mock git behavior: success = ignored
-        // Format: source \0 line \0 pattern \0 path \0
-        // We simulate that 'check-ignore' was called and returned this output
-        indexer.gitResults['check-ignore'] = {
-            stdout: '.gitignore\0' + '1\0*\0/root/ignored.txt\0',
-        };
+    // Mock git behavior: failure with code 1 = none ignored
+    // This triggers the catch block which resolves false
+    indexer.gitResults["check-ignore"] = { error: { code: 1 } };
 
-        const result = await indexer.checkIsGitIgnored('/root/ignored.txt');
-        expect(result).toBe(true);
+    const result = await indexer.checkIsGitIgnored("/root/tracked.txt");
+    expect(result).toBe(false);
+  });
+
+  it("should return false if not in a workspace folder", async () => {
+    const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+    const result = await indexer.checkIsGitIgnored("/outside/file.txt");
+    expect(result).toBe(false);
+  });
+
+  it("should return false if config disables gitignore", async () => {
+    const customConfig = new Config();
+    customConfig.update({ respectGitignore: false });
+
+    const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+
+    // Even if git would say ignored...
+    indexer.gitResults["check-ignore"] = { stdout: "ignored" };
+
+    const result = await indexer.checkIsGitIgnored("/root/file.txt");
+    expect(result).toBe(false);
+  });
+
+  it("should exclude files based on default exclude patterns", () => {
+    const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+    expect(indexer.checkShouldExcludeFile("/root/node_modules/package.json")).toBe(true);
+    expect(indexer.checkShouldExcludeFile("/root/dist/bundle.js")).toBe(true);
+    expect(indexer.checkShouldExcludeFile("/root/src/index.ts")).toBe(false);
+  });
+
+  it("should update exclude patterns when config changes", () => {
+    const customConfig = new Config();
+    const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+
+    expect(indexer.checkShouldExcludeFile("/root/temp/temp.js")).toBe(false);
+
+    customConfig.update({ excludePatterns: ["**/temp/**"] });
+
+    indexer.triggerUpdateExcludeMatchers();
+
+    expect(indexer.checkShouldExcludeFile("/root/temp/temp.js")).toBe(true);
+  });
+
+  describe("file event updates", () => {
+    it("should include relativeFilePath when creating a file item", async () => {
+      const customConfig = new Config();
+      customConfig.update({ respectGitignore: false });
+      const indexer = new TestWorkspaceIndexer(
+        customConfig,
+        mockTreeSitter,
+        mockEnv,
+        process.cwd(),
+      );
+      const addedItems: any[] = [];
+
+      indexer.onItemsAdded((items) => addedItems.push(...items));
+
+      await indexer.processFileEvent("/root/src/new-file.ts", "create");
+
+      const fileItem = addedItems.find(
+        (item) => item.type === SearchItemType.FILE && item.filePath === "/root/src/new-file.ts",
+      );
+      expect(fileItem).toBeDefined();
+      expect(fileItem.relativeFilePath).toBe("src/new-file.ts");
     });
 
-    it('should return false if git check-ignore fails (exit code 1)', async () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+    it("should include relativeFilePath when changing a file item", async () => {
+      const customConfig = new Config();
+      customConfig.update({ respectGitignore: false });
+      const indexer = new TestWorkspaceIndexer(
+        customConfig,
+        mockTreeSitter,
+        mockEnv,
+        process.cwd(),
+      );
+      const addedItems: any[] = [];
 
-        // Mock git behavior: failure with code 1 = none ignored
-        // This triggers the catch block which resolves false
-        indexer.gitResults['check-ignore'] = { error: { code: 1 } };
+      indexer.onItemsAdded((items) => addedItems.push(...items));
 
-        const result = await indexer.checkIsGitIgnored('/root/tracked.txt');
-        expect(result).toBe(false);
+      await indexer.processFileEvent("/root/src/updated-file.ts", "change");
+
+      const fileItem = addedItems.find(
+        (item) =>
+          item.type === SearchItemType.FILE && item.filePath === "/root/src/updated-file.ts",
+      );
+      expect(fileItem).toBeDefined();
+      expect(fileItem.relativeFilePath).toBe("src/updated-file.ts");
     });
 
-    it('should return false if not in a workspace folder', async () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+    it("should skip likely generated C# files when creating", async () => {
+      const customConfig = new Config();
+      customConfig.update({ respectGitignore: false });
+      const indexer = new TestWorkspaceIndexer(
+        customConfig,
+        mockTreeSitter,
+        mockEnv,
+        process.cwd(),
+      );
+      const addedItems: any[] = [];
 
-        const result = await indexer.checkIsGitIgnored('/outside/file.txt');
-        expect(result).toBe(false);
+      indexer.onItemsAdded((items) => addedItems.push(...items));
+
+      await indexer.processFileEvent("/root/obj/Debug/net8.0/SomeFile.g.cs", "create");
+
+      expect(addedItems).toHaveLength(0);
     });
 
-    it('should return false if config disables gitignore', async () => {
-        const customConfig = new Config();
-        customConfig.update({ respectGitignore: false });
+    it("should skip likely generated C# files when changing", async () => {
+      const customConfig = new Config();
+      customConfig.update({ respectGitignore: false });
+      const indexer = new TestWorkspaceIndexer(
+        customConfig,
+        mockTreeSitter,
+        mockEnv,
+        process.cwd(),
+      );
+      const addedItems: any[] = [];
 
-        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+      indexer.onItemsAdded((items) => addedItems.push(...items));
 
-        // Even if git would say ignored...
-        indexer.gitResults['check-ignore'] = { stdout: 'ignored' };
+      await indexer.processFileEvent("/root/generated/SomeFile.Designer.cs", "change");
 
-        const result = await indexer.checkIsGitIgnored('/root/file.txt');
-        expect(result).toBe(false);
+      expect(addedItems).toHaveLength(0);
+    });
+  });
+  describe("dispose", () => {
+    it("should clear timers on dispose", () => {
+      const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+      indexer.setGitCheckTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
+      indexer.setWatcherCooldownTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
+
+      expect(indexer.getGitCheckTimer()).not.toBeNull();
+      expect(indexer.getWatcherCooldownTimer()).not.toBeNull();
+
+      indexer.dispose();
+
+      expect(indexer.getGitCheckTimer()).toBeNull();
+      expect(indexer.getWatcherCooldownTimer()).toBeNull();
+    });
+  });
+
+  describe("stringCache", () => {
+    it("should cache strings and return same reference", () => {
+      const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+      const str1 = indexer.testIntern("/path/to/file.ts");
+      const str2 = indexer.testIntern("/path/to/file.ts");
+
+      expect(str1).toBe(str2);
     });
 
-    it('should exclude files based on default exclude patterns', () => {
-        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+    it("should evict oldest entry when cache exceeds max size", () => {
+      const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
-        expect(indexer.checkShouldExcludeFile('/root/node_modules/package.json')).toBe(true);
-        expect(indexer.checkShouldExcludeFile('/root/dist/bundle.js')).toBe(true);
-        expect(indexer.checkShouldExcludeFile('/root/src/index.ts')).toBe(false);
+      const maxSize = 10000;
+      for (let i = 0; i < maxSize + 100; i++) {
+        indexer.testIntern(`/unique/path/${i}.ts`);
+      }
+
+      expect(indexer.getStringCacheSize()).toBeLessThanOrEqual(maxSize);
     });
-
-    it('should update exclude patterns when config changes', () => {
-        const customConfig = new Config();
-        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-
-        expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(false);
-
-        customConfig.update({ excludePatterns: ['**/temp/**'] });
-
-        indexer.triggerUpdateExcludeMatchers();
-
-        expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(true);
-    });
-
-    describe('file event updates', () => {
-        it('should include relativeFilePath when creating a file item', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/src/new-file.ts', 'create');
-
-            const fileItem = addedItems.find(
-                (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/new-file.ts',
-            );
-            expect(fileItem).toBeDefined();
-            expect(fileItem.relativeFilePath).toBe('src/new-file.ts');
-        });
-
-        it('should include relativeFilePath when changing a file item', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/src/updated-file.ts', 'change');
-
-            const fileItem = addedItems.find(
-                (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/updated-file.ts',
-            );
-            expect(fileItem).toBeDefined();
-            expect(fileItem.relativeFilePath).toBe('src/updated-file.ts');
-        });
-
-        it('should skip likely generated C# files when creating', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/obj/Debug/net8.0/SomeFile.g.cs', 'create');
-
-            expect(addedItems).toHaveLength(0);
-        });
-
-        it('should skip likely generated C# files when changing', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/generated/SomeFile.Designer.cs', 'change');
-
-            expect(addedItems).toHaveLength(0);
-        });
-    });
-    describe('dispose', () => {
-        it('should clear timers on dispose', () => {
-            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
-
-            indexer.setGitCheckTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
-            indexer.setWatcherCooldownTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
-
-            expect(indexer.getGitCheckTimer()).not.toBeNull();
-            expect(indexer.getWatcherCooldownTimer()).not.toBeNull();
-
-            indexer.dispose();
-
-            expect(indexer.getGitCheckTimer()).toBeNull();
-            expect(indexer.getWatcherCooldownTimer()).toBeNull();
-        });
-    });
-
-    describe('stringCache', () => {
-        it('should cache strings and return same reference', () => {
-            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
-
-            const str1 = indexer.testIntern('/path/to/file.ts');
-            const str2 = indexer.testIntern('/path/to/file.ts');
-
-            expect(str1).toBe(str2);
-        });
-
-        it('should evict oldest entry when cache exceeds max size', () => {
-            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
-
-            const maxSize = 10000;
-            for (let i = 0; i < maxSize + 100; i++) {
-                indexer.testIntern(`/unique/path/${i}.ts`);
-            }
-
-            expect(indexer.getStringCacheSize()).toBeLessThanOrEqual(maxSize);
-        });
-    });
+  });
 });
