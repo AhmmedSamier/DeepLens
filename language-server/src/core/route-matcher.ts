@@ -275,10 +275,10 @@ export class RouteMatcher {
 
             // ⚡ Bolt: Fast boolean array creation
             // Replaces .map() with a pre-allocated array and manual loop, which is ~15-20% faster.
-            const len = templateSegments.length;
+            const segmentCount = templateSegments.length;
             // eslint-disable-next-line sonarjs/array-constructor
-            const isParameter = new Array<boolean>(len);
-            for (let i = 0; i < len; i++) {
+            const isParameter = new Array<boolean>(segmentCount);
+            for (let i = 0; i < segmentCount; i++) {
                 const s = templateSegments[i];
                 isParameter[i] = s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125; // 123 is '{', 125 is '}'
             }
