@@ -21,7 +21,7 @@ interface ModifiedFileEngine {
 }
 
 export async function runModifiedFilesBenchmark(): Promise<void> {
-    console.log("=== Modified Files Search Benchmark ===");
+    console.log('=== Modified Files Search Benchmark ===');
 
     const engine = new SearchEngine();
     const itemCount = 50000;
@@ -37,7 +37,7 @@ export async function runModifiedFilesBenchmark(): Promise<void> {
             type: SearchItemType.FILE,
             filePath: `/project/src/components/File${i}Component.ts`,
             relativeFilePath: `src/components/File${i}Component.ts`,
-            fullName: `File${i}Component.ts`
+            fullName: `File${i}Component.ts`,
         });
     }
 
@@ -68,9 +68,13 @@ export async function runModifiedFilesBenchmark(): Promise<void> {
     //
     // To be precise, let's measure getIndicesForModifiedFiles directly via cast.
 
-    await benchmark("getIndicesForModifiedFiles (50k items, 100 modified)", async () => {
-        await modifiedFileEngine.getIndicesForModifiedFiles();
-    }, 100);
+    await benchmark(
+        'getIndicesForModifiedFiles (50k items, 100 modified)',
+        async () => {
+            await modifiedFileEngine.getIndicesForModifiedFiles();
+        },
+        100,
+    );
 
-    console.log("\n");
+    console.log('\n');
 }

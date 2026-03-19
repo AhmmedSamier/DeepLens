@@ -136,11 +136,13 @@ export class CommandIndexer {
                 let addSpace = false;
                 if (i > startIdx) {
                     const prevCode = commandId.charCodeAt(i - 1);
-                    if (prevCode >= 97 && prevCode <= 122) { // a-z
+                    if (prevCode >= 97 && prevCode <= 122) {
+                        // a-z
                         addSpace = true;
                     } else if (i < len - 1) {
                         const nextCode = commandId.charCodeAt(i + 1);
-                        if (nextCode >= 97 && nextCode <= 122) { // a-z
+                        if (nextCode >= 97 && nextCode <= 122) {
+                            // a-z
                             addSpace = true;
                         }
                     }

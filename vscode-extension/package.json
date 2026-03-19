@@ -158,7 +158,7 @@
         "compile": "bun run clean && bun run esbuild && cd ../language-server && bun run build && cd ../vscode-extension && bun run scripts/copy-artifacts.ts",
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
-        "format": "prettier --write \"src/**/*.ts\" --cache",
+        "format": "oxfmt --write --config .oxfmtrc.json -- \"src/**/*.ts\"",
         "package": "vsce package && bun run scripts/fix-vsix-permissions.ts",
         "vsix": "bun run compile && bun run package",
         "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
@@ -184,8 +184,6 @@
         "glob": "^13.0.0",
         "globals": "^17.0.0",
         "mocha": "^11.7.5",
-        "prettier": "^3.7.4",
-        "prettier-plugin-organize-imports": "^4.3.0",
         "typescript": "^5.9.3",
         "nyc": "^15.1.0"
     },

@@ -1,60 +1,60 @@
 name: Visual Studio Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+    push:
+        tags:
+            - 'v*'
 
 jobs:
-  build-and-publish:
-    runs-on: windows-latest
-    permissions:
-      contents: write
-    
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+    build-and-publish:
+        runs-on: windows-latest
+        permissions:
+            contents: write
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '8.0.x'
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
 
-    - name: Setup Bun
-      uses: oven-sh/setup-bun@v1
-      with:
-        bun-version: latest
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  dotnet-version: '8.0.x'
 
-    - name: Add MSBuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.2
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v1
+              with:
+                  bun-version: latest
 
-    - name: Restore NuGet packages
-      run: nuget restore visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj -SolutionDirectory visual-studio-extension/DeepLensVisualStudio
+            - name: Add MSBuild to PATH
+              uses: microsoft/setup-msbuild@v1.0.2
 
-    - name: Update VSIX Version
-      shell: pwsh
-      run: |
-        $version = "${{ github.ref_name }}".TrimStart('v')
-        $manifestPath = "visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest"
-        [xml]$manifest = Get-Content $manifestPath
-        $manifest.PackageManifest.Metadata.Identity.Version = $version
-        $manifest.Save($manifestPath)
-        Write-Host "Updated VSIX version to $version"
+            - name: Restore NuGet packages
+              run: nuget restore visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj -SolutionDirectory visual-studio-extension/DeepLensVisualStudio
 
-    - name: Build Extension
-      run: msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj /p:Configuration=Release /p:DeployExtension=false
+            - name: Update VSIX Version
+              shell: pwsh
+              run: |
+                  $version = "${{ github.ref_name }}".TrimStart('v')
+                  $manifestPath = "visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/source.extension.vsixmanifest"
+                  [xml]$manifest = Get-Content $manifestPath
+                  $manifest.PackageManifest.Metadata.Identity.Version = $version
+                  $manifest.Save($manifestPath)
+                  Write-Host "Updated VSIX version to $version"
 
-    - name: Create GitHub Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Build Extension
+              run: msbuild visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/DeepLensVisualStudio.csproj /p:Configuration=Release /p:DeployExtension=false
 
-    # Publish to Visual Studio Marketplace
-    - name: Publish to Visual Studio Marketplace
-      uses: cezarypiatek/VsixPublisherAction@1.1
-      with:
-        extension-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
-        publish-manifest-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
-        personal-access-code: ${{ secrets.VSCE_PAT }}
+            - name: Create GitHub Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+            # Publish to Visual Studio Marketplace
+            - name: Publish to Visual Studio Marketplace
+              uses: cezarypiatek/VsixPublisherAction@1.1
+              with:
+                  extension-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/bin/Release/net472/DeepLensVisualStudio.vsix
+                  publish-manifest-file: visual-studio-extension/DeepLensVisualStudio/DeepLensVisualStudio/publishManifest.json
+                  personal-access-code: ${{ secrets.VSCE_PAT }}

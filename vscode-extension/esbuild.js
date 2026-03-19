@@ -62,7 +62,7 @@ function copyWasmFiles() {
 
             // Search only within specific subdirectories to avoid scanning the entire package
             // or use specific known paths where possible
-            files.forEach(file => {
+            files.forEach((file) => {
                 // Try direct path first (common case)
                 let srcPath = path.join(pkgRoot, file);
 
@@ -81,7 +81,6 @@ function copyWasmFiles() {
                     console.warn(`Could not find ${file} in ${pkg}`);
                 }
             });
-
         } catch (e) {
             console.warn(`Could not resolve ${pkg}:`, e.message);
         }
@@ -93,7 +92,7 @@ async function main() {
 
     const ctx = await esbuild.context({
         entryPoints: {
-            extension: 'src/extension.ts'
+            extension: 'src/extension.ts',
         },
         bundle: true,
         format: 'cjs',

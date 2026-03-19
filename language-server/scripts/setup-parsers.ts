@@ -23,7 +23,7 @@ async function copyWasmFiles() {
         fs.copyFileSync(webTreeSitterWasm, path.join(parsersDir, 'web-tree-sitter.wasm'));
         console.log(`Copied web-tree-sitter.wasm`);
     } catch (e) {
-        console.error("Failed to copy web-tree-sitter.wasm", e);
+        console.error('Failed to copy web-tree-sitter.wasm', e);
     }
 
     // 2. Find and copy language parsers
@@ -67,7 +67,6 @@ async function copyWasmFiles() {
                     console.warn(`Could not find ${file} in ${pkg}`);
                 }
             }
-
         } catch (e) {
             console.warn(`Could not resolve ${pkg}:`, e);
         }

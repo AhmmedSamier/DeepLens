@@ -3,27 +3,14 @@
         "module": "nodenext",
         "target": "ES2021",
         "outDir": "dist",
-        "lib": [
-            "ES2021"
-        ],
+        "lib": ["ES2021"],
         "sourceMap": true,
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,
         "skipLibCheck": true,
         "esModuleInterop": true,
-        "types": [
-            "node"
-        ]
+        "types": ["node"]
     },
-    "include": [
-        "src/**/*",
-        "scripts/**/*",
-        "tests/**/*",
-        "benchmarks/**/*"
-    ],
-    "exclude": [
-        "node_modules",
-        "dist",
-        "coverage"
-    ]
+    "include": ["src/**/*", "scripts/**/*", "tests/**/*", "benchmarks/**/*"],
+    "exclude": ["node_modules", "dist", "coverage"]
 }

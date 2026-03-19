@@ -459,7 +459,10 @@ export class TreeSitterParser {
         }
 
         if (parent?.type.toLowerCase().includes('class_declaration')) {
-            const results: { method: string | null; route: string | null } = { method: null, route: null };
+            const results: { method: string | null; route: string | null } = {
+                method: null,
+                route: null,
+            };
             this.findAttributeListsRecursive(parent, results, true);
             return results.route;
         }

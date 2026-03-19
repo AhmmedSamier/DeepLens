@@ -50,14 +50,17 @@ export async function runGitProviderBenchmarks() {
 
         // Run benchmark
         // We do more iterations to smooth out process spawn overhead
-        const result = await benchmark('GitProvider.getModifiedFiles', async () => {
-            const files = await provider.getModifiedFiles();
-            // Optional: verify we got results
-            if (files.size === 0) {
-                 console.warn('Warning: No modified files detected in benchmark!');
-            }
-        }, 20);
-
+        const result = await benchmark(
+            'GitProvider.getModifiedFiles',
+            async () => {
+                const files = await provider.getModifiedFiles();
+                // Optional: verify we got results
+                if (files.size === 0) {
+                    console.warn('Warning: No modified files detected in benchmark!');
+                }
+            },
+            20,
+        );
     } catch (e) {
         console.error('Benchmark failed:', e);
     } finally {

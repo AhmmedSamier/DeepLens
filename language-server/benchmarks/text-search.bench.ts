@@ -6,7 +6,7 @@ import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/ty
 import { benchmark } from './utils';
 
 export async function runTextSearchBenchmarks() {
-    console.log("=== Text Search Benchmarks ===");
+    console.log('=== Text Search Benchmarks ===');
 
     const engine = new SearchEngine();
 
@@ -15,7 +15,7 @@ export async function runTextSearchBenchmarks() {
         isTextSearchEnabled: () => true,
         getSearchConcurrency: () => 60,
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        isRespectGitignoreEnabled: () => false
+        isRespectGitignoreEnabled: () => false,
     } as unknown as Config;
 
     engine.setConfig(config);
@@ -28,9 +28,8 @@ export async function runTextSearchBenchmarks() {
     const fileCount = 100;
     const items: SearchableItem[] = [];
 
-
     // Create files
-    for(let i=0; i<fileCount; i++) {
+    for (let i = 0; i < fileCount; i++) {
         const filePath = path.join(tempDir, `file_${i}.txt`);
         const content = `This is file number ${i}.\nIt contains some random text.\nHere is the magic keyword: UNICORN.\nMore text here.`;
         fs.writeFileSync(filePath, content);
@@ -41,24 +40,27 @@ export async function runTextSearchBenchmarks() {
             type: SearchItemType.FILE,
             filePath: filePath,
             relativeFilePath: `temp_text_search/file_${i}.txt`,
-            fullName: `file_${i}.txt`
+            fullName: `file_${i}.txt`,
         });
     }
 
     await engine.setItems(items);
 
-
     try {
-        await benchmark("Text Search 100 files", async () => {
-            await engine.search({ query: "UNICORN", scope: SearchScope.TEXT });
-        }, 10);
+        await benchmark(
+            'Text Search 100 files',
+            async () => {
+                await engine.search({ query: 'UNICORN', scope: SearchScope.TEXT });
+            },
+            10,
+        );
     } finally {
         // Cleanup
-        for(let i=0; i<fileCount; i++) {
+        for (let i = 0; i < fileCount; i++) {
             fs.unlinkSync(path.join(tempDir, `file_${i}.txt`));
         }
         fs.rmdirSync(tempDir);
     }
 
-    console.log("\n");
+    console.log('\n');
 }

@@ -438,7 +438,11 @@ describe('SearchEngine scopes and providers', () => {
         engine.registerProvider(createDelayedProvider('p2', fileItem));
 
         const start = Date.now();
-        const results = await engine.search({ query: 'File', scope: SearchScope.EVERYTHING, maxResults: 10 });
+        const results = await engine.search({
+            query: 'File',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 10,
+        });
         const durationMs = Date.now() - start;
 
         expect(results.length).toBeGreaterThanOrEqual(2);

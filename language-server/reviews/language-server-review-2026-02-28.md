@@ -3,21 +3,21 @@
 ## Findings
 
 1. **Lint gate is currently failing in core files**
-   - `RouteMatcher.isPotentialUrl` exceeds configured cognitive complexity threshold.
-   - `WorkspaceIndexer.getGitExitCode` uses `String.match(...)` where lint prefers `RegExp.exec(...)`.
+    - `RouteMatcher.isPotentialUrl` exceeds configured cognitive complexity threshold.
+    - `WorkspaceIndexer.getGitExitCode` uses `String.match(...)` where lint prefers `RegExp.exec(...)`.
 
 2. **Benchmark runs are noisy and partially skewed by git errors**
-   - Several indexing benchmarks run in temporary folders that are not git repositories.
-   - The indexer still runs git commands (`ls-files`, `check-ignore`) and logs failures.
-   - This introduces avoidable stderr noise and can add overhead to measurements.
+    - Several indexing benchmarks run in temporary folders that are not git repositories.
+    - The indexer still runs git commands (`ls-files`, `check-ignore`) and logs failures.
+    - This introduces avoidable stderr noise and can add overhead to measurements.
 
 3. **Benchmark harness reports only avg/total and lacks variance metrics**
-   - Current benchmark utility stores only `avgMs` and `totalMs`.
-   - Missing p95/stddev/min/max makes regressions harder to detect when variance is high.
+    - Current benchmark utility stores only `avgMs` and `totalMs`.
+    - Missing p95/stddev/min/max makes regressions harder to detect when variance is high.
 
 4. **Benchmark code has type-safety debt (`any`)**
-   - Benchmark datasets and config mocks rely on `any` in multiple benchmark files.
-   - This can hide schema drift against language-server model types.
+    - Benchmark datasets and config mocks rely on `any` in multiple benchmark files.
+    - This can hide schema drift against language-server model types.
 
 ## Quick benchmark snapshot (local run)
 

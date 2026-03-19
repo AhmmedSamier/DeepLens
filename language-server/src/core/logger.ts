@@ -66,7 +66,9 @@ class FileLogger implements LogOutput {
  */
 class ConnectionLogger implements LogOutput {
     constructor(
-        private readonly connection: { console: { log: (msg: string) => void; error: (msg: string) => void } },
+        private readonly connection: {
+            console: { log: (msg: string) => void; error: (msg: string) => void };
+        },
     ) {}
 
     write(level: LogLevel, message: string): void {
