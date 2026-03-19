@@ -196,6 +196,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 {
                     _searchQuery = value;
                     OnPropertyChanged();
+                    OnPropertyChanged(nameof(ShowEmptyState));
                     _ = PerformSearchAsync();
                 }
             }
@@ -208,6 +209,7 @@ namespace DeepLensVisualStudio.ToolWindows
             {
                 _statusText = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(ShowEmptyState));
             }
         }
 
@@ -251,6 +253,8 @@ namespace DeepLensVisualStudio.ToolWindows
         }
 
         public string ResultCountText => Results.Count > 0 ? $"{Results.Count} results" : "";
+
+        public bool ShowEmptyState => Results.Count == 0 && !string.IsNullOrWhiteSpace(SearchQuery) && StatusText != "Searching...";
 
         public bool FilterAll
         {
@@ -741,6 +745,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 OnPropertyChanged(nameof(ResultCountText));
+                OnPropertyChanged(nameof(ShowEmptyState));
                 return;
             }
 
@@ -749,6 +754,7 @@ namespace DeepLensVisualStudio.ToolWindows
             // Clear results immediately so user knows search is in progress
             Results.Clear();
             OnPropertyChanged(nameof(ResultCountText));
+            OnPropertyChanged(nameof(ShowEmptyState));
 
             try
             {
@@ -796,6 +802,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 OnPropertyChanged(nameof(ResultCountText));
+                OnPropertyChanged(nameof(ShowEmptyState));
 
                 // Show any errors from the service
                 if (Results.Count == 0 && !string.IsNullOrEmpty(_sharedSearchService.LastError))

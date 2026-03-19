@@ -10,7 +10,7 @@
         "benchmark": "bun run scripts/setup-parsers.ts && bun run benchmarks/index.ts",
         "benchmark:memory": "bun run scripts/memory-benchmark.ts",
         "lint": "eslint src --cache",
-        "format": "prettier --write \"src/**/*.ts\" --cache"
+        "format": "oxfmt --write --config .oxfmtrc.json -- \"src/**/*.ts\""
     },
     "dependencies": {
         "@vscode/ripgrep": "^1.17.0",
@@ -42,8 +42,6 @@
         "eslint": "^9.39.2",
         "eslint-plugin-sonarjs": "3.0.5",
         "globals": "^17.0.0",
-        "prettier": "^3.7.4",
-        "prettier-plugin-organize-imports": "^4.3.0",
         "typescript": "^5.9.3"
     }
 }

@@ -8,7 +8,6 @@ import { TreeSitterParser } from '../src/core/tree-sitter-parser';
 import { IndexerEnvironment } from '../src/core/indexer-interfaces';
 import { benchmark } from './utils';
 
-
 function initializeGitRepo(directory: string): void {
     try {
         execSync('git init', { cwd: directory, stdio: 'ignore' });
@@ -22,7 +21,7 @@ function initializeGitRepo(directory: string): void {
 }
 
 export async function runIndexingDensityBenchmarks() {
-    console.log("=== Indexing Density Benchmarks ===");
+    console.log('=== Indexing Density Benchmarks ===');
 
     const extensionPath = path.resolve(__dirname, '..');
     const parser = new TreeSitterParser(extensionPath);
@@ -49,12 +48,12 @@ export async function runIndexingDensityBenchmarks() {
 
     const env1: IndexerEnvironment = {
         getWorkspaceFolders: () => [tempDir1],
-        findFiles: async () => fs.readdirSync(tempDir1).map(f => path.join(tempDir1, f)),
+        findFiles: async () => fs.readdirSync(tempDir1).map((f) => path.join(tempDir1, f)),
         log: () => {},
         asRelativePath: (p) => path.relative(tempDir1, p),
         createFileSystemWatcher: () => ({ dispose: () => {} }),
         executeWorkspaceSymbolProvider: async () => [],
-        executeDocumentSymbolProvider: async () => []
+        executeDocumentSymbolProvider: async () => [],
     };
     const indexer1 = new WorkspaceIndexer(config, parser, env1, extensionPath);
 
@@ -71,23 +70,31 @@ export async function runIndexingDensityBenchmarks() {
 
     const env2: IndexerEnvironment = {
         getWorkspaceFolders: () => [tempDir2],
-        findFiles: async () => fs.readdirSync(tempDir2).map(f => path.join(tempDir2, f)),
+        findFiles: async () => fs.readdirSync(tempDir2).map((f) => path.join(tempDir2, f)),
         log: () => {},
         asRelativePath: (p) => path.relative(tempDir2, p),
         createFileSystemWatcher: () => ({ dispose: () => {} }),
         executeWorkspaceSymbolProvider: async () => [],
-        executeDocumentSymbolProvider: async () => []
+        executeDocumentSymbolProvider: async () => [],
     };
     const indexer2 = new WorkspaceIndexer(config, parser, env2, extensionPath);
 
     try {
-        await benchmark(`Many Small Files (2000 files, 1 symbol each)`, async () => {
-            await indexer1.indexWorkspace();
-        }, 3);
+        await benchmark(
+            `Many Small Files (2000 files, 1 symbol each)`,
+            async () => {
+                await indexer1.indexWorkspace();
+            },
+            3,
+        );
 
-        await benchmark(`Few Large Files (20 files, 100 symbols each)`, async () => {
-            await indexer2.indexWorkspace();
-        }, 3);
+        await benchmark(
+            `Few Large Files (20 files, 100 symbols each)`,
+            async () => {
+                await indexer2.indexWorkspace();
+            },
+            3,
+        );
     } finally {
         indexer1.dispose();
         indexer2.dispose();
@@ -95,7 +102,7 @@ export async function runIndexingDensityBenchmarks() {
         fs.rmSync(tempDir2, { recursive: true, force: true });
     }
 
-    console.log("\n");
+    console.log('\n');
 }
 
 if (require.main === module) {

@@ -9,7 +9,9 @@ DeepLens brings the ultimate "Search Everywhere" experience to Visual Studio. Po
 ## 🌟 Key Features
 
 ### 🔍 **Search Everywhere**
+
 The definitive navigation tool for Visual Studio. Access everything in your solution from a single, responsive interface.
+
 - **Classes & Types**: Find classes, interfaces, and enums instantly.
 - **Methods & Symbols**: Search for functions, methods, and variables.
 - **Files**: Locate any file by name or relative path.
@@ -17,28 +19,32 @@ The definitive navigation tool for Visual Studio. Access everything in your solu
 - **Text Search**: Full-text search integrated directly into the search experience.
 
 ### 🍱 **Integrated Tool Window**
+
 DeepLens is now a first-class citizen in Visual Studio, living in its own Tool Window.
+
 - **No Focus Issues**: Seamlessly integrates with the IDE without stealing focus from the editor.
 - **Dockable**: Pin it, dock it, or keep it floating—it's part of your layout.
 - **Theme Aware**: Automatically matches Visual Studio's Light, Dark, and Blue themes.
 
 ### ⚡ **Smart Matching Engine**
+
 - **Fuzzy Search**: Type partial matches like `usebas` to find `useCallback`.
 - **High Performance**: Designed to handle massive solutions with tens of thousands of files in milliseconds.
 
 ### 🎯 **Premium UI/UX**
+
 - **Integrated Filters**: Quickly toggle search scopes (Types, Symbols, Files, Endpoints, Text) via dedicated buttons.
 - **Context Actions**: Right-click or use icons to "Reveal in File Explorer" or "Copy Path" directly from results.
 - **Live Preview**: Single-click navigation that opens and centers the result in the editor instantly.
 
 ## ⌨️ Keyboard Shortcuts
 
-| Shortcut | Action |
-|----------|--------|
+| Shortcut                       | Action                                                   |
+| ------------------------------ | -------------------------------------------------------- |
 | `Shift` `Shift` (Double Press) | **Global Search**: Open/Focus DeepLens Search Everywhere |
-| `Arrow Keys` | Navigate through search results |
-| `Enter` | Open selected result in editor |
-| `Escape` | Return focus to the editor |
+| `Arrow Keys`                   | Navigate through search results                          |
+| `Enter`                        | Open selected result in editor                           |
+| `Escape`                       | Return focus to the editor                               |
 
 ## 🚀 Performance First
 

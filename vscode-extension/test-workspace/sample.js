@@ -1,3 +1,3 @@
 function helper() {
-    console.log("Helper function");
+    console.log('Helper function');
 }

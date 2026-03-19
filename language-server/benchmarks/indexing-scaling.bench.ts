@@ -9,11 +9,11 @@ import { IndexerEnvironment } from '../src/core/indexer-interfaces';
 import { benchmark } from './utils';
 
 export async function runIndexingScalingBenchmarks() {
-    console.log("=== Indexing Concurrency Scaling Benchmarks ===");
+    console.log('=== Indexing Concurrency Scaling Benchmarks ===');
 
     const extensionPath = path.resolve(__dirname, '..');
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'deeplens-scaling-bench-'));
-    
+
     // Align with the baseline indexing benchmark size.
     const FILE_COUNT = 5000;
     for (let i = 0; i < FILE_COUNT; i++) {
@@ -33,12 +33,12 @@ export async function runIndexingScalingBenchmarks() {
 
     const env: IndexerEnvironment = {
         getWorkspaceFolders: () => [tempDir],
-        findFiles: async () => fs.readdirSync(tempDir).map(f => path.join(tempDir, f)),
+        findFiles: async () => fs.readdirSync(tempDir).map((f) => path.join(tempDir, f)),
         log: () => {},
         asRelativePath: (p) => path.relative(tempDir, p),
         createFileSystemWatcher: () => ({ dispose: () => {} }),
         executeWorkspaceSymbolProvider: async () => [],
-        executeDocumentSymbolProvider: async () => []
+        executeDocumentSymbolProvider: async () => [],
     };
 
     const parser = new TreeSitterParser(extensionPath);
@@ -60,18 +60,22 @@ export async function runIndexingScalingBenchmarks() {
         });
 
         const indexer = new WorkspaceIndexer(config, parser, env, extensionPath);
-        
+
         try {
-            await benchmark(`Index ${FILE_COUNT} files (Concurrency: ${concurrency})`, async () => {
-                await indexer.indexWorkspace();
-            }, 2);
+            await benchmark(
+                `Index ${FILE_COUNT} files (Concurrency: ${concurrency})`,
+                async () => {
+                    await indexer.indexWorkspace();
+                },
+                2,
+            );
         } finally {
             indexer.dispose();
         }
     }
 
     fs.rmSync(tempDir, { recursive: true, force: true });
-    console.log("\n");
+    console.log('\n');
 }
 
 if (require.main === module) {

@@ -2405,5 +2405,6 @@ export function escapeRegExp(str: string): string {
 }
 
 export function escapeRegex(string: string): string {
-    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // ⚡ Bolt: Use existing optimized fast path instead of duplicated unoptimized logic
+    return escapeRegExp(string);
 }

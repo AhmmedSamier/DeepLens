@@ -3,7 +3,7 @@ import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/ty
 import { benchmark } from './utils';
 
 export async function runRouteMatcherBenchmarks() {
-    console.log("=== Route Matcher Benchmarks ===");
+    console.log('=== Route Matcher Benchmarks ===');
 
     const engine = new SearchEngine();
     const itemCount = 50000;
@@ -20,7 +20,7 @@ export async function runRouteMatcherBenchmarks() {
                 type: SearchItemType.ENDPOINT,
                 filePath: `/project/src/api/users.ts`,
                 relativeFilePath: `src/api/users.ts`,
-                fullName: `api/v1/users/${i}/details`
+                fullName: `api/v1/users/${i}/details`,
             });
         } else {
             items.push({
@@ -29,7 +29,7 @@ export async function runRouteMatcherBenchmarks() {
                 type: SearchItemType.FILE,
                 filePath: `/project/src/controllers/User${i}Controller.ts`,
                 relativeFilePath: `src/controllers/User${i}Controller.ts`,
-                fullName: `User${i}Controller.ts`
+                fullName: `User${i}Controller.ts`,
             });
         }
     }
@@ -39,14 +39,22 @@ export async function runRouteMatcherBenchmarks() {
     console.log(`Initialized engine with ${items.length} items.`);
 
     // Query that triggers URL matching (has slashes)
-    await benchmark("Route Match Search 'api/v1/users'", async () => {
-        await engine.search({ query: "api/v1/users", scope: SearchScope.EVERYTHING });
-    }, 100);
+    await benchmark(
+        "Route Match Search 'api/v1/users'",
+        async () => {
+            await engine.search({ query: 'api/v1/users', scope: SearchScope.EVERYTHING });
+        },
+        100,
+    );
 
     // Burst search version
-    await benchmark("Route Match Burst 'api/v1/users'", async () => {
-        engine.burstSearch({ query: "api/v1/users", scope: SearchScope.EVERYTHING });
-    }, 100);
+    await benchmark(
+        "Route Match Burst 'api/v1/users'",
+        async () => {
+            engine.burstSearch({ query: 'api/v1/users', scope: SearchScope.EVERYTHING });
+        },
+        100,
+    );
 
-    console.log("\n");
+    console.log('\n');
 }

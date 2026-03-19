@@ -1,13 +1,1 @@
-node_modules
-dist
-out
-build
-coverage
-.vscode-test
-*.vsix
-*.log
-.eslintcache
-.DS_Store
-Thumbs.db
-bin
-obj
+# This file is deprecated. Use .oxfmtignore instead.

@@ -1,0 +1,26 @@
+{
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "oxfmt",
+    "[typescript]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "[javascript]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "[typescriptreact]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "[javascriptreact]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "[json]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "[jsonc]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "[json5]": {
+        "editor.defaultFormatter": "oxfmt"
+    },
+    "files.associations": ["*.ts", "*.tsx", "*.js", "*.jsx", "*.json", "*.jsonc", "*.vue"]
+}

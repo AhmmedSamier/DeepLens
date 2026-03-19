@@ -43,9 +43,13 @@ export async function runActivityBenchmarks(): Promise<void> {
         });
     }
 
-    await benchmark(`recalculateAllScores (N=${itemCount})`, () => {
-        benchmarkTracker.recalculateAllScores();
-    }, 20);
+    await benchmark(
+        `recalculateAllScores (N=${itemCount})`,
+        () => {
+            benchmarkTracker.recalculateAllScores();
+        },
+        20,
+    );
 
     tracker.dispose();
 }

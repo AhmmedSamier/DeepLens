@@ -478,7 +478,10 @@ connection.onRequest(BurstSearchRequest, async (options, token) => {
             options,
             (result) => {
                 if (!isShuttingDown && !token?.isCancellationRequested) {
-                    connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+                    connection.sendNotification('deeplens/streamResult', {
+                        requestId: options.requestId,
+                        result,
+                    });
                 }
             },
             token,
@@ -510,7 +513,10 @@ connection.onRequest(DeepLensSearchRequest, async (options, token) => {
             options,
             (result) => {
                 if (!isShuttingDown && !token?.isCancellationRequested) {
-                    connection.sendNotification('deeplens/streamResult', { requestId: options.requestId, result });
+                    connection.sendNotification('deeplens/streamResult', {
+                        requestId: options.requestId,
+                        result,
+                    });
                 }
             },
             token,

@@ -4,7 +4,7 @@ import { TreeSitterParser } from '../src/core/tree-sitter-parser';
 import { benchmark } from './utils';
 
 export async function runLanguageBenchmarks() {
-    console.log("=== Language Parser Benchmarks ===");
+    console.log('=== Language Parser Benchmarks ===');
 
     const extensionPath = path.resolve(__dirname, '..');
     const parser = new TreeSitterParser(extensionPath);
@@ -15,11 +15,15 @@ export async function runLanguageBenchmarks() {
         { id: 'python', ext: 'py', content: 'class Test:\n    def method(self):\n        print("hi")' },
         { id: 'csharp', ext: 'cs', content: 'public class Test { public void Method() { Console.WriteLine("hi"); } }' },
         { id: 'go', ext: 'go', content: 'package main\nfunc main() { fmt.Println("hi") }' },
-        { id: 'java', ext: 'java', content: 'public class Test { public void method() { System.out.println("hi"); } }' },
+        {
+            id: 'java',
+            ext: 'java',
+            content: 'public class Test { public void method() { System.out.println("hi"); } }',
+        },
         { id: 'php', ext: 'php', content: '<?php class Test { public function method() { echo "hi"; } }' },
         { id: 'ruby', ext: 'rb', content: 'class Test\n  def method\n    puts "hi"\n  end\nend' },
         { id: 'cpp', ext: 'cpp', content: 'class Test { public: void method() { std::cout << "hi"; } };' },
-        { id: 'c', ext: 'c', content: 'void method() { printf("hi"); }' }
+        { id: 'c', ext: 'c', content: 'void method() { printf("hi"); }' },
     ];
 
     for (const lang of languages) {
@@ -27,14 +31,18 @@ export async function runLanguageBenchmarks() {
         // Create a larger version of the content
         let largeContent = '';
         for (let i = 0; i < 100; i++) {
-            largeContent += lang.content.replace(/Test/g, `Test${i}`).replace(/method/g, `method${i}`) + "\n";
+            largeContent += lang.content.replace(/Test/g, `Test${i}`).replace(/method/g, `method${i}`) + '\n';
         }
         fs.writeFileSync(tempFile, largeContent);
 
         try {
-            await benchmark(`Parse ${lang.id} (100 classes/methods)`, async () => {
-                await parser.parseFile(tempFile);
-            }, 20);
+            await benchmark(
+                `Parse ${lang.id} (100 classes/methods)`,
+                async () => {
+                    await parser.parseFile(tempFile);
+                },
+                20,
+            );
         } catch (e) {
             console.error(`Failed to benchmark ${lang.id}:`, e);
         } finally {
@@ -42,7 +50,7 @@ export async function runLanguageBenchmarks() {
         }
     }
 
-    console.log("\n");
+    console.log('\n');
 }
 
 if (require.main === module) {
