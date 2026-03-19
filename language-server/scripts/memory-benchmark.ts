@@ -1,4 +1,3 @@
-
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SearchEngine } from '../src/core/search-engine';
@@ -26,9 +25,7 @@ async function runMemoryBenchmark() {
     const itemCount = 15000;
     const items: any[] = [];
 
-
     console.log(`Generating ${itemCount} files (approx 75k items total)...`);
-
 
     for (let i = 0; i < itemCount; i++) {
         const fileName = `File${i}Component.ts`;
@@ -46,7 +43,7 @@ async function runMemoryBenchmark() {
             type: SearchItemType.FILE,
             filePath: `/project/${path}`,
             relativeFilePath: path,
-            fullName: path
+            fullName: path,
         });
 
         // Add a class
@@ -57,7 +54,7 @@ async function runMemoryBenchmark() {
             filePath: `/project/${path}`,
             relativeFilePath: path,
             fullName: `File${i}Component`,
-            containerName: ''
+            containerName: '',
         });
 
         // Add some methods
@@ -69,7 +66,7 @@ async function runMemoryBenchmark() {
                 filePath: `/project/${path}`,
                 relativeFilePath: path,
                 fullName: `File${i}Component.method${j}`,
-                containerName: `File${i}Component`
+                containerName: `File${i}Component`,
             });
         }
     }
@@ -83,7 +80,6 @@ async function runMemoryBenchmark() {
     await engine.setItems(items);
     const duration = Date.now() - start;
 
-
     console.log(`Indexing took ${duration}ms`);
     const afterIndexing = getMemoryUsage();
     console.log('Memory after indexing (MB):', afterIndexing);
@@ -96,8 +92,7 @@ async function runMemoryBenchmark() {
         snapshots.push({ name: 'After GC', memory: afterGc });
     }
 
-    const outputPath =
-        process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, '../benchmarks/memory-benchmark.json');
+    const outputPath = process.env.BENCHMARK_OUTPUT || path.resolve(__dirname, '../benchmarks/memory-benchmark.json');
     try {
         const dir = path.dirname(outputPath);
         if (!fs.existsSync(dir)) {

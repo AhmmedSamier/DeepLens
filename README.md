@@ -30,6 +30,7 @@ The ultimate navigation tool. Access everything in your workspace from a single 
 ### ⌨️ **Slash Commands & History**
 
 DeepLens features an intuitive command-line style interface within the search bar.
+
 - **Filter with ease**: Type `/t ` for types, `/f ` for files, or `/txt ` for text search.
 - **Quick History**: DeepLens remembers your recent searches and frequently visited files, making it easy to jump back into context.
 - **History Management**: Easily clear your search history directly from the search interface.
@@ -90,13 +91,13 @@ DeepLens automatically extracts and indexes API endpoints (like `GET /api/users`
 
 Open the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`) and search for:
 
-| Command                         | Description                                       |
-| ------------------------------- | ------------------------------------------------- |
-| `DeepLens: Search Everywhere`   | Main search interface with all filters            |
-| `DeepLens: Rebuild Index`       | Manually trigger a full re-index of the workspace |
-| `DeepLens: Clear Index Cache`   | Clear the local index cache and rebuild           |
-| `DeepLens: Show Index Statistics` | View detailed stats and manage the search index |
-| `DeepLens: Show Call Chain Visualizer` | Show the call chain for the current function |
+| Command                                | Description                                       |
+| -------------------------------------- | ------------------------------------------------- |
+| `DeepLens: Search Everywhere`          | Main search interface with all filters            |
+| `DeepLens: Rebuild Index`              | Manually trigger a full re-index of the workspace |
+| `DeepLens: Clear Index Cache`          | Clear the local index cache and rebuild           |
+| `DeepLens: Show Index Statistics`      | View detailed stats and manage the search index   |
+| `DeepLens: Show Call Chain Visualizer` | Show the call chain for the current function      |
 
 ## ⚙️ Configuration
 

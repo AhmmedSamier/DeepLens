@@ -5,7 +5,7 @@ import * as path from 'node:path';
 // Find the .vsix file in the current directory (which should be vscode-extension)
 const currentDir = process.cwd();
 const files = fs.readdirSync(currentDir);
-const vsixFile = files.find(f => f.endsWith('.vsix'));
+const vsixFile = files.find((f) => f.endsWith('.vsix'));
 
 if (!vsixFile) {
     console.error('No VSIX file found in the current directory!');
@@ -49,7 +49,7 @@ try {
 
             // attr = (mode << 16) | (existing_dos_attr)
             // Preserve the lower 16 bits (DOS attributes) just in case
-            const newAttr = (mode << 16) | (entry.header.attr & 0xFFFF);
+            const newAttr = (mode << 16) | (entry.header.attr & 0xffff);
 
             entry.header.attr = newAttr;
 
@@ -68,7 +68,6 @@ try {
     } else {
         console.log('No binaries found to update.');
     }
-
 } catch (err) {
     console.error('Error updating VSIX permissions:', err);
     process.exit(1);

@@ -14,5 +14,5 @@ interface UserProfile {
 
 enum UserRole {
     Admin,
-    User
+    User,
 }

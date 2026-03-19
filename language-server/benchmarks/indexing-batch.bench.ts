@@ -26,7 +26,6 @@ function createBenchmarkConfig(searchConcurrency: number): Config {
     });
 }
 
-
 function initializeGitRepo(directory: string): void {
     try {
         execSync('git init', { cwd: directory, stdio: 'ignore' });

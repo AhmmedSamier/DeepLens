@@ -3,7 +3,7 @@ import { SearchItemType, SearchScope, type SearchableItem } from '../src/core/ty
 import { benchmark } from './utils';
 
 export async function runConcurrencyBenchmarks() {
-    console.log("=== Concurrency Benchmarks ===");
+    console.log('=== Concurrency Benchmarks ===');
 
     const engine = new SearchEngine();
     const itemCount = 20000;
@@ -16,22 +16,31 @@ export async function runConcurrencyBenchmarks() {
             type: SearchItemType.FILE,
             filePath: `/path/to/Item${i}.ts`,
             relativeFilePath: `Item${i}.ts`,
-            fullName: `Item${i}`
+            fullName: `Item${i}`,
         });
     }
     await engine.setItems(items);
 
     const concurrentRequests = 10;
-    
-    await benchmark(`${concurrentRequests} Concurrent Searches`, async () => {
-        const promises: Promise<void>[] = [];
-        for (let i = 0; i < concurrentRequests; i++) {
-            promises.push(engine.search({ query: `Item${Math.floor(Math.random() * itemCount)}`, scope: SearchScope.EVERYTHING }));
-        }
-        await Promise.all(promises);
-    }, 50);
 
-    console.log("\n");
+    await benchmark(
+        `${concurrentRequests} Concurrent Searches`,
+        async () => {
+            const promises: Promise<void>[] = [];
+            for (let i = 0; i < concurrentRequests; i++) {
+                promises.push(
+                    engine.search({
+                        query: `Item${Math.floor(Math.random() * itemCount)}`,
+                        scope: SearchScope.EVERYTHING,
+                    }),
+                );
+            }
+            await Promise.all(promises);
+        },
+        50,
+    );
+
+    console.log('\n');
 }
 
 if (require.main === module) {

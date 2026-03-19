@@ -3,7 +3,7 @@ import { SearchItemType, SearchableItem } from '../src/core/types';
 import { benchmark } from './utils';
 
 export async function runSearchIngestionBenchmark() {
-    console.log("=== Search Engine Ingestion Benchmark ===");
+    console.log('=== Search Engine Ingestion Benchmark ===');
 
     const engine = new SearchEngine();
     const items: SearchableItem[] = [];
@@ -26,7 +26,7 @@ export async function runSearchIngestionBenchmark() {
             type: SearchItemType.FILE,
             filePath: filePath,
             relativeFilePath: relativePath,
-            fullName: relativePath
+            fullName: relativePath,
         });
 
         // Add symbols
@@ -38,7 +38,7 @@ export async function runSearchIngestionBenchmark() {
                 filePath: filePath,
                 relativeFilePath: relativePath, // Same relative path!
                 containerName: containerName,
-                fullName: `${containerName}.handleClick_${i}`
+                fullName: `${containerName}.handleClick_${i}`,
             });
         }
     }
@@ -46,11 +46,15 @@ export async function runSearchIngestionBenchmark() {
     console.log(`Prepared ${items.length} items.`);
 
     try {
-        await benchmark(`SearchEngine.setItems with ${items.length} items`, async () => {
-            await engine.setItems(items);
-        }, 5); // 5 iterations
+        await benchmark(
+            `SearchEngine.setItems with ${items.length} items`,
+            async () => {
+                await engine.setItems(items);
+            },
+            5,
+        ); // 5 iterations
     } catch (e) {
-        console.error("Benchmark failed:", e);
+        console.error('Benchmark failed:', e);
     }
 }
 

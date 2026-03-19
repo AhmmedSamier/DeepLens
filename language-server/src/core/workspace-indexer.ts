@@ -724,7 +724,10 @@ export class WorkspaceIndexer {
 
         try {
             if (batchFiles.length > 0) {
-                worker.postMessage({ filePaths: batchFiles, chunkSize: this.getWorkerChunkSize(batchFiles.length) });
+                worker.postMessage({
+                    filePaths: batchFiles,
+                    chunkSize: this.getWorkerChunkSize(batchFiles.length),
+                });
             } else {
                 this.finalizeTask(state);
             }

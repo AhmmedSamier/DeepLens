@@ -3,28 +3,14 @@
         "module": "nodenext",
         "target": "ES2021",
         "outDir": "out",
-        "lib": [
-            "ES2021"
-        ],
+        "lib": ["ES2021"],
         "sourceMap": true,
         "forceConsistentCasingInFileNames": true,
         "resolveJsonModule": true,
         "skipLibCheck": true,
         "esModuleInterop": true,
-        "types": [
-            "node",
-            "vscode",
-            "mocha"
-        ]
+        "types": ["node", "vscode", "mocha"]
     },
-    "include": [
-        "src/**/*",
-        "../language-server/src/**/*"
-    ],
-    "exclude": [
-        "node_modules",
-        ".vscode-test",
-        "cognitive-lens",
-        "../language-server/**/*.test.ts"
-    ]
+    "include": ["src/**/*", "../language-server/src/**/*"],
+    "exclude": ["node_modules", ".vscode-test", "cognitive-lens", "../language-server/**/*.test.ts"]
 }

@@ -4,7 +4,7 @@ import { TreeSitterParser } from '../src/core/tree-sitter-parser';
 import { benchmark } from './utils';
 
 export async function runParserBenchmarks() {
-    console.log("=== Parser Benchmarks ===");
+    console.log('=== Parser Benchmarks ===');
 
     // Use the language-server root as extensionPath so it finds dist/parsers
     const extensionPath = path.resolve(__dirname, '..');
@@ -19,7 +19,7 @@ export async function runParserBenchmarks() {
         private counter: number = 0;
     `;
 
-    for(let i=0; i<500; i++) {
+    for (let i = 0; i < 500; i++) {
         content += `
         public method${i}(arg: string): void {
             console.log("Method ${i}");
@@ -32,12 +32,16 @@ export async function runParserBenchmarks() {
     fs.writeFileSync(tempFile, content);
 
     try {
-        await benchmark("Parse 500-method TS Class", async () => {
-            await parser.parseFile(tempFile);
-        }, 10);
+        await benchmark(
+            'Parse 500-method TS Class',
+            async () => {
+                await parser.parseFile(tempFile);
+            },
+            10,
+        );
     } finally {
         fs.unlinkSync(tempFile);
     }
 
-    console.log("\n");
+    console.log('\n');
 }
