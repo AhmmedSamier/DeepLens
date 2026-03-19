@@ -611,7 +611,9 @@ export class SearchProvider {
                     item.buttons = [...(item.buttons || []), removeButton];
 
                     // Palette: Add visual indicator to clarify these are history items
-                    item.description = item.description ? `$(history) Recent • ${item.description}` : `$(history) Recent`;
+                    item.description = item.description
+                        ? `$(history) Recent • ${item.description}`
+                        : `$(history) Recent`;
                 }
             }
 
