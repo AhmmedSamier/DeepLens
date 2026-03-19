@@ -1,3 +1,8 @@
+## 2024-05-26 - [Fast Array Pre-allocation over Map]
+
+**Learning:** In hot paths (like `RouteMatcher.precompute`), replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`) and a manual `for` loop avoids function call and iterator creation overhead, resulting in measurable performance gains in route pattern precomputation.
+**Action:** Use pre-allocated arrays and manual loops instead of `.map()` in performance-sensitive hot loops, explicitly disabling the `sonarjs/array-constructor` lint rule as needed.
+
 ## 2024-05-26 - [Fast Array Pre-allocation]
 
 **Learning:** In hot paths (like `RouteMatcher.precompute`), replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`) and a manual `for` loop is significantly faster. Avoid using `Array.from({ length })` for array pre-allocation, as it introduces substantial overhead and acts as an anti-optimization compared to `.map()`.
