@@ -1,4 +1,4 @@
-import { CancellationToken, NotificationType } from "vscode-languageserver-protocol";
+import { CancellationToken, NotificationType } from 'vscode-languageserver-protocol';
 
 /**
  * Core type definitions for the search engine
@@ -8,150 +8,144 @@ import { CancellationToken, NotificationType } from "vscode-languageserver-proto
  * Types of searchable items
  */
 export enum SearchItemType {
-  FILE = "file",
-  CLASS = "class",
-  INTERFACE = "interface",
-  ENUM = "enum",
-  FUNCTION = "function",
-  METHOD = "method",
-  PROPERTY = "property",
-  VARIABLE = "variable",
-  TEXT = "text",
-  COMMAND = "command",
-  ENDPOINT = "endpoint",
+    FILE = 'file',
+    CLASS = 'class',
+    INTERFACE = 'interface',
+    ENUM = 'enum',
+    FUNCTION = 'function',
+    METHOD = 'method',
+    PROPERTY = 'property',
+    VARIABLE = 'variable',
+    TEXT = 'text',
+    COMMAND = 'command',
+    ENDPOINT = 'endpoint',
 }
 
 /**
  * Search scope/filter types
  */
 export enum SearchScope {
-  EVERYTHING = "everything",
-  TYPES = "types", // Classes, interfaces, enums
-  SYMBOLS = "symbols", // Methods and functions
-  FILES = "files", // File names only
-  COMMANDS = "commands", // VS Code commands
-  PROPERTIES = "properties", // Properties and variables
-  TEXT = "text", // Text content in files
-  ENDPOINTS = "endpoints", // ASP.NET endpoints
-  OPEN = "open", // Currently open files
-  MODIFIED = "modified", // Git modified/untracked files
+    EVERYTHING = 'everything',
+    TYPES = 'types', // Classes, interfaces, enums
+    SYMBOLS = 'symbols', // Methods and functions
+    FILES = 'files', // File names only
+    COMMANDS = 'commands', // VS Code commands
+    PROPERTIES = 'properties', // Properties and variables
+    TEXT = 'text', // Text content in files
+    ENDPOINTS = 'endpoints', // ASP.NET endpoints
+    OPEN = 'open', // Currently open files
+    MODIFIED = 'modified', // Git modified/untracked files
 }
 
 /**
  * Base searchable item interface
  */
 export interface SearchableItem {
-  /** Unique identifier */
-  id: string;
-  /** Display name */
-  name: string;
-  /** Item type */
-  type: SearchItemType;
-  /** File path */
-  filePath: string;
-  /** Relative file path for display and search */
-  relativeFilePath?: string;
-  /** Line number in file (optional for files) */
-  line?: number;
-  /** Column number (optional) */
-  column?: number;
-  /** Container name (e.g., class name for methods) */
-  containerName?: string;
-  /** Full qualified name */
-  fullName?: string;
-  /** Additional context (e.g., function signature) */
-  detail?: string;
-  /** Command ID (for commands) */
-  commandId?: string;
-  /** File size in bytes (optional) */
-  size?: number;
+    /** Unique identifier */
+    id: string;
+    /** Display name */
+    name: string;
+    /** Item type */
+    type: SearchItemType;
+    /** File path */
+    filePath: string;
+    /** Relative file path for display and search */
+    relativeFilePath?: string;
+    /** Line number in file (optional for files) */
+    line?: number;
+    /** Column number (optional) */
+    column?: number;
+    /** Container name (e.g., class name for methods) */
+    containerName?: string;
+    /** Full qualified name */
+    fullName?: string;
+    /** Additional context (e.g., function signature) */
+    detail?: string;
+    /** Command ID (for commands) */
+    commandId?: string;
+    /** File size in bytes (optional) */
+    size?: number;
 }
 
 /**
  * Search result with score
  */
 export interface SearchResult {
-  /** The matched item */
-  item: SearchableItem;
-  /** Match score (0-1, higher is better) */
-  score: number;
-  /** Matched portions for highlighting */
-  highlights?: number[][];
-  /** Search scope this result belongs to */
-  scope: SearchScope;
+    /** The matched item */
+    item: SearchableItem;
+    /** Match score (0-1, higher is better) */
+    score: number;
+    /** Matched portions for highlighting */
+    highlights?: number[][];
+    /** Search scope this result belongs to */
+    scope: SearchScope;
 }
 
 /**
  * Search options
  */
 export interface SearchOptions {
-  /** Search query */
-  query: string;
-  /** Scope filter */
-  scope: SearchScope;
-  /** Maximum number of results */
-  maxResults?: number;
-  /** File patterns to exclude */
-  excludePatterns?: string[];
-  /** Request ID for streaming correlation */
-  requestId?: number;
+    /** Search query */
+    query: string;
+    /** Scope filter */
+    scope: SearchScope;
+    /** Maximum number of results */
+    maxResults?: number;
+    /** File patterns to exclude */
+    excludePatterns?: string[];
+    /** Request ID for streaming correlation */
+    requestId?: number;
 }
 
 /**
  * Search context for providers
  */
 export interface SearchContext {
-  query: string;
-  normalizedQuery: string;
-  queryUpper: string;
-  scope: SearchScope;
-  maxResults: number;
-  isPotentialUrl: boolean;
-  queryLower: string;
+    query: string;
+    normalizedQuery: string;
+    queryUpper: string;
+    scope: SearchScope;
+    maxResults: number;
+    isPotentialUrl: boolean;
+    queryLower: string;
 }
 
 /**
  * Interface for search functionality
  */
 export interface ISearchProvider {
-  id?: string;
-  priority?: number;
-  search(
-    options: SearchOptions | SearchContext,
-    token?: CancellationToken,
-  ): Promise<SearchResult[]> | SearchResult[];
-  burstSearch?(
-    options: SearchOptions,
-    token?: CancellationToken,
-  ): Promise<SearchResult[]> | SearchResult[];
-  resolveItems?(itemIds: string[]): Promise<SearchResult[]> | SearchResult[];
-  getRecentItems?(count: number): Promise<SearchResult[]> | SearchResult[];
-  recordActivity?(itemId: string): Promise<void> | void;
-  getIndexStats?(): Promise<IndexStats | undefined>;
+    id?: string;
+    priority?: number;
+    search(options: SearchOptions | SearchContext, token?: CancellationToken): Promise<SearchResult[]> | SearchResult[];
+    burstSearch?(options: SearchOptions, token?: CancellationToken): Promise<SearchResult[]> | SearchResult[];
+    resolveItems?(itemIds: string[]): Promise<SearchResult[]> | SearchResult[];
+    getRecentItems?(count: number): Promise<SearchResult[]> | SearchResult[];
+    recordActivity?(itemId: string): Promise<void> | void;
+    getIndexStats?(): Promise<IndexStats | undefined>;
 }
 
 /**
  * Index statistics
  */
 export interface IndexStats {
-  /** Total number of indexed items */
-  totalItems: number;
-  /** Number of files indexed */
-  totalFiles: number;
-  /** Number of types (classes, interfaces, enums) */
-  totalTypes: number;
-  /** Number of symbols (methods, functions, properties) */
-  totalSymbols: number;
-  /** Last update timestamp */
-  lastUpdate: number;
-  /** Indexing in progress */
-  indexing: boolean;
-  /** Size of the cache on disk in bytes */
-  cacheSize: number;
+    /** Total number of indexed items */
+    totalItems: number;
+    /** Number of files indexed */
+    totalFiles: number;
+    /** Number of types (classes, interfaces, enums) */
+    totalTypes: number;
+    /** Number of symbols (methods, functions, properties) */
+    totalSymbols: number;
+    /** Last update timestamp */
+    lastUpdate: number;
+    /** Indexing in progress */
+    indexing: boolean;
+    /** Size of the cache on disk in bytes */
+    cacheSize: number;
 }
 
 export type RipgrepUnavailableParams = object;
 
 export const RipgrepUnavailableNotification = new NotificationType<RipgrepUnavailableParams>(
-  "deeplens/ripgrepUnavailable",
+    'deeplens/ripgrepUnavailable',
 );
