@@ -202,15 +202,19 @@
                         Fill="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                         Stretch="Uniform" />
 
-                    <!--  Search TextBox  -->
-                    <TextBox
-                        Name="SearchTextBox"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
-                        FontSize="14"
+<!--  Search TextBox  -->
+                     <TextBox
+                         Name="SearchTextBox"
+                         Grid.Column="1"
+                         VerticalAlignment="Center"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                         FontSize="14"
+                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                         AutomationProperties.Name="Search query"
+                         ToolTip="Search for classes, symbols, files, text, or endpoints" />
 
                     <Button
                         x:Name="ClearSearchButton"
