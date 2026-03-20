@@ -91,6 +91,7 @@ export class CommandIndexer {
      * Convert command ID to human-readable title
      * e.g., "workbench.action.files.save" -> "Files Save"
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private commandIdToTitle(commandId: string): string {
         // ⚡ Bolt: Fast string formatting optimization
         // Replaces regex operations and .split().map().join() chains with a single-pass manual traversal.
