@@ -272,9 +272,16 @@ export class RouteMatcher {
             // Splitting the pre-lowercased string is ~25% faster than mapping the array with toLowerCase().
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = cleanTemplate.length > 0 ? cleanTemplate.toLowerCase().split('/') : [];
-            const isParameter = templateSegments.map(
-                (s) => s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125,
-            ); // 123 is '{', 125 is '}'
+
+            // ⚡ Bolt: Fast array pre-allocation optimization
+            // Pre-allocating the array and using a manual loop is significantly faster than .map()
+            const lenSegments = templateSegments.length;
+            // eslint-disable-next-line sonarjs/array-constructor
+            const isParameter = new Array<boolean>(lenSegments);
+            for (let j = 0; j < lenSegments; j++) {
+                const s = templateSegments[j];
+                isParameter[j] = s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+            } // 123 is '{', 125 is '}'
 
             cached = {
                 regex: exactRegex,
