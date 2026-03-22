@@ -216,6 +216,26 @@
                          AutomationProperties.Name="Search query"
                          ToolTip="Search for classes, symbols, files, text, or endpoints" />
 
+                    <!-- Watermark Overlay -->
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Margin="4,0,0,0"
+                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                        IsHitTestVisible="False"
+                        Text="Search for classes, symbols, files, text, or endpoints">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text.Length, ElementName=SearchTextBox}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
                     <Button
                         x:Name="ClearSearchButton"
                         Grid.Column="2"
