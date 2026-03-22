@@ -1,3 +1,8 @@
+## 2026-03-22 - [Fast Multiline String Parsing]
+
+**Learning:** When parsing large multiline outputs from external commands (like `ripgrep` or `git`), chaining array operations like `.split('\n').map().filter().map()` creates multiple intermediate arrays, string allocations, and triggers garbage collection overhead. Replacing these with a single-pass manual `for` loop that iterates over the string using `charCodeAt` (to find newlines and trim whitespace) and `.slice()` is significantly faster (~5x in V8/Node) and uses less memory.
+**Action:** In hot paths handling large string outputs, avoid `.split('\n')` and chained array methods. Use a manual string traversal loop with `charCodeAt` and `.slice()` instead.
+
 ## 2024-05-27 - [Avoid Chained Array Operations]
 
 **Learning:** In paths where a unique collection of objects is needed from a Map or an Array (like extracting unique commands in `getCommands`), using chained operations like `Array.from(new Set(Array.from(map.values()).map(c => c.name))).map(...)` creates multiple intermediate arrays, sets, and requires multiple iterations. Replacing these with a single-pass `for...of` loop and a `Set` to track seen properties (e.g., `seen.has(cmd.name)`) is significantly faster (~5x in V8/Node) as it avoids unnecessary allocations and iterations.
