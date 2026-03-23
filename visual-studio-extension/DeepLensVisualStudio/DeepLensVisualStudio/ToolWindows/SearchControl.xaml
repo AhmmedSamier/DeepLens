@@ -221,6 +221,7 @@
                         Grid.Column="1"
                         VerticalAlignment="Center"
                         Margin="4,0,0,0"
+                        FontSize="{Binding FontSize, ElementName=SearchTextBox}"
                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                         IsHitTestVisible="False"
                         Text="Search for classes, symbols, files, text, or endpoints">
