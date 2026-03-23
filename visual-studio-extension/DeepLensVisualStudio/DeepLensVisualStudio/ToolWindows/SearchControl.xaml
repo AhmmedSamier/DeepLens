@@ -216,6 +216,26 @@
                          AutomationProperties.Name="Search query"
                          ToolTip="Search for classes, symbols, files, text, or endpoints" />
 
+                    <!--  Search TextBox Watermark  -->
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                        FontSize="14"
+                        IsHitTestVisible="False"
+                        Text="Search for classes, symbols, files, text, or endpoints">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Hidden" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=SearchTextBox, Path=Text}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
                     <Button
                         x:Name="ClearSearchButton"
                         Grid.Column="2"
