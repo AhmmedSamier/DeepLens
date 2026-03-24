@@ -1,3 +1,8 @@
+## 2026-03-19 - [Accessible Progress Indicators in WPF]
+
+**Learning:** In WPF interfaces, ensure non-interactive progress indicators (like `ProgressBar`) include an `AutomationProperties.Name` attribute so their state and purpose remain accessible to screen readers.
+**Action:** Add `AutomationProperties.Name` to `ProgressBar` elements in WPF XAML files to ensure they are accessible.
+
 ## 2024-01-01 - [Init]
 
 ## 2026-03-09 - [Informational Empty States in QuickPick]

@@ -177,13 +177,13 @@ The extension and server communicate via custom JSON-RPC requests over IPC:
 ## Git Commit Guidelines
 
 - All commits must follow [Conventional Commits](https://www.conventionalcommits.org/) format:
-  - `feat:` for new features
-  - `fix:` for bug fixes
-  - `docs:` for documentation changes
-  - `style:` for code style changes (formatting, etc.)
-  - `refactor:` for code refactoring
-  - `test:` for adding or updating tests
-  - `chore:` for maintenance tasks
+    - `feat:` for new features
+    - `fix:` for bug fixes
+    - `docs:` for documentation changes
+    - `style:` for code style changes (formatting, etc.)
+    - `refactor:` for code refactoring
+    - `test:` for adding or updating tests
+    - `chore:` for maintenance tasks
 
 ## Current Feature Context: File Icons in Search Results (001-file-icons-search)
 
