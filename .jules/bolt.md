@@ -1,3 +1,8 @@
+## 2026-03-20 - [Fast String Traversal Over Regex/Split]
+
+**Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
+**Action:** When repeatedly splitting large output blocks, use manual `indexOf` string index traversal and primitive character boundary checks rather than regex or `Array.prototype.split`.
+
 ## 2024-05-27 - [Fast Array Pre-allocation for RouteMatcher Params]
 
 **Learning:** In hot paths (like checking template segments for parameters in `RouteMatcher.getOrCompileCache`), mapping an array with `.map()` incurs significant closure creation and iterator overhead. Pre-allocating the boolean array (`new Array<boolean>(length)`) and populating it via a `for` loop is considerably faster, dropping `RouteMatcher` search time from ~50ms to ~33ms over 100 iterations.
