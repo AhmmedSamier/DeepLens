@@ -280,7 +280,10 @@ export class RouteMatcher {
             const isParameter = new Array<boolean>(segmentsLength);
             for (let j = 0; j < segmentsLength; j++) {
                 const s = templateSegments[j];
-                isParameter[j] = s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+                // ⚡ Bolt: Fast parameter detection optimization
+                // Explicitly check length to avoid NaN comparisons on charCodeAt.
+                // A parameter segment must have at least 2 characters (e.g. "{}").
+                isParameter[j] = s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
             } // 123 is '{', 125 is '}'
 
             cached = {
