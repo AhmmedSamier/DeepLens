@@ -1,3 +1,8 @@
+## 2026-03-20 - [WPF TextBox Watermark Accessibility]
+
+**Learning:** In WPF interfaces, when layering a `TextBlock` over a `TextBox` to simulate a missing placeholder property, explicitly setting `AutomationProperties.Name=""` on the watermark is an anti-pattern. It improperly obscures the element from screen readers.
+**Action:** Omit the `AutomationProperties.Name` property entirely on overlay watermarks to allow screen readers to fall back to the `Text` property naturally.
+
 ## 2026-03-19 - [Accessible Progress Indicators in WPF]
 
 **Learning:** In WPF interfaces, ensure non-interactive progress indicators (like `ProgressBar`) include an `AutomationProperties.Name` attribute so their state and purpose remain accessible to screen readers.
