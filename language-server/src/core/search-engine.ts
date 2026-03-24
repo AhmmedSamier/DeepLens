@@ -2310,7 +2310,12 @@ export class SearchEngine implements ISearchProvider {
         queryOrPrepared: string | PreparedPath,
         maxResults?: number,
     ): void {
-        const existingIds = new Set(results.map((r) => r.item.id));
+        // ⚡ Bolt: Fast Set allocation without map
+        const existingIds = new Set<string>();
+        const resLen = results.length;
+        for (let j = 0; j < resLen; j++) {
+            existingIds.add(results[j].item.id);
+        }
 
         const checkItem = (i: number) => {
             if (maxResults && results.length >= maxResults) return;

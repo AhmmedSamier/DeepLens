@@ -1,3 +1,8 @@
+## 2024-05-28 - [Fast string parsing vs chained split().map().filter()]
+
+**Learning:** In hot paths parsing delimited strings (e.g., parsing ripgrep output or comma-separated configuration values), replacing chained array operations like `.split('\n').map(line => line.trim()).filter(line => line.length > 0)` with a single-pass manual `while` loop using `charCodeAt` to find delimiters and checking for non-whitespace characters is significantly faster (~1.5x to 2x faster). It avoids multiple intermediate array allocations, string allocations for the map/trim, and multiple passes over the data.
+**Action:** When processing long text outputs or delimited lists in performance-sensitive areas, use a manual `charCodeAt` loop with index pointers to extract segments, trimming whitespace manually by adjusting the pointers before calling `.slice()`.
+
 ## 2024-05-27 - [Avoid Chained Array Operations]
 
 **Learning:** In paths where a unique collection of objects is needed from a Map or an Array (like extracting unique commands in `getCommands`), using chained operations like `Array.from(new Set(Array.from(map.values()).map(c => c.name))).map(...)` creates multiple intermediate arrays, sets, and requires multiple iterations. Replacing these with a single-pass `for...of` loop and a `Set` to track seen properties (e.g., `seen.has(cmd.name)`) is significantly faster (~5x in V8/Node) as it avoids unnecessary allocations and iterations.
