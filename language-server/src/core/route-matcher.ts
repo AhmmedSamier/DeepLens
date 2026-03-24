@@ -397,7 +397,7 @@ export class RouteMatcher {
     const len = q.length;
 
     // Minimum length for a URL path (e.g., "/a") or method + path
-    if (len <= 2) return false;
+    if (len < 2) return false;
 
     // Fast check for standalone path without method
     const methodSeparator = q.indexOf(" ");
