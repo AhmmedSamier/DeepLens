@@ -786,6 +786,7 @@ export async function activate(context: vscode.ExtensionContext) {
             const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
 
             interface IndexActionItem extends vscode.QuickPickItem {
+                // eslint-disable-next-line sonarjs/max-union-size
                 action?: 'copy' | 'rebuild' | 'clear' | 'settings';
             }
 
@@ -872,7 +873,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             statusItem.text = `${icon} DeepLens${percentageText}`;
             if (e.message) {
-                statusItem.tooltip = `DeepLens: ${e.message} (Click for stats)`;
+                statusItem.tooltip = `DeepLens: ${e.message}${percentageText} (Click for stats)`;
                 statusItem.accessibilityInformation = {
                     label: `DeepLens: ${e.message}${percentageText}, click for stats`,
                     role: 'button',

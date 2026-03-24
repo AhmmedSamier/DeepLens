@@ -272,9 +272,19 @@ export class RouteMatcher {
             // Splitting the pre-lowercased string is ~25% faster than mapping the array with toLowerCase().
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const templateSegmentsLower = cleanTemplate.length > 0 ? cleanTemplate.toLowerCase().split('/') : [];
-            const isParameter = templateSegments.map(
-                (s) => s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125,
-            ); // 123 is '{', 125 is '}'
+            // ⚡ Bolt: Fast Array Allocation optimization
+            // Using a pre-allocated array and a manual for-loop is faster than Array.prototype.map()
+            // Performance impact: Speeds up hot-path route pattern precomputation by avoiding callback overhead
+            const segmentsLength = templateSegments.length;
+            // eslint-disable-next-line sonarjs/array-constructor
+            const isParameter = new Array<boolean>(segmentsLength);
+            for (let j = 0; j < segmentsLength; j++) {
+                const s = templateSegments[j];
+                // ⚡ Bolt: Fast parameter detection optimization
+                // Explicitly check length to avoid NaN comparisons on charCodeAt.
+                // A parameter segment must have at least 2 characters (e.g. "{}").
+                isParameter[j] = s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+            } // 123 is '{', 125 is '}'
 
             cached = {
                 regex: exactRegex,
@@ -391,7 +401,7 @@ export class RouteMatcher {
         const len = q.length;
 
         // Minimum length for a URL path (e.g., "/a") or method + path
-        if (len <= 2) return false;
+        if (len < 2) return false;
 
         // Fast check for standalone path without method
         const methodSeparator = q.indexOf(' ');
