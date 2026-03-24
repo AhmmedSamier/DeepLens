@@ -1,1467 +1,1513 @@
-import { Minimatch } from 'minimatch';
-import * as cp from 'node:child_process';
-import * as fs from 'node:fs';
-import * as os from 'node:os';
-import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { Worker } from 'node:worker_threads';
-import { Config } from './config';
-import { IndexerEnvironment } from './indexer-interfaces';
-import { pLimit } from './p-limit';
-import { SearchableItem, SearchItemType } from './types';
+import { Minimatch } from "minimatch";
+import * as cp from "node:child_process";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Worker } from "node:worker_threads";
+import { Config } from "./config";
+import { IndexerEnvironment } from "./indexer-interfaces";
+import { pLimit } from "./p-limit";
+import { SearchableItem, SearchItemType } from "./types";
 
 export class CancellationError extends Error {
-    constructor(message: string = 'Operation cancelled') {
-        super(message);
-        this.name = 'CancellationError';
-    }
+  constructor(message: string = "Operation cancelled") {
+    super(message);
+    this.name = "CancellationError";
+  }
 }
 
 interface WorkerPoolState {
-    pendingItems: SearchableItem[];
-    activeTasks: number;
-    finished: boolean;
-    processed: number;
-    nextReportingPercentage: number;
-    logged100: boolean;
-    resolveAll: () => void;
+  pendingItems: SearchableItem[];
+  activeTasks: number;
+  finished: boolean;
+  processed: number;
+  nextReportingPercentage: number;
+  logged100: boolean;
+  resolveAll: () => void;
 }
 
 interface WorkspaceSymbolScanResult {
-    symbolCount: number;
-    uniqueFiles: number;
-    durationMs: number;
-    timedOut: boolean;
+  symbolCount: number;
+  uniqueFiles: number;
+  durationMs: number;
+  timedOut: boolean;
 }
 
 /**
  * Workspace indexer that scans files and extracts symbols
  */
 export class WorkspaceIndexer {
-    private static readonly WORKSPACE_SYMBOL_TIMEOUT_MS = 1200;
-    private static readonly WORKSPACE_SYMBOL_COVERAGE_THRESHOLD = 0.6;
-    private static readonly STRING_CACHE_MAX_SIZE = 10000;
-    private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
-    private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
+  private static readonly WORKSPACE_SYMBOL_TIMEOUT_MS = 1200;
+  private static readonly WORKSPACE_SYMBOL_COVERAGE_THRESHOLD = 0.6;
+  private static readonly STRING_CACHE_MAX_SIZE = 10000;
+  private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
+  private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
 
-    private indexing: boolean = false;
-    private cancellationToken = { cancelled: false };
-    private watchersActive: boolean = true;
-    private watcherCooldownTimer: NodeJS.Timeout | null = null;
-    private readonly config: Config;
-    private fileWatcher: { dispose(): void } | undefined;
-    private readonly treeSitter: import('./tree-sitter-parser').TreeSitterParser;
-    private readonly env: IndexerEnvironment;
-    private readonly stringCache: Map<string, string> = new Map();
-    private readonly extensionPath: string;
-    private lastIndexTimestamp: number | null = null;
-    private excludeMatchers: Minimatch[] = [];
-    private workers: Worker[] = [];
-    private workersInitialized: boolean = false;
+  private indexing: boolean = false;
+  private cancellationToken = { cancelled: false };
+  private watchersActive: boolean = true;
+  private watcherCooldownTimer: NodeJS.Timeout | null = null;
+  private readonly config: Config;
+  private fileWatcher: { dispose(): void } | undefined;
+  private readonly treeSitter: import("./tree-sitter-parser").TreeSitterParser;
+  private readonly env: IndexerEnvironment;
+  private readonly stringCache: Map<string, string> = new Map();
+  private readonly extensionPath: string;
+  private lastIndexTimestamp: number | null = null;
+  private excludeMatchers: Minimatch[] = [];
+  private workers: Worker[] = [];
+  private workersInitialized: boolean = false;
 
-    private readonly gitCheckQueue: Map<string, Set<string>> = new Map();
-    private readonly gitCheckResolvers: Map<string, ((ignored: boolean) => void)[]> = new Map();
-    private gitCheckTimer: NodeJS.Timeout | null = null;
+  private readonly gitCheckQueue: Map<string, Set<string>> = new Map();
+  private readonly gitCheckResolvers: Map<string, ((ignored: boolean) => void)[]> = new Map();
+  private gitCheckTimer: NodeJS.Timeout | null = null;
 
-    constructor(
-        config: Config,
-        treeSitter: import('./tree-sitter-parser').TreeSitterParser,
-        env: IndexerEnvironment,
-        extensionPath: string,
-    ) {
-        this.config = config;
-        this.treeSitter = treeSitter;
-        this.env = env;
-        this.extensionPath = extensionPath;
-        this.updateExcludeMatchers();
+  constructor(
+    config: Config,
+    treeSitter: import("./tree-sitter-parser").TreeSitterParser,
+    env: IndexerEnvironment,
+    extensionPath: string,
+  ) {
+    this.config = config;
+    this.treeSitter = treeSitter;
+    this.env = env;
+    this.extensionPath = extensionPath;
+    this.updateExcludeMatchers();
+  }
+
+  /**
+   * Proactively initialize workers and Tree-sitter to speed up first index
+   */
+  public async warmup(): Promise<void> {
+    if (this.workersInitialized) return;
+    this.log("Warming up indexing workers...");
+    const workers = this.getWorkers();
+
+    // Send an empty batch to trigger WASM initialization in the background
+    // while the main thread continues with other tasks.
+    for (const worker of workers) {
+      worker.postMessage({ filePaths: [] });
+    }
+  }
+
+  private getWorkers(): Worker[] {
+    if (this.workersInitialized) {
+      return this.workers;
     }
 
-    /**
-     * Proactively initialize workers and Tree-sitter to speed up first index
-     */
-    public async warmup(): Promise<void> {
-        if (this.workersInitialized) return;
-        this.log('Warming up indexing workers...');
-        const workers = this.getWorkers();
-
-        // Send an empty batch to trigger WASM initialization in the background
-        // while the main thread continues with other tasks.
-        for (const worker of workers) {
-            worker.postMessage({ filePaths: [] });
-        }
+    let workerCount = this.config.getIndexWorkerCount();
+    if (workerCount <= 0) {
+      const cpuCount = os.cpus().length;
+      workerCount = Math.max(1, Math.min(cpuCount - 1, 8));
     }
 
-    private getWorkers(): Worker[] {
-        if (this.workersInitialized) {
-            return this.workers;
-        }
+    const possibleScripts = [
+      path.join(this.extensionPath, "dist", "indexer-worker.js"), // Production path
+      path.join(__dirname, "indexer-worker.js"), // Relative to current file (prod)
+    ];
 
-        let workerCount = this.config.getIndexWorkerCount();
-        if (workerCount <= 0) {
-            const cpuCount = os.cpus().length;
-            workerCount = Math.max(1, Math.min(cpuCount - 1, 8));
-        }
-
-        const possibleScripts = [
-            path.join(this.extensionPath, 'dist', 'indexer-worker.js'), // Production path
-            path.join(__dirname, 'indexer-worker.js'), // Relative to current file (prod)
-        ];
-
-        if ('Bun' in globalThis) {
-            possibleScripts.push(path.join(__dirname, 'indexer-worker.ts'));
-        }
-
-        let workerScript = '';
-        for (const script of possibleScripts) {
-            if (fs.existsSync(script)) {
-                workerScript = script;
-                break;
-            }
-        }
-
-        if (!workerScript) {
-            this.log(`ERROR: Worker script not found. Searched in: ${possibleScripts.join(', ')}`);
-            return [];
-        }
-
-        for (let i = 0; i < workerCount; i++) {
-            const worker = new Worker(workerScript, {
-                workerData: { extensionPath: this.extensionPath },
-            });
-            worker.on('error', (err) => {
-                let errorMessage: string;
-                if (err instanceof Error) {
-                    errorMessage = err.message;
-                    if (err.stack) {
-                        errorMessage += `\n${err.stack}`;
-                    }
-                } else {
-                    try {
-                        errorMessage = JSON.stringify(err);
-                    } catch {
-                        const tag = Object.prototype.toString.call(err);
-                        errorMessage = `Non-Error value: ${tag}`;
-                    }
-                }
-                this.log(`Worker ${i} error: ${errorMessage}`);
-            });
-            this.workers.push(worker);
-        }
-
-        this.workersInitialized = true;
-        return this.workers;
+    if ("Bun" in globalThis) {
+      possibleScripts.push(path.join(__dirname, "indexer-worker.ts"));
     }
 
-    private updateExcludeMatchers(): void {
-        const patterns = this.config.getExcludePatterns();
-        this.excludeMatchers = patterns.map((p) => new Minimatch(p, { dot: true }));
+    let workerScript = "";
+    for (const script of possibleScripts) {
+      if (fs.existsSync(script)) {
+        workerScript = script;
+        break;
+      }
     }
 
-    public onItemsAdded(listener: (items: SearchableItem[]) => void) {
-        this.onItemsAddedListeners.push(listener);
-        return {
-            dispose: () => {
-                this.onItemsAddedListeners = this.onItemsAddedListeners.filter((l) => l !== listener);
-            },
-        };
+    if (!workerScript) {
+      this.log(`ERROR: Worker script not found. Searched in: ${possibleScripts.join(", ")}`);
+      return [];
     }
 
-    public onItemsRemoved(listener: (filePath: string) => void) {
-        this.onItemsRemovedListeners.push(listener);
-        return {
-            dispose: () => {
-                this.onItemsRemovedListeners = this.onItemsRemovedListeners.filter((l) => l !== listener);
-            },
-        };
-    }
-
-    private fireItemsAdded(items: SearchableItem[]) {
-        if (items.length === 0) return;
-        for (const listener of this.onItemsAddedListeners) {
-            listener(items);
+    for (let i = 0; i < workerCount; i++) {
+      const worker = new Worker(workerScript, {
+        workerData: { extensionPath: this.extensionPath },
+      });
+      worker.on("error", (err) => {
+        let errorMessage: string;
+        if (err instanceof Error) {
+          errorMessage = err.message;
+          if (err.stack) {
+            errorMessage += `\n${err.stack}`;
+          }
+        } else {
+          try {
+            errorMessage = JSON.stringify(err);
+          } catch {
+            const tag = Object.prototype.toString.call(err);
+            errorMessage = `Non-Error value: ${tag}`;
+          }
         }
+        this.log(`Worker ${i} error: ${errorMessage}`);
+      });
+      this.workers.push(worker);
     }
 
-    private fireItemsRemoved(filePath: string) {
-        for (const listener of this.onItemsRemovedListeners) {
-            listener(filePath);
-        }
+    this.workersInitialized = true;
+    return this.workers;
+  }
+
+  private updateExcludeMatchers(): void {
+    const patterns = this.config.getExcludePatterns();
+    this.excludeMatchers = patterns.map((p) => new Minimatch(p, { dot: true }));
+  }
+
+  public onItemsAdded(listener: (items: SearchableItem[]) => void) {
+    this.onItemsAddedListeners.push(listener);
+    return {
+      dispose: () => {
+        this.onItemsAddedListeners = this.onItemsAddedListeners.filter((l) => l !== listener);
+      },
+    };
+  }
+
+  public onItemsRemoved(listener: (filePath: string) => void) {
+    this.onItemsRemovedListeners.push(listener);
+    return {
+      dispose: () => {
+        this.onItemsRemovedListeners = this.onItemsRemovedListeners.filter((l) => l !== listener);
+      },
+    };
+  }
+
+  private fireItemsAdded(items: SearchableItem[]) {
+    if (items.length === 0) return;
+    for (const listener of this.onItemsAddedListeners) {
+      listener(items);
+    }
+  }
+
+  private fireItemsRemoved(filePath: string) {
+    for (const listener of this.onItemsRemovedListeners) {
+      listener(filePath);
+    }
+  }
+
+  /**
+   * Cancel the current indexing operation if one is running
+   */
+  public cancel(): void {
+    if (this.indexing) {
+      this.log("Cancelling indexing operation...");
+      this.cancellationToken.cancelled = true;
+    }
+  }
+
+  async indexWorkspace(
+    progressCallback?: (message: string, increment?: number) => void,
+  ): Promise<void> {
+    if (this.indexing) {
+      return;
     }
 
-    /**
-     * Cancel the current indexing operation if one is running
-     */
-    public cancel(): void {
-        if (this.indexing) {
-            this.log('Cancelling indexing operation...');
-            this.cancellationToken.cancelled = true;
+    this.indexing = true;
+    this.cancellationToken = { cancelled: false };
+    this.stringCache.clear();
+    this.updateExcludeMatchers();
+
+    try {
+      const workspaceFolders = this.env.getWorkspaceFolders();
+      if (workspaceFolders.length === 0) {
+        return;
+      }
+
+      if (this.cancellationToken.cancelled) throw new CancellationError();
+
+      this.log("Step 1/4: Analyzing repository structure...");
+      progressCallback?.("Analyzing repository structure...", 10);
+
+      // Step 2: Index files (Always fresh)
+      this.log("Step 2/4: Scanning workspace files...");
+      progressCallback?.("Scanning files...", 10);
+      const fileItems: SearchableItem[] = [];
+
+      if (this.cancellationToken.cancelled) throw new CancellationError();
+
+      await this.indexFiles((items) => {
+        fileItems.push(...items);
+        this.fireItemsAdded(items);
+      });
+
+      if (this.cancellationToken.cancelled) throw new CancellationError();
+
+      // Step 3: Index symbols
+      this.log(`Step 3/4: Extracting symbols from ${fileItems.length} files...`);
+      let reportedStepProgress = 0;
+
+      await this.indexSymbols(fileItems, (message, totalPercentage) => {
+        if (totalPercentage === undefined) {
+          progressCallback?.(message);
+          return;
         }
+
+        const targetStepProgress = totalPercentage * 0.7;
+        const delta = targetStepProgress - reportedStepProgress;
+        if (delta > 0) {
+          progressCallback?.(message, delta);
+          reportedStepProgress = targetStepProgress;
+        } else {
+          progressCallback?.(message);
+        }
+      });
+
+      if (this.cancellationToken.cancelled) throw new CancellationError();
+
+      // Step 4: Finalize
+      this.log("Step 4/4: Setting up file watchers...");
+      progressCallback?.("Finalizing...", 10);
+      this.setupFileWatchers();
+
+      this.log("Index Workspace complete.");
+      this.lastIndexTimestamp = Date.now();
+    } finally {
+      this.indexing = false;
+    }
+  }
+
+  /**
+   * Check if indexing is in progress
+   */
+  isIndexing(): boolean {
+    return this.indexing;
+  }
+
+  getLastIndexTimestamp(): number | null {
+    return this.lastIndexTimestamp;
+  }
+
+  /**
+   * Index all files in workspace
+   */
+  private async indexFiles(collector: (items: SearchableItem[]) => void): Promise<void> {
+    // TURBO PATH: Try to use git ls-files for instant listing if it's a git repo
+    const gitFiles = await this.listGitFiles();
+    if (gitFiles.length > 0) {
+      this.log("Using git for indexing: true");
+      await this.processFileList(gitFiles, collector);
+      return;
     }
 
-    async indexWorkspace(progressCallback?: (message: string, increment?: number) => void): Promise<void> {
-        if (this.indexing) {
-            return;
-        }
+    this.log("Using git for indexing: false");
 
-        this.indexing = true;
-        this.cancellationToken = { cancelled: false };
-        this.stringCache.clear();
-        this.updateExcludeMatchers();
+    // STANDARD FALLBACK
+    const excludePatterns = this.config.getExcludePatterns();
+    const includePattern = `**/*`;
 
+    // LSP client or VS Code provides the implementation
+    const excludePattern = `{${excludePatterns.join(",")}}`;
+    const files = await this.env.findFiles(includePattern, excludePattern);
+
+    await this.processFileList(files, collector);
+  }
+
+  /**
+   * List files using git (much faster than walking disk)
+   */
+  private async listGitFiles(): Promise<string[]> {
+    const workspaceFolders = this.env.getWorkspaceFolders();
+    if (workspaceFolders.length === 0) {
+      return [];
+    }
+
+    const limit = pLimit(50); // Consistent with processFileList concurrency
+
+    const folderPromises = workspaceFolders.map((folderPath) =>
+      limit(async () => {
         try {
-            const workspaceFolders = this.env.getWorkspaceFolders();
-            if (workspaceFolders.length === 0) {
-                return;
+          // Get both tracked and untracked (but not ignored) files
+          const output = await this.execGit(
+            ["ls-files", "--cached", "--others", "--exclude-standard"],
+            folderPath,
+          );
+
+          const lines = output.split("\n");
+          const folderResults: string[] = [];
+
+          for (const rawLine of lines) {
+            const line = rawLine.trim();
+            if (!line) {
+              continue;
             }
 
-            if (this.cancellationToken.cancelled) throw new CancellationError();
-
-            this.log('Step 1/4: Analyzing repository structure...');
-            progressCallback?.('Analyzing repository structure...', 10);
-
-            // Step 2: Index files (Always fresh)
-            this.log('Step 2/4: Scanning workspace files...');
-            progressCallback?.('Scanning files...', 10);
-            const fileItems: SearchableItem[] = [];
-
-            if (this.cancellationToken.cancelled) throw new CancellationError();
-
-            await this.indexFiles((items) => {
-                fileItems.push(...items);
-                this.fireItemsAdded(items);
-            });
-
-            if (this.cancellationToken.cancelled) throw new CancellationError();
-
-            // Step 3: Index symbols
-            this.log(`Step 3/4: Extracting symbols from ${fileItems.length} files...`);
-            let reportedStepProgress = 0;
-
-            await this.indexSymbols(fileItems, (message, totalPercentage) => {
-                if (totalPercentage === undefined) {
-                    progressCallback?.(message);
-                    return;
-                }
-
-                const targetStepProgress = totalPercentage * 0.7;
-                const delta = targetStepProgress - reportedStepProgress;
-                if (delta > 0) {
-                    progressCallback?.(message, delta);
-                    reportedStepProgress = targetStepProgress;
-                } else {
-                    progressCallback?.(message);
-                }
-            });
-
-            if (this.cancellationToken.cancelled) throw new CancellationError();
-
-            // Step 4: Finalize
-            this.log('Step 4/4: Setting up file watchers...');
-            progressCallback?.('Finalizing...', 10);
-            this.setupFileWatchers();
-
-            this.log('Index Workspace complete.');
-            this.lastIndexTimestamp = Date.now();
-        } finally {
-            this.indexing = false;
+            const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
+            // Optimization: Do not intern file paths during discovery as they are unique per file
+            folderResults.push(fullPath);
+          }
+          return folderResults;
+        } catch (error) {
+          // Not a git repo or git not installed
+          const errorMessage =
+            error instanceof Error ? error.message : JSON.stringify(error) || String(error);
+          console.debug(`Git file listing failed for ${folderPath}: ${errorMessage}`);
+          return [];
         }
-    }
+      }),
+    );
 
-    /**
-     * Check if indexing is in progress
-     */
-    isIndexing(): boolean {
-        return this.indexing;
-    }
+    const allResults = await Promise.all(folderPromises);
+    return allResults.flat();
+  }
 
-    getLastIndexTimestamp(): number | null {
-        return this.lastIndexTimestamp;
-    }
+  /**
+   * Process a list of file paths into searchable items in parallel
+   */
+  private async processFileList(
+    files: string[],
+    collector: (items: SearchableItem[]) => void,
+  ): Promise<void> {
+    const CONCURRENCY = 50; // Reduced to 50 to avoid EMFILE on some systems
+    const limit = pLimit(CONCURRENCY);
 
-    /**
-     * Index all files in workspace
-     */
-    private async indexFiles(collector: (items: SearchableItem[]) => void): Promise<void> {
-        // TURBO PATH: Try to use git ls-files for instant listing if it's a git repo
-        const gitFiles = await this.listGitFiles();
-        if (gitFiles.length > 0) {
-            this.log('Using git for indexing: true');
-            await this.processFileList(gitFiles, collector);
+    let batch: SearchableItem[] = [];
+
+    await Promise.all(
+      files.map((filePath) =>
+        limit(async () => {
+          if (this.cancellationToken.cancelled) {
             return;
-        }
+          }
 
-        this.log('Using git for indexing: false');
+          // Skip C# auto-generated files in parallel
+          if (filePath.endsWith(".cs")) {
+            if (this.isLikelyGeneratedCSharpPath(filePath)) {
+              return;
+            }
 
-        // STANDARD FALLBACK
-        const excludePatterns = this.config.getExcludePatterns();
-        const includePattern = `**/*`;
+            const isAutoGenerated = await this.isAutoGeneratedFile(filePath);
+            if (isAutoGenerated) {
+              return;
+            }
+          }
 
-        // LSP client or VS Code provides the implementation
-        const excludePattern = `{${excludePatterns.join(',')}}`;
-        const files = await this.env.findFiles(includePattern, excludePattern);
+          const fileName = path.basename(filePath);
+          // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
+          const relativePath = this.env.asRelativePath(filePath);
+          const internedFileName = this.intern(fileName);
 
-        await this.processFileList(files, collector);
-    }
+          batch.push({
+            id: `file:${filePath}`,
+            name: internedFileName,
+            type: SearchItemType.FILE,
+            filePath: filePath,
+            relativeFilePath: relativePath,
+            detail: relativePath,
+            fullName: relativePath,
+          });
 
-    /**
-     * List files using git (much faster than walking disk)
-     */
-    private async listGitFiles(): Promise<string[]> {
-        const workspaceFolders = this.env.getWorkspaceFolders();
-        if (workspaceFolders.length === 0) {
-            return [];
-        }
-
-        const limit = pLimit(50); // Consistent with processFileList concurrency
-
-        const folderPromises = workspaceFolders.map((folderPath) =>
-            limit(async () => {
-                try {
-                    // Get both tracked and untracked (but not ignored) files
-                    const output = await this.execGit(
-                        ['ls-files', '--cached', '--others', '--exclude-standard'],
-                        folderPath,
-                    );
-
-                    const lines = output.split('\n');
-                    const folderResults: string[] = [];
-
-                    for (const rawLine of lines) {
-                        const line = rawLine.trim();
-                        if (!line) {
-                            continue;
-                        }
-
-                        const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
-                        // Optimization: Do not intern file paths during discovery as they are unique per file
-                        folderResults.push(fullPath);
-                    }
-                    return folderResults;
-                } catch (error) {
-                    // Not a git repo or git not installed
-                    const errorMessage =
-                        error instanceof Error ? error.message : JSON.stringify(error) || String(error);
-                    console.debug(`Git file listing failed for ${folderPath}: ${errorMessage}`);
-                    return [];
-                }
-            }),
-        );
-
-        const allResults = await Promise.all(folderPromises);
-        return allResults.flat();
-    }
-
-    /**
-     * Process a list of file paths into searchable items in parallel
-     */
-    private async processFileList(files: string[], collector: (items: SearchableItem[]) => void): Promise<void> {
-        const CONCURRENCY = 50; // Reduced to 50 to avoid EMFILE on some systems
-        const limit = pLimit(CONCURRENCY);
-
-        let batch: SearchableItem[] = [];
-
-        await Promise.all(
-            files.map((filePath) =>
-                limit(async () => {
-                    if (this.cancellationToken.cancelled) {
-                        return;
-                    }
-
-                    // Skip C# auto-generated files in parallel
-                    if (filePath.endsWith('.cs')) {
-                        if (this.isLikelyGeneratedCSharpPath(filePath)) {
-                            return;
-                        }
-
-                        const isAutoGenerated = await this.isAutoGeneratedFile(filePath);
-                        if (isAutoGenerated) {
-                            return;
-                        }
-                    }
-
-                    const fileName = path.basename(filePath);
-                    // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
-                    const relativePath = this.env.asRelativePath(filePath);
-                    const internedFileName = this.intern(fileName);
-
-                    batch.push({
-                        id: `file:${filePath}`,
-                        name: internedFileName,
-                        type: SearchItemType.FILE,
-                        filePath: filePath,
-                        relativeFilePath: relativePath,
-                        detail: relativePath,
-                        fullName: relativePath,
-                    });
-
-                    if (batch.length >= CONCURRENCY) {
-                        collector(batch);
-                        batch = [];
-                    }
-                }),
-            ),
-        );
-
-        if (this.cancellationToken.cancelled) {
-            throw new CancellationError();
-        }
-
-        if (batch.length > 0) {
+          if (batch.length >= CONCURRENCY) {
             collector(batch);
-        }
+            batch = [];
+          }
+        }),
+      ),
+    );
+
+    if (this.cancellationToken.cancelled) {
+      throw new CancellationError();
     }
 
-    private isLikelyGeneratedCSharpPath(filePath: string): boolean {
-        // ⚡ Bolt: Fast C# path check optimization
-        // Normalizing path and doing split/basename is ~15% slower than using includes and custom slice logic
-        const p = filePath.toLowerCase();
-        if (p.includes('/obj/') || p.includes('\\obj\\') || p.includes('/generated/') || p.includes('\\generated\\')) {
-            return true;
-        }
-
-        let fileNameStartIndex = 0;
-        for (let i = p.length - 1; i >= 0; i--) {
-            const c = p.charCodeAt(i);
-            if (c === 47 || c === 92) {
-                // slash or backslash
-                fileNameStartIndex = i + 1;
-                break;
-            }
-        }
-
-        const fileName = p.slice(fileNameStartIndex);
-        return (
-            fileName.endsWith('.g.cs') ||
-            fileName.endsWith('.g.i.cs') ||
-            fileName.endsWith('.designer.cs') ||
-            fileName.endsWith('.generated.cs') ||
-            fileName.endsWith('.assemblyattributes.cs')
-        );
+    if (batch.length > 0) {
+      collector(batch);
     }
+  }
 
-    private async getFileSize(filePath: string): Promise<number | undefined> {
-        let attempts = 0;
-        while (attempts < 3) {
-            try {
-                const stats = await fs.promises.stat(filePath);
-                return stats.size;
-            } catch (error) {
-                const err = error;
-                // Retry only on file descriptor exhaustion or busy errors
-                if (err.code === 'EMFILE' || err.code === 'ENFILE' || err.code === 'EBUSY') {
-                    attempts++;
-                    if (attempts >= 3) {
-                        this.log(`Failed to get file size for ${filePath} after 3 attempts: ${err.message}`);
-                        return undefined;
-                    }
-                    // Exponential backoff: 20ms, 80ms
-                    await new Promise((resolve) => setTimeout(resolve, 20 * Math.pow(4, attempts - 1)));
-                } else {
-                    // Non-retriable error (e.g., file not found)
-                    return undefined;
-                }
-            }
-        }
-        return undefined;
-    }
-
-    /**
-     * Check if a file is auto-generated (C# files with // <auto-generated /> marker)
-     * Optimized to avoid opening a full document
-     */
-    private async isAutoGeneratedFile(filePath: string): Promise<boolean> {
-        let fd: fs.promises.FileHandle | undefined;
-        try {
-            fd = await fs.promises.open(filePath, 'r');
-            const { buffer } = await fd.read(Buffer.alloc(1024), 0, 1024, 0);
-
-            const content = buffer.toString('utf8');
-
-            if (!content) {
-                return false;
-            }
-
-            const firstLine = content.split('\n')[0].trim();
-
-            // Check for common auto-generated markers in C#
-            return (
-                firstLine === '// <auto-generated />' ||
-                firstLine === '// <auto-generated/>' ||
-                firstLine.startsWith('// <auto-generated>') ||
-                content.includes('<auto-generated') // Some files have it later or in a header block
-            );
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : JSON.stringify(error) || String(error);
-            console.debug(`Auto-generated check failed for ${filePath}: ${errorMessage}`);
-            return false;
-        } finally {
-            if (fd) {
-                try {
-                    await fd.close();
-                } catch (closeError) {
-                    const closeErrorMessage =
-                        closeError instanceof Error
-                            ? closeError.message
-                            : JSON.stringify(closeError) || String(closeError);
-                    console.debug(`Failed to close file handle for ${filePath}: ${closeErrorMessage}`);
-                }
-            }
-        }
-    }
-
-    /**
-     * Index symbols from all files with optimized concurrency (Sliding Window)
-     */
-    private async indexSymbols(
-        fileItems: SearchableItem[],
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<void> {
-        const totalFiles = fileItems.length;
-
-        if (totalFiles === 0) {
-            return;
-        }
-
-        if (!this.env.executeWorkspaceSymbolProvider) {
-            await this.runFileIndexingPool(fileItems, progressCallback);
-            return;
-        }
-
-        const workspaceScan = await this.scanWorkspaceSymbols(progressCallback);
-        const coverage = workspaceScan.uniqueFiles / totalFiles;
-        const shouldSkipFullWorkerPass =
-            workspaceScan.symbolCount > 0 &&
-            !workspaceScan.timedOut &&
-            coverage >= WorkspaceIndexer.WORKSPACE_SYMBOL_COVERAGE_THRESHOLD;
-
-        this.log(
-            `Workspace symbol pass: symbols=${workspaceScan.symbolCount}, files=${workspaceScan.uniqueFiles}, coverage=${coverage.toFixed(2)}, duration=${Math.round(workspaceScan.durationMs)}ms`,
-        );
-
-        if (shouldSkipFullWorkerPass) {
-            progressCallback?.('Workspace symbols provided sufficient coverage; skipping deep parse.', 70);
-            return;
-        }
-
-        await this.runFileIndexingPool(fileItems, progressCallback);
-    }
-
-    /**
-     * Perform workspace-wide symbol extraction pass
-     */
-    private async scanWorkspaceSymbols(
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<WorkspaceSymbolScanResult> {
-        progressCallback?.('Fast-scanning workspace symbols...', 5);
-        if (!this.env.executeWorkspaceSymbolProvider) {
-            return {
-                symbolCount: 0,
-                uniqueFiles: 0,
-                durationMs: 0,
-                timedOut: false,
-            };
-        }
-
-        const start = Date.now();
-
-        try {
-            const workspaceSymbolsPromise = this.env.executeWorkspaceSymbolProvider();
-            const timeoutPromise = new Promise<'timeout'>((resolve) => {
-                setTimeout(() => resolve('timeout'), WorkspaceIndexer.WORKSPACE_SYMBOL_TIMEOUT_MS);
-            });
-
-            const resolved = await Promise.race([workspaceSymbolsPromise, timeoutPromise]);
-
-            if (resolved === 'timeout') {
-                return {
-                    symbolCount: 0,
-                    uniqueFiles: 0,
-                    durationMs: Date.now() - start,
-                    timedOut: true,
-                };
-            }
-
-            const workspaceSymbols = resolved;
-
-            if (workspaceSymbols && workspaceSymbols.length > 0) {
-                const uniqueFiles = await this.processWorkspaceSymbols(workspaceSymbols);
-                return {
-                    symbolCount: workspaceSymbols.length,
-                    uniqueFiles,
-                    durationMs: Date.now() - start,
-                    timedOut: false,
-                };
-            }
-
-            return {
-                symbolCount: 0,
-                uniqueFiles: 0,
-                durationMs: Date.now() - start,
-                timedOut: false,
-            };
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : JSON.stringify(error) || String(error);
-            console.debug(`Workspace symbol pass failed, moving to file-by-file: ${errorMessage}`);
-
-            return {
-                symbolCount: 0,
-                uniqueFiles: 0,
-                durationMs: Date.now() - start,
-                timedOut: false,
-            };
-        }
-    }
-
-    private async runFileIndexingPool(
-        fileItems: SearchableItem[],
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<void> {
-        const totalFiles = fileItems.length;
-        let batchSize = 100;
-        if (totalFiles >= 10000) {
-            batchSize = 250;
-        } else if (totalFiles >= 2500) {
-            batchSize = 150;
-        }
-
-        const workers = this.getWorkers();
-        if (workers.length === 0) {
-            this.log(`No indexing workers available. Falling back to main thread.`);
-            return this.runFileIndexingFallback(fileItems, progressCallback);
-        }
-
-        this.log(`Using ${workers.length} persistent indexing workers...`);
-
-        const state: WorkerPoolState = {
-            pendingItems: [...fileItems],
-            activeTasks: 0,
-            finished: false,
-            processed: 0,
-            nextReportingPercentage: 0,
-            logged100: false,
-            resolveAll: () => {},
-        };
-
-        try {
-            const promise = new Promise<void>((resolve) => {
-                state.resolveAll = resolve;
-            });
-
-            const cleanupListeners = this.setupWorkerPoolListeners(
-                workers,
-                totalFiles,
-                state,
-                progressCallback,
-                batchSize,
-            );
-            this.startInitialWorkerTasks(workers, state, batchSize);
-            await promise;
-            this.cleanupWorkerPoolListeners(cleanupListeners);
-        } catch (error) {
-            this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
-            return this.runFileIndexingFallback(fileItems, progressCallback);
-        }
-    }
-
-    private setupWorkerPoolListeners(
-        workers: Worker[],
-        totalFiles: number,
-        state: WorkerPoolState,
-        progressCallback: ((message: string, increment?: number) => void) | undefined,
-        batchSize: number,
-    ): (() => void)[] {
-        const cleanupListeners: (() => void)[] = [];
-
-        for (const worker of workers) {
-            const onMessage = (message: {
-                type: string;
-                items?: SearchableItem[];
-                count?: number;
-                isPartial?: boolean;
-            }) => {
-                this.handleWorkerMessage(message, worker, state, totalFiles, progressCallback, batchSize);
-            };
-
-            worker.on('message', onMessage);
-            cleanupListeners.push(() => worker.removeListener('message', onMessage));
-        }
-
-        return cleanupListeners;
-    }
-
-    private startInitialWorkerTasks(workers: Worker[], state: WorkerPoolState, batchSize: number): void {
-        const initialCount = Math.min(workers.length, state.pendingItems.length);
-        if (initialCount === 0) {
-            state.finished = true;
-            state.resolveAll();
-            return;
-        }
-
-        for (let i = 0; i < initialCount; i++) {
-            this.assignWorkerTask(workers[i], batchSize, state);
-        }
-    }
-
-    private cleanupWorkerPoolListeners(cleanupListeners: (() => void)[]): void {
-        for (const cleanup of cleanupListeners) {
-            cleanup();
-        }
-    }
-
-    private assignWorkerTask(worker: Worker, batchSize: number, state: WorkerPoolState): void {
-        if (state.finished) {
-            return;
-        }
-
-        if (this.cancellationToken.cancelled) {
-            this.finishIfNoActiveTasks(state);
-            return;
-        }
-
-        const batchFiles = this.collectBatch(state, batchSize);
-
-        state.activeTasks++;
-
-        try {
-            if (batchFiles.length > 0) {
-                worker.postMessage({
-                    filePaths: batchFiles,
-                    chunkSize: this.getWorkerChunkSize(batchFiles.length),
-                });
-            } else {
-                this.finalizeTask(state);
-            }
-        } catch (error) {
-            this.log(`Error assigning task: ${error}`);
-            this.finalizeTask(state);
-        }
-    }
-
-    private getWorkerChunkSize(assignedBatchSize: number): number {
-        if (assignedBatchSize >= 200) {
-            return 60;
-        }
-        if (assignedBatchSize >= 100) {
-            return 40;
-        }
-        return 25;
-    }
-
-    private collectBatch(state: WorkerPoolState, batchSize: number): string[] {
-        const batchFiles: string[] = [];
-        while (state.pendingItems.length > 0 && batchFiles.length < batchSize) {
-            const fileItem = state.pendingItems.shift();
-            if (fileItem) {
-                batchFiles.push(fileItem.filePath);
-            }
-        }
-        return batchFiles;
-    }
-
-    private finalizeTask(state: WorkerPoolState): void {
-        state.activeTasks--;
-        this.finishIfNoActiveTasks(state);
-    }
-
-    private finishIfNoActiveTasks(state: WorkerPoolState): void {
-        if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
-            state.finished = true;
-            state.resolveAll();
-        }
-    }
-
-    private handleWorkerMessage(
-        message: {
-            type: string;
-            items?: SearchableItem[];
-            count?: number;
-            isPartial?: boolean;
-        },
-        worker: Worker,
-        state: WorkerPoolState,
-        totalFiles: number,
-        progressCallback: ((message: string, increment?: number) => void) | undefined,
-        batchSize: number,
-    ): void {
-        if (this.handleCancelledWorkerMessage(message, state)) {
-            return;
-        }
-
-        if (message.type === 'result') {
-            this.handleWorkerResultMessage(message, worker, state, totalFiles, progressCallback, batchSize);
-        } else if (message.type === 'error') {
-            this.handleWorkerErrorMessage(worker, state, batchSize);
-        }
-    }
-
-    private handleCancelledWorkerMessage(
-        message: {
-            type: string;
-            items?: SearchableItem[];
-            count?: number;
-            isPartial?: boolean;
-        },
-        state: WorkerPoolState,
-    ): boolean {
-        if (!this.cancellationToken.cancelled || state.finished) {
-            return false;
-        }
-
-        if ((message.type === 'result' || message.type === 'error') && !message.isPartial) {
-            state.activeTasks--;
-            this.finishIfNoActiveTasks(state);
-        }
-
-        return true;
-    }
-
-    private handleWorkerResultMessage(
-        message: {
-            type: string;
-            items?: SearchableItem[];
-            count?: number;
-            isPartial?: boolean;
-        },
-        worker: Worker,
-        state: WorkerPoolState,
-        totalFiles: number,
-        progressCallback: ((message: string, increment?: number) => void) | undefined,
-        batchSize: number,
-    ): void {
-        const { items, count, isPartial } = message;
-
-        if (items && items.length > 0) {
-            const processItems = () => {
-                const internedItems = items.map((item: SearchableItem) => ({
-                    ...item,
-                    name: this.intern(item.name),
-                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                    relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
-                    filePath: this.intern(item.filePath),
-                }));
-                this.fireItemsAdded(internedItems);
-            };
-
-            if (items.length > 100) {
-                setTimeout(processItems, 0);
-            } else {
-                processItems();
-            }
-        }
-
-        const itemsProcessed = count || 1;
-        state.processed += itemsProcessed;
-
-        if (!isPartial) {
-            state.activeTasks--;
-        }
-
-        this.updateWorkerProgress(totalFiles, itemsProcessed, state, progressCallback);
-
-        if (isPartial) {
-            return;
-        }
-
-        if (state.pendingItems.length > 0) {
-            this.assignWorkerTask(worker, batchSize, state);
-        } else {
-            this.finishIfNoActiveTasks(state);
-        }
-    }
-
-    private handleWorkerErrorMessage(worker: Worker, state: WorkerPoolState, batchSize: number): void {
-        state.activeTasks--;
-        if (state.pendingItems.length > 0) {
-            this.assignWorkerTask(worker, batchSize, state);
-        } else {
-            this.finishIfNoActiveTasks(state);
-        }
-    }
-
-    private updateWorkerProgress(
-        totalFiles: number,
-        itemsProcessed: number,
-        state: WorkerPoolState,
-        progressCallback: ((message: string, increment?: number) => void) | undefined,
+  private isLikelyGeneratedCSharpPath(filePath: string): boolean {
+    // ⚡ Bolt: Fast C# path check optimization
+    // Normalizing path and doing split/basename is ~15% slower than using includes and custom slice logic
+    const p = filePath.toLowerCase();
+    if (
+      p.includes("/obj/") ||
+      p.includes("\\obj\\") ||
+      p.includes("/generated/") ||
+      p.includes("\\generated\\")
     ) {
-        const processed = state.processed;
-        const logged100 = state.logged100;
-
-        if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
-            if (processed >= totalFiles) {
-                state.logged100 = true;
-            }
-            this.log(
-                `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
-            );
-        }
-
-        if (progressCallback) {
-            const percentage = (processed / totalFiles) * 100;
-            const nextReportingPercentage = state.nextReportingPercentage;
-            if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
-                state.nextReportingPercentage = percentage + 5;
-            }
-        }
+      return true;
     }
 
-    /**
-     * Process symbols from workspace provider
-     */
-    private async processWorkspaceSymbols(
-        symbols: import('./indexer-interfaces').LeanSymbolInformation[],
-    ): Promise<number> {
-        const batch: SearchableItem[] = [];
-        const uniqueFiles = new Set<string>();
-
-        for (const symbol of symbols) {
-            const itemType = this.mapSymbolKindToItemType(symbol.kind);
-            if (!itemType) {
-                continue;
-            }
-
-            const filePath = this.normalizeUriToPath(symbol.location.uri);
-            uniqueFiles.add(filePath);
-            const id = `symbol:${filePath}:${symbol.name}:${symbol.location.range.start.line}`;
-            const item: SearchableItem = {
-                id,
-                name: symbol.name,
-                type: itemType,
-                filePath,
-                relativeFilePath: this.env.asRelativePath(filePath),
-                line: symbol.location.range.start.line,
-                column: symbol.location.range.start.character,
-                containerName: symbol.containerName,
-                fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
-            };
-
-            batch.push(item);
-        }
-
-        this.fireItemsAdded(batch);
-        return uniqueFiles.size;
+    let fileNameStartIndex = 0;
+    for (let i = p.length - 1; i >= 0; i--) {
+      const c = p.charCodeAt(i);
+      if (c === 47 || c === 92) {
+        // slash or backslash
+        fileNameStartIndex = i + 1;
+        break;
+      }
     }
 
-    private normalizeUriToPath(uriOrPath: string): string {
-        if (uriOrPath.startsWith('file://')) {
-            try {
-                return fileURLToPath(uriOrPath);
-            } catch {
-                return uriOrPath;
-            }
+    const fileName = p.slice(fileNameStartIndex);
+    return (
+      fileName.endsWith(".g.cs") ||
+      fileName.endsWith(".g.i.cs") ||
+      fileName.endsWith(".designer.cs") ||
+      fileName.endsWith(".generated.cs") ||
+      fileName.endsWith(".assemblyattributes.cs")
+    );
+  }
+
+  private async getFileSize(filePath: string): Promise<number | undefined> {
+    let attempts = 0;
+    while (attempts < 3) {
+      try {
+        const stats = await fs.promises.stat(filePath);
+        return stats.size;
+      } catch (error) {
+        const err = error;
+        // Retry only on file descriptor exhaustion or busy errors
+        if (err.code === "EMFILE" || err.code === "ENFILE" || err.code === "EBUSY") {
+          attempts++;
+          if (attempts >= 3) {
+            this.log(`Failed to get file size for ${filePath} after 3 attempts: ${err.message}`);
+            return undefined;
+          }
+          // Exponential backoff: 20ms, 80ms
+          await new Promise((resolve) => setTimeout(resolve, 20 * Math.pow(4, attempts - 1)));
+        } else {
+          // Non-retriable error (e.g., file not found)
+          return undefined;
         }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Check if a file is auto-generated (C# files with // <auto-generated /> marker)
+   * Optimized to avoid opening a full document
+   */
+  private async isAutoGeneratedFile(filePath: string): Promise<boolean> {
+    let fd: fs.promises.FileHandle | undefined;
+    try {
+      fd = await fs.promises.open(filePath, "r");
+      const { buffer } = await fd.read(Buffer.alloc(1024), 0, 1024, 0);
+
+      const content = buffer.toString("utf8");
+
+      if (!content) {
+        return false;
+      }
+
+      const firstLine = content.split("\n")[0].trim();
+
+      // Check for common auto-generated markers in C#
+      return (
+        firstLine === "// <auto-generated />" ||
+        firstLine === "// <auto-generated/>" ||
+        firstLine.startsWith("// <auto-generated>") ||
+        content.includes("<auto-generated") // Some files have it later or in a header block
+      );
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : JSON.stringify(error) || String(error);
+      console.debug(`Auto-generated check failed for ${filePath}: ${errorMessage}`);
+      return false;
+    } finally {
+      if (fd) {
+        try {
+          await fd.close();
+        } catch (closeError) {
+          const closeErrorMessage =
+            closeError instanceof Error
+              ? closeError.message
+              : JSON.stringify(closeError) || String(closeError);
+          console.debug(`Failed to close file handle for ${filePath}: ${closeErrorMessage}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Index symbols from all files with optimized concurrency (Sliding Window)
+   */
+  private async indexSymbols(
+    fileItems: SearchableItem[],
+    progressCallback?: (message: string, increment?: number) => void,
+  ): Promise<void> {
+    const totalFiles = fileItems.length;
+
+    if (totalFiles === 0) {
+      return;
+    }
+
+    if (!this.env.executeWorkspaceSymbolProvider) {
+      await this.runFileIndexingPool(fileItems, progressCallback);
+      return;
+    }
+
+    const workspaceScan = await this.scanWorkspaceSymbols(progressCallback);
+    const coverage = workspaceScan.uniqueFiles / totalFiles;
+    const shouldSkipFullWorkerPass =
+      workspaceScan.symbolCount > 0 &&
+      !workspaceScan.timedOut &&
+      coverage >= WorkspaceIndexer.WORKSPACE_SYMBOL_COVERAGE_THRESHOLD;
+
+    this.log(
+      `Workspace symbol pass: symbols=${workspaceScan.symbolCount}, files=${workspaceScan.uniqueFiles}, coverage=${coverage.toFixed(2)}, duration=${Math.round(workspaceScan.durationMs)}ms`,
+    );
+
+    if (shouldSkipFullWorkerPass) {
+      progressCallback?.(
+        "Workspace symbols provided sufficient coverage; skipping deep parse.",
+        70,
+      );
+      return;
+    }
+
+    await this.runFileIndexingPool(fileItems, progressCallback);
+  }
+
+  /**
+   * Perform workspace-wide symbol extraction pass
+   */
+  private async scanWorkspaceSymbols(
+    progressCallback?: (message: string, increment?: number) => void,
+  ): Promise<WorkspaceSymbolScanResult> {
+    progressCallback?.("Fast-scanning workspace symbols...", 5);
+    if (!this.env.executeWorkspaceSymbolProvider) {
+      return {
+        symbolCount: 0,
+        uniqueFiles: 0,
+        durationMs: 0,
+        timedOut: false,
+      };
+    }
+
+    const start = Date.now();
+
+    try {
+      const workspaceSymbolsPromise = this.env.executeWorkspaceSymbolProvider();
+      const timeoutPromise = new Promise<"timeout">((resolve) => {
+        setTimeout(() => resolve("timeout"), WorkspaceIndexer.WORKSPACE_SYMBOL_TIMEOUT_MS);
+      });
+
+      const resolved = await Promise.race([workspaceSymbolsPromise, timeoutPromise]);
+
+      if (resolved === "timeout") {
+        return {
+          symbolCount: 0,
+          uniqueFiles: 0,
+          durationMs: Date.now() - start,
+          timedOut: true,
+        };
+      }
+
+      const workspaceSymbols = resolved;
+
+      if (workspaceSymbols && workspaceSymbols.length > 0) {
+        const uniqueFiles = await this.processWorkspaceSymbols(workspaceSymbols);
+        return {
+          symbolCount: workspaceSymbols.length,
+          uniqueFiles,
+          durationMs: Date.now() - start,
+          timedOut: false,
+        };
+      }
+
+      return {
+        symbolCount: 0,
+        uniqueFiles: 0,
+        durationMs: Date.now() - start,
+        timedOut: false,
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : JSON.stringify(error) || String(error);
+      console.debug(`Workspace symbol pass failed, moving to file-by-file: ${errorMessage}`);
+
+      return {
+        symbolCount: 0,
+        uniqueFiles: 0,
+        durationMs: Date.now() - start,
+        timedOut: false,
+      };
+    }
+  }
+
+  private async runFileIndexingPool(
+    fileItems: SearchableItem[],
+    progressCallback?: (message: string, increment?: number) => void,
+  ): Promise<void> {
+    const totalFiles = fileItems.length;
+    let batchSize = 100;
+    if (totalFiles >= 10000) {
+      batchSize = 250;
+    } else if (totalFiles >= 2500) {
+      batchSize = 150;
+    }
+
+    const workers = this.getWorkers();
+    if (workers.length === 0) {
+      this.log(`No indexing workers available. Falling back to main thread.`);
+      return this.runFileIndexingFallback(fileItems, progressCallback);
+    }
+
+    this.log(`Using ${workers.length} persistent indexing workers...`);
+
+    const state: WorkerPoolState = {
+      pendingItems: [...fileItems],
+      activeTasks: 0,
+      finished: false,
+      processed: 0,
+      nextReportingPercentage: 0,
+      logged100: false,
+      resolveAll: () => {},
+    };
+
+    try {
+      const promise = new Promise<void>((resolve) => {
+        state.resolveAll = resolve;
+      });
+
+      const cleanupListeners = this.setupWorkerPoolListeners(
+        workers,
+        totalFiles,
+        state,
+        progressCallback,
+        batchSize,
+      );
+      this.startInitialWorkerTasks(workers, state, batchSize);
+      await promise;
+      this.cleanupWorkerPoolListeners(cleanupListeners);
+    } catch (error) {
+      this.log(`Worker pool failed: ${error}. Falling back to main thread.`);
+      return this.runFileIndexingFallback(fileItems, progressCallback);
+    }
+  }
+
+  private setupWorkerPoolListeners(
+    workers: Worker[],
+    totalFiles: number,
+    state: WorkerPoolState,
+    progressCallback: ((message: string, increment?: number) => void) | undefined,
+    batchSize: number,
+  ): (() => void)[] {
+    const cleanupListeners: (() => void)[] = [];
+
+    for (const worker of workers) {
+      const onMessage = (message: {
+        type: string;
+        items?: SearchableItem[];
+        count?: number;
+        isPartial?: boolean;
+      }) => {
+        this.handleWorkerMessage(message, worker, state, totalFiles, progressCallback, batchSize);
+      };
+
+      worker.on("message", onMessage);
+      cleanupListeners.push(() => worker.removeListener("message", onMessage));
+    }
+
+    return cleanupListeners;
+  }
+
+  private startInitialWorkerTasks(
+    workers: Worker[],
+    state: WorkerPoolState,
+    batchSize: number,
+  ): void {
+    const initialCount = Math.min(workers.length, state.pendingItems.length);
+    if (initialCount === 0) {
+      state.finished = true;
+      state.resolveAll();
+      return;
+    }
+
+    for (let i = 0; i < initialCount; i++) {
+      this.assignWorkerTask(workers[i], batchSize, state);
+    }
+  }
+
+  private cleanupWorkerPoolListeners(cleanupListeners: (() => void)[]): void {
+    for (const cleanup of cleanupListeners) {
+      cleanup();
+    }
+  }
+
+  private assignWorkerTask(worker: Worker, batchSize: number, state: WorkerPoolState): void {
+    if (state.finished) {
+      return;
+    }
+
+    if (this.cancellationToken.cancelled) {
+      this.finishIfNoActiveTasks(state);
+      return;
+    }
+
+    const batchFiles = this.collectBatch(state, batchSize);
+
+    state.activeTasks++;
+
+    try {
+      if (batchFiles.length > 0) {
+        worker.postMessage({
+          filePaths: batchFiles,
+          chunkSize: this.getWorkerChunkSize(batchFiles.length),
+        });
+      } else {
+        this.finalizeTask(state);
+      }
+    } catch (error) {
+      this.log(`Error assigning task: ${error}`);
+      this.finalizeTask(state);
+    }
+  }
+
+  private getWorkerChunkSize(assignedBatchSize: number): number {
+    if (assignedBatchSize >= 200) {
+      return 60;
+    }
+    if (assignedBatchSize >= 100) {
+      return 40;
+    }
+    return 25;
+  }
+
+  private collectBatch(state: WorkerPoolState, batchSize: number): string[] {
+    const batchFiles: string[] = [];
+    while (state.pendingItems.length > 0 && batchFiles.length < batchSize) {
+      const fileItem = state.pendingItems.shift();
+      if (fileItem) {
+        batchFiles.push(fileItem.filePath);
+      }
+    }
+    return batchFiles;
+  }
+
+  private finalizeTask(state: WorkerPoolState): void {
+    state.activeTasks--;
+    this.finishIfNoActiveTasks(state);
+  }
+
+  private finishIfNoActiveTasks(state: WorkerPoolState): void {
+    if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
+      state.finished = true;
+      state.resolveAll();
+    }
+  }
+
+  private handleWorkerMessage(
+    message: {
+      type: string;
+      items?: SearchableItem[];
+      count?: number;
+      isPartial?: boolean;
+    },
+    worker: Worker,
+    state: WorkerPoolState,
+    totalFiles: number,
+    progressCallback: ((message: string, increment?: number) => void) | undefined,
+    batchSize: number,
+  ): void {
+    if (this.handleCancelledWorkerMessage(message, state)) {
+      return;
+    }
+
+    if (message.type === "result") {
+      this.handleWorkerResultMessage(
+        message,
+        worker,
+        state,
+        totalFiles,
+        progressCallback,
+        batchSize,
+      );
+    } else if (message.type === "error") {
+      this.handleWorkerErrorMessage(worker, state, batchSize);
+    }
+  }
+
+  private handleCancelledWorkerMessage(
+    message: {
+      type: string;
+      items?: SearchableItem[];
+      count?: number;
+      isPartial?: boolean;
+    },
+    state: WorkerPoolState,
+  ): boolean {
+    if (!this.cancellationToken.cancelled || state.finished) {
+      return false;
+    }
+
+    if ((message.type === "result" || message.type === "error") && !message.isPartial) {
+      state.activeTasks--;
+      this.finishIfNoActiveTasks(state);
+    }
+
+    return true;
+  }
+
+  private handleWorkerResultMessage(
+    message: {
+      type: string;
+      items?: SearchableItem[];
+      count?: number;
+      isPartial?: boolean;
+    },
+    worker: Worker,
+    state: WorkerPoolState,
+    totalFiles: number,
+    progressCallback: ((message: string, increment?: number) => void) | undefined,
+    batchSize: number,
+  ): void {
+    const { items, count, isPartial } = message;
+
+    if (items && items.length > 0) {
+      const processItems = () => {
+        const internedItems = items.map((item: SearchableItem) => ({
+          ...item,
+          name: this.intern(item.name),
+          fullName: item.fullName ? this.intern(item.fullName) : undefined,
+          containerName: item.containerName ? this.intern(item.containerName) : undefined,
+          relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
+          filePath: this.intern(item.filePath),
+        }));
+        this.fireItemsAdded(internedItems);
+      };
+
+      if (items.length > 100) {
+        setTimeout(processItems, 0);
+      } else {
+        processItems();
+      }
+    }
+
+    const itemsProcessed = count || 1;
+    state.processed += itemsProcessed;
+
+    if (!isPartial) {
+      state.activeTasks--;
+    }
+
+    this.updateWorkerProgress(totalFiles, itemsProcessed, state, progressCallback);
+
+    if (isPartial) {
+      return;
+    }
+
+    if (state.pendingItems.length > 0) {
+      this.assignWorkerTask(worker, batchSize, state);
+    } else {
+      this.finishIfNoActiveTasks(state);
+    }
+  }
+
+  private handleWorkerErrorMessage(
+    worker: Worker,
+    state: WorkerPoolState,
+    batchSize: number,
+  ): void {
+    state.activeTasks--;
+    if (state.pendingItems.length > 0) {
+      this.assignWorkerTask(worker, batchSize, state);
+    } else {
+      this.finishIfNoActiveTasks(state);
+    }
+  }
+
+  private updateWorkerProgress(
+    totalFiles: number,
+    itemsProcessed: number,
+    state: WorkerPoolState,
+    progressCallback: ((message: string, increment?: number) => void) | undefined,
+  ) {
+    const processed = state.processed;
+    const logged100 = state.logged100;
+
+    if (processed % 100 < itemsProcessed || (processed === totalFiles && !logged100)) {
+      if (processed >= totalFiles) {
+        state.logged100 = true;
+      }
+      this.log(
+        `Extraction progress: ${processed}/${totalFiles} files (${Math.round((processed / totalFiles) * 100)}%)`,
+      );
+    }
+
+    if (progressCallback) {
+      const percentage = (processed / totalFiles) * 100;
+      const nextReportingPercentage = state.nextReportingPercentage;
+      if (percentage >= nextReportingPercentage || processed === totalFiles) {
+        progressCallback(`Indexing batch... (${processed}/${totalFiles})`, percentage);
+        state.nextReportingPercentage = percentage + 5;
+      }
+    }
+  }
+
+  /**
+   * Process symbols from workspace provider
+   */
+  private async processWorkspaceSymbols(
+    symbols: import("./indexer-interfaces").LeanSymbolInformation[],
+  ): Promise<number> {
+    const batch: SearchableItem[] = [];
+    const uniqueFiles = new Set<string>();
+
+    for (const symbol of symbols) {
+      const itemType = this.mapSymbolKindToItemType(symbol.kind);
+      if (!itemType) {
+        continue;
+      }
+
+      const filePath = this.normalizeUriToPath(symbol.location.uri);
+      uniqueFiles.add(filePath);
+      const id = `symbol:${filePath}:${symbol.name}:${symbol.location.range.start.line}`;
+      const item: SearchableItem = {
+        id,
+        name: symbol.name,
+        type: itemType,
+        filePath,
+        relativeFilePath: this.env.asRelativePath(filePath),
+        line: symbol.location.range.start.line,
+        column: symbol.location.range.start.character,
+        containerName: symbol.containerName,
+        fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
+      };
+
+      batch.push(item);
+    }
+
+    this.fireItemsAdded(batch);
+    return uniqueFiles.size;
+  }
+
+  private normalizeUriToPath(uriOrPath: string): string {
+    if (uriOrPath.startsWith("file://")) {
+      try {
+        return fileURLToPath(uriOrPath);
+      } catch {
         return uriOrPath;
+      }
     }
+    return uriOrPath;
+  }
 
-    /**
-     * Process symbols recursively
-     */
-    private processSymbols(
-        symbols: import('./indexer-interfaces').LeanDocumentSymbol[],
-        filePath: string, // Expected to be interned by caller
-        relativeFilePath: string, // Expected to be interned by caller
-        collector: SearchableItem[],
-        containerName?: string,
-    ): void {
-        for (const symbol of symbols) {
-            const itemType = this.mapSymbolKindToItemType(symbol.kind);
-            if (itemType) {
-                const name = this.intern(symbol.name);
-                const internedContainerName = containerName ? this.intern(containerName) : undefined;
-                const fullName = this.intern(containerName ? `${containerName}.${symbol.name}` : symbol.name);
-
-                const selectionStart = symbol.selectionRange?.start ?? symbol.range.start;
-
-                collector.push({
-                    id: `symbol:${filePath}:${fullName}:${selectionStart.line}`,
-                    name: name,
-                    type: itemType,
-                    filePath,
-                    relativeFilePath,
-                    line: selectionStart.line,
-                    column: selectionStart.character,
-                    containerName: internedContainerName,
-                    fullName,
-                    detail: symbol.detail,
-                });
-            }
-
-            // Process nested symbols
-            if (symbol.children && symbol.children.length > 0) {
-                const newContainerName = containerName ? `${containerName}.${symbol.name}` : symbol.name;
-                this.processSymbols(symbol.children, filePath, relativeFilePath, collector, newContainerName);
-            }
-        }
-    }
-
-    /**
-     * Map SymbolKind to our SearchItemType
-     */
-    private mapSymbolKindToItemType(kind: number): SearchItemType | null {
-        // Based on VS Code SymbolKind enum values
-        switch (kind) {
-            case 4: // Class
-                return SearchItemType.CLASS;
-            case 10: // Interface
-                return SearchItemType.INTERFACE;
-            case 9: // Enum
-                return SearchItemType.ENUM;
-            case 11: // Function
-                return SearchItemType.FUNCTION;
-            case 5: // Method
-                return SearchItemType.METHOD;
-            case 6: // Property
-            case 7: // Field
-                return SearchItemType.PROPERTY;
-            case 12: // Variable
-            case 13: // Constant
-                return SearchItemType.VARIABLE;
-            default:
-                return null; // Skip other symbol kinds
-        }
-    }
-
-    private async runFileIndexingFallback(
-        fileItems: SearchableItem[],
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<void> {
-        const totalFiles = fileItems.length;
-        let processed = 0;
-        let nextReportingPercentage = 0;
-
-        const CONCURRENCY = 50;
-        const limit = pLimit(CONCURRENCY);
-
-        await Promise.all(
-            fileItems.map((fileItem) =>
-                limit(async () => {
-                    await this.indexFileSymbols(fileItem.filePath);
-                    processed++;
-
-                    if (progressCallback) {
-                        const percentage = (processed / totalFiles) * 100;
-                        if (percentage >= nextReportingPercentage || processed === totalFiles) {
-                            progressCallback(`Indexing symbols... (${processed}/${totalFiles})`, percentage);
-                            nextReportingPercentage = percentage + 5;
-                        }
-                    }
-                }),
-            ),
+  /**
+   * Process symbols recursively
+   */
+  private processSymbols(
+    symbols: import("./indexer-interfaces").LeanDocumentSymbol[],
+    filePath: string, // Expected to be interned by caller
+    relativeFilePath: string, // Expected to be interned by caller
+    collector: SearchableItem[],
+    containerName?: string,
+  ): void {
+    for (const symbol of symbols) {
+      const itemType = this.mapSymbolKindToItemType(symbol.kind);
+      if (itemType) {
+        const name = this.intern(symbol.name);
+        const internedContainerName = containerName ? this.intern(containerName) : undefined;
+        const fullName = this.intern(
+          containerName ? `${containerName}.${symbol.name}` : symbol.name,
         );
-    }
 
-    private async indexFileSymbols(filePath: string): Promise<void> {
-        try {
-            await this.treeSitter.init();
-            const items = await this.treeSitter.parseFile(filePath);
-            if (items.length > 0) {
-                this.fireItemsAdded(items);
-            }
-        } catch (error) {
-            this.log(`Error indexing symbols for ${filePath}: ${error}`);
-        }
-    }
+        const selectionStart = symbol.selectionRange?.start ?? symbol.range.start;
 
-    /**
-     * Setup file watchers for incremental updates
-     */
-    private setupFileWatchers(): void {
-        this.fileWatcher?.dispose();
-        if (!this.env.createFileSystemWatcher) return;
-
-        // Watch all files
-        const pattern = `**/*`;
-
-        this.fileWatcher = this.env.createFileSystemWatcher(pattern, (filePath, type) => {
-            void this.processFileEvent(filePath, type);
+        collector.push({
+          id: `symbol:${filePath}:${fullName}:${selectionStart.line}`,
+          name: name,
+          type: itemType,
+          filePath,
+          relativeFilePath,
+          line: selectionStart.line,
+          column: selectionStart.character,
+          containerName: internedContainerName,
+          fullName,
+          detail: symbol.detail,
         });
+      }
+
+      // Process nested symbols
+      if (symbol.children && symbol.children.length > 0) {
+        const newContainerName = containerName ? `${containerName}.${symbol.name}` : symbol.name;
+        this.processSymbols(
+          symbol.children,
+          filePath,
+          relativeFilePath,
+          collector,
+          newContainerName,
+        );
+      }
     }
+  }
 
-    public async processFileEvent(filePath: string, type: 'create' | 'change' | 'delete'): Promise<void> {
-        switch (type) {
-            case 'create':
-                await this.handleFileCreated(filePath);
-                break;
-            case 'change':
-                await this.handleFileChanged(filePath);
-                break;
-            case 'delete':
-                this.handleFileDeleted(filePath);
-                break;
-        }
+  /**
+   * Map SymbolKind to our SearchItemType
+   */
+  private mapSymbolKindToItemType(kind: number): SearchItemType | null {
+    // Based on VS Code SymbolKind enum values
+    switch (kind) {
+      case 4: // Class
+        return SearchItemType.CLASS;
+      case 10: // Interface
+        return SearchItemType.INTERFACE;
+      case 9: // Enum
+        return SearchItemType.ENUM;
+      case 11: // Function
+        return SearchItemType.FUNCTION;
+      case 5: // Method
+        return SearchItemType.METHOD;
+      case 6: // Property
+      case 7: // Field
+        return SearchItemType.PROPERTY;
+      case 12: // Variable
+      case 13: // Constant
+        return SearchItemType.VARIABLE;
+      default:
+        return null; // Skip other symbol kinds
     }
+  }
 
-    /**
-     * Check if a file should be excluded based on config patterns
-     */
-    private shouldExcludeFile(filePath: string): boolean {
-        const relativePath = this.env.asRelativePath(filePath);
-        // Normalize to forward slashes for matching
-        // ⚡ Bolt: Fast backslash normalization optimization
-        // Replacing with regex + early indexOf check is much faster than replaceAll
-        const normalizedPath = relativePath.indexOf('\\') !== -1 ? relativePath.replace(/\\/g, '/') : relativePath;
+  private async runFileIndexingFallback(
+    fileItems: SearchableItem[],
+    progressCallback?: (message: string, increment?: number) => void,
+  ): Promise<void> {
+    const totalFiles = fileItems.length;
+    let processed = 0;
+    let nextReportingPercentage = 0;
 
-        return this.excludeMatchers.some((matcher) => matcher.match(normalizedPath));
-    }
+    const CONCURRENCY = 50;
+    const limit = pLimit(CONCURRENCY);
 
-    private isGitIgnored(filePath: string): Promise<boolean> {
-        if (!this.config.shouldRespectGitignore()) {
-            return Promise.resolve(false);
-        }
+    await Promise.all(
+      fileItems.map((fileItem) =>
+        limit(async () => {
+          await this.indexFileSymbols(fileItem.filePath);
+          processed++;
 
-        const workspaceFolders = this.env.getWorkspaceFolders();
-        const folder = workspaceFolders.find((f) => filePath.startsWith(f));
-        if (!folder) {
-            return Promise.resolve(false);
-        }
-
-        // Add to queue for batch processing
-        let folderQueue = this.gitCheckQueue.get(folder);
-        if (!folderQueue) {
-            folderQueue = new Set();
-            this.gitCheckQueue.set(folder, folderQueue);
-        }
-        folderQueue.add(filePath);
-
-        // Create promise
-        return new Promise<boolean>((resolve) => {
-            let resolvers = this.gitCheckResolvers.get(filePath);
-            if (!resolvers) {
-                resolvers = [];
-                this.gitCheckResolvers.set(filePath, resolvers);
+          if (progressCallback) {
+            const percentage = (processed / totalFiles) * 100;
+            if (percentage >= nextReportingPercentage || processed === totalFiles) {
+              progressCallback(`Indexing symbols... (${processed}/${totalFiles})`, percentage);
+              nextReportingPercentage = percentage + 5;
             }
-            resolvers.push(resolve);
+          }
+        }),
+      ),
+    );
+  }
 
-            this.scheduleGitCheck();
-        });
+  private async indexFileSymbols(filePath: string): Promise<void> {
+    try {
+      await this.treeSitter.init();
+      const items = await this.treeSitter.parseFile(filePath);
+      if (items.length > 0) {
+        this.fireItemsAdded(items);
+      }
+    } catch (error) {
+      this.log(`Error indexing symbols for ${filePath}: ${error}`);
+    }
+  }
+
+  /**
+   * Setup file watchers for incremental updates
+   */
+  private setupFileWatchers(): void {
+    this.fileWatcher?.dispose();
+    if (!this.env.createFileSystemWatcher) return;
+
+    // Watch all files
+    const pattern = `**/*`;
+
+    this.fileWatcher = this.env.createFileSystemWatcher(pattern, (filePath, type) => {
+      void this.processFileEvent(filePath, type);
+    });
+  }
+
+  public async processFileEvent(
+    filePath: string,
+    type: "create" | "change" | "delete",
+  ): Promise<void> {
+    switch (type) {
+      case "create":
+        await this.handleFileCreated(filePath);
+        break;
+      case "change":
+        await this.handleFileChanged(filePath);
+        break;
+      case "delete":
+        this.handleFileDeleted(filePath);
+        break;
+    }
+  }
+
+  /**
+   * Check if a file should be excluded based on config patterns
+   */
+  private shouldExcludeFile(filePath: string): boolean {
+    const relativePath = this.env.asRelativePath(filePath);
+    // Normalize to forward slashes for matching
+    // ⚡ Bolt: Fast backslash normalization optimization
+    // Replacing with regex + early indexOf check is much faster than replaceAll
+    const normalizedPath =
+      relativePath.indexOf("\\") !== -1 ? relativePath.replace(/\\/g, "/") : relativePath;
+
+    return this.excludeMatchers.some((matcher) => matcher.match(normalizedPath));
+  }
+
+  private isGitIgnored(filePath: string): Promise<boolean> {
+    if (!this.config.shouldRespectGitignore()) {
+      return Promise.resolve(false);
     }
 
-    private scheduleGitCheck() {
-        if (this.gitCheckTimer) {
-            return;
-        }
-        // Debounce for 50ms to collect file events
-        this.gitCheckTimer = setTimeout(() => this.processGitChecks(), 50);
+    const workspaceFolders = this.env.getWorkspaceFolders();
+    const folder = workspaceFolders.find((f) => filePath.startsWith(f));
+    if (!folder) {
+      return Promise.resolve(false);
     }
 
-    private async processGitChecks() {
-        this.gitCheckTimer = null;
+    // Add to queue for batch processing
+    let folderQueue = this.gitCheckQueue.get(folder);
+    if (!folderQueue) {
+      folderQueue = new Set();
+      this.gitCheckQueue.set(folder, folderQueue);
+    }
+    folderQueue.add(filePath);
 
-        const queue = new Map(this.gitCheckQueue);
-        this.gitCheckQueue.clear();
+    // Create promise
+    return new Promise<boolean>((resolve) => {
+      let resolvers = this.gitCheckResolvers.get(filePath);
+      if (!resolvers) {
+        resolvers = [];
+        this.gitCheckResolvers.set(filePath, resolvers);
+      }
+      resolvers.push(resolve);
 
-        for (const [folder, files] of queue) {
-            if (files.size === 0) continue;
+      this.scheduleGitCheck();
+    });
+  }
 
-            const filesArray = Array.from(files);
-            await this.processGitCheckBatch(folder, filesArray);
+  private scheduleGitCheck() {
+    if (this.gitCheckTimer) {
+      return;
+    }
+    // Debounce for 50ms to collect file events
+    this.gitCheckTimer = setTimeout(() => this.processGitChecks(), 50);
+  }
+
+  private async processGitChecks() {
+    this.gitCheckTimer = null;
+
+    const queue = new Map(this.gitCheckQueue);
+    this.gitCheckQueue.clear();
+
+    for (const [folder, files] of queue) {
+      if (files.size === 0) continue;
+
+      const filesArray = Array.from(files);
+      await this.processGitCheckBatch(folder, filesArray);
+    }
+  }
+
+  private async processGitCheckBatch(folder: string, filesArray: string[]): Promise<void> {
+    try {
+      const input = filesArray.join("\0");
+      const output = await this.execGit(
+        ["check-ignore", "-v", "-n", "-z", "--stdin"],
+        folder,
+        input,
+      );
+
+      const parts = output.split("\0");
+      const ignoredFiles = new Set<string>();
+
+      for (let i = 0; i < parts.length - 1; i += 4) {
+        const source = parts[i];
+        const pathName = parts[i + 3];
+
+        if (source && source.length > 0) {
+          const absolutePath = path.isAbsolute(pathName) ? pathName : path.join(folder, pathName);
+          ignoredFiles.add(absolutePath);
         }
+      }
+
+      for (const filePath of filesArray) {
+        const isIgnored = ignoredFiles.has(filePath);
+        this.resolveGitCheck(filePath, isIgnored);
+      }
+    } catch (error) {
+      const exitCode = WorkspaceIndexer.getGitExitCode(error);
+      if (exitCode !== 1) {
+        console.error(`Git check-ignore batch failed for ${folder}:`, error);
+      }
+      for (const filePath of filesArray) {
+        this.resolveGitCheck(filePath, false);
+      }
+    }
+  }
+
+  private static getGitExitCode(error: unknown): number | undefined {
+    if (typeof error === "object" && error !== null && "code" in error) {
+      const code = (error as { code?: unknown }).code;
+      if (typeof code === "number") {
+        return code;
+      }
     }
 
-    private async processGitCheckBatch(folder: string, filesArray: string[]): Promise<void> {
-        try {
-            const input = filesArray.join('\0');
-            const output = await this.execGit(['check-ignore', '-v', '-n', '-z', '--stdin'], folder, input);
-
-            const parts = output.split('\0');
-            const ignoredFiles = new Set<string>();
-
-            for (let i = 0; i < parts.length - 1; i += 4) {
-                const source = parts[i];
-                const pathName = parts[i + 3];
-
-                if (source && source.length > 0) {
-                    const absolutePath = path.isAbsolute(pathName) ? pathName : path.join(folder, pathName);
-                    ignoredFiles.add(absolutePath);
-                }
-            }
-
-            for (const filePath of filesArray) {
-                const isIgnored = ignoredFiles.has(filePath);
-                this.resolveGitCheck(filePath, isIgnored);
-            }
-        } catch (error) {
-            const exitCode = WorkspaceIndexer.getGitExitCode(error);
-            if (exitCode !== 1) {
-                console.error(`Git check-ignore batch failed for ${folder}:`, error);
-            }
-            for (const filePath of filesArray) {
-                this.resolveGitCheck(filePath, false);
-            }
-        }
+    if (error instanceof Error) {
+      const codePattern = /code\s+(\d+)/;
+      const match = codePattern.exec(error.message);
+      if (match) {
+        return Number.parseInt(match[1], 10);
+      }
     }
 
-    private static getGitExitCode(error: unknown): number | undefined {
-        if (typeof error === 'object' && error !== null && 'code' in error) {
-            const code = (error as { code?: unknown }).code;
-            if (typeof code === 'number') {
-                return code;
-            }
-        }
+    return undefined;
+  }
 
-        if (error instanceof Error) {
-            const codePattern = /code\s+(\d+)/;
-            const match = codePattern.exec(error.message);
-            if (match) {
-                return Number.parseInt(match[1], 10);
-            }
-        }
+  private resolveGitCheck(filePath: string, isIgnored: boolean) {
+    const resolvers = this.gitCheckResolvers.get(filePath);
+    if (resolvers) {
+      for (const resolve of resolvers) {
+        resolve(isIgnored);
+      }
+      this.gitCheckResolvers.delete(filePath);
+    }
+  }
 
-        return undefined;
+  /**
+   * Handle file created
+   */
+  private async handleFileCreated(filePath: string): Promise<void> {
+    if (this.indexing || !this.watchersActive) {
+      return; // Skip during full re-index or cooldown
     }
 
-    private resolveGitCheck(filePath: string, isIgnored: boolean) {
-        const resolvers = this.gitCheckResolvers.get(filePath);
-        if (resolvers) {
-            for (const resolve of resolvers) {
-                resolve(isIgnored);
-            }
-            this.gitCheckResolvers.delete(filePath);
-        }
+    if (this.shouldExcludeFile(filePath)) {
+      return;
     }
 
-    /**
-     * Handle file created
-     */
-    private async handleFileCreated(filePath: string): Promise<void> {
-        if (this.indexing || !this.watchersActive) {
-            return; // Skip during full re-index or cooldown
-        }
-
-        if (this.shouldExcludeFile(filePath)) {
-            return;
-        }
-
-        if (await this.isGitIgnored(filePath)) {
-            return;
-        }
-
-        if (filePath.endsWith('.cs') && this.isLikelyGeneratedCSharpPath(filePath)) {
-            return;
-        }
-
-        const fileName = path.basename(filePath);
-        // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
-        const relativePath = this.env.asRelativePath(filePath);
-        const internedFilePath = filePath;
-        const internedFileName = this.intern(fileName);
-
-        // Add file item
-        const fileItem: SearchableItem = {
-            id: `file:${filePath}`,
-            name: internedFileName,
-            type: SearchItemType.FILE,
-            filePath: internedFilePath,
-            relativeFilePath: relativePath,
-            detail: relativePath,
-            fullName: relativePath,
-            size: await this.getFileSize(filePath),
-        };
-        this.fireItemsAdded([fileItem]);
-
-        // Index symbols
-        await this.indexFileSymbols(filePath);
-
-        this.log(`Indexed new file: ${relativePath}`);
+    if (await this.isGitIgnored(filePath)) {
+      return;
     }
 
-    /**
-     * Handle file changed
-     */
-    private async handleFileChanged(filePath: string): Promise<void> {
-        if (this.indexing || !this.watchersActive) {
-            return; // Skip individual updates during full re-index or cooldown
-        }
-
-        if (this.shouldExcludeFile(filePath)) {
-            return;
-        }
-
-        if (await this.isGitIgnored(filePath)) {
-            return;
-        }
-
-        if (filePath.endsWith('.cs') && this.isLikelyGeneratedCSharpPath(filePath)) {
-            return;
-        }
-
-        // Remove old symbols for this file
-        this.fireItemsRemoved(filePath);
-
-        // Invalidate hash to force re-calculation
-
-        // Re-add file item with updated size
-        const fileName = path.basename(filePath);
-        // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
-        const relativePath = this.env.asRelativePath(filePath);
-        const internedFilePath = filePath;
-        const internedFileName = this.intern(fileName);
-
-        const fileItem: SearchableItem = {
-            id: `file:${filePath}`,
-            name: internedFileName,
-            type: SearchItemType.FILE,
-            filePath: internedFilePath,
-            relativeFilePath: relativePath,
-            detail: relativePath,
-            fullName: relativePath,
-            size: await this.getFileSize(filePath),
-        };
-        this.fireItemsAdded([fileItem]);
-
-        // Re-index symbols (it will check cache internally)
-        await this.indexFileSymbols(filePath);
+    if (filePath.endsWith(".cs") && this.isLikelyGeneratedCSharpPath(filePath)) {
+      return;
     }
 
-    /**
-     * Handle file deleted
-     */
-    private handleFileDeleted(filePath: string): void {
-        if (this.shouldExcludeFile(filePath)) {
-            return;
+    const fileName = path.basename(filePath);
+    // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
+    const relativePath = this.env.asRelativePath(filePath);
+    const internedFilePath = filePath;
+    const internedFileName = this.intern(fileName);
+
+    // Add file item
+    const fileItem: SearchableItem = {
+      id: `file:${filePath}`,
+      name: internedFileName,
+      type: SearchItemType.FILE,
+      filePath: internedFilePath,
+      relativeFilePath: relativePath,
+      detail: relativePath,
+      fullName: relativePath,
+      size: await this.getFileSize(filePath),
+    };
+    this.fireItemsAdded([fileItem]);
+
+    // Index symbols
+    await this.indexFileSymbols(filePath);
+
+    this.log(`Indexed new file: ${relativePath}`);
+  }
+
+  /**
+   * Handle file changed
+   */
+  private async handleFileChanged(filePath: string): Promise<void> {
+    if (this.indexing || !this.watchersActive) {
+      return; // Skip individual updates during full re-index or cooldown
+    }
+
+    if (this.shouldExcludeFile(filePath)) {
+      return;
+    }
+
+    if (await this.isGitIgnored(filePath)) {
+      return;
+    }
+
+    if (filePath.endsWith(".cs") && this.isLikelyGeneratedCSharpPath(filePath)) {
+      return;
+    }
+
+    // Remove old symbols for this file
+    this.fireItemsRemoved(filePath);
+
+    // Invalidate hash to force re-calculation
+
+    // Re-add file item with updated size
+    const fileName = path.basename(filePath);
+    // Optimization: Do not intern relative/full paths here to avoid LRU cache churn
+    const relativePath = this.env.asRelativePath(filePath);
+    const internedFilePath = filePath;
+    const internedFileName = this.intern(fileName);
+
+    const fileItem: SearchableItem = {
+      id: `file:${filePath}`,
+      name: internedFileName,
+      type: SearchItemType.FILE,
+      filePath: internedFilePath,
+      relativeFilePath: relativePath,
+      detail: relativePath,
+      fullName: relativePath,
+      size: await this.getFileSize(filePath),
+    };
+    this.fireItemsAdded([fileItem]);
+
+    // Re-index symbols (it will check cache internally)
+    await this.indexFileSymbols(filePath);
+  }
+
+  /**
+   * Handle file deleted
+   */
+  private handleFileDeleted(filePath: string): void {
+    if (this.shouldExcludeFile(filePath)) {
+      return;
+    }
+
+    // Remove all items for this file
+    this.fireItemsRemoved(filePath);
+  }
+
+  /**
+   * Incrementally sync the index based on git changes (e.g., branch switch)
+   */
+  /**
+   * Disable file watchers for a short period after a full index
+   * to prevent Git "checkout" event storms from causing redundant work.
+   */
+  public cooldownFileWatchers(ms: number = 5000): void {
+    this.watchersActive = false;
+    if (this.watcherCooldownTimer) {
+      clearTimeout(this.watcherCooldownTimer);
+    }
+    this.watcherCooldownTimer = setTimeout(() => {
+      this.watchersActive = true;
+      this.watcherCooldownTimer = null;
+    }, ms);
+  }
+
+  public log(message: string): void {
+    this.env.log(message);
+  }
+
+  /**
+   * Reset internal caches for a forced full rebuild.
+   */
+  public resetCaches(): void {
+    this.stringCache.clear();
+  }
+
+  /**
+   * Intern a string to save memory with LRU eviction
+   */
+  private intern(str: string): string {
+    return this.getCachedString(str);
+  }
+
+  private getCachedString(str: string): string {
+    const cached = this.stringCache.get(str);
+    if (cached) {
+      return cached;
+    }
+
+    // ⚡ Bolt: Fast LRU Eviction Optimization
+    // Evicting a batch of items instead of a single item at a time when cache is full
+    // drastically reduces the overhead of Map re-hashing and iterator creation in hot loops.
+    if (this.stringCache.size >= WorkspaceIndexer.STRING_CACHE_MAX_SIZE) {
+      const iterator = this.stringCache.keys();
+      // Evict 10% of the cache (or at least 1) to avoid constant capacity bumping
+      const evictionCount = Math.max(1, Math.floor(WorkspaceIndexer.STRING_CACHE_MAX_SIZE * 0.1));
+      for (let i = 0; i < evictionCount; i++) {
+        const next = iterator.next();
+        if (!next.done && next.value != null) {
+          this.stringCache.delete(next.value);
         }
-
-        // Remove all items for this file
-        this.fireItemsRemoved(filePath);
+      }
     }
 
-    /**
-     * Incrementally sync the index based on git changes (e.g., branch switch)
-     */
-    /**
-     * Disable file watchers for a short period after a full index
-     * to prevent Git "checkout" event storms from causing redundant work.
-     */
-    public cooldownFileWatchers(ms: number = 5000): void {
-        this.watchersActive = false;
-        if (this.watcherCooldownTimer) {
-            clearTimeout(this.watcherCooldownTimer);
+    this.stringCache.set(str, str);
+    return str;
+  }
+
+  /**
+   * Execute a git command (abstracted for testing and reuse)
+   * Uses execFile to avoid shell injection vulnerabilities
+   */
+  protected async execGit(args: string[], cwd: string, input?: string): Promise<string> {
+    return new Promise<string>((resolve, reject) => {
+      const child = cp.spawn("git", args, { cwd });
+
+      let settled = false;
+      const timeoutMs = 10000;
+      const timeout = setTimeout(() => {
+        if (!settled) {
+          settled = true;
+          child.kill();
+          reject(new Error(`Git command timed out after ${timeoutMs}ms`));
         }
-        this.watcherCooldownTimer = setTimeout(() => {
-            this.watchersActive = true;
-            this.watcherCooldownTimer = null;
-        }, ms);
-    }
+      }, timeoutMs);
 
-    public log(message: string): void {
-        this.env.log(message);
-    }
+      if (input) {
+        child.stdin.write(input);
+        child.stdin.end();
+      }
 
-    /**
-     * Reset internal caches for a forced full rebuild.
-     */
-    public resetCaches(): void {
-        this.stringCache.clear();
-    }
+      let stdout = "";
+      let stderr = "";
 
-    /**
-     * Intern a string to save memory with LRU eviction
-     */
-    private intern(str: string): string {
-        return this.getCachedString(str);
-    }
+      child.stdout.on("data", (chunk) => {
+        stdout += chunk.toString();
+      });
 
-    private getCachedString(str: string): string {
-        const cached = this.stringCache.get(str);
-        if (cached) {
-            return cached;
+      child.stderr.on("data", (chunk) => {
+        stderr += chunk.toString();
+      });
+
+      child.on("error", (err) => {
+        if (settled) {
+          return;
         }
+        settled = true;
+        clearTimeout(timeout);
+        reject(err);
+      });
 
-        // ⚡ Bolt: Fast LRU Eviction Optimization
-        // Evicting a batch of items instead of a single item at a time when cache is full
-        // drastically reduces the overhead of Map re-hashing and iterator creation in hot loops.
-        if (this.stringCache.size >= WorkspaceIndexer.STRING_CACHE_MAX_SIZE) {
-            const iterator = this.stringCache.keys();
-            // Evict 10% of the cache (or at least 1) to avoid constant capacity bumping
-            const evictionCount = Math.max(1, Math.floor(WorkspaceIndexer.STRING_CACHE_MAX_SIZE * 0.1));
-            for (let i = 0; i < evictionCount; i++) {
-                const next = iterator.next();
-                if (!next.done && next.value != null) {
-                    this.stringCache.delete(next.value);
-                }
-            }
+      child.on("close", (code) => {
+        if (settled) {
+          return;
         }
+        settled = true;
+        clearTimeout(timeout);
+        if (code === 0) {
+          resolve(stdout);
+        } else {
+          reject(new Error(`Git exited with code ${code}: ${stderr}`));
+        }
+      });
+    });
+  }
 
-        this.stringCache.set(str, str);
-        return str;
+  /**
+   * Dispose resources
+   */
+  dispose(): void {
+    if (this.gitCheckTimer) {
+      clearTimeout(this.gitCheckTimer);
+      this.gitCheckTimer = null;
     }
-
-    /**
-     * Execute a git command (abstracted for testing and reuse)
-     * Uses execFile to avoid shell injection vulnerabilities
-     */
-    protected async execGit(args: string[], cwd: string, input?: string): Promise<string> {
-        return new Promise<string>((resolve, reject) => {
-            const child = cp.spawn('git', args, { cwd });
-
-            let settled = false;
-            const timeoutMs = 10000;
-            const timeout = setTimeout(() => {
-                if (!settled) {
-                    settled = true;
-                    child.kill();
-                    reject(new Error(`Git command timed out after ${timeoutMs}ms`));
-                }
-            }, timeoutMs);
-
-            if (input) {
-                child.stdin.write(input);
-                child.stdin.end();
-            }
-
-            let stdout = '';
-            let stderr = '';
-
-            child.stdout.on('data', (chunk) => {
-                stdout += chunk.toString();
-            });
-
-            child.stderr.on('data', (chunk) => {
-                stderr += chunk.toString();
-            });
-
-            child.on('error', (err) => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                clearTimeout(timeout);
-                reject(err);
-            });
-
-            child.on('close', (code) => {
-                if (settled) {
-                    return;
-                }
-                settled = true;
-                clearTimeout(timeout);
-                if (code === 0) {
-                    resolve(stdout);
-                } else {
-                    reject(new Error(`Git exited with code ${code}: ${stderr}`));
-                }
-            });
-        });
+    if (this.watcherCooldownTimer) {
+      clearTimeout(this.watcherCooldownTimer);
+      this.watcherCooldownTimer = null;
     }
-
-    /**
-     * Dispose resources
-     */
-    dispose(): void {
-        if (this.gitCheckTimer) {
-            clearTimeout(this.gitCheckTimer);
-            this.gitCheckTimer = null;
-        }
-        if (this.watcherCooldownTimer) {
-            clearTimeout(this.watcherCooldownTimer);
-            this.watcherCooldownTimer = null;
-        }
-        this.fileWatcher?.dispose();
-        for (const worker of this.workers) {
-            worker.terminate();
-        }
-        this.workers = [];
+    this.fileWatcher?.dispose();
+    for (const worker of this.workers) {
+      worker.terminate();
     }
+    this.workers = [];
+  }
 }

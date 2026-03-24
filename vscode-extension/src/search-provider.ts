@@ -611,7 +611,9 @@ export class SearchProvider {
                     item.buttons = [...(item.buttons || []), removeButton];
 
                     // Palette: Add visual indicator to clarify these are history items
-                    item.description = item.description ? `$(history) Recent • ${item.description}` : `$(history) Recent`;
+                    item.description = item.description
+                        ? `$(history) Recent • ${item.description}`
+                        : `$(history) Recent`;
                 }
             }
 
@@ -1694,7 +1696,24 @@ export class SearchProvider {
     private getWelcomeItems(): SearchResultItem[] {
         // Palette: Added /cmd and /e to improve discoverability
         const welcomeCommands = ['/all', '/t', '/f', '/s', '/txt', '/cmd', '/e'];
-        const items: SearchResultItem[] = [];
+        const items: SearchResultItem[] = [
+            {
+                label: 'Quick Start',
+                kind: vscode.QuickPickItemKind.Separator,
+                alwaysShow: true,
+                result: {
+                    item: {
+                        id: 'empty-state-header',
+                        name: 'Quick Start Header',
+                        type: SearchItemType.TEXT,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: SearchScope.COMMANDS,
+                },
+            },
+        ];
 
         for (const cmdId of welcomeCommands) {
             const cmd = this.slashCommandService.getCommand(cmdId);

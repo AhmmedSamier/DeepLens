@@ -466,6 +466,7 @@
                             Text="{Binding IndexingStatusText}" />
 
                         <ProgressBar
+                            AutomationProperties.Name="Indexing progress"
                             Width="100"
                             Height="10"
                             Maximum="100"
