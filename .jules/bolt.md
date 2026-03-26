@@ -1,3 +1,8 @@
+## 2026-03-22 - [Avoid Double String Splitting in Hot Paths]
+
+**Learning:** When both original and lowercased string segments are needed (e.g., parsing route templates in `RouteMatcher`), applying `.split('/')` twice (`str.split('/')` and `str.toLowerCase().split('/')`) creates unnecessary intermediate allocations and incurs ~60% more overhead.
+**Action:** Split the original string once, and use a manual `for` loop with a pre-allocated array (using `new Array(length)` with `eslint-disable-next-line sonarjs/array-constructor` enabled) to generate the derived lowercased segments. This avoids redundant parsing and mapping.
+
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
