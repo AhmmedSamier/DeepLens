@@ -2316,7 +2316,13 @@ export class SearchEngine implements ISearchProvider {
         queryOrPrepared: string | PreparedPath,
         maxResults?: number,
     ): void {
-        const existingIds = new Set(results.map((r) => r.item.id));
+        // ⚡ Bolt: Fast Set initialization avoiding Array.map
+        // Replacing `new Set(results.map(...))` with a manual loop avoids creating
+        // an intermediate array, saving memory allocations in this hot path.
+        const existingIds = new Set<string>();
+        for (let i = 0; i < results.length; i++) {
+            existingIds.add(results[i].item.id);
+        }
 
         const checkItem = (i: number) => {
             if (maxResults && results.length >= maxResults) return;

@@ -1,3 +1,8 @@
+## 2026-03-22 - [Avoid Chained Array Map when Initializing Set]
+
+**Learning:** When creating a `Set` of unique properties from an array (e.g., `new Set(results.map((r) => r.item.id))`), using `.map()` creates a completely unnecessary intermediate array allocation that is immediately discarded. Replacing this with an empty `Set` initialization and a manual `for` loop to add items avoids this allocation, significantly improving performance and reducing memory churn in hot paths.
+**Action:** Always initialize a `Set` directly and use a manual loop instead of chained `.map()` operations when extracting unique properties from an object array.
+
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
