@@ -110,11 +110,36 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
             });
         });
 
-        return output
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0)
-            .map((relativePath) => path.join(folder, relativePath));
+        // ⚡ Bolt: Fast string processing optimization
+        // Replaces .split('\n').map().filter().map() with a single-pass manual loop.
+        const results = [];
+        let start = 0;
+        const len = output.length;
+
+        while (start < len) {
+            let end = output.indexOf('\n', start);
+            if (end === -1) {
+                end = len;
+            }
+
+            let trimmedStart = start;
+            let trimmedEnd = end;
+            while (trimmedStart < trimmedEnd && output.charCodeAt(trimmedStart) <= 32) {
+                trimmedStart++;
+            }
+            while (trimmedEnd > trimmedStart && output.charCodeAt(trimmedEnd - 1) <= 32) {
+                trimmedEnd--;
+            }
+
+            if (trimmedStart < trimmedEnd) {
+                const relativePath = output.slice(trimmedStart, trimmedEnd);
+                results.push(path.join(folder, relativePath));
+            }
+
+            start = end + 1;
+        }
+
+        return results;
     }
 
     asRelativePath(filePath: string): string {
