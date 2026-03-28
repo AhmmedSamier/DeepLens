@@ -1,3 +1,8 @@
+## 2026-03-28 - [Avoid inline string path concatenations]
+
+**Learning:** When optimizing string concatenations in file path processing loops, do not replace `path.join(folder, pathName)` with manual inline string concatenation (e.g., `folder + '/' + pathName`). While inline string concatenation might appear faster in simple benchmarks, `path.join` provides critical cross-platform normalization. Specifically, it converts mixed slashes to standard backslashes on Windows, which is absolutely required for reliable exact-match path comparisons (e.g., when verifying paths against a `Set` of ignored files).
+**Action:** Retain `path.join` when assembling full file paths, even in performance-sensitive manual `charCodeAt` loops, to guarantee correct cross-platform path resolution.
+
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
