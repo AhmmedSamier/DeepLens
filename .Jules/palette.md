@@ -1,3 +1,8 @@
+## 2026-03-28 - [Contextual QuickPick Actions]
+
+**Learning:** In VS Code QuickPicks, adding many inline buttons to every item causes severe visual clutter and drastically impairs keyboard navigation by inserting numerous tab stops per row. Actions should be strictly contextual based on the item type (e.g., 'Copy Reference' for code symbols only, 'Reveal in File Explorer' for files only).
+**Action:** When mapping search results to `vscode.QuickPickItem` objects, conditionally apply action buttons using `item.type` to ensure users only see relevant UI actions, reducing cognitive load and tab stops.
+
 ## 2026-03-19 - [Accessible Progress Indicators in WPF]
 
 **Learning:** In WPF interfaces, ensure non-interactive progress indicators (like `ProgressBar`) include an `AutomationProperties.Name` attribute so their state and purpose remain accessible to screen readers.
