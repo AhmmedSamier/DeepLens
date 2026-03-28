@@ -1,3 +1,8 @@
+## 2026-03-20 - [Fast RegExp over string toLowerCase and chained includes]
+
+**Learning:** In hot paths checking for multiple string substrings (e.g., parsing HTTP method attributes), using a single case-insensitive Regular Expression (`/.../i.exec(text)`) is significantly faster than allocating a new lowercased string (`.toLowerCase()`) and chaining multiple `.includes()` checks. It avoids creating short-lived strings and avoids scanning the string multiple times.
+**Action:** Replace multiple `str.toLowerCase().includes(...)` chains with a single case-insensitive `RegExp.exec()` for faster pattern matching in hot paths.
+
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
