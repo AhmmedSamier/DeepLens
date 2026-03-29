@@ -52,6 +52,9 @@ export class GitProvider {
 
     private readonly isWindows = process.platform === 'win32';
 
+    // TODO(#101): Refactor inner logic into smaller helpers (e.g., parseGitLsOutputLine) to reduce cognitive complexity.
+    // Expected timeline: Next refactoring cycle.
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private addFilesToSet(set: Set<string>, root: string, output: string): void {
         // ⚡ Bolt: Fast string processing optimization
         // Replaces .split('\n') and .trim() with a single-pass manual loop,
