@@ -34,7 +34,7 @@ async function main() {
     await runLanguageBenchmarks();
     await runTextSearchBenchmarks();
     await runIndexingBenchmark();
-    await runIndexingScalingBenchmarks();
+    // await runIndexingScalingBenchmarks(); // Disabled: Causes SIGILL crash in Bun CI environment under high concurrency
     await runIndexingBatchBenchmarks();
     await runIndexingDensityBenchmarks();
     await runIncrementalBenchmarks();
