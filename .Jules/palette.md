@@ -1,6 +1,9 @@
-## 2026-03-24 - [Watermark TextBlock Z-Index in WPF XAML]
-**Learning:** In WPF XAML (e.g., Visual Studio Extension tool windows), elements within the same `Grid` cell render in the order they are declared in the markup. To ensure overlay elements (like an Empty State message or a TextBlock watermark) are visible and not hidden by controls (like a ListBox or TextBox), the overlay must be defined after the background control in the XAML.
-**Action:** When adding a watermark `TextBlock` behind a `TextBox` with a transparent background, place the `TextBlock` element *after* the `TextBox` element in the XAML file, and set `IsHitTestVisible="False"` on the `TextBlock` so mouse clicks pass through to the `TextBox`.
+## 2026-03-20 - [WPF TextBox Watermark Accessibility]
+
+**Learning:** In WPF interfaces, when layering a `TextBlock` over a `TextBox` to simulate a missing placeholder property, explicitly setting `AutomationProperties.Name=""` on the watermark is an anti-pattern. It improperly obscures the element from screen readers.
+**Action:** Omit the `AutomationProperties.Name` property entirely on overlay watermarks to allow screen readers to fall back to the `Text` property naturally.
+
+## 2026-03-19 - [Accessible Progress Indicators in WPF]
 
 ## 2026-03-19 - [Accessible Progress Indicators in WPF]
 **Learning:** In WPF interfaces, ensure non-interactive progress indicators (like `ProgressBar`) include an `AutomationProperties.Name` attribute so their state and purpose remain accessible to screen readers.
