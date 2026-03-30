@@ -20,3 +20,7 @@
 ## 2026-03-22 - [WPF TextBox Watermark Consistency]
 **Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, bind properties like `FontSize` or `FontFamily` directly to the underlying `TextBox` (e.g., `FontSize="{Binding FontSize, ElementName=SearchTextBox}"`). This ensures consistent visual rendering and avoids visual mismatches if the environment or user settings change the base control's font size.
 **Action:** Bind font and alignment properties of watermarks directly to their underlying input controls instead of hardcoding matching values.
+
+## 2026-03-30 - [QuickPick Inline Action Buttons Accessibility]
+**Learning:** In VS Code QuickPicks, adding inline action buttons to every item impairs keyboard navigation by creating excessive tab stops. Conditionally applying inline buttons based on the item's `SearchItemType` (e.g., showing 'Copy Reference' only for code symbols, 'Reveal in File Explorer' only for files) maintains contextual relevance and accessibility.
+**Action:** Always conditionally apply inline action buttons in QuickPick menus based on the item's type to reduce unnecessary tab stops and improve keyboard navigation.

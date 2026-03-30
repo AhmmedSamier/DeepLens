@@ -1854,6 +1854,7 @@ export class SearchProvider {
     /**
      * Convert search result to QuickPick item
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private resultToQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
 
@@ -1894,16 +1895,32 @@ export class SearchProvider {
         // Conditional buttons based on item type
         const buttons: vscode.QuickInputButton[] = [];
 
-        if (item.type !== SearchItemType.COMMAND) {
-            buttons.push(
-                {
-                    iconPath: new vscode.ThemeIcon('copy'),
-                    tooltip: this.TOOLTIP_COPY_PATH,
-                },
-                {
+        if (item.type !== SearchItemType.COMMAND && item.type !== SearchItemType.TEXT) {
+            // General actions available for most items
+            buttons.push({
+                iconPath: new vscode.ThemeIcon('copy'),
+                tooltip: this.TOOLTIP_COPY_PATH,
+            });
+
+            const isCodeSymbol =
+                item.type === SearchItemType.CLASS ||
+                item.type === SearchItemType.INTERFACE ||
+                item.type === SearchItemType.ENUM ||
+                item.type === SearchItemType.FUNCTION ||
+                item.type === SearchItemType.METHOD ||
+                item.type === SearchItemType.PROPERTY ||
+                item.type === SearchItemType.VARIABLE ||
+                item.type === SearchItemType.ENDPOINT;
+
+            // Show "Copy Reference" only for code symbols
+            if (isCodeSymbol) {
+                buttons.push({
                     iconPath: new vscode.ThemeIcon('references'),
                     tooltip: this.TOOLTIP_COPY_REF,
-                },
+                });
+            }
+
+            buttons.push(
                 {
                     iconPath: new vscode.ThemeIcon('file-submodule'),
                     tooltip: this.TOOLTIP_COPY_REL,
@@ -1912,11 +1929,15 @@ export class SearchProvider {
                     iconPath: new vscode.ThemeIcon('split-horizontal'),
                     tooltip: this.TOOLTIP_OPEN_SIDE,
                 },
-                {
+            );
+
+            // Show "Reveal in File Explorer" primarily for files
+            if (item.type === SearchItemType.FILE) {
+                buttons.push({
                     iconPath: new vscode.ThemeIcon('folder-opened'),
                     tooltip: this.TOOLTIP_REVEAL,
-                },
-            );
+                });
+            }
         }
 
         return {
