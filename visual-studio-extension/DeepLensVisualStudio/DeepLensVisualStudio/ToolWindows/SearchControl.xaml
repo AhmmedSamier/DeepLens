@@ -203,18 +203,60 @@
                         Stretch="Uniform" />
 
 <!--  Search TextBox  -->
-                     <TextBox
-                         Name="SearchTextBox"
-                         Grid.Column="1"
-                         VerticalAlignment="Center"
-                         Background="Transparent"
-                         BorderThickness="0"
-                         CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
-                         FontSize="14"
-                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
-                         Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                         AutomationProperties.Name="Search query"
-                         ToolTip="Search for classes, symbols, files, text, or endpoints" />
+                    <Grid Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock
+                            IsHitTestVisible="False"
+                            Text="Search for classes, symbols, files, text, or endpoints"
+                            VerticalAlignment="Center"
+                            FontSize="14"
+                            Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Visible" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBox
+                            Name="SearchTextBox"
+                            VerticalAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CaretBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                            FontSize="14"
+                            Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                            Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
+                            AutomationProperties.Name="Search query"
+                            ToolTip="Search for classes, symbols, files, text, or endpoints" />
+                    </Grid>
+
+                    <!-- Watermark Overlay -->
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Margin="4,0,0,0"
+                        FontSize="{Binding FontSize, ElementName=SearchTextBox}"
+                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                        IsHitTestVisible="False"
+                        Text="Search for classes, symbols, files, text, or endpoints">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text.Length, ElementName=SearchTextBox}" Value="0">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
 
                     <!--  Search TextBox Watermark  -->
                     <TextBlock
@@ -491,6 +533,7 @@
                             Height="10"
                             Maximum="100"
                             Minimum="0"
+                            AutomationProperties.Name="Indexing progress"
                             Value="{Binding IndexingProgress}" />
                     </StackPanel>
                 </Grid>
