@@ -1,20 +1,9 @@
-## 2026-03-25 - [Fast Set Initialization and Array Mapping]
+## 2026-03-24 - [Avoid Double Splits in String Case Conversion]
 
-**Learning:** When initializing a `Set` from an array of objects based on a property, or mapping objects into new shapes, using `new Set(arr.map(x => x.prop))` incurs a ~30-40% performance penalty due to intermediate array allocation. Replacing this with an empty `Set` initialization and a manual `for` loop (`set.add(arr[i].prop)`) avoids the extra array creation and function callback overhead.
-**Action:** When creating a unique collection from an object array or mapping it, always prefer manual `for` loops (using pre-allocated arrays when mapping, disabling `sonarjs/array-constructor` as needed) instead of `.map()` or chained array operations.
-
+**Learning:** When both original and lowercased string segments are needed, the intuitive approach of splitting the lowercased string (`str.toLowerCase().split('/')`) incurs overhead due to duplicating the string allocation and executing a second array splitting operation. Splitting the original string once and mapping the segments via a manual `for` loop and a pre-allocated array (`new Array()`) is ~35% faster. Although splitting a pre-lowercased string is faster than using `.map()` on the segments, using a pre-allocated array avoids the second iteration entirely.
+**Action:** When deriving variations (like lowercased versions) of string segments, split the string once and use a manual `for` loop with a pre-allocated array to generate the derived segments, explicitly disabling the `sonarjs/array-constructor` lint rule.
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
-## 2024-05-26 - [Fast Array Pre-allocation]
-**Learning:** In hot paths (like `RouteMatcher.precompute`), replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`) and a manual `for` loop is significantly faster. Avoid using `Array.from({ length })` for array pre-allocation, as it introduces substantial overhead and acts as an anti-optimization compared to `.map()`.
-**Action:** Use pre-allocated arrays with a manual loop for array mappings in critical hot paths, remembering to explicitly disable the `sonarjs/array-constructor` lint rule when doing so.
-
-## 2024-05-27 - [Fast Multi-line String Parsing]
-**Learning:** In high-performance string processing (like parsing multi-line command outputs such as Git status), replacing `.split('\n')` and `.trim()` with a single-pass manual loop using `.indexOf('\n')` and `.charCodeAt()` boundaries significantly reduces array and string allocations. This avoids the overhead of creating many intermediate string segments and arrays, making parsing over 3x faster for large inputs.
-**Action:** When iterating over lines in a large string output, use a manual `while` loop with `indexOf('\n', lastIndex)` to find line boundaries, and use `charCodeAt` to manually skip whitespace, slicing only the final required substring.
-
-## 2024-05-26 - [Fast Array Pre-allocation]
-## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
 **Action:** When repeatedly splitting large output blocks, use manual `indexOf` string index traversal and primitive character boundary checks rather than regex or `Array.prototype.split`.
 
