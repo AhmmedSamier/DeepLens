@@ -1,10 +1,9 @@
-## 2026-03-22 - [Fast Multiline String Parsing]
-**Learning:** When parsing large multiline outputs from external commands (like `ripgrep` or `git`), chaining array operations like `.split('\n').map().filter().map()` creates multiple intermediate arrays, string allocations, and triggers garbage collection overhead. Replacing these with a single-pass manual `for` loop that iterates over the string using `charCodeAt` (to find newlines and trim whitespace) and `.slice()` is significantly faster (~5x in V8/Node) and uses less memory.
-**Action:** In hot paths handling large string outputs, avoid `.split('\n')` and chained array methods. Use a manual string traversal loop with `charCodeAt` and `.slice()` instead.
+## 2026-03-25 - [Fast Set Initialization and Array Mapping]
 
-## 2024-05-27 - [Avoid Chained Array Operations]
-**Learning:** In paths where a unique collection of objects is needed from a Map or an Array (like extracting unique commands in `getCommands`), using chained operations like `Array.from(new Set(Array.from(map.values()).map(c => c.name))).map(...)` creates multiple intermediate arrays, sets, and requires multiple iterations. Replacing these with a single-pass `for...of` loop and a `Set` to track seen properties (e.g., `seen.has(cmd.name)`) is significantly faster (~5x in V8/Node) as it avoids unnecessary allocations and iterations.
-**Action:** When extracting or filtering unique items based on a property from a collection, avoid chained `Array.from()`, `map()`, and `filter()` operations. Use a single manual loop with a `Set` to track uniqueness instead.
+**Learning:** When initializing a `Set` from an array of objects based on a property, or mapping objects into new shapes, using `new Set(arr.map(x => x.prop))` incurs a ~30-40% performance penalty due to intermediate array allocation. Replacing this with an empty `Set` initialization and a manual `for` loop (`set.add(arr[i].prop)`) avoids the extra array creation and function callback overhead.
+**Action:** When creating a unique collection from an object array or mapping it, always prefer manual `for` loops (using pre-allocated arrays when mapping, disabling `sonarjs/array-constructor` as needed) instead of `.map()` or chained array operations.
+
+## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 ## 2024-05-26 - [Fast Array Pre-allocation]
 **Learning:** In hot paths (like `RouteMatcher.precompute`), replacing `Array.prototype.map()` with a pre-allocated array (`new Array(length)`) and a manual `for` loop is significantly faster. Avoid using `Array.from({ length })` for array pre-allocation, as it introduces substantial overhead and acts as an anti-optimization compared to `.map()`.
