@@ -2152,7 +2152,13 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (targetLine !== undefined) {
-            results = this.applyTargetLine(results, targetLine);
+            results = results.map((r) => ({
+                ...r,
+                item: {
+                    ...r.item,
+                    line: targetLine,
+                },
+            }));
         }
 
         return results.sort((a, b) => b.score - a.score);
