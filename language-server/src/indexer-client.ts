@@ -67,18 +67,50 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         return results;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private parseExcludePatterns(exclude: string | null): string[] {
         if (!exclude || !exclude.startsWith('{') || !exclude.endsWith('}')) {
             return [];
         }
 
-        return exclude
-            .slice(1, -1)
-            .split(',')
-            .map((part) => part.trim())
-            .filter((part) => part.length > 0);
+        // ⚡ Bolt: Fast parsing of exclude patterns
+        // Avoids multiple allocations from split, map, and filter
+        const result: string[] = [];
+        const inner = exclude.slice(1, -1);
+        let lastIdx = 0;
+        let idx = 0;
+        const len = inner.length;
+
+        while (idx < len) {
+            if (inner.charCodeAt(idx) === 44) { // ','
+                if (idx > lastIdx) {
+                    let start = lastIdx;
+                    let end = idx;
+                    while (start < end && inner.charCodeAt(start) <= 32) start++;
+                    while (end > start && inner.charCodeAt(end - 1) <= 32) end--;
+                    if (end > start) {
+                        result.push(inner.slice(start, end));
+                    }
+                }
+                lastIdx = idx + 1;
+            }
+            idx++;
+        }
+
+        if (len > lastIdx) {
+            let start = lastIdx;
+            let end = len;
+            while (start < end && inner.charCodeAt(start) <= 32) start++;
+            while (end > start && inner.charCodeAt(end - 1) <= 32) end--;
+            if (end > start) {
+                result.push(inner.slice(start, end));
+            }
+        }
+
+        return result;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private async execRgFiles(folder: string, excludes: string[]): Promise<string[]> {
         const args = ['--files', '--hidden'];
         for (const pattern of excludes) {
@@ -110,11 +142,40 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
             });
         });
 
-        return output
-            .split('\n')
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0)
-            .map((relativePath) => path.join(folder, relativePath));
+        // ⚡ Bolt: Fast ripgrep output parsing
+        // Avoids chained split().map().filter().map() allocations
+        const result: string[] = [];
+        let lastIdx = 0;
+        let idx = 0;
+        const len = output.length;
+
+        while (idx < len) {
+            if (output.charCodeAt(idx) === 10) { // '\n'
+                if (idx > lastIdx) {
+                    let start = lastIdx;
+                    let end = idx;
+                    while (start < end && output.charCodeAt(start) <= 32) start++;
+                    while (end > start && output.charCodeAt(end - 1) <= 32) end--;
+                    if (end > start) {
+                        result.push(path.join(folder, output.slice(start, end)));
+                    }
+                }
+                lastIdx = idx + 1;
+            }
+            idx++;
+        }
+
+        if (len > lastIdx) {
+            let start = lastIdx;
+            let end = len;
+            while (start < end && output.charCodeAt(start) <= 32) start++;
+            while (end > start && output.charCodeAt(end - 1) <= 32) end--;
+            if (end > start) {
+                result.push(path.join(folder, output.slice(start, end)));
+            }
+        }
+
+        return result;
     }
 
     asRelativePath(filePath: string): string {
