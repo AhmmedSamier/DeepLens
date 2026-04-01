@@ -81,6 +81,8 @@ export class RouteMatcher {
         for (let i = 0; i < segmentsLength; i++) {
             segmentsLower[i] = segments[i].toLowerCase();
         }
+            segmentsLower[i] = segments[i].toLowerCase();
+        }
         return { cleanPath, segments, segmentsLower, method };
     }
 
@@ -274,10 +276,6 @@ export class RouteMatcher {
 
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
-            // ⚡ Bolt: Fast segment processing and lowercasing optimization
-            // Splitting the original string once and using a pre-allocated array with a manual for loop
-            // to populate both lowercased segments and parameter checks avoids double splitting and .map()
-            // overhead, improving route pattern precomputation speed by ~35%.
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const segmentsLength = templateSegments.length;
 
@@ -287,8 +285,8 @@ export class RouteMatcher {
             const isParameter = new Array<boolean>(segmentsLength);
 
             for (let j = 0; j < segmentsLength; j++) {
+                templateSegmentsLower[j] = templateSegments[j].toLowerCase();
                 const s = templateSegments[j];
-                templateSegmentsLower[j] = s.toLowerCase();
                 // ⚡ Bolt: Fast parameter detection optimization
                 // Explicitly check length to avoid NaN comparisons on charCodeAt.
                 // A parameter segment must have at least 2 characters (e.g. "{}").
