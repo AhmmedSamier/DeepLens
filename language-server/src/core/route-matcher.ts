@@ -290,8 +290,6 @@ export class RouteMatcher {
             for (let j = 0; j < segmentsLength; j++) {
                 templateSegmentsLower[j] = templateSegments[j].toLowerCase();
                 const s = templateSegments[j];
-                // eslint-disable-next-line sonarjs/array-constructor
-                templateSegmentsLower[j] = s.toLowerCase();
                 // ⚡ Bolt: Fast parameter detection optimization
                 // Explicitly check length to avoid NaN comparisons on charCodeAt.
                 // A parameter segment must have at least 2 characters (e.g. "{}").
