@@ -18,6 +18,7 @@
 
         <!--  String to Visibility Converter  -->
         <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
+        <local:InverseStringToVisibilityConverter x:Key="InverseStringToVisibilityConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <!-- Colors replaced by VS Theme Brushes -->
@@ -292,6 +293,37 @@
                                  <Setter Property="Visibility" Value="Collapsed" />
                                  <Style.Triggers>
                                      <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                         <Setter Property="Visibility" Value="Visible" />
+                                     </DataTrigger>
+                                 </Style.Triggers>
+                             </Style>
+                         </TextBlock.Style>
+                     </TextBlock>
+
+                     <TextBlock
+                         Grid.Column="1"
+                         VerticalAlignment="Center"
+                         Margin="4,0,0,0"
+                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                         FontSize="14"
+                         IsHitTestVisible="False"
+                         Text="Search for classes, symbols, files, text, or endpoints"
+                         Visibility="{Binding SearchQuery, Converter={StaticResource InverseStringToVisibilityConverter}}" />
+
+                     <!-- Search Watermark (Placeholder) -->
+                     <TextBlock
+                         Grid.Column="1"
+                         IsHitTestVisible="False"
+                         Text="Search for classes, symbols, files, text, or endpoints"
+                         VerticalAlignment="Center"
+                         Margin="4,0,0,0"
+                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                         FontSize="14">
+                         <TextBlock.Style>
+                             <Style TargetType="TextBlock">
+                                 <Setter Property="Visibility" Value="Hidden" />
+                                 <Style.Triggers>
+                                     <DataTrigger Binding="{Binding Text.Length, ElementName=SearchTextBox}" Value="0">
                                          <Setter Property="Visibility" Value="Visible" />
                                      </DataTrigger>
                                  </Style.Triggers>

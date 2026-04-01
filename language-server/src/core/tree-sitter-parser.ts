@@ -469,11 +469,13 @@ export class TreeSitterParser {
         return null;
     }
 
+    private static readonly HTTP_ATTR_REGEX = /http(get|post|put|delete|patch|head|options)|route/i;
+
     private getHttpAttributeInfo(attr: TreeSitterNode): { method: string } | null {
-        const text = attr.text;
         // ⚡ Bolt: Fast regex matching optimization
         // Replaces multiple .includes() checks on a newly allocated lowercase string
         // with a single pre-compiled regex test, yielding a ~4x performance improvement.
+        const text = attr.text;
         const match = /http(get|post|put|delete|patch|head|options)|route/i.exec(text);
         if (match) {
             if (match[1]) {
@@ -513,7 +515,8 @@ export class TreeSitterParser {
         // Skip opening quotes and prefixes like @ or $
         while (start < len) {
             const c = text.charCodeAt(start);
-            if (c === 34 || c === 64 || c === 36) { // '"', '@', '$'
+            if (c === 34 || c === 64 || c === 36) {
+                // '"', '@', '$'
                 start++;
             } else {
                 break;
@@ -522,7 +525,8 @@ export class TreeSitterParser {
         let end = len;
         // Skip closing quotes
         while (end > start) {
-            if (text.charCodeAt(end - 1) === 34) { // '"'
+            if (text.charCodeAt(end - 1) === 34) {
+                // '"'
                 end--;
             } else {
                 break;

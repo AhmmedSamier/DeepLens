@@ -73,11 +73,9 @@ export class RouteMatcher {
         }
 
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
-        // ⚡ Bolt: Fast segment processing optimization
-        // When both original and lowercased string segments are needed, avoid double splitting
-        // string.toLowerCase().split('/') or mapping. Instead, split the original string once
-        // and use a manual for loop with a pre-allocated array (new Array(length)) to generate
-        // the derived segments, which is ~35% faster.
+        // ⚡ Bolt: Fast segment lowercasing optimization
+        // Avoiding double splitting (str.toLowerCase().split('/')) or .map() by splitting once
+        // and using a pre-allocated array with a manual for loop is ~35% faster.
         const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
         const segmentsLength = segments.length;
         // eslint-disable-next-line sonarjs/array-constructor
@@ -278,24 +276,16 @@ export class RouteMatcher {
 
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
-            // ⚡ Bolt: Fast segment processing optimization
-            // When both original and lowercased string segments are needed, avoid double splitting
-            // string.toLowerCase().split('/') or mapping. Instead, split the original string once
-            // and use a manual for loop with a pre-allocated array (new Array(length)) to generate
-            // the derived segments, which is ~35% faster.
             const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
             const segmentsLength = templateSegments.length;
+
             // eslint-disable-next-line sonarjs/array-constructor
             const templateSegmentsLower = new Array<string>(segmentsLength);
-            for (let j = 0; j < segmentsLength; j++) {
-                templateSegmentsLower[j] = templateSegments[j].toLowerCase();
-            }
-            // ⚡ Bolt: Fast Array Allocation optimization
-            // Using a pre-allocated array and a manual for-loop is faster than Array.prototype.map()
-            // Performance impact: Speeds up hot-path route pattern precomputation by avoiding callback overhead
             // eslint-disable-next-line sonarjs/array-constructor
             const isParameter = new Array<boolean>(segmentsLength);
+
             for (let j = 0; j < segmentsLength; j++) {
+                templateSegmentsLower[j] = templateSegments[j].toLowerCase();
                 const s = templateSegments[j];
                 // ⚡ Bolt: Fast parameter detection optimization
                 // Explicitly check length to avoid NaN comparisons on charCodeAt.

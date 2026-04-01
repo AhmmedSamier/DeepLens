@@ -58,9 +58,18 @@ export async function runRouteMatcherBenchmarks() {
 
     // Also benchmark `isPotentialUrl`
     const { RouteMatcher } = await import('../src/core/route-matcher');
-    const strings = ["api/v1/users", "GET api/users", "POST /api", "customers", "not_a_url_really", "another one", "api customers", "longstring_without_spaces_or_slashes_and_so_on"];
+    const strings = [
+        'api/v1/users',
+        'GET api/users',
+        'POST /api',
+        'customers',
+        'not_a_url_really',
+        'another one',
+        'api customers',
+        'longstring_without_spaces_or_slashes_and_so_on',
+    ];
     await benchmark(
-        "RouteMatcher.isPotentialUrl",
+        'RouteMatcher.isPotentialUrl',
         async () => {
             for (let i = 0; i < 10000; i++) {
                 RouteMatcher.isPotentialUrl(strings[i % strings.length]);
@@ -70,11 +79,11 @@ export async function runRouteMatcherBenchmarks() {
     );
 
     await benchmark(
-        "RouteMatcher.prepare",
+        'RouteMatcher.prepare',
         async () => {
             for (let i = 0; i < 1000; i++) {
-                RouteMatcher.prepare("GET /api/v1/users/details");
-                RouteMatcher.prepare("api/v1/users/details");
+                RouteMatcher.prepare('GET /api/v1/users/details');
+                RouteMatcher.prepare('api/v1/users/details');
             }
         },
         100,
