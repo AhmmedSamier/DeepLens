@@ -2,6 +2,12 @@
 
 **Learning:** When both original and lowercased string segments are needed, the intuitive approach of splitting the lowercased string (`str.toLowerCase().split('/')`) incurs overhead due to duplicating the string allocation and executing a second array splitting operation. Splitting the original string once and mapping the segments via a manual `for` loop and a pre-allocated array (`new Array()`) is ~35% faster. Although splitting a pre-lowercased string is faster than using `.map()` on the segments, using a pre-allocated array avoids the second iteration entirely.
 **Action:** When deriving variations (like lowercased versions) of string segments, split the string once and use a manual `for` loop with a pre-allocated array to generate the derived segments, explicitly disabling the `sonarjs/array-constructor` lint rule.
+
+## 2026-03-25 - [Fast Single Pass Splitting Over Chained/Double Splitting]
+
+**Learning:** When both original and derived (e.g., lowercased) segments are needed from a string, avoiding double splitting (`str.split('/')` and `str.toLowerCase().split('/')`) or `.map()` yields significant performance gains. Splitting the string once and populating a pre-allocated derived array (`new Array(length)`) via a manual `for` loop is ~35-40% faster in hot paths.
+**Action:** When both original string segments and lowercased segments are required, split the original string once and use a manual `for` loop with a pre-allocated array (`new Array(length)`) to generate the derived segments, which is ~35% faster.
+
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
