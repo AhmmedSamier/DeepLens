@@ -469,11 +469,13 @@ export class TreeSitterParser {
         return null;
     }
 
+    private static readonly HTTP_ATTR_REGEX = /http(get|post|put|delete|patch|head|options)|route/i;
+
     private getHttpAttributeInfo(attr: TreeSitterNode): { method: string } | null {
-        const text = attr.text;
         // ⚡ Bolt: Fast regex matching optimization
         // Replaces multiple .includes() checks on a newly allocated lowercase string
         // with a single pre-compiled regex test, yielding a ~4x performance improvement.
+        const text = attr.text;
         const match = /http(get|post|put|delete|patch|head|options)|route/i.exec(text);
         if (match) {
             if (match[1]) {
