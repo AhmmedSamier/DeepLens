@@ -475,6 +475,7 @@ export class TreeSitterParser {
         // ⚡ Bolt: Fast regex matching optimization
         // Replaces multiple .includes() checks on a newly allocated lowercase string
         // with a single pre-compiled regex test, yielding a ~4x performance improvement.
+        const text = attr.text;
         const match = /http(get|post|put|delete|patch|head|options)|route/i.exec(text);
         if (match) {
             if (match[1]) {
