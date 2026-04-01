@@ -18,6 +18,7 @@
 
         <!--  String to Visibility Converter  -->
         <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter" />
+        <local:InverseStringToVisibilityConverter x:Key="InverseStringToVisibilityConverter" />
         <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
 
         <!-- Colors replaced by VS Theme Brushes -->
@@ -298,6 +299,16 @@
                              </Style>
                          </TextBlock.Style>
                      </TextBlock>
+
+                     <TextBlock
+                         Grid.Column="1"
+                         VerticalAlignment="Center"
+                         Margin="4,0,0,0"
+                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                         FontSize="14"
+                         IsHitTestVisible="False"
+                         Text="Search for classes, symbols, files, text, or endpoints"
+                         Visibility="{Binding SearchQuery, Converter={StaticResource InverseStringToVisibilityConverter}}" />
 
                     <Button
                         x:Name="ClearSearchButton"
