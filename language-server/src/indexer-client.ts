@@ -112,7 +112,7 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
     }
 
     private async execRgFiles(folder: string, excludes: string[]): Promise<string[]> {
-        const args = ['--files', '--hidden'];
+        const args: string[] = ['--files', '--hidden'];
         for (const pattern of excludes) {
             args.push('--glob', `!${pattern}`);
         }
