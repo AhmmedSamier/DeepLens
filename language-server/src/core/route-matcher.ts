@@ -285,14 +285,6 @@ export class RouteMatcher {
             const segmentsLength = templateSegments.length;
             // eslint-disable-next-line sonarjs/array-constructor
             const templateSegmentsLower = new Array<string>(segmentsLength);
-            for (let k = 0; k < segmentsLength; k++) {
-                templateSegmentsLower[k] = templateSegments[k].toLowerCase();
-            }
-            // ⚡ Bolt: Fast Array Allocation optimization
-            // Using a pre-allocated array and a manual for-loop is faster than Array.prototype.map()
-            // Performance impact: Speeds up hot-path route pattern precomputation by avoiding callback overhead
-            // eslint-disable-next-line sonarjs/array-constructor
-            const templateSegmentsLower = new Array<string>(segmentsLength);
             // eslint-disable-next-line sonarjs/array-constructor
             const isParameter = new Array<boolean>(segmentsLength);
             for (let j = 0; j < segmentsLength; j++) {
