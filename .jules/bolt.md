@@ -1,8 +1,3 @@
-## 2024-05-28 - [Fast Array Allocation vs String Splits]
-
-**Learning:** When producing both original and lowercased segment arrays from a path string, calling `path.split('/')` and then `path.toLowerCase().split('/')` incurs two `.split()` operations and a full-string lowercase allocation. Instead, splitting the original string once and populating a pre-allocated array with lowercased segments inside a manual loop is ~35% faster because it avoids the second split and the large intermediate lowercased string allocation.
-**Action:** When both original and lowercased string segments are needed, avoid `str.toLowerCase().split('/')` (double splitting) or `.map()`. Instead, split the original string once and use a manual `for` loop with a pre-allocated array (`new Array(length)`) to generate the derived segments, explicitly disabling the `sonarjs/array-constructor` lint rule.
-
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
 **Learning:** In high-performance string processing (e.g., parsing multi-line command outputs like Git status), replacing `.split('\n')` and `.trim()` with manual single-pass loops using `.indexOf('\n')` and `.charCodeAt()` boundaries, and substituting `path.normalize(path.join())` with direct string concatenation, significantly reduces intermediate allocations and execution time (~2x speedup observed).
