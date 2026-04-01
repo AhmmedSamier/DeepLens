@@ -81,8 +81,6 @@ export class RouteMatcher {
         for (let i = 0; i < segmentsLength; i++) {
             segmentsLower[i] = segments[i].toLowerCase();
         }
-            segmentsLower[i] = segments[i].toLowerCase();
-        }
         return { cleanPath, segments, segmentsLower, method };
     }
 
