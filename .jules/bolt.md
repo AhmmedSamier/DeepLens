@@ -1,7 +1,7 @@
-## 2026-03-28 - [Avoid inline string path concatenations]
+## 2026-03-20 - [Fast RegExp over string toLowerCase and chained includes]
 
-**Learning:** When optimizing string concatenations in file path processing loops, do not replace `path.join(folder, pathName)` with manual inline string concatenation (e.g., `folder + '/' + pathName`). While inline string concatenation might appear faster in simple benchmarks, `path.join` provides critical cross-platform normalization. Specifically, it converts mixed slashes to standard backslashes on Windows, which is absolutely required for reliable exact-match path comparisons (e.g., when verifying paths against a `Set` of ignored files).
-**Action:** Retain `path.join` when assembling full file paths, even in performance-sensitive manual `charCodeAt` loops, to guarantee correct cross-platform path resolution.
+**Learning:** In hot paths checking for multiple string substrings (e.g., parsing HTTP method attributes), using a single case-insensitive Regular Expression (`/.../i.exec(text)`) is significantly faster than allocating a new lowercased string (`.toLowerCase()`) and chaining multiple `.includes()` checks. It avoids creating short-lived strings and avoids scanning the string multiple times.
+**Action:** Replace multiple `str.toLowerCase().includes(...)` chains with a single case-insensitive `RegExp.exec()` for faster pattern matching in hot paths.
 
 ## 2026-03-20 - [Fast String Traversal Over Regex/Split]
 
