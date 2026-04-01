@@ -72,34 +72,34 @@ export class RouteMatcher {
 
         // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
         // ⚡ Bolt: Fast segment processing optimization
-    // Splitting the original string once and mapping to a pre-allocated array via a loop
-    // is ~35% faster than splitting twice or mapping the array via Array.prototype.map().
-    // Update: Pre-allocating an array and lowercasing individual segments via a manual for-loop
-    // is even faster (~35% faster) than lowercasing the entire string and splitting a second time.
-    const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
-    const segmentsLen = segments.length;
-    // eslint-disable-next-line sonarjs/array-constructor
-    const segmentsLower = new Array<string>(segmentsLen);
-    for (let i = 0; i < segmentsLen; i++) {
-      segmentsLower[i] = segments[i].toLowerCase();
+        // Splitting the original string once and mapping to a pre-allocated array via a loop
+        // is ~35% faster than splitting twice or mapping the array via Array.prototype.map().
+        // Update: Pre-allocating an array and lowercasing individual segments via a manual for-loop
+        // is even faster (~35% faster) than lowercasing the entire string and splitting a second time.
+        const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
+        const segmentsLen = segments.length;
+        // eslint-disable-next-line sonarjs/array-constructor
+        const segmentsLower = new Array<string>(segmentsLen);
+        for (let i = 0; i < segmentsLen; i++) {
+            segmentsLower[i] = segments[i].toLowerCase();
+        }
+        return { cleanPath, segments, segmentsLower, method };
     }
-    return { cleanPath, segments, segmentsLower, method };
-  }
 
-  /**
-   * Pre-compute the route pattern for a template.
-   */
-  static precompute(template: string): RoutePattern | null {
-    return this.getOrCompileCache(template);
-  }
+    /**
+     * Pre-compute the route pattern for a template.
+     */
+    static precompute(template: string): RoutePattern | null {
+        return this.getOrCompileCache(template);
+    }
 
-  /**
-   * Matches a concrete URL path against a pre-computed route pattern and returns a score.
-   */
-  static scoreMatchPattern(pattern: RoutePattern, concretePath: string | PreparedPath): number {
-    let cleanPath: string;
-    let pathSegments: string[];
-    let pathSegmentsLower: string[];
+    /**
+     * Matches a concrete URL path against a pre-computed route pattern and returns a score.
+     */
+    static scoreMatchPattern(pattern: RoutePattern, concretePath: string | PreparedPath): number {
+        let cleanPath: string;
+        let pathSegments: string[];
+        let pathSegmentsLower: string[];
 
         if (typeof concretePath === 'string') {
             const prepared = this.prepare(concretePath);
@@ -277,26 +277,26 @@ export class RouteMatcher {
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
             // ⚡ Bolt: Fast segment processing optimization
-        // Splitting the original string once and mapping to a pre-allocated array via a loop
-        // is ~35% faster than splitting twice or mapping the array via Array.prototype.map().
-        // Update: Pre-allocating an array and lowercasing individual segments via a manual for-loop
-        // is even faster (~35% faster) than lowercasing the entire string and splitting a second time.
-        const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
-        const segmentsLength = templateSegments.length;
-        // eslint-disable-next-line sonarjs/array-constructor
-        const templateSegmentsLower = new Array<string>(segmentsLength);
-        // eslint-disable-next-line sonarjs/array-constructor
-        const isParameter = new Array<boolean>(segmentsLength);
-        for (let j = 0; j < segmentsLength; j++) {
-          templateSegmentsLower[j] = templateSegments[j].toLowerCase();
-          const s = templateSegments[j];
-          // eslint-disable-next-line sonarjs/array-constructor
-          templateSegmentsLower[j] = s.toLowerCase();
-          // ⚡ Bolt: Fast parameter detection optimization
-          // Explicitly check length to avoid NaN comparisons on charCodeAt.
-          // A parameter segment must have at least 2 characters (e.g. "{}").
-          isParameter[j] = s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
-        } // 123 is '{', 125 is '}'
+            // Splitting the original string once and mapping to a pre-allocated array via a loop
+            // is ~35% faster than splitting twice or mapping the array via Array.prototype.map().
+            // Update: Pre-allocating an array and lowercasing individual segments via a manual for-loop
+            // is even faster (~35% faster) than lowercasing the entire string and splitting a second time.
+            const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
+            const segmentsLength = templateSegments.length;
+            // eslint-disable-next-line sonarjs/array-constructor
+            const templateSegmentsLower = new Array<string>(segmentsLength);
+            // eslint-disable-next-line sonarjs/array-constructor
+            const isParameter = new Array<boolean>(segmentsLength);
+            for (let j = 0; j < segmentsLength; j++) {
+                templateSegmentsLower[j] = templateSegments[j].toLowerCase();
+                const s = templateSegments[j];
+                // eslint-disable-next-line sonarjs/array-constructor
+                templateSegmentsLower[j] = s.toLowerCase();
+                // ⚡ Bolt: Fast parameter detection optimization
+                // Explicitly check length to avoid NaN comparisons on charCodeAt.
+                // A parameter segment must have at least 2 characters (e.g. "{}").
+                isParameter[j] = s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+            } // 123 is '{', 125 is '}'
 
             cached = {
                 regex: exactRegex,
