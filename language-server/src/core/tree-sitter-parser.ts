@@ -513,7 +513,8 @@ export class TreeSitterParser {
         // Skip opening quotes and prefixes like @ or $
         while (start < len) {
             const c = text.charCodeAt(start);
-            if (c === 34 || c === 64 || c === 36) { // '"', '@', '$'
+            if (c === 34 || c === 64 || c === 36) {
+                // '"', '@', '$'
                 start++;
             } else {
                 break;
@@ -522,7 +523,8 @@ export class TreeSitterParser {
         let end = len;
         // Skip closing quotes
         while (end > start) {
-            if (text.charCodeAt(end - 1) === 34) { // '"'
+            if (text.charCodeAt(end - 1) === 34) {
+                // '"'
                 end--;
             } else {
                 break;

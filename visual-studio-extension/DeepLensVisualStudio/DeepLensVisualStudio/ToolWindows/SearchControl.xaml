@@ -258,6 +258,47 @@
                         </TextBlock.Style>
                     </TextBlock>
 
+                    <!--  Search TextBox Watermark  -->
+                    <TextBlock
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                        FontSize="14"
+                        IsHitTestVisible="False"
+                        Text="Search for classes, symbols, files, text, or endpoints">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Hidden" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ElementName=SearchTextBox, Path=Text}" Value="">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                     <!-- Search Placeholder / Watermark -->
+                     <TextBlock
+                         Grid.Column="1"
+                         IsHitTestVisible="False"
+                         Margin="3,0,0,0"
+                         VerticalAlignment="Center"
+                         FontSize="14"
+                         Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                         Text="Search for classes, symbols, files, text, or endpoints">
+                         <TextBlock.Style>
+                             <Style TargetType="TextBlock">
+                                 <Setter Property="Visibility" Value="Collapsed" />
+                                 <Style.Triggers>
+                                     <DataTrigger Binding="{Binding Text, ElementName=SearchTextBox}" Value="">
+                                         <Setter Property="Visibility" Value="Visible" />
+                                     </DataTrigger>
+                                 </Style.Triggers>
+                             </Style>
+                         </TextBlock.Style>
+                     </TextBlock>
+
                     <Button
                         x:Name="ClearSearchButton"
                         Grid.Column="2"
