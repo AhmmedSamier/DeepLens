@@ -1,3 +1,8 @@
+## 2026-03-28 - [Contextual QuickPick Actions]
+
+**Learning:** In VS Code QuickPicks, adding many inline buttons to every item causes severe visual clutter and drastically impairs keyboard navigation by inserting numerous tab stops per row. Actions should be strictly contextual based on the item type (e.g., 'Copy Reference' for code symbols only, 'Reveal in File Explorer' for files only).
+**Action:** When mapping search results to `vscode.QuickPickItem` objects, conditionally apply action buttons using `item.type` to ensure users only see relevant UI actions, reducing cognitive load and tab stops.
+
 ## 2026-03-24 - [Avoid Double Splits in String Case Conversion]
 
 **Learning:** When both original and lowercased string segments are needed, the intuitive approach of splitting the lowercased string (`str.toLowerCase().split('/')`) incurs overhead due to duplicating the string allocation and executing a second array splitting operation. Splitting the original string once and mapping the segments via a manual `for` loop and a pre-allocated array (`new Array()`) is ~35% faster. Although splitting a pre-lowercased string is faster than using `.map()` on the segments, using a pre-allocated array avoids the second iteration entirely.
@@ -36,4 +41,14 @@
 ## 2026-03-22 - [WPF TextBox Watermark Consistency]
 
 **Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, bind properties like `FontSize` or `FontFamily` directly to the underlying `TextBox` (e.g., `FontSize="{Binding FontSize, ElementName=SearchTextBox}"`). This ensures consistent visual rendering and avoids visual mismatches if the environment or user settings change the base control's font size.
+**Action:** Bind font and alignment properties of watermarks directly to their underlying input controls instead of hardcoding matching values.
+
+## 2026-03-20 - [WPF TextBox Watermark Behavior]
+
+**Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, avoid hardcoding `Opacity` values on the watermark. Instead, bind `Opacity` directly to the underlying `TextBox` (e.g., `Opacity="{Binding Opacity, ElementName=SearchTextBox, Converter={x:Static local:OpacityConverter.Instance}"}`) to ensure consistent visual rendering and avoid visual mismatches if the environment or user settings change the base control's opacity.
+**Action:** Bind opacity of watermarks directly to their underlying input controls instead of hardcoding matching values.
+
+## 2026-03-09 - [WPF Tool Window Title Accessibility]
+
+**Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, avoid hardcoding `FontSize` or `FontFamily` to match the underlying control. Instead, bind these properties directly to the underlying `TextBox` (e.g., `FontSize="{Binding FontSize, ElementName=SearchTextBox}"`). This ensures consistent visual rendering and avoids visual mismatches if the environment or user settings change the base control's font size.
 **Action:** Bind font and alignment properties of watermarks directly to their underlying input controls instead of hardcoding matching values.
