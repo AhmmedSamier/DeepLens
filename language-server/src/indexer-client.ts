@@ -111,7 +111,6 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         return result;
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private async execRgFiles(folder: string, excludes: string[]): Promise<string[]> {
         const args = ['--files', '--hidden'];
         for (const pattern of excludes) {
