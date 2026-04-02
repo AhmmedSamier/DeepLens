@@ -65,7 +65,8 @@ export class GitProvider {
         const len = output.length;
         let normalizedRoot = root;
         const rootLastChar = root.charCodeAt(root.length - 1);
-        if (rootLastChar !== 47 && rootLastChar !== 92) { // 47 is '/', 92 is '\'
+        if (rootLastChar !== 47 && rootLastChar !== 92) {
+            // 47 is '/', 92 is '\'
             normalizedRoot += path.sep;
         }
 

@@ -547,7 +547,10 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Compute bitflags for an item (name flags and aggregate flags)
      */
-    private computeItemBitflags(item: SearchableItem): { nameFlags: number; aggregateFlags: number } {
+    private computeItemBitflags(item: SearchableItem): {
+        nameFlags: number;
+        aggregateFlags: number;
+    } {
         const nameFlags = this.calculateBitflags(item.name);
         let aggregateFlags = nameFlags;
 
@@ -818,7 +821,12 @@ export class SearchEngine implements ISearchProvider {
     /**
      * Get detailed index statistics
      */
-    getStats(): { totalItems: number; fileCount: number; typeCount: number; symbolCount: number } {
+    getStats(): {
+        totalItems: number;
+        fileCount: number;
+        typeCount: number;
+        symbolCount: number;
+    } {
         let fileCount = 0;
         let typeCount = 0;
         let symbolCount = 0;
@@ -2152,13 +2160,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         if (targetLine !== undefined) {
-            results = results.map((r) => ({
-                ...r,
-                item: {
-                    ...r.item,
-                    line: targetLine,
-                },
-            }));
+            results = this.applyTargetLine(results, targetLine);
         }
 
         return results.sort((a, b) => b.score - a.score);
@@ -2296,7 +2298,10 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
-    private parseQueryWithLineNumber(query: string): { effectiveQuery: string; targetLine?: number } {
+    private parseQueryWithLineNumber(query: string): {
+        effectiveQuery: string;
+        targetLine?: number;
+    } {
         const lineMatch = /^(.*?):(\d+)$/.exec(query);
         if (lineMatch) {
             const effectiveQuery = lineMatch[1];
