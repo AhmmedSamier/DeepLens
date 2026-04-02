@@ -1851,10 +1851,26 @@ export class SearchProvider {
         };
     }
 
+    // Explicit allow-list of item types that support inline buttons
+    private readonly ALLOWED_INLINE_BUTTON_TYPES = new Set<SearchItemType>([
+        SearchItemType.CLASS,
+        SearchItemType.INTERFACE,
+        SearchItemType.ENUM,
+        SearchItemType.FUNCTION,
+        SearchItemType.METHOD,
+        SearchItemType.PROPERTY,
+        SearchItemType.VARIABLE,
+        SearchItemType.FILE,
+        SearchItemType.TEXT,
+    ]);
+
+    private isInlineButtonAllowed(type: SearchItemType): boolean {
+        return this.ALLOWED_INLINE_BUTTON_TYPES.has(type);
+    }
+
     /**
      * Convert search result to QuickPick item
      */
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private resultToQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
 
@@ -1898,43 +1914,45 @@ export class SearchProvider {
         // Conditional buttons based on item type
         const buttons: vscode.QuickInputButton[] = [];
 
-        if (item.type !== SearchItemType.COMMAND) {
+        if (this.isInlineButtonAllowed(item.type)) {
             // Contextual UX: Only show relevant actions to reduce visual noise and keyboard tab stops
             buttons.push({
                 iconPath: new vscode.ThemeIcon('copy'),
                 tooltip: this.TOOLTIP_COPY_PATH,
             });
 
-            if (
-                item.type === SearchItemType.CLASS ||
-                item.type === SearchItemType.INTERFACE ||
-                item.type === SearchItemType.ENUM ||
-                item.type === SearchItemType.FUNCTION ||
-                item.type === SearchItemType.METHOD ||
-                item.type === SearchItemType.PROPERTY ||
-                item.type === SearchItemType.VARIABLE
-            ) {
-                buttons.push({
-                    iconPath: new vscode.ThemeIcon('references'),
-                    tooltip: this.TOOLTIP_COPY_REF,
-                });
-            } else if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
-                buttons.push({
-                    iconPath: new vscode.ThemeIcon('file-submodule'),
-                    tooltip: this.TOOLTIP_COPY_REL,
-                });
-            }
+            if (this.isInlineButtonAllowed(item.type)) {
+                if (
+                    item.type === SearchItemType.CLASS ||
+                    item.type === SearchItemType.INTERFACE ||
+                    item.type === SearchItemType.ENUM ||
+                    item.type === SearchItemType.FUNCTION ||
+                    item.type === SearchItemType.METHOD ||
+                    item.type === SearchItemType.PROPERTY ||
+                    item.type === SearchItemType.VARIABLE
+                ) {
+                    buttons.push({
+                        iconPath: new vscode.ThemeIcon('references'),
+                        tooltip: this.TOOLTIP_COPY_REF,
+                    });
+                } else if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
+                    buttons.push({
+                        iconPath: new vscode.ThemeIcon('file-submodule'),
+                        tooltip: this.TOOLTIP_COPY_REL,
+                    });
+                }
 
-            buttons.push({
-                iconPath: new vscode.ThemeIcon('split-horizontal'),
-                tooltip: this.TOOLTIP_OPEN_SIDE,
-            });
-
-            if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
                 buttons.push({
-                    iconPath: new vscode.ThemeIcon('folder-opened'),
-                    tooltip: this.TOOLTIP_REVEAL,
+                    iconPath: new vscode.ThemeIcon('split-horizontal'),
+                    tooltip: this.TOOLTIP_OPEN_SIDE,
                 });
+
+                if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
+                    buttons.push({
+                        iconPath: new vscode.ThemeIcon('folder-opened'),
+                        tooltip: this.TOOLTIP_REVEAL,
+                    });
+                }
             }
         }
 

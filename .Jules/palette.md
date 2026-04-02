@@ -48,6 +48,11 @@
 **Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, bind properties like `FontSize` or `FontFamily` directly to the underlying `TextBox` (e.g., `FontSize="{Binding FontSize, ElementName=SearchTextBox}"`). This ensures consistent visual rendering and avoids visual mismatches if the environment or user settings change the base control's font size.
 **Action:** Bind font and alignment properties of watermarks directly to their underlying input controls instead of hardcoding matching values.
 
+## 2024-05-15 - [WPF XAML Watermark Rendering and Overlap Issues]
+
+**Learning:** In WPF tool windows (e.g., Visual Studio Extension), setting up input watermarks involves correctly ordering overlay elements. Elements within the same `Grid` cell render in the exact order they are declared in the markup. Therefore, overlay elements like Empty State messages or TextBlock watermarks must be defined _after_ the primary background control (like a TextBox) in the XAML markup to ensure they render visibly on top. Additionally, multiple overlaid TextBlocks with identical anti-aliasing can cause blurry rendering or invalid markup conflicts, which need to be consolidated. Finally, explicitly setting `AutomationProperties.Name=""` (empty) is an anti-pattern as it obscures the actual textual content from screen readers.
+**Action:** When implementing placeholder or watermark text patterns in Visual Studio Extension controls, consolidate multiple duplicated watermark labels, explicitly position the `TextBlock` overlay after the background `TextBox` within the `Grid`, and omit `AutomationProperties.Name` entirely so screen readers correctly read the underlying `Text` property.
+
 ## 2026-03-20 - [WPF TextBox Watermark Behavior]
 
 **Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, avoid hardcoding `Opacity` values on the watermark. Instead, bind `Opacity` directly to the underlying `TextBox` (e.g., `Opacity="{Binding Opacity, ElementName=SearchTextBox, Converter={x:Static local:OpacityConverter.Instance}"}`) to ensure consistent visual rendering and avoid visual mismatches if the environment or user settings change the base control's opacity.
@@ -57,6 +62,8 @@
 
 **Learning:** In WPF tool windows, when adding an overlay like a placeholder or watermark to a `TextBox`, avoid hardcoding `FontSize` or `FontFamily` to match the underlying control. Instead, bind these properties directly to the underlying `TextBox` (e.g., `FontSize="{Binding FontSize, ElementName=SearchTextBox}"`). This ensures consistent visual rendering and avoids visual mismatches if the environment or user settings change the base control's font size.
 **Action:** Bind font and alignment properties of watermarks directly to their underlying input controls instead of hardcoding matching values.
+
 ## 2024-05-18 - Consolidate WPF Overlapping Watermarks
+
 **Learning:** In WPF XAML, overlapping multiple identical TextBlock elements (like redundant watermarks) causes blurry text rendering due to overlapping anti-aliasing passes. Also, replacing a DataTrigger binding from "Text.Length" against "0" to directly bind to "Text" and checking against an empty string ("") is safer and standard practice in WPF.
 **Action:** When implementing overlays or watermarks in WPF applications, consolidate duplicate elements into a single overlay and bind visibility triggers directly to the `Text` dependency property against an empty string to avoid blurry text and ensure robust evaluation.
