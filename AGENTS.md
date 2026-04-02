@@ -173,6 +173,7 @@ The extension and server communicate via custom JSON-RPC requests over IPC:
 2. If changing the search engine, run `bun run test` in `language-server`.
 3. Ensure no new `any` types are introduced.
 4. Verify that `Shift-Shift` still opens the search dialog after UI changes.
+5. **After completing each task**: Run `bun run test` in `language-server` to verify no regressions were introduced.
 
 ## Git Commit Guidelines
 

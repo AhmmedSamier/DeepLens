@@ -1885,54 +1885,52 @@ export class SearchProvider {
             } else {
                 detail = `${relativePath}:${item.line + 1}`;
             }
-        }
 
-        // Add additional detail if available
-        if (item.detail) {
-            description = description ? `${description} - ${item.detail}` : item.detail;
+            // Add additional detail if available
+            if (item.detail) {
+                description = description ? `${description} - ${item.detail}` : item.detail;
+            }
+        } else {
+            // For commands, preserve the detail property for consistent multi-line display
+            detail = item.detail || '';
         }
 
         // Conditional buttons based on item type
         const buttons: vscode.QuickInputButton[] = [];
 
-        if (item.type !== SearchItemType.COMMAND && item.type !== SearchItemType.TEXT) {
-            // General actions available for most items
+        if (item.type !== SearchItemType.COMMAND) {
+            // Contextual UX: Only show relevant actions to reduce visual noise and keyboard tab stops
             buttons.push({
                 iconPath: new vscode.ThemeIcon('copy'),
                 tooltip: this.TOOLTIP_COPY_PATH,
             });
 
-            const isCodeSymbol =
+            if (
                 item.type === SearchItemType.CLASS ||
                 item.type === SearchItemType.INTERFACE ||
                 item.type === SearchItemType.ENUM ||
                 item.type === SearchItemType.FUNCTION ||
                 item.type === SearchItemType.METHOD ||
                 item.type === SearchItemType.PROPERTY ||
-                item.type === SearchItemType.VARIABLE ||
-                item.type === SearchItemType.ENDPOINT;
-
-            // Show "Copy Reference" only for code symbols
-            if (isCodeSymbol) {
+                item.type === SearchItemType.VARIABLE
+            ) {
                 buttons.push({
                     iconPath: new vscode.ThemeIcon('references'),
                     tooltip: this.TOOLTIP_COPY_REF,
                 });
-            }
-
-            buttons.push(
-                {
+            } else if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
+                buttons.push({
                     iconPath: new vscode.ThemeIcon('file-submodule'),
                     tooltip: this.TOOLTIP_COPY_REL,
-                },
-                {
-                    iconPath: new vscode.ThemeIcon('split-horizontal'),
-                    tooltip: this.TOOLTIP_OPEN_SIDE,
-                },
-            );
+                });
+            }
 
-            // Show "Reveal in File Explorer" primarily for files
-            if (item.type === SearchItemType.FILE) {
+            buttons.push({
+                iconPath: new vscode.ThemeIcon('split-horizontal'),
+                tooltip: this.TOOLTIP_OPEN_SIDE,
+            });
+
+            if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
                 buttons.push({
                     iconPath: new vscode.ThemeIcon('folder-opened'),
                     tooltip: this.TOOLTIP_REVEAL,
