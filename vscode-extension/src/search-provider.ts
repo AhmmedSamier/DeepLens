@@ -935,8 +935,13 @@ export class SearchProvider {
         // We only auto-switch scope if the command is followed by space
         // This allows typing "/txt" without immediately switching to "/t" (types)
         // Single character triggers (#, >) are always immediate
+
+        // ⚡ Bolt: Fast parsing optimization
+        // Cache the lowercased query to avoid repeated string allocations in the loop
+        const queryLower = query.toLowerCase();
+
         for (const [prefix, scope] of this.PREFIX_MAP.entries()) {
-            if (query.toLowerCase().startsWith(prefix) && (prefix.endsWith(' ') || prefix.length === 1)) {
+            if (queryLower.startsWith(prefix) && (prefix.endsWith(' ') || prefix.length === 1)) {
                 return {
                     scope,
                     text: query.slice(prefix.length),
@@ -963,13 +968,17 @@ export class SearchProvider {
         const commandSuggestions: SearchResult[] = [];
         const seen = new Set<string>();
 
+        // ⚡ Bolt: Fast suggestion optimization
+        // Cache the lowercased query to avoid allocating new strings during the command iteration
+        const queryLower = query ? query.toLowerCase() : '';
+
         // Add recent commands first with a visual indicator
         for (const cmd of recentCommands) {
             if (seen.has(cmd.name)) continue;
             if (
-                query &&
-                !cmd.name.toLowerCase().startsWith(query.toLowerCase()) &&
-                !cmd.aliases.some((a) => a.toLowerCase().startsWith(query.toLowerCase()))
+                queryLower &&
+                !cmd.name.toLowerCase().startsWith(queryLower) &&
+                !cmd.aliases.some((a) => a.toLowerCase().startsWith(queryLower))
             )
                 continue;
 
@@ -1871,6 +1880,7 @@ export class SearchProvider {
     /**
      * Convert search result to QuickPick item
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private resultToQuickPickItem(result: SearchResult): SearchResultItem {
         const { item } = result;
 
