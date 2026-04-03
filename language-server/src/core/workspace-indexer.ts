@@ -320,7 +320,7 @@ export class WorkspaceIndexer {
                 try {
                     // Get both tracked and untracked (but not ignored) files
                     const output = await this.execGit(
-                        ['ls-files', '--cached', '--others', '--exclude-standard'],
+                        ['ls-files', '-z', '--cached', '--others', '--exclude-standard'],
                         folderPath,
                     );
 
@@ -328,35 +328,25 @@ export class WorkspaceIndexer {
                     if (!output) return folderResults;
 
                     // ⚡ Bolt: Fast string processing optimization
-                    // Replaces .split('\n') and .trim() with a single-pass manual loop using .indexOf('\n')
-                    // and .charCodeAt() boundaries. This avoids intermediate array and string allocations,
-                    // making file discovery faster for large workspaces.
+                    // Replaces .split('\0') with a manual single-pass string index traversal,
+                    // avoiding an intermediate array allocation that could be huge for many files.
+                    // Using -z ensures filenames with spaces or newlines are handled correctly.
                     let lastIndex = 0;
                     const len = output.length;
                     while (lastIndex < len) {
-                        let newlineIndex = output.indexOf('\n', lastIndex);
-                        if (newlineIndex === -1) {
-                            newlineIndex = len;
+                        let nullIndex = output.indexOf('\0', lastIndex);
+                        if (nullIndex === -1) {
+                            nullIndex = len;
                         }
 
-                        let start = lastIndex;
-                        while (start < newlineIndex && output.charCodeAt(start) <= 32) {
-                            start++;
-                        }
-
-                        let end = newlineIndex;
-                        while (end > start && output.charCodeAt(end - 1) <= 32) {
-                            end--;
-                        }
-
-                        if (start < end) {
-                            const line = output.slice(start, end);
+                        if (lastIndex < nullIndex) {
+                            const line = output.slice(lastIndex, nullIndex);
                             const fullPath = path.isAbsolute(line) ? line : path.join(folderPath, line);
                             // Optimization: Do not intern file paths during discovery as they are unique per file
                             folderResults.push(fullPath);
                         }
 
-                        lastIndex = newlineIndex + 1;
+                        lastIndex = nullIndex + 1;
                     }
 
                     return folderResults;
