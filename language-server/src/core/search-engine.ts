@@ -901,31 +901,43 @@ export class SearchEngine implements ISearchProvider {
         return this.executeInternalSearch(effectiveQuery, scope, maxResults, targetLine, cancellationToken);
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
         const results: SearchResult[] = [];
 
-        const isModifiedScope = options.scope === SearchScope.MODIFIED;
+        // ⚡ Bolt: Fast Empty Query Filtering Optimization
+        // Pre-fetch modified files to avoid multiple async calls during the iteration
+        let modifiedFiles: Set<string> | undefined;
+        if (options.scope === SearchScope.MODIFIED && this.gitProvider) {
+            modifiedFiles = await this.gitProvider.getModifiedFiles();
+        }
+
         const isOpenScope = options.scope === SearchScope.OPEN;
-        const modifiedFiles = isModifiedScope && this.gitProvider ? await this.gitProvider.getModifiedFiles() : null;
+        const isModifiedScope = options.scope === SearchScope.MODIFIED;
 
         for (const provider of this.providers) {
             const providerResults = await provider.search(context);
 
+            // Apply scope filtering during the iteration pass instead of using Array.prototype.filter()
+            // on the aggregated results. This avoids unnecessary O(N) array allocations and prevents
+            // bugs where we might return fewer than maxResults if matches were found but subsequently filtered out.
             for (let i = 0; i < providerResults.length; i++) {
                 const r = providerResults[i];
+                let include = true;
 
-                // Apply scope filtering during single pass to avoid O(N) array allocation
                 if (isOpenScope) {
-                    if (!this.isActive(r.item.filePath)) continue;
+                    include = this.isActive(r.item.filePath);
                 } else if (isModifiedScope && modifiedFiles) {
-                    if (!modifiedFiles.has(this.normalizePath(r.item.filePath))) continue;
+                    include = modifiedFiles.has(this.normalizePath(r.item.filePath));
                 }
 
-                results.push(r);
-                if (results.length >= maxResults) {
-                    return results;
+                if (include) {
+                    results.push(r);
+                    if (results.length >= maxResults) {
+                        return results;
+                    }
                 }
             }
         }
