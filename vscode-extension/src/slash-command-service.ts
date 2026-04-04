@@ -216,7 +216,17 @@ export class SlashCommandService {
         }
 
         const lowerQuery = query.toLowerCase();
-        const trimmedQuery = lowerQuery.replace(/^[/#>]/, '');
+        // ⚡ Bolt: Fast String Traversal Over Regex
+        // Replacing regular expression matching and literal string replacement
+        // with native charCodeAt bounds check.
+        let trimmedQuery = lowerQuery;
+        if (trimmedQuery.length > 0) {
+            const c = trimmedQuery.charCodeAt(0);
+            // '/' = 47, '#' = 35, '>' = 62
+            if (c === 47 || c === 35 || c === 62) {
+                trimmedQuery = trimmedQuery.slice(1);
+            }
+        }
         const results: SlashCommand[] = [];
         const seen = new Set<string>();
 
