@@ -901,22 +901,39 @@ export class SearchEngine implements ISearchProvider {
         return this.executeInternalSearch(effectiveQuery, scope, maxResults, targetLine, cancellationToken);
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
-        let results: SearchResult[] = [];
-        for (const provider of this.providers) {
-            const providerResults = await provider.search(context);
-            results.push(...providerResults);
-            if (results.length >= maxResults) break;
+        const results: SearchResult[] = [];
+
+        // ⚡ Bolt: Fast Empty Query Filtering Optimization
+        // Pre-fetch modified files to avoid multiple async calls
+        let modifiedFiles: Set<string> | undefined;
+        if (options.scope === SearchScope.MODIFIED && this.gitProvider) {
+            modifiedFiles = await this.gitProvider.getModifiedFiles();
         }
 
-        // Apply scope filtering to empty query results (e.g., for /o or /m history)
-        if (options.scope === SearchScope.OPEN) {
-            results = results.filter((r) => this.isActive(r.item.filePath));
-        } else if (options.scope === SearchScope.MODIFIED && this.gitProvider) {
-            const modifiedFiles = await this.gitProvider.getModifiedFiles();
-            results = results.filter((r) => modifiedFiles.has(this.normalizePath(r.item.filePath)));
+        for (const provider of this.providers) {
+            const providerResults = await provider.search(context);
+
+            // Apply scope filtering during the iteration pass instead of using Array.prototype.filter()
+            // on the aggregated results. This avoids unnecessary O(N) array allocations and prevents
+            // bugs where we might return fewer than maxResults if matches were found but subsequently filtered out.
+            for (const r of providerResults) {
+                let include = true;
+                if (options.scope === SearchScope.OPEN) {
+                    include = this.isActive(r.item.filePath);
+                } else if (options.scope === SearchScope.MODIFIED && modifiedFiles) {
+                    include = modifiedFiles.has(this.normalizePath(r.item.filePath));
+                }
+
+                if (include) {
+                    results.push(r);
+                    if (results.length >= maxResults) break;
+                }
+            }
+            if (results.length >= maxResults) break;
         }
 
         return results;
