@@ -908,11 +908,14 @@ export class SearchEngine implements ISearchProvider {
         const results: SearchResult[] = [];
 
         // ⚡ Bolt: Fast Empty Query Filtering Optimization
-        // Pre-fetch modified files to avoid multiple async calls
+        // Pre-fetch modified files to avoid multiple async calls during the iteration
         let modifiedFiles: Set<string> | undefined;
         if (options.scope === SearchScope.MODIFIED && this.gitProvider) {
             modifiedFiles = await this.gitProvider.getModifiedFiles();
         }
+
+        const isOpenScope = options.scope === SearchScope.OPEN;
+        const isModifiedScope = options.scope === SearchScope.MODIFIED;
 
         for (const provider of this.providers) {
             const providerResults = await provider.search(context);
@@ -920,20 +923,23 @@ export class SearchEngine implements ISearchProvider {
             // Apply scope filtering during the iteration pass instead of using Array.prototype.filter()
             // on the aggregated results. This avoids unnecessary O(N) array allocations and prevents
             // bugs where we might return fewer than maxResults if matches were found but subsequently filtered out.
-            for (const r of providerResults) {
+            for (let i = 0; i < providerResults.length; i++) {
+                const r = providerResults[i];
                 let include = true;
-                if (options.scope === SearchScope.OPEN) {
+
+                if (isOpenScope) {
                     include = this.isActive(r.item.filePath);
-                } else if (options.scope === SearchScope.MODIFIED) {
-                    include = modifiedFiles ? modifiedFiles.has(this.normalizePath(r.item.filePath)) : false;
+                } else if (isModifiedScope && modifiedFiles) {
+                    include = modifiedFiles.has(this.normalizePath(r.item.filePath));
                 }
 
                 if (include) {
                     results.push(r);
-                    if (results.length >= maxResults) break;
+                    if (results.length >= maxResults) {
+                        return results;
+                    }
                 }
             }
-            if (results.length >= maxResults) break;
         }
 
         return results;
