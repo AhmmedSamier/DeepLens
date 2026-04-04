@@ -216,51 +216,53 @@ export class RipgrepService {
                         try {
                             const msg = JSON.parse(line);
                             if (msg.type === 'match') {
-                            const data = msg.data;
-                            // Ripgrep returns byte offsets into the original UTF-8 string.
-                            const rawText = data.lines.text;
+                                const data = msg.data;
+                                // Ripgrep returns byte offsets into the original UTF-8 string.
+                                const rawText = data.lines.text;
 
-                            // Calculate leading whitespace (bytes)
-                            // We need to match leading whitespace and count its *bytes* because rg offsets are bytes.
-                            const leadingMatch = rawText.match(/^\s*/);
-                            const leadingStr = leadingMatch ? leadingMatch[0] : '';
-                            const leadingBytes = Buffer.byteLength(leadingStr);
+                                // Calculate leading whitespace (bytes)
+                                // We need to match leading whitespace and count its *bytes* because rg offsets are bytes.
+                                const leadingMatch = rawText.match(/^\s*/);
+                                const leadingStr = leadingMatch ? leadingMatch[0] : '';
+                                const leadingBytes = Buffer.byteLength(leadingStr);
 
-                            // Trim text for display
-                            const trimmedText = rawText.trimStart().trimEnd(); // Matches behaviors of .trim()
+                                // Trim text for display
+                                const trimmedText = rawText.trimStart().trimEnd(); // Matches behaviors of .trim()
 
-                            // Adjust submatches
-                            const adjustedSubmatches = data.submatches.map((sm: { start: number; end: number }) => ({
-                                ...sm,
-                                start: Math.max(0, sm.start - leadingBytes),
-                                end: Math.max(0, sm.end - leadingBytes),
-                            }));
+                                // Adjust submatches
+                                const adjustedSubmatches = data.submatches.map(
+                                    (sm: { start: number; end: number }) => ({
+                                        ...sm,
+                                        start: Math.max(0, sm.start - leadingBytes),
+                                        end: Math.max(0, sm.end - leadingBytes),
+                                    }),
+                                );
 
-                            results.push({
-                                path: data.path.text,
-                                line: data.line_number - 1,
-                                column: data.submatches[0]?.start || 0, // Original Column
-                                text: trimmedText,
-                                match: data.submatches[0]?.match?.text || '',
-                                submatches: adjustedSubmatches,
-                            });
+                                results.push({
+                                    path: data.path.text,
+                                    line: data.line_number - 1,
+                                    column: data.submatches[0]?.start || 0, // Original Column
+                                    text: trimmedText,
+                                    match: data.submatches[0]?.match?.text || '',
+                                    submatches: adjustedSubmatches,
+                                });
 
-                            if (results.length >= limit) {
-                                hitLimit = true;
-                                child.kill();
-                                break;
+                                if (results.length >= limit) {
+                                    hitLimit = true;
+                                    child.kill();
+                                    break;
+                                }
                             }
+                        } catch {
+                            // ignore
                         }
-                    } catch {
-                        // ignore
                     }
+
+                    lastIndex = newlineIndex + 1;
                 }
 
-                lastIndex = newlineIndex + 1;
-            }
-
-            buffer = buffer.slice(lastIndex);
-        });
+                buffer = buffer.slice(lastIndex);
+            });
 
             child.stderr.on('data', (chunk) => {
                 errorBuffer += chunk.toString();
