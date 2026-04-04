@@ -69,5 +69,6 @@
 **Action:** When implementing overlays or watermarks in WPF applications, consolidate duplicate elements into a single overlay and bind visibility triggers directly to the `Text` dependency property against an empty string to avoid blurry text and ensure robust evaluation.
 
 ## 2026-03-30 - [WPF TextBlock Watermark Font Binding]
+
 **Learning:** In WPF XAML tool windows, when using a `TextBlock` as a watermark for a `TextBox`, avoid hardcoding font sizes (e.g., `FontSize="14"`). Doing so prevents the placeholder text from scaling when a user modifies their environment font size or accessibility settings.
 **Action:** Instead of hardcoding, bind the `FontSize` property of the watermark directly to the underlying input control using `FontSize="{Binding FontSize, ElementName=SearchTextBox}"` so it scales correctly with user preferences.

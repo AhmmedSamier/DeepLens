@@ -43,7 +43,13 @@
 
 **Learning:** In hot paths checking for multiple specific string prefixes or substrings (e.g., parsing HTTP methods), using a single pre-compiled case-insensitive Regular Expression (e.g. `!/^(?:GET|POST|PUT)$/i.test(text)`) is significantly faster than allocating a new lowercased/uppercased string (`.toUpperCase()`) and chaining multiple `.includes()` or using a `switch` block. This eliminates intermediate string allocations and validation loops, providing an ~30-40% speedup.
 **Action:** When evaluating short string prefixes or exact matches in performance-sensitive logic against a known set of keywords, prefer a single case-insensitive Regex over manual slice-and-uppercase combinations.
+
 ## 2026-04-04 - [Fast Empty Query Filtering Optimization]
 
 **Learning:** In `SearchEngine.handleEmptyQuerySearch`, applying scope filters (e.g., `OPEN` or `MODIFIED`) within the provider iteration pass rather than using `Array.prototype.filter()` on the aggregated results avoids unnecessary O(N) array allocations. Pre-fetching required filter data (like a Set of modified files) before the loop minimizes async overhead. This also prevents a bug where the search might return fewer than `maxResults` items if matches were found but subsequently filtered out after the loop was broken early.
 **Action:** When aggregating results from multiple providers with an early break condition, apply filters sequentially during iteration rather than as a post-processing step.
+
+## 2026-04-03 - [Fast String Splitting Over Regex/split]
+
+**Learning:** In high-performance string processing for extremely large command output strings (like Ripgrep stdout or Git commands), using `String.prototype.split('\n')` or `String.prototype.split(/\r?\n/)` causes excessive intermediate array and string allocations. Replacing it with a single-pass manual loop using `indexOf('\n')`, `charCodeAt`, and `slice` significantly reduces memory overhead and improves performance.
+**Action:** When parsing large, multi-line command output payloads, replace regex-based splits and manual trims with a single-pass loop utilizing `indexOf('\n')` and `charCodeAt` boundaries to minimize allocations.
