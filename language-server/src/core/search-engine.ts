@@ -904,19 +904,30 @@ export class SearchEngine implements ISearchProvider {
     private async handleEmptyQuerySearch(options: SearchOptions, maxResults: number): Promise<SearchResult[]> {
         // New: Handle Phase 0 (Recent/Instant) via providers
         const context = this.createSearchContext(options);
-        let results: SearchResult[] = [];
+        const results: SearchResult[] = [];
+
+        const isModifiedScope = options.scope === SearchScope.MODIFIED;
+        const isOpenScope = options.scope === SearchScope.OPEN;
+        const modifiedFiles = isModifiedScope && this.gitProvider ? await this.gitProvider.getModifiedFiles() : null;
+
         for (const provider of this.providers) {
             const providerResults = await provider.search(context);
-            results.push(...providerResults);
-            if (results.length >= maxResults) break;
-        }
 
-        // Apply scope filtering to empty query results (e.g., for /o or /m history)
-        if (options.scope === SearchScope.OPEN) {
-            results = results.filter((r) => this.isActive(r.item.filePath));
-        } else if (options.scope === SearchScope.MODIFIED && this.gitProvider) {
-            const modifiedFiles = await this.gitProvider.getModifiedFiles();
-            results = results.filter((r) => modifiedFiles.has(this.normalizePath(r.item.filePath)));
+            for (let i = 0; i < providerResults.length; i++) {
+                const r = providerResults[i];
+
+                // Apply scope filtering during single pass to avoid O(N) array allocation
+                if (isOpenScope) {
+                    if (!this.isActive(r.item.filePath)) continue;
+                } else if (isModifiedScope && modifiedFiles) {
+                    if (!modifiedFiles.has(this.normalizePath(r.item.filePath))) continue;
+                }
+
+                results.push(r);
+                if (results.length >= maxResults) {
+                    return results;
+                }
+            }
         }
 
         return results;
