@@ -924,8 +924,8 @@ export class SearchEngine implements ISearchProvider {
                 let include = true;
                 if (options.scope === SearchScope.OPEN) {
                     include = this.isActive(r.item.filePath);
-                } else if (options.scope === SearchScope.MODIFIED && modifiedFiles) {
-                    include = modifiedFiles.has(this.normalizePath(r.item.filePath));
+                } else if (options.scope === SearchScope.MODIFIED) {
+                    include = modifiedFiles ? modifiedFiles.has(this.normalizePath(r.item.filePath)) : false;
                 }
 
                 if (include) {
