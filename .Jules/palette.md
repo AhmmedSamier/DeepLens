@@ -72,3 +72,6 @@
 
 **Learning:** In WPF XAML tool windows, when using a `TextBlock` as a watermark for a `TextBox`, avoid hardcoding font sizes (e.g., `FontSize="14"`). Doing so prevents the placeholder text from scaling when a user modifies their environment font size or accessibility settings.
 **Action:** Instead of hardcoding, bind the `FontSize` property of the watermark directly to the underlying input control using `FontSize="{Binding FontSize, ElementName=SearchTextBox}"` so it scales correctly with user preferences.
+## 2026-04-05 - [Clear Loading State in QuickPick]
+**Learning:** In VS Code `QuickPick` interfaces, the `busy` property provides visual feedback that a background task is running. If `quickPick.busy = true` is set at the start of a search but never explicitly cleared when the data finishes loading, the UI will remain in a perpetual loading state even after results are fully populated, leading to a confusing user experience.
+**Action:** When managing asynchronous searches or operations in VS Code extensions, ensure `quickPick.busy = false` is explicitly set in the final completion block (or when displaying an empty state) to accurately reflect the completion of the background task.
