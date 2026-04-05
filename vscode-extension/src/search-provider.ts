@@ -1403,6 +1403,8 @@ export class SearchProvider {
         // Unified EVERYTHING scope merge is now handled by the LSP search engine
 
         if (queryId === this.lastQueryId) {
+            quickPick.busy = false;
+
             // Sort by score if we merged multiple types
             if (this.currentScope === SearchScope.EVERYTHING) {
                 results.sort((a, b) => {
