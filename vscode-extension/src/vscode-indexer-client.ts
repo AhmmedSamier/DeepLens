@@ -46,18 +46,26 @@ export class VsCodeIndexerEnvironment implements IndexerEnvironment {
         );
 
         if (!symbols) return [];
-        return symbols.map((s) => ({
-            name: s.name,
-            kind: s.kind,
-            location: {
-                uri: s.location.uri.fsPath,
-                range: {
-                    start: { line: s.location.range.start.line, character: s.location.range.start.character },
-                    end: { line: s.location.range.end.line, character: s.location.range.end.character },
+
+        // ⚡ Bolt: Fast array mapping optimization
+        // eslint-disable-next-line sonarjs/array-constructor
+        const result = new Array<LeanSymbolInformation>(symbols.length);
+        for (let i = 0; i < symbols.length; i++) {
+            const s = symbols[i];
+            result[i] = {
+                name: s.name,
+                kind: s.kind,
+                location: {
+                    uri: s.location.uri.fsPath,
+                    range: {
+                        start: { line: s.location.range.start.line, character: s.location.range.start.character },
+                        end: { line: s.location.range.end.line, character: s.location.range.end.character },
+                    },
                 },
-            },
-            containerName: s.containerName,
-        }));
+                containerName: s.containerName,
+            };
+        }
+        return result;
     }
 
     createFileSystemWatcher(
@@ -81,19 +89,26 @@ export class VsCodeIndexerEnvironment implements IndexerEnvironment {
     }
 
     private mapDocumentSymbols(symbols: vscode.DocumentSymbol[]): LeanDocumentSymbol[] {
-        return symbols.map((s) => ({
-            name: s.name,
-            detail: s.detail,
-            kind: s.kind,
-            range: {
-                start: { line: s.range.start.line, character: s.range.start.character },
-                end: { line: s.range.end.line, character: s.range.end.character },
-            },
-            selectionRange: {
-                start: { line: s.selectionRange.start.line, character: s.selectionRange.start.character },
-                end: { line: s.selectionRange.end.line, character: s.selectionRange.end.character },
-            },
-            children: s.children ? this.mapDocumentSymbols(s.children) : [],
-        }));
+        // ⚡ Bolt: Fast array mapping optimization
+        // eslint-disable-next-line sonarjs/array-constructor
+        const result = new Array<LeanDocumentSymbol>(symbols.length);
+        for (let i = 0; i < symbols.length; i++) {
+            const s = symbols[i];
+            result[i] = {
+                name: s.name,
+                detail: s.detail,
+                kind: s.kind,
+                range: {
+                    start: { line: s.range.start.line, character: s.range.start.character },
+                    end: { line: s.range.end.line, character: s.range.end.character },
+                },
+                selectionRange: {
+                    start: { line: s.selectionRange.start.line, character: s.selectionRange.start.character },
+                    end: { line: s.selectionRange.end.line, character: s.selectionRange.end.character },
+                },
+                children: s.children ? this.mapDocumentSymbols(s.children) : [],
+            };
+        }
+        return result;
     }
 }
