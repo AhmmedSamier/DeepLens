@@ -53,3 +53,8 @@
 
 **Learning:** In high-performance string processing for extremely large command output strings (like Ripgrep stdout or Git commands), using `String.prototype.split('\n')` or `String.prototype.split(/\r?\n/)` causes excessive intermediate array and string allocations. Replacing it with a single-pass manual loop using `indexOf('\n')`, `charCodeAt`, and `slice` significantly reduces memory overhead and improves performance.
 **Action:** When parsing large, multi-line command output payloads, replace regex-based splits and manual trims with a single-pass loop utilizing `indexOf('\n')` and `charCodeAt` boundaries to minimize allocations.
+
+## 2026-04-05 - [Fast Git Output Parsing and Path Corruption Prevention]
+
+**Learning:** When processing output from Git commands (like `git ls-files` or `git diff`) that contain file paths, using the `-z` flag to output null-terminated strings and manually parsing them with `indexOf('\0')` is not only much faster than splitting by newlines and trimming, but it also fundamentally prevents path corruption. Git uses C-style quoting for files with spaces or special characters when outputting normally. Using `-z` bypasses this quoting and outputs raw, pristine paths, which ensures correctness while simultaneously avoiding expensive intermediate array allocations.
+**Action:** Always use the `-z` flag for Git commands that output file paths, and parse the resulting null-terminated string using a single-pass loop over `indexOf('\0')` to maximize both performance and reliability.
