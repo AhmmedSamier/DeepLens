@@ -315,7 +315,6 @@ export class WorkspaceIndexer {
         const limit = pLimit(50); // Consistent with processFileList concurrency
 
         const folderPromises = workspaceFolders.map((folderPath) =>
-            // eslint-disable-next-line sonarjs/cognitive-complexity
             limit(async () => {
                 try {
                     // Get both tracked and untracked (but not ignored) files
