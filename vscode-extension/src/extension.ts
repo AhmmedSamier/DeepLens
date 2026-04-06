@@ -176,18 +176,26 @@ async function buildCallTreeFromReferences(
 }
 
 async function loadReferenceDocuments(references: vscode.Location[]): Promise<Map<string, vscode.TextDocument>> {
-    const refUriStrings = [...new Set(references.map((r) => r.uri.toString()))];
+    // ⚡ Bolt: Fast unique reference extraction and O(1) lookup
+    // Replaces O(N^2) filtering (Array.map + Set + Array.find in a loop) with a single pass O(N) map population.
+    const uniqueUris = new Map<string, vscode.Uri>();
+    const len = references.length;
+    for (let i = 0; i < len; i++) {
+        const uri = references[i].uri;
+        const uriStr = uri.toString();
+        if (!uniqueUris.has(uriStr)) {
+            uniqueUris.set(uriStr, uri);
+        }
+    }
+
     const textDocuments = new Map<string, vscode.TextDocument>();
 
-    for (const uriStr of refUriStrings) {
-        const refUri = references.find((r) => r.uri.toString() === uriStr)?.uri;
-        if (refUri) {
-            try {
-                const doc = await vscode.workspace.openTextDocument(refUri);
-                textDocuments.set(uriStr, doc);
-            } catch (e) {
-                logger.error(`Failed to open document ${refUri}: ${e}`);
-            }
+    for (const [uriStr, refUri] of uniqueUris.entries()) {
+        try {
+            const doc = await vscode.workspace.openTextDocument(refUri);
+            textDocuments.set(uriStr, doc);
+        } catch (e) {
+            logger.error(`Failed to open document ${refUri}: ${e}`);
         }
     }
 
