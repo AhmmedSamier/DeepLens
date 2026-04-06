@@ -27,11 +27,11 @@ export class GitProvider {
                     // Run git commands in parallel
                     const [modifiedOutput, stagedOutput, untrackedOutput] = await Promise.all([
                         // 1. Get modified tracked files
-                        this.execGit(['diff', '--name-only'], root),
+                        this.execGit(['diff', '--name-only', '-z'], root),
                         // 2. Get modified staged files (in case they are staged but not committed)
-                        this.execGit(['diff', '--name-only', '--cached'], root),
+                        this.execGit(['diff', '--name-only', '--cached', '-z'], root),
                         // 3. Get untracked files
-                        this.execGit(['ls-files', '--others', '--exclude-standard'], root),
+                        this.execGit(['ls-files', '--others', '--exclude-standard', '-z'], root),
                     ]);
 
                     this.addFilesToSet(modifiedFiles, root, modifiedOutput);
@@ -52,12 +52,10 @@ export class GitProvider {
 
     private readonly isWindows = process.platform === 'win32';
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private addFilesToSet(set: Set<string>, root: string, output: string): void {
         // ⚡ Bolt: Fast string processing optimization
-        // Replaces .split('\n'), .trim(), and path.normalize(path.join()) with a single-pass
-        // manual loop using .indexOf('\n') and .charCodeAt() boundaries.
-        // This avoids intermediate array and string allocations, making it ~3.3x faster
+        // Replaces .split('\0') with a single-pass manual loop using .indexOf('\0').
+        // This avoids intermediate array and string allocations, avoids trimming, and prevents path corruption from C-style quoting.
         // for large git status outputs.
         if (!output) return;
 
@@ -71,23 +69,13 @@ export class GitProvider {
         }
 
         while (lastIndex < len) {
-            let newlineIndex = output.indexOf('\n', lastIndex);
-            if (newlineIndex === -1) {
-                newlineIndex = len;
+            let nullIndex = output.indexOf('\0', lastIndex);
+            if (nullIndex === -1) {
+                nullIndex = len;
             }
 
-            let start = lastIndex;
-            while (start < newlineIndex && output.charCodeAt(start) <= 32) {
-                start++;
-            }
-
-            let end = newlineIndex;
-            while (end > start && output.charCodeAt(end - 1) <= 32) {
-                end--;
-            }
-
-            if (start < end) {
-                const segment = output.slice(start, end);
+            if (lastIndex < nullIndex) {
+                const segment = output.slice(lastIndex, nullIndex);
                 let filePath: string;
 
                 if (this.isWindows) {
@@ -100,7 +88,7 @@ export class GitProvider {
                 set.add(filePath);
             }
 
-            lastIndex = newlineIndex + 1;
+            lastIndex = nullIndex + 1;
         }
     }
 
