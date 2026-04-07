@@ -1091,13 +1091,14 @@ export class SearchEngine implements ISearchProvider {
         const targetResults = new Array<SearchResult>(len);
         for (let i = 0; i < len; i++) {
             const r = results[i];
-            targetResults[i] = {
-                ...r,
-                item: {
-                    ...r.item,
-                    line: targetLine,
-                },
-            };
+            // ⚡ Bolt: Fast Object Creation Optimization
+            // Replaces nested object spread syntax ({ ...r, item: { ...r.item } })
+            // with `Object.assign` to avoid iterating over all properties multiple times.
+            // This is significantly faster for shallow cloning known structures
+            // while preserving immutability for shared SearchableItem references.
+            targetResults[i] = Object.assign({}, r, {
+                item: Object.assign({}, r.item, { line: targetLine }),
+            });
         }
         return targetResults;
     }
