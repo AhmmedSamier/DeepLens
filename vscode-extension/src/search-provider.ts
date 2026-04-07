@@ -1341,6 +1341,7 @@ export class SearchProvider {
         if (!query || query.trim().length === 0) {
             if (queryId === this.lastQueryId) {
                 quickPick.items = [];
+                quickPick.busy = false;
             }
             return [];
         }
