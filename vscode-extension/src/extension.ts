@@ -190,12 +190,19 @@ async function loadReferenceDocuments(references: vscode.Location[]): Promise<Ma
 
     const textDocuments = new Map<string, vscode.TextDocument>();
 
-    for (const [uriStr, refUri] of uniqueUris.entries()) {
-        try {
-            const doc = await vscode.workspace.openTextDocument(refUri);
-            textDocuments.set(uriStr, doc);
-        } catch (e) {
-            logger.error(`Failed to open document ${refUri}: ${e}`);
+    const entries = Array.from(uniqueUris.entries());
+    const promises = entries.map((entry) => vscode.workspace.openTextDocument(entry[1]));
+
+    const results = await Promise.allSettled(promises);
+
+    for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const [uriStr, refUri] = entries[i];
+
+        if (result.status === 'fulfilled') {
+            textDocuments.set(uriStr, result.value);
+        } else {
+            logger.error(`Failed to open document ${refUri}: ${result.reason}`);
         }
     }
 
