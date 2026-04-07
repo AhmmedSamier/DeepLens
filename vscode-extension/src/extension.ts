@@ -176,18 +176,33 @@ async function buildCallTreeFromReferences(
 }
 
 async function loadReferenceDocuments(references: vscode.Location[]): Promise<Map<string, vscode.TextDocument>> {
-    const refUriStrings = [...new Set(references.map((r) => r.uri.toString()))];
+    // ⚡ Bolt: Fast unique reference extraction and O(1) lookup
+    // Replaces O(N^2) filtering (Array.map + Set + Array.find in a loop) with a single pass O(N) map population.
+    const uniqueUris = new Map<string, vscode.Uri>();
+    const len = references.length;
+    for (let i = 0; i < len; i++) {
+        const uri = references[i].uri;
+        const uriStr = uri.toString();
+        if (!uniqueUris.has(uriStr)) {
+            uniqueUris.set(uriStr, uri);
+        }
+    }
+
     const textDocuments = new Map<string, vscode.TextDocument>();
 
-    for (const uriStr of refUriStrings) {
-        const refUri = references.find((r) => r.uri.toString() === uriStr)?.uri;
-        if (refUri) {
-            try {
-                const doc = await vscode.workspace.openTextDocument(refUri);
-                textDocuments.set(uriStr, doc);
-            } catch (e) {
-                logger.error(`Failed to open document ${refUri}: ${e}`);
-            }
+    const entries = Array.from(uniqueUris.entries());
+    const promises = entries.map((entry) => vscode.workspace.openTextDocument(entry[1]));
+
+    const results = await Promise.allSettled(promises);
+
+    for (let i = 0; i < results.length; i++) {
+        const result = results[i];
+        const [uriStr, refUri] = entries[i];
+
+        if (result.status === 'fulfilled') {
+            textDocuments.set(uriStr, result.value);
+        } else {
+            logger.error(`Failed to open document ${refUri}: ${result.reason}`);
         }
     }
 
