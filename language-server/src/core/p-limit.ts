@@ -19,6 +19,14 @@ export function pLimit(concurrency: number) {
             // fn should be defined because we only increment head after reading
             if (fn) fn();
         }
+
+        // ⚡ Bolt: Memory optimization
+        // Reset queue array when empty to prevent unbounded memory growth
+        // from continuous queuing of tasks without array truncation.
+        if (head >= queue.length) {
+            head = 0;
+            queue.length = 0;
+        }
     };
 
     const run = async <T>(fn: () => Promise<T>, resolve: (val: T) => void, reject: (err: unknown) => void) => {
