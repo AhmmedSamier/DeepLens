@@ -998,6 +998,10 @@ export class SearchProvider {
             quickPick.items = commandSuggestions.map((r) => this.resultToSlashCommandQuickPickItem(r));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
+        } else {
+            quickPick.items = [];
+            quickPick.title = 'DeepLens - No matching commands';
+            quickPick.busy = false;
         }
     }
 
