@@ -2222,7 +2222,18 @@ export class SearchEngine implements ISearchProvider {
                 ? (prepared as unknown as ExtendedPrepared)._targetLower
                 : item.name.toLowerCase();
 
-            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower);
+            // ⚡ Bolt: Use pre-computed lowercased fullName to avoid string allocation overhead
+            // Retrieves the lowercased fullName from parallel array Fuzzysort prepared structures
+            // directly instead of invoking item.fullName.toLowerCase() within the hot path
+            let fullLower: string | undefined;
+            const preparedFull = this.preparedFullNames[i];
+            if (preparedFull) {
+                fullLower = (preparedFull as unknown as ExtendedPrepared)._targetLower;
+            } else if (item.fullName) {
+                fullLower = item.fullName.toLowerCase();
+            }
+
+            const score = this.calculateMatchScore(nameLower, fullLower, queryLower);
             if (score > 0) {
                 addResult(item, this.itemTypeIds[i], score);
             }
@@ -2240,7 +2251,7 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
+    private calculateMatchScore(nameLower: string, fullLower: string | undefined, queryLower: string): number {
         // Fast path: Exact match or prefix match
         if (nameLower === queryLower || nameLower.indexOf(queryLower) === 0) {
             return 1.0;
@@ -2251,16 +2262,13 @@ export class SearchEngine implements ISearchProvider {
             return 0.8;
         }
 
-        // Check fullName if it exists and is different from name
-        if (fullName) {
-            const fullLower = fullName.toLowerCase();
-            if (fullLower !== nameLower) {
-                if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
-                    return 0.9;
-                }
-                if (fullLower.indexOf(queryLower) !== -1) {
-                    return 0.7;
-                }
+        // Check fullLower if it exists and is different from name
+        if (fullLower && fullLower !== nameLower) {
+            if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
+                return 0.9;
+            }
+            if (fullLower.indexOf(queryLower) !== -1) {
+                return 0.7;
             }
         }
 
