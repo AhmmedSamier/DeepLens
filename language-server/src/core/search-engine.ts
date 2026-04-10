@@ -1574,13 +1574,29 @@ export class SearchEngine implements ISearchProvider {
 
         if (context.scope === SearchScope.OPEN) {
             indices = this.getIndicesForOpenFiles();
-            // Filter out files, keep only symbols
-            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            // ⚡ Bolt: Fast array filtering optimization
+            // Replacing Array.prototype.filter() with manual iteration avoids allocation overhead in hot paths
+            const filteredIndices: number[] = [];
+            for (let i = 0; i < indices.length; i++) {
+                const idx = indices[i];
+                if (this.items[idx].type !== SearchItemType.FILE) {
+                    filteredIndices.push(idx);
+                }
+            }
+            indices = filteredIndices;
         } else if (context.scope === SearchScope.MODIFIED) {
             indices = await this.getIndicesForModifiedFiles();
 
-            // Filter out files, keep only symbols
-            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            // ⚡ Bolt: Fast array filtering optimization
+            // Replacing Array.prototype.filter() with manual iteration avoids allocation overhead in hot paths
+            const filteredIndices: number[] = [];
+            for (let i = 0; i < indices.length; i++) {
+                const idx = indices[i];
+                if (this.items[idx].type !== SearchItemType.FILE) {
+                    filteredIndices.push(idx);
+                }
+            }
+            indices = filteredIndices;
         } else {
             indices =
                 context.scope === SearchScope.EVERYTHING
@@ -1623,7 +1639,8 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
+        // ⚡ Bolt: Use Uint8Array instead of Set<number> for tracking visited indices
+        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
             this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
@@ -1664,9 +1681,13 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Set<number> | undefined;
+        // ⚡ Bolt: Fast candidate set checking
+        let candidateSet: Uint8Array | undefined;
         if (indices) {
-            candidateSet = new Set(indices);
+            candidateSet = new Uint8Array(this.items.length);
+            for (let i = 0; i < indices.length; i++) {
+                candidateSet[indices[i]] = 1;
+            }
         }
 
         const preferred: number[] = [];
@@ -1674,7 +1695,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && !candidateSet.has(index)) {
+            if (candidateSet && candidateSet[index] !== 1) {
                 continue;
             }
             preferred.push(index);
@@ -1750,16 +1771,16 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
             if (visited) {
-                if (visited.has(i)) {
+                if (visited[i] === 1) {
                     continue;
                 }
-                visited.add(i);
+                visited[i] = 1;
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1769,12 +1790,12 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.has(i)) {
+            if (visited && visited[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
@@ -2309,14 +2330,25 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        const searchedIndices = new Set<number>();
-        priorityScopes.forEach((s) => {
-            this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
-        });
+        // ⚡ Bolt: Fast index tracking
+        // Tracking visited indices in a pre-allocated Uint8Array is significantly faster
+        // than using a Set<number>, avoiding heavy object allocation and providing O(1) checks.
+        const searchedIndices = new Uint8Array(this.items.length);
+        const len = priorityScopes.length;
+        for (let p = 0; p < len; p++) {
+            const indices = this.scopedIndices.get(priorityScopes[p]);
+            if (indices) {
+                const idxLen = indices.length;
+                for (let i = 0; i < idxLen; i++) {
+                    searchedIndices[indices[i]] = 1;
+                }
+            }
+        }
 
-        for (let i = 0; i < this.items.length; i++) {
+        const itemsLen = this.items.length;
+        for (let i = 0; i < itemsLen; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (!searchedIndices.has(i)) {
+            if (searchedIndices[i] !== 1) {
                 processItem(i);
             }
         }
