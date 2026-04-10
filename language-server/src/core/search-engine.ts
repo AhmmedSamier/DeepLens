@@ -19,7 +19,7 @@ import {
 
 // Extend Fuzzysort.Prepared to include internal property
 interface ExtendedPrepared extends Fuzzysort.Prepared {
-    _targetLower: string;
+    targetLower: string;
 }
 
 interface TextScanContext {
@@ -685,6 +685,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const prepared = Fuzzysort.prepare(text);
+        (prepared as unknown as ExtendedPrepared).targetLower = text.toLowerCase();
         this.preparedCache.set(text, { prepared, refCount: 1 });
         return prepared;
     }
@@ -2219,7 +2220,7 @@ export class SearchEngine implements ISearchProvider {
             if (!item) return;
 
             const nameLower = prepared
-                ? (prepared as unknown as ExtendedPrepared)._targetLower
+                ? (prepared as unknown as ExtendedPrepared).targetLower
                 : item.name.toLowerCase();
 
             // ⚡ Bolt: Use pre-computed lowercased fullName to avoid string allocation overhead
@@ -2228,7 +2229,7 @@ export class SearchEngine implements ISearchProvider {
             let fullLower: string | undefined;
             const preparedFull = this.preparedFullNames[i];
             if (preparedFull) {
-                fullLower = (preparedFull as unknown as ExtendedPrepared)._targetLower;
+                fullLower = (preparedFull as unknown as ExtendedPrepared).targetLower;
             } else if (item.fullName) {
                 fullLower = item.fullName.toLowerCase();
             }
