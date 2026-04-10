@@ -1128,7 +1128,7 @@ export class SearchProvider {
         }
 
         this.suggestSlashCommands(quickPick, query);
-        return quickPick.items.length > 0;
+        return true;
     }
 
     private async showRecentHistoryAndResetState(
