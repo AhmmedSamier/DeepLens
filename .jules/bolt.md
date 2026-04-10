@@ -6,6 +6,6 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
-## 2024-04-10 - O(1) Index tracking with Uint8Array
+## 2026-04-10 - O(1) Index tracking with Uint8Array
 **Learning:** In highly executed code paths dealing with dense and bounded integer IDs (such as indexing elements from 0 to N), using `Set<number>` creates unnecessary object allocation and garbage collection overhead.
 **Action:** Replace `Set<number>` with a pre-allocated `Uint8Array` of size N and use array indices to track presence (e.g. `array[index] = 1`). This provides O(1) lookup times and eliminates `Set` operation overhead.

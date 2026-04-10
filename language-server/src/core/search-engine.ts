@@ -145,6 +145,10 @@ export class SearchEngine implements ISearchProvider {
 
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
+    private visitedStampArray = new Uint32Array(0);
+    private candidateStampArray = new Uint32Array(0);
+    private searchedStampArray = new Uint32Array(0);
+    private currentStamp = 0;
     private itemTypeIds: Uint8Array = new Uint8Array(0);
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
@@ -187,6 +191,17 @@ export class SearchEngine implements ISearchProvider {
     private readonly fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
     private getActivityScore?: (itemId: string) => number;
+
+    private getNextStamp(): number {
+        this.currentStamp++;
+        if (this.currentStamp >= 0xffffffff) {
+            this.currentStamp = 1;
+            this.visitedStampArray.fill(0);
+            this.candidateStampArray.fill(0);
+            this.searchedStampArray.fill(0);
+        }
+        return this.currentStamp;
+    }
     private config?: Config;
     private logger?: { log: (msg: string) => void; error: (msg: string) => void };
     private activeFiles: Set<string> = new Set();
@@ -1623,17 +1638,18 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        // ⚡ Bolt: Use Uint8Array instead of Set<number> for O(1) index tracking without allocation overhead
-        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
-        if (preferredIndices.length > 0) {
-            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+        const hasPreferred = preferredIndices.length > 0;
+        let stamp: number | undefined;
+        if (hasPreferred) {
+            stamp = this.getNextStamp();
+            this.searchWithIndices(preferredIndices, searchContext, heap, token, stamp);
         }
 
         if (indices) {
-            this.searchWithIndices(indices, searchContext, heap, token, visited);
+            this.searchWithIndices(indices, searchContext, heap, token, stamp);
         } else {
-            this.searchAllItems(searchContext, heap, token, visited);
+            this.searchAllItems(searchContext, heap, token, stamp);
         }
 
         const results = heap.getSorted();
@@ -1665,13 +1681,18 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Uint8Array | undefined;
+        let candidateStamp = 0;
         if (indices) {
-            // ⚡ Bolt: Using Uint8Array to track candidate indices provides O(1) checks while
-            // eliminating the allocation/GC overhead of Set operations in hot paths.
-            candidateSet = new Uint8Array(this.items.length);
+            // ⚡ Bolt: Using a reusable stamp array provides O(1) checks while
+            // eliminating per-query allocation/GC overhead of Set/Uint8Array in hot paths.
+            candidateStamp = this.getNextStamp();
+            if (this.candidateStampArray.length < this.items.length) {
+                const newArray = new Uint32Array(this.items.length);
+                newArray.set(this.candidateStampArray);
+                this.candidateStampArray = newArray;
+            }
             for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
+                this.candidateStampArray[indices[i]] = candidateStamp;
             }
         }
 
@@ -1680,7 +1701,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (indices && this.candidateStampArray[index] !== candidateStamp) {
                 continue;
             }
             preferred.push(index);
@@ -1756,16 +1777,21 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        stamp?: number,
     ): void {
+        if (stamp !== undefined && this.visitedStampArray.length < this.items.length) {
+            const newArray = new Uint32Array(this.items.length);
+            newArray.set(this.visitedStampArray);
+            this.visitedStampArray = newArray;
+        }
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
-            if (visited) {
-                if (visited[i] === 1) {
+            if (stamp !== undefined) {
+                if (this.visitedStampArray[i] === stamp) {
                     continue;
                 }
-                visited[i] = 1;
+                this.visitedStampArray[i] = stamp;
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1775,12 +1801,17 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        stamp?: number,
     ): void {
         const count = context.items.length;
+        if (stamp !== undefined && this.visitedStampArray.length < count) {
+            const newArray = new Uint32Array(count);
+            newArray.set(this.visitedStampArray);
+            this.visitedStampArray = newArray;
+        }
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited && visited[i] === 1) {
+            if (stamp !== undefined && this.visitedStampArray[i] === stamp) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
@@ -2315,16 +2346,22 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        const searchedIndices = new Uint8Array(this.items.length);
+        const stamp = this.getNextStamp();
+        if (this.searchedStampArray.length < this.items.length) {
+            const newArray = new Uint32Array(this.items.length);
+            newArray.set(this.searchedStampArray);
+            this.searchedStampArray = newArray;
+        }
+
         priorityScopes.forEach((s) => {
             this.scopedIndices.get(s)?.forEach((i) => {
-                searchedIndices[i] = 1;
+                this.searchedStampArray[i] = stamp;
             });
         });
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] !== 1) {
+            if (this.searchedStampArray[i] !== stamp) {
                 processItem(i);
             }
         }
