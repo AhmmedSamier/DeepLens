@@ -269,6 +269,21 @@ namespace DeepLensVisualStudio.ToolWindows
 
         public bool ShowEmptyState => Results.Count == 0 && !string.IsNullOrWhiteSpace(SearchQuery) && StatusText != "Searching...";
 
+        public string SearchPlaceholderText
+        {
+            get
+            {
+                if (FilterClasses) return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
+                if (FilterMethods) return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
+                if (FilterFiles) return "Files: Try 'app.ts', 'components/Button', or 'index.html'...";
+                if (FilterEndpoints) return "Endpoints: Try 'GET /api/users', '/auth/login', or 'POST'...";
+                if (FilterSymbols) return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
+                if (FilterTypes) return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
+                if (FilterText) return "Text: Try 'async function', 'TODO:', or 'extends Component'...";
+                return "Global: Try 'UserService', 'app.ts', 'GET /api', or '/t'...";
+            }
+        }
+
         public bool FilterAll
         {
             get => _filterAll;
@@ -635,6 +650,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (currentFilter != nameof(FilterSymbols)) FilterSymbols = false;
                 if (currentFilter != nameof(FilterTypes)) FilterTypes = false;
                 if (currentFilter != nameof(FilterText)) FilterText = false;
+                OnPropertyChanged(nameof(SearchPlaceholderText));
             }
             finally
             {
