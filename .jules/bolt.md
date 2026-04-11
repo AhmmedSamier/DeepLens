@@ -6,3 +6,6 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+## 2026-04-11 - [Eliminate Redundant toLowerCase() in Hot Paths]
+**Learning:** In SearchEngine scoring loops, dynamically calling `.toLowerCase()` on item properties causes redundant string allocations and degrades performance.
+**Action:** Retrieve pre-computed lowercased strings from parallel Fuzzysort prepared arrays (e.g., `this.preparedFullNames[i]._targetLower`) using `ExtendedPrepared` to eliminate string allocations in the hot loop.
