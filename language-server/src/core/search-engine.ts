@@ -2309,14 +2309,24 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        const searchedIndices = new Set<number>();
-        priorityScopes.forEach((s) => {
-            this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
-        });
+        // ⚡ Bolt: Fast Uint8Array tracking
+        // Tracking seen dense integer indices via Uint8Array is significantly faster than using a Set<number>
+        // and avoids GC overhead in this hot path
+        const searchedIndices = new Uint8Array(this.items.length);
+        const priorityScopesLen = priorityScopes.length;
+        for (let j = 0; j < priorityScopesLen; j++) {
+            const indices = this.scopedIndices.get(priorityScopes[j]);
+            if (indices) {
+                const indicesLen = indices.length;
+                for (let k = 0; k < indicesLen; k++) {
+                    searchedIndices[indices[k]] = 1;
+                }
+            }
+        }
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (!searchedIndices.has(i)) {
+            if (searchedIndices[i] === 0) {
                 processItem(i);
             }
         }

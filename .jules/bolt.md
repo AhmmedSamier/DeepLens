@@ -6,3 +6,6 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+## 2026-04-11 - [Fast Memory O(1) Search via Pre-Allocated Arrays]
+**Learning:** When checking seen integer IDs that are dense and bounded (e.g., 0 to N like `searchRemainingItems` index lists), use a pre-allocated `Uint8Array` instead of `Set<number>`. Tracking presence via array indices (`array[id] = 1`) significantly reduces object allocation overhead and provides O(1) access speed, avoiding garbage collection pauses in hot paths.
+**Action:** Replace `new Set<number>()` with `new Uint8Array(maxIndex)` for dense ID bounds checking.
