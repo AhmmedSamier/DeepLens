@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { pLimit } from './p-limit';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -27,30 +28,45 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         const { filePaths } = message;
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        // ⚡ Bolt: Prevent head-of-line blocking by using pLimit
+        // Replaces fixed-chunk Promise.all() which waits for the slowest file in a batch.
+        const limit = pLimit(BATCH_SIZE);
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
-                    try {
-                        return await parser.parseFile(filePath);
-                    } catch {
-                        return [];
-                    }
-                }),
-            );
+        let currentBatchItems: unknown[] = [];
+        let filesCompletedInBatch = 0;
+        let totalFilesCompleted = 0;
 
-            const chunkItems = results.flat();
+        const promises = filePaths.map((filePath) =>
+            limit(async () => {
+                let items: unknown[] = [];
+                try {
+                    items = await parser.parseFile(filePath);
+                } catch {
+                    items = [];
+                }
 
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+                // ⚡ Bolt: Use a loop instead of spread operator to avoid Maximum Call Stack Size Exceeded errors for large arrays.
+                for (let i = 0; i < items.length; i++) {
+                    currentBatchItems.push(items[i]);
+                }
+                filesCompletedInBatch++;
+                totalFilesCompleted++;
+
+                const isLast = totalFilesCompleted === filePaths.length;
+                if (filesCompletedInBatch >= BATCH_SIZE || isLast) {
+                    parentPort?.postMessage({
+                        type: 'result',
+                        items: currentBatchItems,
+                        count: filesCompletedInBatch,
+                        isPartial: !isLast,
+                    });
+                    currentBatchItems = [];
+                    filesCompletedInBatch = 0;
+                }
+            }),
+        );
+
+        await Promise.all(promises);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
