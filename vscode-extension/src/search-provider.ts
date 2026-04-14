@@ -1295,9 +1295,13 @@ export class SearchProvider {
                 // Check if we need to update the query prefix
                 const currentQuery = quickPick.value;
 
+                // ⚡ Bolt: Fast prefix parsing optimization
+                // Cache the lowercased query to avoid repeated string allocations in the loop
+                const currentQueryLower = currentQuery.toLowerCase();
+
                 // Check if current query has ANY known prefix
                 for (const [prefix] of this.PREFIX_MAP.entries()) {
-                    if (currentQuery.toLowerCase().startsWith(prefix)) {
+                    if (currentQueryLower.startsWith(prefix)) {
                         // Clear the prefix when switching scopes via buttons
                         const replacement = '';
                         quickPick.value = replacement + currentQuery.slice(prefix.length);
@@ -1542,9 +1546,13 @@ export class SearchProvider {
             const currentQuery = quickPick.value;
             let text = currentQuery;
 
+            // ⚡ Bolt: Fast prefix parsing optimization
+            // Cache the lowercased query to avoid repeated string allocations in the loop
+            const currentQueryLower = currentQuery.toLowerCase();
+
             // Check if current query has ANY known prefix
             for (const [prefix] of this.PREFIX_MAP.entries()) {
-                if (currentQuery.toLowerCase().startsWith(prefix)) {
+                if (currentQueryLower.startsWith(prefix)) {
                     text = currentQuery.slice(prefix.length);
                     quickPick.value = text;
                     break;
