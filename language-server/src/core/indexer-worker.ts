@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 
 if (!parentPort) {
@@ -27,30 +28,48 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         const { filePaths } = message;
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        // ⚡ Bolt: Fast streaming pool optimization
+        // Replace fixed-chunk Promise.all with a concurrency-limited task pool
+        const limit = pLimit(BATCH_SIZE);
+        let chunkItems: import('./types').SearchableItem[] = [];
+        let batchFileCount = 0;
+        let totalProcessed = 0;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
-                    try {
-                        return await parser.parseFile(filePath);
-                    } catch {
-                        return [];
-                    }
-                }),
-            );
+        const tasks = filePaths.map((filePath) =>
+            limit(async () => {
+                let items: import('./types').SearchableItem[] = [];
+                try {
+                    items = await parser.parseFile(filePath);
+                } catch {
+                    items = [];
+                }
 
-            const chunkItems = results.flat();
+                // Fast array concatenation
+                chunkItems = chunkItems.concat(items);
 
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+                batchFileCount++;
+                totalProcessed++;
+
+                // Send back chunk result immediately when batch size is reached or at the end
+                if (batchFileCount >= BATCH_SIZE || totalProcessed === filePaths.length) {
+                    const currentFileCount = batchFileCount;
+                    const currentItems = chunkItems;
+
+                    // Reset accumulators
+                    batchFileCount = 0;
+                    chunkItems = [];
+
+                    parentPort?.postMessage({
+                        type: 'result',
+                        items: currentItems,
+                        count: currentFileCount,
+                        isPartial: totalProcessed < filePaths.length,
+                    });
+                }
+            }),
+        );
+
+        await Promise.all(tasks);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
