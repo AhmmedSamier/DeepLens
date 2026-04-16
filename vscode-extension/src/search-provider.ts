@@ -120,18 +120,27 @@ export class SearchProvider {
         ['>', SearchScope.COMMANDS],
     ]);
 
+    private readonly memento: vscode.Memento;
+
     constructor(
         searchEngine: ISearchProvider,
         config: Config,
+        memento: vscode.Memento,
         activityTracker?: ActivityTracker,
         commandIndexer?: CommandIndexer,
     ) {
         this.searchEngine = searchEngine;
         this.config = config;
+        this.memento = memento;
         this.activityTracker = activityTracker;
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
+
+        const storedScope = this.memento.get<SearchScope>('deeplens.userSelectedScope');
+        if (storedScope !== undefined) {
+            this.userSelectedScope = storedScope;
+        }
 
         // Start with a random tip
         // eslint-disable-next-line sonarjs/pseudo-random
@@ -145,6 +154,14 @@ export class SearchProvider {
                 config.getActivityWeight(),
             );
         }
+    }
+
+    /**
+     * Persist user scope selection
+     */
+    private setUserSelectedScope(scope: SearchScope): void {
+        this.userSelectedScope = scope;
+        void this.memento.update('deeplens.userSelectedScope', scope);
     }
 
     /**
@@ -451,11 +468,10 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope;
         } else {
             this.currentScope = scope;
-            this.userSelectedScope = scope;
+            this.setUserSelectedScope(scope);
         }
         await this.showInternal(initialQuery);
     }
@@ -880,7 +896,7 @@ export class SearchProvider {
     }
 
     private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        this.userSelectedScope = SearchScope.EVERYTHING;
+        this.setUserSelectedScope(SearchScope.EVERYTHING);
         this.currentScope = SearchScope.EVERYTHING;
 
         const currentQuery = quickPick.value;
@@ -1099,7 +1115,7 @@ export class SearchProvider {
             return false;
         }
 
-        this.userSelectedScope = scope;
+        this.setUserSelectedScope(scope);
         this.currentScope = scope;
         this.updateFilterButtons(quickPick);
         quickPick.placeholder = this.getPlaceholder();
@@ -1287,7 +1303,7 @@ export class SearchProvider {
 
             if (buttonBaseName === baseName) {
                 // Update user selection
-                this.userSelectedScope = scope;
+                this.setUserSelectedScope(scope);
 
                 // Also update current scope (though it might be overridden by query prefix in next step)
                 this.currentScope = scope;
@@ -1536,7 +1552,7 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_SWITCH_SCOPE) {
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.setUserSelectedScope(SearchScope.EVERYTHING);
             this.currentScope = SearchScope.EVERYTHING;
 
             const currentQuery = quickPick.value;
@@ -2078,7 +2094,7 @@ export class SearchProvider {
             // Find scope for this prefix (add space to match PREFIX_MAP)
             const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
             if (scope) {
-                this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                this.setUserSelectedScope(scope); // <--- FIX: Persist user selection
                 this.currentScope = scope;
                 this.updateFilterButtons(this.currentQuickPick);
                 this.currentQuickPick.value = ''; // Clear the command text
