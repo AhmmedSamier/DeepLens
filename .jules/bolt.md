@@ -6,3 +6,6 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+## 2026-04-07 - [Reduce tail latency in worker thread batch processing]
+**Learning:** In worker thread architectures that process batches of files, using a fixed-chunk `Promise.all` approach creates head-of-line blocking. If one file in the chunk takes significantly longer to parse, the entire chunk's response is delayed, and concurrent slots sit idle, increasing tail latency and slowing down streaming UI updates.
+**Action:** Replace fixed chunks with a rolling concurrency window using `pLimit`. Track processed counts within the mapping loop and manually batch results to emit them back to the main thread incrementally as exactly `BATCH_SIZE` items accumulate, keeping all parsing slots fully utilized and reducing time-to-first-result.
