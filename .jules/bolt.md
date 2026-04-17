@@ -6,3 +6,6 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+## 2026-04-08 - [Fast Integer Presence Tracking]
+**Learning:** In highly iterated search loops (e.g. `search-engine.ts`), instantiating `Set<number>` for presence checks (`visited.has(i)`) creates overhead due to memory allocation, hashing functions, and garbage collection pauses. When integer IDs are bounded and dense (e.g. array indices from 0 to N), mapping their existence onto an array avoids all of these overheads.
+**Action:** Replace `new Set<number>()` with a pre-allocated `new Uint8Array(maxIndex)` and track integer presence via direct array index access (`array[index] = 1`). This provides true `O(1)` contiguous memory lookup.
