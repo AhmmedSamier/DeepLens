@@ -6,3 +6,6 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+## 2026-04-07 - [Fast AST Node Type Checks]
+**Learning:** In Tree-sitter AST traversal loops (e.g., searching for parent class declarations), using dynamic string manipulation like `type.toLowerCase().includes('class_declaration')` inside a `while` loop creates redundant string allocations and slows down parsing execution.
+**Action:** Replace dynamic substring checks with a static `Set` of exact node names (e.g., `'class_declaration'`, `'class_definition'`, `'class'`) for O(1) lookups to eliminate redundant allocations and improve traversal speed.
