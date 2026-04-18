@@ -1585,14 +1585,28 @@ export class SearchEngine implements ISearchProvider {
         let indices: number[] | undefined;
 
         if (context.scope === SearchScope.OPEN) {
-            indices = this.getIndicesForOpenFiles();
-            // Filter out files, keep only symbols
-            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            const rawIndices = this.getIndicesForOpenFiles() || [];
+            // ⚡ Bolt: Fast array filtering without callback allocation overhead
+            // Replaces indices.filter() to avoid callback overhead in a hot path
+            indices = [];
+            for (let i = 0; i < rawIndices.length; i++) {
+                const idx = rawIndices[i];
+                if (this.items[idx].type !== SearchItemType.FILE) {
+                    indices.push(idx);
+                }
+            }
         } else if (context.scope === SearchScope.MODIFIED) {
-            indices = await this.getIndicesForModifiedFiles();
+            const rawIndices = (await this.getIndicesForModifiedFiles()) || [];
 
-            // Filter out files, keep only symbols
-            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            // ⚡ Bolt: Fast array filtering without callback allocation overhead
+            // Replaces indices.filter() to avoid callback overhead in a hot path
+            indices = [];
+            for (let i = 0; i < rawIndices.length; i++) {
+                const idx = rawIndices[i];
+                if (this.items[idx].type !== SearchItemType.FILE) {
+                    indices.push(idx);
+                }
+            }
         } else {
             indices =
                 context.scope === SearchScope.EVERYTHING
