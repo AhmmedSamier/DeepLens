@@ -9,3 +9,7 @@
 ## 2026-04-08 - [Fast Dense Integer Set Tracking]
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
+## 2026-04-19 - [Fast Worker Concurrency with Streaming Queue]
+
+**Learning:** In worker threads processing large batches of files, using fixed-chunk arrays mapped with unconstrained `Promise.all` introduces head-of-line blocking. The entire chunk must wait for its slowest file to finish parsing before sending results back to the main thread.
+**Action:** Replace fixed-chunk `Promise.all` with an unbounded `Promise.all` mapped over all files, constrained by `pLimit`. Maintain a local accumulator array in the worker and send partial results (`parentPort?.postMessage`) back as soon as a `BATCH_SIZE` worth of items is parsed. This keeps the parent thread's indexing pipeline saturated and lowers indexing latency.
