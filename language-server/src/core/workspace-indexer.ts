@@ -19,6 +19,7 @@ export class CancellationError extends Error {
 
 interface WorkerPoolState {
     pendingItems: SearchableItem[];
+    pendingHead: number; // ⚡ Bolt: Fast array shifting via head index
     activeTasks: number;
     finished: boolean;
     processed: number;
@@ -646,6 +647,7 @@ export class WorkspaceIndexer {
 
         const state: WorkerPoolState = {
             pendingItems: [...fileItems],
+            pendingHead: 0,
             activeTasks: 0,
             finished: false,
             processed: 0,
@@ -702,7 +704,7 @@ export class WorkspaceIndexer {
     }
 
     private startInitialWorkerTasks(workers: Worker[], state: WorkerPoolState, batchSize: number): void {
-        const initialCount = Math.min(workers.length, state.pendingItems.length);
+        const initialCount = Math.min(workers.length, state.pendingItems.length - state.pendingHead);
         if (initialCount === 0) {
             state.finished = true;
             state.resolveAll();
@@ -761,12 +763,20 @@ export class WorkspaceIndexer {
 
     private collectBatch(state: WorkerPoolState, batchSize: number): string[] {
         const batchFiles: string[] = [];
-        while (state.pendingItems.length > 0 && batchFiles.length < batchSize) {
-            const fileItem = state.pendingItems.shift();
+        while (state.pendingItems.length - state.pendingHead > 0 && batchFiles.length < batchSize) {
+            const fileItem = state.pendingItems[state.pendingHead];
+            state.pendingHead++;
             if (fileItem) {
                 batchFiles.push(fileItem.filePath);
             }
         }
+
+        // Memory optimization: reset queue array when empty
+        if (state.pendingHead >= state.pendingItems.length) {
+            state.pendingHead = 0;
+            state.pendingItems.length = 0;
+        }
+
         return batchFiles;
     }
 
@@ -776,7 +786,7 @@ export class WorkspaceIndexer {
     }
 
     private finishIfNoActiveTasks(state: WorkerPoolState): void {
-        if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
+        if (state.activeTasks === 0 && state.pendingItems.length - state.pendingHead === 0 && !state.finished) {
             state.finished = true;
             state.resolveAll();
         }
@@ -884,7 +894,7 @@ export class WorkspaceIndexer {
             return;
         }
 
-        if (state.pendingItems.length > 0) {
+        if (state.pendingItems.length - state.pendingHead > 0) {
             this.assignWorkerTask(worker, batchSize, state);
         } else {
             this.finishIfNoActiveTasks(state);
@@ -893,7 +903,7 @@ export class WorkspaceIndexer {
 
     private handleWorkerErrorMessage(worker: Worker, state: WorkerPoolState, batchSize: number): void {
         state.activeTasks--;
-        if (state.pendingItems.length > 0) {
+        if (state.pendingItems.length - state.pendingHead > 0) {
             this.assignWorkerTask(worker, batchSize, state);
         } else {
             this.finishIfNoActiveTasks(state);
