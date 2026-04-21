@@ -1649,7 +1649,8 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
+        // ⚡ Bolt: Fast Dense Integer Set Tracking - Replace Set<number> with Uint8Array for O(1) allocation and access
+        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
             this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
@@ -1681,6 +1682,7 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
@@ -1690,9 +1692,15 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Set<number> | undefined;
+        // ⚡ Bolt: Fast Dense Integer Set Tracking
+        let candidateSet: Uint8Array | undefined;
         if (indices) {
-            candidateSet = new Set(indices);
+            candidateSet = new Uint8Array(this.items.length);
+            for (let i = 0; i < indices.length; i++) {
+                if (indices[i] >= 0 && indices[i] < this.items.length) {
+                    candidateSet[indices[i]] = 1;
+                }
+            }
         }
 
         const preferred: number[] = [];
@@ -1700,7 +1708,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && !candidateSet.has(index)) {
+            if (candidateSet && candidateSet[index] !== 1) {
                 continue;
             }
             preferred.push(index);
@@ -1776,16 +1784,16 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
             if (visited) {
-                if (visited.has(i)) {
+                if (visited[i] === 1) {
                     continue;
                 }
-                visited.add(i);
+                visited[i] = 1;
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1795,12 +1803,12 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.has(i)) {
+            if (visited && visited[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
