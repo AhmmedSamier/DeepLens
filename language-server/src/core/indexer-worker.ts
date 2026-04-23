@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { pLimit } from './p-limit';
-import { SearchableItem } from '../types';
+import { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
