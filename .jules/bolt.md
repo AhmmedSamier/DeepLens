@@ -9,3 +9,7 @@
 ## 2026-04-08 - [Fast Dense Integer Set Tracking]
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
+
+## 2026-04-10 - [Avoid Unrolling Maps to For Loops]
+**Learning:** While replacing the spread operator in `.push(...items)` with manual `.push` in a `for` loop resolves stack overflow errors on huge arrays, manually unrolling `Array.prototype.map()` into `for` loops (e.g., `const newItems = new Array(len); for...`) is considered an anti-pattern. It introduces micro-optimizations that sacrifice code readability and trigger linting errors (like `sonarjs/array-constructor`) without a universally measurable performance win to justify the complexity.
+**Action:** Do not sacrifice readability for micro-optimizations. When dealing with arrays in UI components or where sizes are modest, stick to native array methods like `.map()` and prioritize clear, maintainable code over unrolled loops.
