@@ -284,12 +284,28 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
+        public string EmptyStateMessage
+        {
+            get
+            {
+                if (FilterClasses) return "No classes found";
+                if (FilterTypes) return "No types found";
+                if (FilterMethods) return "No methods found";
+                if (FilterSymbols) return "No symbols found";
+                if (FilterFiles) return "No files found";
+                if (FilterText) return "No text matches found";
+                if (FilterEndpoints) return "No endpoints found";
+                return "No results found";
+            }
+        }
+
         private void UpdateFilter(ref bool field, bool value, [CallerMemberName] string? propertyName = null)
         {
             if (field == value) return;
             field = value;
             OnPropertyChanged(propertyName);
             OnPropertyChanged(nameof(SearchPlaceholder));
+            OnPropertyChanged(nameof(EmptyStateMessage));
             if (value)
             {
                 ClearOtherFilters(propertyName ?? string.Empty);
