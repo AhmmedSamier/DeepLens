@@ -1649,7 +1649,10 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
+        // ⚡ Bolt: Fast dense integer set tracking optimization
+        // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents object allocation overhead
+        // and provides O(1) array access for visited indices during hot-path searches.
+        const visited = preferredIndices.length > 0 ? new Uint8Array(searchContext.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
             this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
@@ -1776,16 +1779,16 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
             if (visited) {
-                if (visited.has(i)) {
+                if (visited[i] === 1) {
                     continue;
                 }
-                visited.add(i);
+                visited[i] = 1;
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1795,12 +1798,12 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.has(i)) {
+            if (visited && visited[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
