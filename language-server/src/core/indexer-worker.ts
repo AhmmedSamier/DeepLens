@@ -1,4 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 
 if (!parentPort) {
@@ -27,30 +28,49 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         const { filePaths } = message;
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        const limit = pLimit(BATCH_SIZE);
+        let pendingItems: import('./types').SearchableItem[] = [];
+        let processedCount = 0;
+        let totalCompleted = 0;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
-                    try {
-                        return await parser.parseFile(filePath);
-                    } catch {
-                        return [];
+        const flushBatch = (isPartial: boolean) => {
+            if (pendingItems.length > 0 || !isPartial) {
+                parentPort?.postMessage({
+                    type: 'result',
+                    items: pendingItems,
+                    count: processedCount,
+                    isPartial,
+                });
+                pendingItems = [];
+                processedCount = 0;
+            }
+        };
+
+        const tasks = filePaths.map((filePath) => {
+            return limit(async () => {
+                try {
+                    const parsedItems = await parser.parseFile(filePath);
+
+                    // Avoid array spread to prevent Call Stack Size Exceeded
+                    for (let i = 0; i < parsedItems.length; i++) {
+                        pendingItems.push(parsedItems[i]);
                     }
-                }),
-            );
+                } catch {
+                    // Ignore parse errors for individual files
+                } finally {
+                    processedCount++;
+                    totalCompleted++;
 
-            const chunkItems = results.flat();
-
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
+                    // Flush when we hit batch size or it's the very last item
+                    const isLast = totalCompleted === filePaths.length;
+                    if (processedCount >= BATCH_SIZE || isLast) {
+                        flushBatch(!isLast);
+                    }
+                }
             });
-        }
+        });
+
+        await Promise.all(tasks);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
