@@ -905,12 +905,23 @@ export class SearchProvider {
     /**
      * Create a search result for a slash command
      */
-    private createCommandSuggestion(cmd: SlashCommand, score: number, isRecent: boolean = false): SearchResult {
+    private createCommandSuggestion(
+        cmd: SlashCommand,
+        score: number,
+        indicatorType: 'recent' | 'popular' | 'normal' = 'normal',
+    ): SearchResult {
         const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
         const aliasText = this.formatAliasText(cmd);
         const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
         const exampleText = cmd.example ? ` • Try: ${cmd.example}` : '';
         const description = `${cmd.description}${aliasText}${shortcutText}${exampleText}`;
+
+        let detailPrefix = '';
+        if (indicatorType === 'recent') {
+            detailPrefix = '$(history) Recent • ';
+        } else if (indicatorType === 'popular') {
+            detailPrefix = '$(star) Popular • ';
+        }
 
         return {
             item: {
@@ -918,7 +929,7 @@ export class SearchProvider {
                 name: primaryAlias,
                 type: SearchItemType.COMMAND,
                 filePath: '',
-                detail: isRecent ? `$(history) Recent • ${description}` : description,
+                detail: `${detailPrefix}${description}`,
                 containerName: this.getCategoryLabel(cmd.category),
             },
             score: score,
@@ -961,9 +972,11 @@ export class SearchProvider {
     /**
      * Suggest slash commands based on query
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
+        const popularCommands = this.slashCommandService.getPopularCommands();
 
         const commandSuggestions: SearchResult[] = [];
         const seen = new Set<string>();
@@ -982,7 +995,21 @@ export class SearchProvider {
             )
                 continue;
 
-            commandSuggestions.push(this.createCommandSuggestion(cmd, 1000, true));
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 1000, 'recent'));
+            seen.add(cmd.name);
+        }
+
+        // Add popular commands
+        for (const cmd of popularCommands) {
+            if (seen.has(cmd.name)) continue;
+            if (
+                queryLower &&
+                !cmd.name.toLowerCase().startsWith(queryLower) &&
+                !cmd.aliases.some((a) => a.toLowerCase().startsWith(queryLower))
+            )
+                continue;
+
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 500, 'popular'));
             seen.add(cmd.name);
         }
 
@@ -990,7 +1017,7 @@ export class SearchProvider {
         for (const cmd of commands) {
             if (seen.has(cmd.name)) continue;
 
-            commandSuggestions.push(this.createCommandSuggestion(cmd, 1, false));
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 1, 'normal'));
             seen.add(cmd.name);
         }
 
