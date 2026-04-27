@@ -266,6 +266,23 @@ export class SlashCommandService {
         return recent;
     }
 
+    /**
+     * Get a list of popular commands to suggest to users
+     */
+    getPopularCommands(): SlashCommand[] {
+        const popularCommandIds = ['/files', '/txt', '/types', '/symbols', '/m'];
+        const popular: SlashCommand[] = [];
+
+        for (const id of popularCommandIds) {
+            const cmd = this.commands.get(id);
+            if (cmd) {
+                popular.push(cmd);
+            }
+        }
+
+        return popular;
+    }
+
     getCommandsByCategory(category: SlashCommandCategory): SlashCommand[] {
         return this.categoryGroups.get(category) || [];
     }
