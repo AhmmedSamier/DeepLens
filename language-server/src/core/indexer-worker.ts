@@ -1,5 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
+import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -27,30 +29,45 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         const { filePaths } = message;
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        // ⚡ Bolt: Fast concurrent streaming optimization
+        // Replace fixed-chunk Promise.all with a concurrency-limited task pool.
+        // This prevents head-of-line blocking where one slow file stalls the entire batch,
+        // allowing faster files to stream their results immediately.
+        const limit = pLimit(BATCH_SIZE);
+        let batchItems: SearchableItem[] = [];
+        let batchCount = 0;
+        let totalCompleted = 0;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
-                    try {
-                        return await parser.parseFile(filePath);
-                    } catch {
-                        return [];
-                    }
-                }),
-            );
+        const processFile = async (filePath: string) => {
+            let items: SearchableItem[] = [];
+            try {
+                items = await parser.parseFile(filePath);
+            } catch {
+                // Ignore parse errors
+            }
 
-            const chunkItems = results.flat();
+            for (let j = 0; j < items.length; j++) {
+                batchItems.push(items[j]);
+            }
+            batchCount++;
+            totalCompleted++;
 
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+            if (batchCount >= BATCH_SIZE || totalCompleted === filePaths.length) {
+                const itemsToSend = batchItems;
+                const countToSend = batchCount;
+                batchItems = [];
+                batchCount = 0;
+
+                parentPort?.postMessage({
+                    type: 'result',
+                    items: itemsToSend,
+                    count: countToSend,
+                    isPartial: totalCompleted < filePaths.length,
+                });
+            }
+        };
+
+        await Promise.all(filePaths.map((filePath) => limit(() => processFile(filePath))));
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
