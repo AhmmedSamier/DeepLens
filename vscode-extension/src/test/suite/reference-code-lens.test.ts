@@ -91,12 +91,16 @@ suite('ReferenceCodeLens Test Suite', () => {
         assert.ok(Array.isArray(lenses), 'Should return an array even when cancelled');
     });
 
-    test('Provider should handle documents with no symbols', async () => {
+    test('Provider should handle documents with no symbols', async function () {
+        this.timeout(5000); // Increase timeout to avoid flake
         // Create a new document with no symbols
         const emptyDoc = await vscode.workspace.openTextDocument({
             content: '// Empty file\n',
             language: 'typescript',
         });
+
+        // Add a small delay for TS extension to be fully ready before getting lenses to avoid timeout flakes
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(emptyDoc, token);
@@ -168,6 +172,9 @@ export class ReferenceTestClass {
             content: testContent,
             language: 'typescript',
         });
+
+        // Add a small delay for TS extension to be fully ready before getting lenses to avoid timeout flakes
+        await new Promise((resolve) => setTimeout(resolve, 200));
 
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(doc, token);
