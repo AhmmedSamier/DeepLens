@@ -184,6 +184,10 @@ export class SearchEngine implements ISearchProvider {
         topIndices: number[];
     } | null = null;
 
+    // ⚡ Bolt: Re-usable typed arrays for fast dense integer tracking without zero-fill overhead
+    private reusableVisitedIndices: Uint8Array | null = null;
+    private reusableCandidateIndices: Uint8Array | null = null;
+
     public itemsMap: Map<string, SearchableItem> = new Map();
     private readonly fileItemByNormalizedPath: Map<string, SearchableItem> = new Map();
     private activityWeight: number = 0.3;
@@ -1639,6 +1643,7 @@ export class SearchEngine implements ISearchProvider {
         return this.performUnifiedSearch(indices, context.normalizedQuery, context.maxResults, context.scope);
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1649,38 +1654,58 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
 
+        // ⚡ Bolt: Fast dense integer tracking with re-usable Uint8Array avoids O(N) allocation and zero-fill
+        let visited: Uint8Array | undefined;
+        let visitedToClear: number[] | undefined;
         if (preferredIndices.length > 0) {
-            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+            if (!this.reusableVisitedIndices || this.reusableVisitedIndices.length < this.items.length) {
+                this.reusableVisitedIndices = new Uint8Array(this.items.length);
+            }
+            visited = this.reusableVisitedIndices;
+            visitedToClear = [];
         }
 
-        if (indices) {
-            this.searchWithIndices(indices, searchContext, heap, token, visited);
-        } else {
-            this.searchAllItems(searchContext, heap, token, visited);
-        }
+        let results: SearchResult[];
+        try {
+            if (preferredIndices.length > 0) {
+                this.searchWithIndices(preferredIndices, searchContext, heap, token, visited, visitedToClear);
+            }
 
-        const results = heap.getSorted();
+            if (indices) {
+                this.searchWithIndices(indices, searchContext, heap, token, visited, visitedToClear);
+            } else {
+                this.searchAllItems(searchContext, heap, token, visited, visitedToClear);
+            }
 
-        // T006: Apply activity boost post-sort (deferred from hot loop)
-        if (this.getActivityScore) {
-            for (let i = 0; i < results.length; i++) {
-                const r = results[i];
-                const activityScore = this.getActivityScore(r.item.id);
-                if (activityScore > 0 && r.score > 0.05) {
-                    r.score = r.score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+            results = heap.getSorted();
+
+            // T006: Apply activity boost post-sort (deferred from hot loop)
+            if (this.getActivityScore) {
+                for (let i = 0; i < results.length; i++) {
+                    const r = results[i];
+                    const activityScore = this.getActivityScore(r.item.id);
+                    if (activityScore > 0 && r.score > 0.05) {
+                        r.score = r.score * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                    }
+                }
+                // Re-sort results if activity boost was applied (as scores changed)
+                results.sort((a, b) => b.score - a.score);
+            }
+
+            this.updateQueryMemo(scope, query, results);
+        } finally {
+            if (visited && visitedToClear) {
+                for (let i = 0; i < visitedToClear.length; i++) {
+                    visited[visitedToClear[i]] = 0;
                 }
             }
-            // Re-sort results if activity boost was applied (as scores changed)
-            results.sort((a, b) => b.score - a.score);
         }
-
-        this.updateQueryMemo(scope, query, results);
 
         return results;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
@@ -1690,9 +1715,16 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Set<number> | undefined;
+        // ⚡ Bolt: Fast dense integer tracking with re-usable array
+        let candidateSet: Uint8Array | undefined;
         if (indices) {
-            candidateSet = new Set(indices);
+            if (!this.reusableCandidateIndices || this.reusableCandidateIndices.length < this.items.length) {
+                this.reusableCandidateIndices = new Uint8Array(this.items.length);
+            }
+            candidateSet = this.reusableCandidateIndices;
+            for (let i = 0; i < indices.length; i++) {
+                candidateSet[indices[i]] = 1;
+            }
         }
 
         const preferred: number[] = [];
@@ -1700,7 +1732,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && !candidateSet.has(index)) {
+            if (candidateSet && candidateSet[index] === 0) {
                 continue;
             }
             preferred.push(index);
@@ -1708,6 +1740,13 @@ export class SearchEngine implements ISearchProvider {
                 break;
             }
         }
+
+        if (candidateSet && indices) {
+            for (let i = 0; i < indices.length; i++) {
+                candidateSet[indices[i]] = 0;
+            }
+        }
+
         return preferred;
     }
 
@@ -1776,16 +1815,18 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
+        visitedToClear?: number[],
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
-            if (visited) {
-                if (visited.has(i)) {
+            if (visited && visitedToClear) {
+                if (visited[i] === 1) {
                     continue;
                 }
-                visited.add(i);
+                visited[i] = 1;
+                visitedToClear.push(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1795,12 +1836,14 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        visitedToClear?: number[],
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.has(i)) {
+            if (visited && visited[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
