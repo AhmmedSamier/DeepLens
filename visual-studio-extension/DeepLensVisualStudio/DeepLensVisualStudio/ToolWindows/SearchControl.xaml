@@ -214,7 +214,7 @@
                             FontSize="14"
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                             Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                            AutomationProperties.Name="Search query"
+                            AutomationProperties.Name="{Binding SearchPlaceholder}"
                             ToolTip="{Binding SearchPlaceholder}" />
 
                         <!-- Watermark Overlay (Rendered after TextBox to appear on top) -->
