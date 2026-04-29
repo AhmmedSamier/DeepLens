@@ -9,3 +9,7 @@
 ## 2026-04-08 - [Fast Dense Integer Set Tracking]
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
+## 2026-04-29 - [Fast Tree-Sitter Node Type Checks via Sets]
+
+**Learning:** In hot paths like AST traversal and node type mapping (e.g., `getSearchItemType`), repeatedly executing `RegExp.test()` against a small set of known literal strings (like `"class_declaration"`) adds significant overhead due to regex engine execution and matching.
+**Action:** Replace `RegExp.test()` matching with `Set.has()` lookups against pre-allocated `Set<string>` instances for O(1) exact matching. This eliminates regex overhead in hot loops and performs measurably faster. (Benchmark context: 1M iterations evaluating 10 input node types, bun 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM. Result: RegExp ~2638ms vs Set ~761ms, ~3.4x faster).
