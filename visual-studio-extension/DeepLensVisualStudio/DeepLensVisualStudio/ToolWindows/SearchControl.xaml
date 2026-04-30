@@ -149,31 +149,37 @@
                         Content="All"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterAll, Mode=TwoWay}"
+                        ToolTip="Search everywhere (/all)"
                         Style="{StaticResource TabButtonStyle}" />
                     <RadioButton
                         Content="Classes"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterClasses, Mode=TwoWay}"
+                        ToolTip="Search classes and types (/t)"
                         Style="{StaticResource TabButtonStyle}" />
                     <RadioButton
                         Content="Symbols"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterSymbols, Mode=TwoWay}"
+                        ToolTip="Search methods and variables (/s)"
                         Style="{StaticResource TabButtonStyle}" />
                     <RadioButton
                         Content="Files"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterFiles, Mode=TwoWay}"
+                        ToolTip="Search files by name (/f)"
                         Style="{StaticResource TabButtonStyle}" />
                     <RadioButton
                         Content="Text"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterText, Mode=TwoWay}"
+                        ToolTip="Search file content (/txt)"
                         Style="{StaticResource TabButtonStyle}" />
                     <RadioButton
                         Content="Endpoints"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterEndpoints, Mode=TwoWay}"
+                        ToolTip="Search API routes (/e)"
                         Style="{StaticResource TabButtonStyle}" />
                 </StackPanel>
             </Border>
@@ -455,6 +461,18 @@
                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                     HorizontalAlignment="Center"
                     Margin="0,4,0,0" />
+                <Button
+                    Content="Clear Search"
+                    Margin="0,16,0,0"
+                    Padding="16,6"
+                    HorizontalAlignment="Center"
+                    Background="Transparent"
+                    BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBorderKey}}"
+                    BorderThickness="1"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                    Cursor="Hand"
+                    Click="ClearSearchButton_Click"
+                    AutomationProperties.Name="Clear search to try again" />
             </StackPanel>
 
             <!--  Status Bar (Sticky at Bottom)  -->
