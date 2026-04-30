@@ -227,7 +227,11 @@ export class WorkspaceIndexer {
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
             await this.indexFiles((items) => {
-                fileItems.push(...items);
+                // ⚡ Bolt: Fast safe array push
+                // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
+                for (let i = 0; i < items.length; i++) {
+                    fileItems.push(items[i]);
+                }
                 this.fireItemsAdded(items);
             });
 
