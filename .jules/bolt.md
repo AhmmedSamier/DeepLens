@@ -9,3 +9,7 @@
 ## 2026-04-08 - [Fast Dense Integer Set Tracking]
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
+
+## 2024-05-01 - Optimizing TreeSitter AST node type checking
+**Learning:** In hot paths or AST traversal loops (e.g., searching for parent class declarations or extracting symbols based on node type), dynamic string manipulation (`.toLowerCase().includes('class_declaration')`) or regular expression checks (`/class_declaration|class_definition|^class$/.test(nodeType)`) create unnecessary overhead and memory allocations.
+**Action:** Replace these checks with a pre-defined static `Set` of exact node names (e.g., `['class_declaration', 'class_definition', 'class']`) to perform O(1) `.has()` lookups. This eliminates redundant allocations and improves parsing latency for large source files.
