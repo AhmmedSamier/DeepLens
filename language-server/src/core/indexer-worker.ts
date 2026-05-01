@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { pLimit } from './p-limit';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -26,31 +27,45 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         const { filePaths } = message;
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const CONCURRENCY = 15;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        // ⚡ Bolt: Remove head-of-line blocking by using a concurrency task pool
+        // instead of chunked Promise.all
+        const limit = pLimit(CONCURRENCY);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let batchItems: any[] = [];
+        let batchProcessedFiles = 0;
+        let totalCompleted = 0;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
                     try {
-                        return await parser.parseFile(filePath);
+                        const items = await parser.parseFile(filePath);
+                        // ⚡ Bolt: Fast manual loop pushing to avoid Maximum Call Stack Size Exceeded
+                        for (let i = 0; i < items.length; i++) {
+                            batchItems.push(items[i]);
+                        }
                     } catch {
-                        return [];
+                        // Ignore
+                    } finally {
+                        totalCompleted++;
+                        batchProcessedFiles++;
+
+                        if (batchProcessedFiles >= BATCH_SIZE || totalCompleted === filePaths.length) {
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: batchItems,
+                                count: batchProcessedFiles,
+                                isPartial: totalCompleted < filePaths.length,
+                            });
+                            batchItems = [];
+                            batchProcessedFiles = 0;
+                        }
                     }
                 }),
-            );
-
-            const chunkItems = results.flat();
-
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+            ),
+        );
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
