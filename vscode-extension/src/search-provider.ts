@@ -510,6 +510,8 @@ export class SearchProvider {
      * Prompt for confirmation before clearing history
      */
     private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        quickPick.busy = false;
+
         const confirmItem: SearchResultItem = {
             label: 'Confirm Clear History',
             detail: 'This cannot be undone',
