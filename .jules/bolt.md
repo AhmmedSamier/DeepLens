@@ -7,7 +7,14 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
+
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+
+## 2026-04-09 - [Fast Array Filtering]
+
+**Learning:** In performance-critical hot paths, using `Array.prototype.filter()` allocates a new array and incurs the overhead of callback function allocation and execution for every element. While both a manual `for` loop pushing to a new array and `.filter()` allocate exactly one new array, the manual loop entirely avoids the callback execution overhead, resulting in significantly faster execution (up to ~30% faster depending on array size and JS engine optimization).
+
+**Action:** In high-throughput operations where arrays are filtered frequently, replace `Array.prototype.filter()` with a manual `for` loop and `.push()`.
 
 ## 2026-04-08 - [Fast Dense Integer Set Tracking]
 

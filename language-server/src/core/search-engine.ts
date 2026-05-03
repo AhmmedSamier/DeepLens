@@ -1585,9 +1585,9 @@ export class SearchEngine implements ISearchProvider {
         let indices: number[] | undefined;
 
         if (context.scope === SearchScope.OPEN) {
-            const rawIndices = this.getIndicesForOpenFiles() || [];
-            // ⚡ Bolt: Fast array filtering without callback allocation overhead
-            // Replaces indices.filter() to avoid callback overhead in a hot path
+            const rawIndices = this.getIndicesForOpenFiles();
+            // ⚡ Bolt: Fast symbol filtering
+            // Replaces Array.prototype.filter() with a manual loop to avoid callback allocation and function execution overhead
             indices = [];
             for (let i = 0; i < rawIndices.length; i++) {
                 const idx = rawIndices[i];
