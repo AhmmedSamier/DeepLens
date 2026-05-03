@@ -10,6 +10,11 @@
 
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
 
+## 2026-04-11 - [Eliminate Redundant toLowerCase() in Hot Paths]
+
+**Learning:** In SearchEngine scoring loops, dynamically calling `.toLowerCase()` on item properties causes redundant string allocations and degrades performance.
+**Action:** Retrieve pre-computed lowercased strings from parallel Fuzzysort prepared arrays (e.g., `this.preparedFullNames[i]._targetLower`) using `ExtendedPrepared` to eliminate string allocations in the hot loop.
+
 ## 2026-04-09 - [Fast Array Filtering]
 
 **Learning:** In performance-critical hot paths, using `Array.prototype.filter()` allocates a new array and incurs the overhead of callback function allocation and execution for every element. While both a manual `for` loop pushing to a new array and `.filter()` allocate exactly one new array, the manual loop entirely avoids the callback execution overhead, resulting in significantly faster execution (up to ~30% faster depending on array size and JS engine optimization).

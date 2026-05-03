@@ -2248,7 +2248,7 @@ export class SearchEngine implements ISearchProvider {
                 ? (prepared as unknown as ExtendedPrepared)._targetLower
                 : item.name.toLowerCase();
 
-            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower);
+            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower, this.preparedFullNames[i]);
             if (score > 0) {
                 addResult(item, this.itemTypeIds[i], score);
             }
@@ -2266,7 +2266,12 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
+    private calculateMatchScore(
+        nameLower: string,
+        fullName: string | undefined,
+        queryLower: string,
+        preparedFullName: Fuzzysort.Prepared | null,
+    ): number {
         // Fast path: Exact match or prefix match
         if (nameLower === queryLower || nameLower.indexOf(queryLower) === 0) {
             return 1.0;
@@ -2279,7 +2284,12 @@ export class SearchEngine implements ISearchProvider {
 
         // Check fullName if it exists and is different from name
         if (fullName) {
-            const fullLower = fullName.toLowerCase();
+            // ⚡ Bolt: Fast string normalization
+            // Retrieve pre-computed lowercased strings from parallel prepared arrays
+            // to eliminate redundant string allocations in the hot loop.
+            const fullLower = preparedFullName
+                ? (preparedFullName as unknown as ExtendedPrepared)._targetLower
+                : fullName.toLowerCase();
             if (fullLower !== nameLower) {
                 if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
                     return 0.9;
