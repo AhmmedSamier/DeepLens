@@ -269,7 +269,6 @@ namespace DeepLensVisualStudio.ToolWindows
 
         public bool ShowEmptyState => Results.Count == 0 && !string.IsNullOrWhiteSpace(SearchQuery) && StatusText != "Searching...";
 
-
         public string SearchPlaceholder
         {
             get
@@ -344,19 +343,6 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get => _filterText;
             set => UpdateFilter(ref _filterText, value);
-        }
-
-        public string SearchPlaceholder
-        {
-            get
-            {
-                if (FilterClasses || FilterTypes) return "Search classes (e.g. UserService)...";
-                if (FilterMethods || FilterSymbols) return "Search symbols (e.g. GetUser)...";
-                if (FilterFiles) return "Search files (e.g. app.js)...";
-                if (FilterText) return "Search text...";
-                if (FilterEndpoints) return "Search endpoints (e.g. /api/users)...";
-                return "Search for classes, symbols, files, text, or endpoints";
-            }
         }
 
         public SearchResultViewModel? SelectedResult
