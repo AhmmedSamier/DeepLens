@@ -139,7 +139,17 @@ export class SearchProvider {
 
         const storedScope = this.memento.get<SearchScope>('deeplens.userSelectedScope');
         if (storedScope !== undefined) {
-            this.userSelectedScope = storedScope;
+            const validScopes = Object.values(SearchScope);
+            const isValidScope = validScopes.includes(storedScope);
+            if (!isValidScope) {
+                this.setUserSelectedScope(SearchScope.EVERYTHING);
+                this.currentScope = SearchScope.EVERYTHING;
+            } else if (storedScope === SearchScope.TEXT && !this.filterButtons.has(SearchScope.TEXT)) {
+                this.setUserSelectedScope(SearchScope.EVERYTHING);
+                this.currentScope = SearchScope.EVERYTHING;
+            } else {
+                this.userSelectedScope = storedScope;
+            }
         }
 
         // Start with a random tip
@@ -453,9 +463,12 @@ export class SearchProvider {
      * T012: Disable text search (ripgrep unavailable)
      */
     public disableTextSearch(): void {
-        // Remove text scope from buttons list indirectly by filtering it out in the next update list
-        // Actually we need to make createFilterButtons or the orderedScopes list dynamic
-        // For simplicity, we'll just remove it from the filterButtons map
+        if (this.userSelectedScope === SearchScope.TEXT) {
+            this.setUserSelectedScope(SearchScope.EVERYTHING);
+            if (this.currentScope === SearchScope.TEXT) {
+                this.currentScope = SearchScope.EVERYTHING;
+            }
+        }
         this.filterButtons.delete(SearchScope.TEXT);
 
         if (this.currentQuickPick) {
