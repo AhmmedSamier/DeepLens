@@ -284,140 +284,80 @@ namespace DeepLensVisualStudio.ToolWindows
 
         public bool ShowEmptyState => Results.Count == 0 && !string.IsNullOrWhiteSpace(SearchQuery) && StatusText != "Searching...";
 
-        public bool FilterAll
+        public string SearchPlaceholder
+        {
+            get
+            {
+                if (FilterClasses) return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
+                if (FilterTypes) return "Types: Try 'User', 'IConfig', or 'AuthError'...";
+                if (FilterMethods) return "Methods: Try 'getUser', 'setConfig', or 'initialize'...";
+                if (FilterSymbols) return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
+                if (FilterFiles) return "Files: Try 'app.ts', 'components/Button', or 'index.html'...";
+                if (FilterText) return "Text: Try 'async function', 'TODO:', or 'extends Component'...";
+                if (FilterEndpoints) return "Endpoints: Try 'GET /api/users', '/auth/login', or 'POST'...";
+                return "Global: Try 'UserService', 'app.ts', 'GET /api', or '/t'...";
+            }
+        }
+
+        private void UpdateFilter(ref bool field, bool value, [CallerMemberName] string? propertyName = null)
+        {
+            if (field == value) return;
+            field = value;
+            OnPropertyChanged(propertyName);
+            OnPropertyChanged(nameof(SearchPlaceholder));
+            if (value)
+            {
+                ClearOtherFilters(propertyName ?? string.Empty);
+                _ = PerformSearchAsync();
+            }
+        }
+
+public bool FilterAll
         {
             get => _filterAll;
-            set
-            {
-                if (_filterAll == value) return;
-                _filterAll = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterAll));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterAll, value);
         }
 
-        public bool FilterClasses
+public bool FilterClasses
         {
             get => _filterClasses;
-            set
-            {
-                if (_filterClasses == value) return;
-                _filterClasses = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterClasses));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterClasses, value);
         }
 
-        public bool FilterMethods
+public bool FilterMethods
         {
             get => _filterMethods;
-            set
-            {
-                if (_filterMethods == value) return;
-                _filterMethods = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterMethods));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterMethods, value);
         }
 
-        public bool FilterFiles
+public bool FilterFiles
         {
             get => _filterFiles;
-            set
-            {
-                if (_filterFiles == value) return;
-                _filterFiles = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterFiles));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterFiles, value);
         }
 
-        public bool FilterEndpoints
+public bool FilterEndpoints
         {
             get => _filterEndpoints;
-            set
-            {
-                if (_filterEndpoints == value) return;
-                _filterEndpoints = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterEndpoints));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterEndpoints, value);
         }
 
-        public bool FilterSymbols
+public bool FilterSymbols
         {
             get => _filterSymbols;
-            set
-            {
-                if (_filterSymbols == value) return;
-                _filterSymbols = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterSymbols));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterSymbols, value);
         }
 
-        public bool FilterTypes
+public bool FilterTypes
         {
             get => _filterTypes;
-            set
-            {
-                if (_filterTypes == value) return;
-                _filterTypes = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterTypes));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterTypes, value);
         }
 
-        public bool FilterText
+public bool FilterText
         {
             get => _filterText;
-            set
-            {
-                if (_filterText == value) return;
-                _filterText = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterText));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterText, value);
         }
 
         public SearchResultViewModel? SelectedResult
@@ -658,6 +598,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (currentFilter != nameof(FilterSymbols)) FilterSymbols = false;
                 if (currentFilter != nameof(FilterTypes)) FilterTypes = false;
                 if (currentFilter != nameof(FilterText)) FilterText = false;
+                OnPropertyChanged(nameof(SearchPlaceholder));
             }
             finally
             {

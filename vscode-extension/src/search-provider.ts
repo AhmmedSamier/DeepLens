@@ -961,7 +961,7 @@ export class SearchProvider {
     /**
      * Suggest slash commands based on query
      */
-    private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
+    private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): boolean {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
 
@@ -998,7 +998,14 @@ export class SearchProvider {
             quickPick.items = commandSuggestions.map((r) => this.resultToSlashCommandQuickPickItem(r));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
+            return true;
+        } else {
+            quickPick.items = [];
+            quickPick.title = 'DeepLens - No matching commands';
+            quickPick.busy = false;
         }
+
+        return false;
     }
 
     private getCategoryLabel(category: string): string {
@@ -1104,6 +1111,7 @@ export class SearchProvider {
         this.updateFilterButtons(quickPick);
         quickPick.placeholder = this.getPlaceholder();
         quickPick.value = text;
+        quickPick.busy = false;
 
         return true;
     }
@@ -1123,8 +1131,14 @@ export class SearchProvider {
             return false;
         }
 
-        this.suggestSlashCommands(quickPick, query);
-        return quickPick.items.length > 0;
+        const populated = this.suggestSlashCommands(quickPick, query);
+        if (!populated && (query === '/' || query === '#' || query === '>')) {
+            // Early exit if the query is just a prefix and no commands matched yet
+            quickPick.items = [];
+            this.updateTitle(quickPick, 0);
+            quickPick.busy = false;
+        }
+        return true;
     }
 
     private async showRecentHistoryAndResetState(
@@ -1295,9 +1309,13 @@ export class SearchProvider {
                 // Check if we need to update the query prefix
                 const currentQuery = quickPick.value;
 
+                // ⚡ Bolt: Fast prefix parsing optimization
+                // Cache the lowercased query to avoid repeated string allocations in the loop
+                const currentQueryLower = currentQuery.toLowerCase();
+
                 // Check if current query has ANY known prefix
                 for (const [prefix] of this.PREFIX_MAP.entries()) {
-                    if (currentQuery.toLowerCase().startsWith(prefix)) {
+                    if (currentQueryLower.startsWith(prefix)) {
                         // Clear the prefix when switching scopes via buttons
                         const replacement = '';
                         quickPick.value = replacement + currentQuery.slice(prefix.length);
@@ -1542,9 +1560,13 @@ export class SearchProvider {
             const currentQuery = quickPick.value;
             let text = currentQuery;
 
+            // ⚡ Bolt: Fast prefix parsing optimization
+            // Cache the lowercased query to avoid repeated string allocations in the loop
+            const currentQueryLower = currentQuery.toLowerCase();
+
             // Check if current query has ANY known prefix
             for (const [prefix] of this.PREFIX_MAP.entries()) {
-                if (currentQuery.toLowerCase().startsWith(prefix)) {
+                if (currentQueryLower.startsWith(prefix)) {
                     text = currentQuery.slice(prefix.length);
                     quickPick.value = text;
                     break;
