@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { pLimit } from './p-limit';
+import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { SearchableItem } from './types';
 
 if (!parentPort) {
@@ -27,59 +27,38 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (message.chunkSize !== undefined && (!Number.isInteger(message.chunkSize) || message.chunkSize <= 0)) {
+            const errorMsg = `Invalid chunkSize: ${message.chunkSize}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        // ⚡ Bolt: Head-of-line blocking optimization
-        // Replace fixed-chunk Promise.all processing with a concurrency-limited task pool.
-        // This allows results to stream back to the parent thread continuously,
-        // preventing one slow file from delaying an entire batch.
-        const limit = pLimit(BATCH_SIZE);
-        let batchItems: SearchableItem[] = [];
-        let batchProcessedFiles = 0;
-        let totalProcessedFiles = 0;
+        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
+            const chunk = filePaths.slice(i, i + BATCH_SIZE);
 
-        const flushBatch = (isFinal: boolean) => {
-            if (batchItems.length > 0 || isFinal) {
-                parentPort?.postMessage({
-                    type: 'result',
-                    items: batchItems,
-                    count: batchProcessedFiles,
-                    isPartial: !isFinal,
-                });
-                batchItems = [];
-                batchProcessedFiles = 0;
-            }
-        };
+            // Parallelize file reading and parsing within the chunk
+            const results = await Promise.all(
+                chunk.map(async (filePath) => {
+                    try {
+                        return await parser.parseFile(filePath);
+                    } catch {
+                        return [];
+                    }
+                }),
+            );
 
-        const promises = filePaths.map((filePath) =>
-            limit(async () => {
-                let items: SearchableItem[] = [];
-                try {
-                    items = await parser.parseFile(filePath);
-                } catch {
-                    items = [];
-                }
+            const chunkItems = results.flat();
 
-                // Append items without spread operator to avoid Maximum Call Stack Size Exceeded
-                for (let i = 0; i < items.length; i++) {
-                    batchItems.push(items[i]);
-                }
-
-                batchProcessedFiles++;
-                totalProcessedFiles++;
-
-                // Flush if we reach batch size
-                if (batchProcessedFiles >= BATCH_SIZE) {
-                    flushBatch(totalProcessedFiles === filePaths.length);
-                }
-            }),
-        );
-
-        await Promise.all(promises);
-
-        // Final flush if anything remains
-        if (batchProcessedFiles > 0) {
-            flushBatch(true);
+            // Send back chunk result immediately to keep main thread unblocked but processing
+            parentPort?.postMessage({
+                type: 'result',
+                items: chunkItems,
+                count: chunk.length,
+                isPartial: i + BATCH_SIZE < filePaths.length,
+            });
         }
     } catch (error) {
         parentPort?.postMessage({
