@@ -1,4 +1,4 @@
-﻿<UserControl
+<UserControl
     x:Class="DeepLensVisualStudio.ToolWindows.SearchControl"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
@@ -214,13 +214,13 @@
                             FontSize="14"
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                             Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
-                            AutomationProperties.Name="{Binding SearchWatermark}"
-                            ToolTip="{Binding SearchWatermark}" />
+                            AutomationProperties.Name="{Binding SearchPlaceholder}"
+                            ToolTip="{Binding SearchPlaceholder}" />
 
                         <!-- Watermark Overlay (Rendered after TextBox to appear on top) -->
                         <TextBlock
                             IsHitTestVisible="False"
-                            Text="{Binding SearchWatermark}"
+                            Text="{Binding SearchPlaceholder}"
                             VerticalAlignment="Center"
                             FontSize="{Binding FontSize, ElementName=SearchTextBox}"
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"

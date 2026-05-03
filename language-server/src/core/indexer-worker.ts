@@ -1,5 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { pLimit } from './p-limit';
+import { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -25,32 +27,62 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (message.chunkSize !== undefined && (!Number.isInteger(message.chunkSize) || message.chunkSize <= 0)) {
+            const errorMsg = `Invalid chunkSize: ${message.chunkSize}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        if (!Number.isInteger(BATCH_SIZE) || BATCH_SIZE <= 0) {
+            const errorMsg = `Invalid BATCH_SIZE: ${BATCH_SIZE}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
+        const limit = pLimit(BATCH_SIZE);
+
+        let processedCount = 0;
+        let pendingCount = 0;
+        const pendingItems: SearchableItem[] = [];
+
+        // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
+        // This eliminates head-of-line blocking so fast files don't wait for the slowest
+        // file in a specific chunk. Results stream back to the parent continuously.
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
                     try {
-                        return await parser.parseFile(filePath);
+                        const items = (await parser.parseFile(filePath)) as SearchableItem[];
+
+                        // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
+                        // when aggregating large numbers of parsed symbols.
+                        for (let j = 0; j < items.length; j++) {
+                            pendingItems.push(items[j]);
+                        }
                     } catch {
-                        return [];
+                        // Keep going if one file fails
+                    } finally {
+                        processedCount++;
+                        pendingCount++;
+
+                        // Stream results back as they complete
+                        if (pendingCount >= BATCH_SIZE || processedCount === filePaths.length) {
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: [...pendingItems],
+                                count: pendingCount,
+                                isPartial: processedCount < filePaths.length,
+                            });
+                            pendingItems.length = 0;
+                            pendingCount = 0;
+                        }
                     }
                 }),
-            );
-
-            const chunkItems = results.flat();
-
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+            ),
+        );
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
