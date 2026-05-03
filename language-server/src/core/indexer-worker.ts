@@ -1,6 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { pLimit } from './p-limit';
+import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { SearchableItem } from './types';
 
 if (!parentPort) {
@@ -42,43 +42,44 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
             throw new Error(errorMsg);
         }
 
+        // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
+        // This eliminates head-of-line blocking so fast files don't wait for the slowest
+        // file in a specific chunk. Results stream back to the parent continuously.
         const limit = pLimit(BATCH_SIZE);
 
         let processedCount = 0;
         let pendingCount = 0;
         const pendingItems: SearchableItem[] = [];
 
-        // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
-        // This eliminates head-of-line blocking so fast files don't wait for the slowest
-        // file in a specific chunk. Results stream back to the parent continuously.
         await Promise.all(
             filePaths.map((filePath) =>
                 limit(async () => {
+                    let items: import('./types').SearchableItem[] = [];
                     try {
-                        const items = (await parser.parseFile(filePath)) as SearchableItem[];
-
-                        // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
-                        // when aggregating large numbers of parsed symbols.
-                        for (let j = 0; j < items.length; j++) {
-                            pendingItems.push(items[j]);
-                        }
+                        items = await parser.parseFile(filePath);
                     } catch {
-                        // Keep going if one file fails
-                    } finally {
-                        processedCount++;
-                        pendingCount++;
+                        items = [];
+                    }
 
-                        // Stream results back as they complete
-                        if (pendingCount >= BATCH_SIZE || processedCount === filePaths.length) {
-                            parentPort?.postMessage({
-                                type: 'result',
-                                items: [...pendingItems],
-                                count: pendingCount,
-                                isPartial: processedCount < filePaths.length,
-                            });
-                            pendingItems.length = 0;
-                            pendingCount = 0;
-                        }
+                    // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
+                    // when aggregating large numbers of parsed symbols.
+                    for (let j = 0; j < items.length; j++) {
+                        pendingItems.push(items[j]);
+                    }
+
+                    processedCount++;
+                    pendingCount++;
+
+                    // Stream results back as they complete
+                    if (pendingCount >= BATCH_SIZE || processedCount === filePaths.length) {
+                        parentPort?.postMessage({
+                            type: 'result',
+                            items: [...pendingItems],
+                            count: pendingCount,
+                            isPartial: processedCount < filePaths.length,
+                        });
+                        pendingItems.length = 0;
+                        pendingCount = 0;
                     }
                 }),
             ),
