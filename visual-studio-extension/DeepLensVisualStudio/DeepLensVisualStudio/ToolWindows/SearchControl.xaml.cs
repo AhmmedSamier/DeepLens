@@ -215,21 +215,6 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
-        public string SearchPlaceholder
-        {
-            get
-            {
-                if (FilterClasses) return "Search for classes (e.g. UserService, /c...)";
-                if (FilterMethods) return "Search for methods (e.g. GetUser, /m...)";
-                if (FilterFiles) return "Search for files (e.g. .ts, .cs, /f...)";
-                if (FilterEndpoints) return "Search for API endpoints (e.g. /api/users, /e...)";
-                if (FilterSymbols) return "Search for symbols (e.g. data, /s...)";
-                if (FilterTypes) return "Search for types (e.g. interface, /t...)";
-                if (FilterText) return "Search for text (e.g. TODO, /txt...)";
-                return "Search for classes, symbols, files, text, or endpoints";
-            }
-        }
-
         public string StatusText
         {
             get => _statusText;
@@ -288,14 +273,14 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get
             {
-                if (FilterClasses) return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
-                if (FilterTypes) return "Types: Try 'User', 'IConfig', or 'AuthError'...";
-                if (FilterMethods) return "Methods: Try 'getUser', 'setConfig', or 'initialize'...";
-                if (FilterSymbols) return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
-                if (FilterFiles) return "Files: Try 'app.ts', 'components/Button', or 'index.html'...";
-                if (FilterText) return "Text: Try 'async function', 'TODO:', or 'extends Component'...";
-                if (FilterEndpoints) return "Endpoints: Try 'GET /api/users', '/auth/login', or 'POST'...";
-                return "Global: Try 'UserService', 'app.ts', 'GET /api', or '/t'...";
+                if (FilterClasses) return "Classes: Try 'UserService', 'AuthError', or /c...";
+                if (FilterTypes) return "Types: Try 'IUser', 'Config', or /t...";
+                if (FilterMethods) return "Methods: Try 'getUser', 'initialize', or /s...";
+                if (FilterSymbols) return "Symbols: Try 'getUser', 'MAX_RETRIES', or /s...";
+                if (FilterFiles) return "Files: Try 'app.ts', 'Button.cs', or /f...";
+                if (FilterText) return "Text: Try 'TODO:', 'async function', or /txt...";
+                if (FilterEndpoints) return "Endpoints: Try 'GET /api', '/auth/login', or /e...";
+                return "Global: Try 'UserService', 'app.ts', 'GET /api', or /t...";
             }
         }
 
@@ -312,49 +297,49 @@ namespace DeepLensVisualStudio.ToolWindows
             }
         }
 
-public bool FilterAll
+        public bool FilterAll
         {
             get => _filterAll;
             set => UpdateFilter(ref _filterAll, value);
         }
 
-public bool FilterClasses
+        public bool FilterClasses
         {
             get => _filterClasses;
             set => UpdateFilter(ref _filterClasses, value);
         }
 
-public bool FilterMethods
+        public bool FilterMethods
         {
             get => _filterMethods;
             set => UpdateFilter(ref _filterMethods, value);
         }
 
-public bool FilterFiles
+        public bool FilterFiles
         {
             get => _filterFiles;
             set => UpdateFilter(ref _filterFiles, value);
         }
 
-public bool FilterEndpoints
+        public bool FilterEndpoints
         {
             get => _filterEndpoints;
             set => UpdateFilter(ref _filterEndpoints, value);
         }
 
-public bool FilterSymbols
+        public bool FilterSymbols
         {
             get => _filterSymbols;
             set => UpdateFilter(ref _filterSymbols, value);
         }
 
-public bool FilterTypes
+        public bool FilterTypes
         {
             get => _filterTypes;
             set => UpdateFilter(ref _filterTypes, value);
         }
 
-public bool FilterText
+        public bool FilterText
         {
             get => _filterText;
             set => UpdateFilter(ref _filterText, value);
