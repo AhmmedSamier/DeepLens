@@ -221,6 +221,7 @@
                         <TextBlock
                             IsHitTestVisible="False"
                             Text="{Binding SearchPlaceholder}"
+                            Text="{Binding SearchPlaceholder}"
                             VerticalAlignment="Center"
                             FontSize="{Binding FontSize, ElementName=SearchTextBox}"
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
