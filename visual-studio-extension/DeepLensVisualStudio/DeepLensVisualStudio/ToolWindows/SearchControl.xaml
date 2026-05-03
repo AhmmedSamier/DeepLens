@@ -215,12 +215,12 @@
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                             Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                             AutomationProperties.Name="Search query"
-                            ToolTip="Search for classes, symbols, files, text, or endpoints" />
+                            ToolTip="{Binding SearchPlaceholder}" />
 
                         <!-- Watermark Overlay (Rendered after TextBox to appear on top) -->
                         <TextBlock
                             IsHitTestVisible="False"
-                            Text="Search for classes, symbols, files, text, or endpoints"
+                            Text="{Binding SearchPlaceholder}"
                             VerticalAlignment="Center"
                             FontSize="{Binding FontSize, ElementName=SearchTextBox}"
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"

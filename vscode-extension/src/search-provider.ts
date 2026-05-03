@@ -999,6 +999,10 @@ export class SearchProvider {
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
             return true;
+        } else {
+            quickPick.items = [];
+            quickPick.title = 'DeepLens - No matching commands';
+            quickPick.busy = false;
         }
 
         return false;
@@ -1130,9 +1134,11 @@ export class SearchProvider {
         const populated = this.suggestSlashCommands(quickPick, query);
         if (!populated && (query === '/' || query === '#' || query === '>')) {
             // Early exit if the query is just a prefix and no commands matched yet
+            quickPick.items = [];
+            this.updateTitle(quickPick, 0);
             quickPick.busy = false;
         }
-        return populated;
+        return true;
     }
 
     private async showRecentHistoryAndResetState(
