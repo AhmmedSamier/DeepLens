@@ -10,6 +10,12 @@
 
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
 
+## 2026-04-13 - [Eliminating Head-of-Line Blocking in Workers]
+
+**Learning:** When processing a large batch of independent asynchronous tasks (like parsing files in a worker thread), using a fixed-chunk `Promise.all` approach creates head-of-line blocking. The entire chunk must wait for the slowest task (e.g., parsing the largest file) to complete before yielding results, artificially inflating latency.
+
+**Action:** Replace fixed-chunk `Promise.all` processing with a concurrency-limited task pool (using `pLimit`). This architecture allows results to stream back to the parent thread continuously as tasks complete, significantly reducing latency. Additionally, when aggregating large datasets returned by these tasks, avoid array spread operators (`push(...items)`) in favor of manual loops to prevent "Maximum Call Stack Size Exceeded" errors.
+
 ## 2026-04-12 - [Avoid Spread Syntax for Unbounded Array Push]
 
 **Learning:** When pushing elements from potentially large or unbounded arrays (e.g., aggregated results from parsing many files in a background worker thread), using the array spread operator (`currentBatchItems.push(...items)`) creates a massive risk for stack overflow (`Maximum Call Stack Size Exceeded`). This occurs because JavaScript engines place a hard limit on the number of arguments a function can accept, and the spread syntax expands the array elements into function arguments for `.push()`.

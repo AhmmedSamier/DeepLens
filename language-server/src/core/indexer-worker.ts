@@ -1,6 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { pLimit } from './p-limit';
+import { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -26,47 +27,62 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (message.chunkSize !== undefined && (!Number.isInteger(message.chunkSize) || message.chunkSize <= 0)) {
+            const errorMsg = `Invalid chunkSize: ${message.chunkSize}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        // ⚡ Bolt: Prevent head-of-line blocking by using pLimit
-        // Replaces fixed-chunk Promise.all() which waits for the slowest file in a batch.
+        if (!Number.isInteger(BATCH_SIZE) || BATCH_SIZE <= 0) {
+            const errorMsg = `Invalid BATCH_SIZE: ${BATCH_SIZE}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
+
         const limit = pLimit(BATCH_SIZE);
 
-        let currentBatchItems: unknown[] = [];
-        let filesCompletedInBatch = 0;
-        let totalFilesCompleted = 0;
+        let processedCount = 0;
+        let pendingCount = 0;
+        const pendingItems: SearchableItem[] = [];
 
-        const promises = filePaths.map((filePath) =>
-            limit(async () => {
-                let items: unknown[] = [];
-                try {
-                    items = await parser.parseFile(filePath);
-                } catch {
-                    items = [];
-                }
+        // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
+        // This eliminates head-of-line blocking so fast files don't wait for the slowest
+        // file in a specific chunk. Results stream back to the parent continuously.
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
+                    try {
+                        const items = (await parser.parseFile(filePath)) as SearchableItem[];
 
-                // ⚡ Bolt: Use a loop instead of spread operator to avoid Maximum Call Stack Size Exceeded errors for large arrays.
-                for (let i = 0; i < items.length; i++) {
-                    currentBatchItems.push(items[i]);
-                }
-                filesCompletedInBatch++;
-                totalFilesCompleted++;
+                        // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
+                        // when aggregating large numbers of parsed symbols.
+                        for (let j = 0; j < items.length; j++) {
+                            pendingItems.push(items[j]);
+                        }
+                    } catch {
+                        // Keep going if one file fails
+                    } finally {
+                        processedCount++;
+                        pendingCount++;
 
-                const isLast = totalFilesCompleted === filePaths.length;
-                if (filesCompletedInBatch >= BATCH_SIZE || isLast) {
-                    parentPort?.postMessage({
-                        type: 'result',
-                        items: currentBatchItems,
-                        count: filesCompletedInBatch,
-                        isPartial: !isLast,
-                    });
-                    currentBatchItems = [];
-                    filesCompletedInBatch = 0;
-                }
-            }),
+                        // Stream results back as they complete
+                        if (pendingCount >= BATCH_SIZE || processedCount === filePaths.length) {
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: [...pendingItems],
+                                count: pendingCount,
+                                isPartial: processedCount < filePaths.length,
+                            });
+                            pendingItems.length = 0;
+                            pendingCount = 0;
+                        }
+                    }
+                }),
+            ),
         );
-
-        await Promise.all(promises);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
