@@ -27,7 +27,21 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (message.chunkSize !== undefined && (!Number.isInteger(message.chunkSize) || message.chunkSize <= 0)) {
+            const errorMsg = `Invalid chunkSize: ${message.chunkSize}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
+
+        if (!Number.isInteger(BATCH_SIZE) || BATCH_SIZE <= 0) {
+            const errorMsg = `Invalid BATCH_SIZE: ${BATCH_SIZE}`;
+            workerLogger.appendLine(errorMsg);
+            throw new Error(errorMsg);
+        }
+
         const limit = pLimit(BATCH_SIZE);
 
         let processedCount = 0;
@@ -41,7 +55,7 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
             filePaths.map((filePath) =>
                 limit(async () => {
                     try {
-                        const items = await parser.parseFile(filePath);
+                        const items = (await parser.parseFile(filePath)) as SearchableItem[];
 
                         // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
                         // when aggregating large numbers of parsed symbols.
