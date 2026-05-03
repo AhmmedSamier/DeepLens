@@ -10,6 +10,12 @@
 
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
 
+## 2026-04-12 - [Avoid Spread Syntax for Unbounded Array Push]
+
+**Learning:** When pushing elements from potentially large or unbounded arrays (e.g., aggregated results from parsing many files in a background worker thread), using the array spread operator (`currentBatchItems.push(...items)`) creates a massive risk for stack overflow (`Maximum Call Stack Size Exceeded`). This occurs because JavaScript engines place a hard limit on the number of arguments a function can accept, and the spread syntax expands the array elements into function arguments for `.push()`.
+
+**Action:** Replace `array.push(...items)` with a manual `for` loop (`for(let i=0; i<items.length; i++) array.push(items[i])`) when accumulating dynamically sized, potentially large array results.
+
 ## 2026-04-11 - [Eliminate Redundant toLowerCase() in Hot Paths]
 
 **Learning:** In SearchEngine scoring loops, dynamically calling `.toLowerCase()` on item properties causes redundant string allocations and degrades performance.
