@@ -9,11 +9,12 @@
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+
 ## 2026-04-08 - [Hoist Redundant String Conversions]
 
 **Learning:** In frequently executed hot paths (like key stroke handlers inside VS Code QuickPicks), calling methods like `String.prototype.toLowerCase()` inside a loop that iterates over static configuration maps (like command prefixes) causes redundant, repetitive memory allocations on every iteration. While V8 is fast, allocating strings continuously in rapid UI events leads to GC churn.
 
-**Action:** Cache the result of invariant string manipulations (e.g. `const queryLower = query.toLowerCase()`) *before* the loop, replacing O(N) string allocations with a single allocation per handler execution.
+**Action:** Cache the result of invariant string manipulations (e.g. `const queryLower = query.toLowerCase()`) _before_ the loop, replacing O(N) string allocations with a single allocation per handler execution.
 
 ## 2026-04-13 - [Eliminating Head-of-Line Blocking in Workers]
 

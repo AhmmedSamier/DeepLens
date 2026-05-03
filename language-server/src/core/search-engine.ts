@@ -282,7 +282,10 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Append items
-        this.items.push(...items);
+        // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
+        for (let i = 0; i < items.length; i++) {
+            this.items.push(items[i]);
+        }
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -392,7 +395,10 @@ export class SearchEngine implements ISearchProvider {
             if (indices && indices.length > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    indicesToRemove.push(...indices);
+                    // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
+                    for (let i = 0; i < indices.length; i++) {
+                        indicesToRemove.push(indices[i]);
+                    }
                 }
             }
         }
@@ -974,7 +980,10 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                allResults.push(...providerResults);
+                // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
+                for (let i = 0; i < providerResults.length; i++) {
+                    allResults.push(providerResults[i]);
+                }
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
