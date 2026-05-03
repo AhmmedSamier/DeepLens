@@ -346,6 +346,19 @@ namespace DeepLensVisualStudio.ToolWindows
             set => UpdateFilter(ref _filterText, value);
         }
 
+        public string SearchPlaceholder
+        {
+            get
+            {
+                if (FilterClasses || FilterTypes) return "Search classes (e.g. UserService)...";
+                if (FilterMethods || FilterSymbols) return "Search symbols (e.g. GetUser)...";
+                if (FilterFiles) return "Search files (e.g. app.js)...";
+                if (FilterText) return "Search text...";
+                if (FilterEndpoints) return "Search endpoints (e.g. /api/users)...";
+                return "Search for classes, symbols, files, text, or endpoints";
+            }
+        }
+
         public SearchResultViewModel? SelectedResult
         {
             get => _selectedResult;
@@ -584,6 +597,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (currentFilter != nameof(FilterSymbols)) FilterSymbols = false;
                 if (currentFilter != nameof(FilterTypes)) FilterTypes = false;
                 if (currentFilter != nameof(FilterText)) FilterText = false;
+                OnPropertyChanged(nameof(SearchPlaceholder));
             }
             finally
             {
