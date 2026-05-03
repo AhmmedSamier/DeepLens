@@ -273,14 +273,14 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get
             {
-                if (FilterClasses) return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
-                if (FilterTypes) return "Types: Try 'User', 'IConfig', or 'AuthError'...";
-                if (FilterMethods) return "Methods: Try 'getUser', 'setConfig', or 'initialize'...";
-                if (FilterSymbols) return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
-                if (FilterFiles) return "Files: Try 'app.ts', 'components/Button', or 'index.html'...";
-                if (FilterText) return "Text: Try 'async function', 'TODO:', or 'extends Component'...";
-                if (FilterEndpoints) return "Endpoints: Try 'GET /api/users', '/auth/login', or 'POST'...";
-                return "Global: Try 'UserService', 'app.ts', 'GET /api', or '/t'...";
+                if (FilterClasses) return "Classes: Try 'UserService', 'AuthError', or /c...";
+                if (FilterTypes) return "Types: Try 'IUser', 'Config', or /t...";
+                if (FilterMethods) return "Methods: Try 'getUser', 'initialize', or /s...";
+                if (FilterSymbols) return "Symbols: Try 'getUser', 'MAX_RETRIES', or /s...";
+                if (FilterFiles) return "Files: Try 'app.ts', 'Button.cs', or /f...";
+                if (FilterText) return "Text: Try 'TODO:', 'async function', or /txt...";
+                if (FilterEndpoints) return "Endpoints: Try 'GET /api', '/auth/login', or /e...";
+                return "Global: Try 'UserService', 'app.ts', 'GET /api', or /t...";
             }
         }
 
