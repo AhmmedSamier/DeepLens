@@ -159,6 +159,9 @@ export class SearchEngine implements ISearchProvider {
     private inactiveFileItems: SearchableItem[] = [];
     private filePriorityCacheDirty = true;
 
+    private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
+    private visitedIndicesTracker: number[] = [];
+
     // String normalization cache (1-item) for relativeFilePath
     private lastRelativeInput: string | null = null;
     private lastRelativeOutput: string | null = null;
@@ -773,6 +776,8 @@ export class SearchEngine implements ISearchProvider {
         this.lastRelativeOutput = null;
         this.activeFileItems = [];
         this.inactiveFileItems = [];
+        this.visitedIndicesBuffer = new Uint8Array(0);
+        this.visitedIndicesTracker = [];
         this.invalidateDerivedCaches();
     }
 
@@ -2347,6 +2352,7 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private searchRemainingItems(
         priorityScopes: SearchScope[],
         maxResults: number,
@@ -2357,24 +2363,39 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast index tracking optimization
         // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
         // and provides O(1) array access. (~15x faster than Set for 1M items).
-        const searchedIndices = new Uint8Array(this.items.length);
+        if (this.visitedIndicesBuffer.length < this.items.length) {
+            this.visitedIndicesBuffer = new Uint8Array(this.items.length);
+        }
+        const searchedIndices = this.visitedIndicesBuffer;
+        const tracker = this.visitedIndicesTracker;
         const priorityScopesLength = priorityScopes.length;
 
-        for (let s = 0; s < priorityScopesLength; s++) {
-            const indices = this.scopedIndices.get(priorityScopes[s]);
-            if (indices) {
-                const len = indices.length;
-                for (let j = 0; j < len; j++) {
-                    searchedIndices[indices[j]] = 1;
+        try {
+            for (let s = 0; s < priorityScopesLength; s++) {
+                const indices = this.scopedIndices.get(priorityScopes[s]);
+                if (indices) {
+                    const len = indices.length;
+                    for (let j = 0; j < len; j++) {
+                        const idx = indices[j];
+                        if (searchedIndices[idx] === 0) {
+                            searchedIndices[idx] = 1;
+                            tracker.push(idx);
+                        }
+                    }
                 }
             }
-        }
 
-        for (let i = 0; i < this.items.length; i++) {
-            if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] === 0) {
-                processItem(i);
+            for (let i = 0; i < this.items.length; i++) {
+                if (results.length >= maxResults || token?.isCancellationRequested) break;
+                if (searchedIndices[i] === 0) {
+                    processItem(i);
+                }
             }
+        } finally {
+            for (let k = 0; k < tracker.length; k++) {
+                searchedIndices[tracker[k]] = 0;
+            }
+            tracker.length = 0;
         }
     }
 
