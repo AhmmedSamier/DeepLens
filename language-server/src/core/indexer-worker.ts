@@ -36,54 +36,30 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        if (!Number.isInteger(BATCH_SIZE) || BATCH_SIZE <= 0) {
-            const errorMsg = `Invalid BATCH_SIZE: ${BATCH_SIZE}`;
-            workerLogger.appendLine(errorMsg);
-            throw new Error(errorMsg);
-        }
+        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
+            const chunk = filePaths.slice(i, i + BATCH_SIZE);
 
-        // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
-        // This eliminates head-of-line blocking so fast files don't wait for the slowest
-        // file in a specific chunk. Results stream back to the parent continuously.
-        const limit = pLimit(BATCH_SIZE);
-
-        let processedCount = 0;
-        let pendingCount = 0;
-        const pendingItems: SearchableItem[] = [];
-
-        await Promise.all(
-            filePaths.map((filePath) =>
-                limit(async () => {
-                    let items: import('./types').SearchableItem[] = [];
+            // Parallelize file reading and parsing within the chunk
+            const results = await Promise.all(
+                chunk.map(async (filePath) => {
                     try {
-                        items = await parser.parseFile(filePath);
+                        return await parser.parseFile(filePath);
                     } catch {
-                        items = [];
-                    }
-
-                    // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
-                    // when aggregating large numbers of parsed symbols.
-                    for (let j = 0; j < items.length; j++) {
-                        pendingItems.push(items[j]);
-                    }
-
-                    processedCount++;
-                    pendingCount++;
-
-                    // Stream results back as they complete
-                    if (pendingCount >= BATCH_SIZE || processedCount === filePaths.length) {
-                        parentPort?.postMessage({
-                            type: 'result',
-                            items: [...pendingItems],
-                            count: pendingCount,
-                            isPartial: processedCount < filePaths.length,
-                        });
-                        pendingItems.length = 0;
-                        pendingCount = 0;
+                        return [];
                     }
                 }),
-            ),
-        );
+            );
+
+            const chunkItems = results.flat();
+
+            // Send back chunk result immediately to keep main thread unblocked but processing
+            parentPort?.postMessage({
+                type: 'result',
+                items: chunkItems,
+                count: chunk.length,
+                isPartial: i + BATCH_SIZE < filePaths.length,
+            });
+        }
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
