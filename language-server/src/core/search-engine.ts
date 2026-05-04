@@ -5,7 +5,6 @@ import { CancellationToken } from 'vscode-languageserver';
 import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
-import { pLimit } from './p-limit';
 import { RipgrepService } from './ripgrep-service';
 import { PreparedPath, RouteMatcher, RoutePattern } from './route-matcher';
 import {
@@ -282,10 +281,7 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Append items
-        // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
-        for (let i = 0; i < items.length; i++) {
-            this.items.push(items[i]);
-        }
+        this.items.push(...items);
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -395,10 +391,7 @@ export class SearchEngine implements ISearchProvider {
             if (indices && indices.length > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
-                    for (let i = 0; i < indices.length; i++) {
-                        indicesToRemove.push(indices[i]);
-                    }
+                    indicesToRemove.push(...indices);
                 }
             }
         }
@@ -960,40 +953,26 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
         let allResults: SearchResult[] = [];
+        const providerPromises = this.providers.map(async (provider) => {
+            if (token?.isCancellationRequested) {
+                return;
+            }
 
-        // ⚡ Bolt: Prevent Resource Exhaustion
-        // Replaced unconstrained Promise.all mapping with a bounded concurrency pool (pLimit).
-        // Why: Running all search providers concurrently without limits can cause severe CPU thrashing
-        // and potential file descriptor exhaustion, especially in environments with many providers
-        // or during high-throughput burst searches.
-        // Impact: Stabilizes memory usage and reduces tail latency during heavy concurrent searches.
-        const limit = pLimit(4);
+            const providerResults = await provider.search(context);
+            if (token?.isCancellationRequested) {
+                return;
+            }
 
-        const providerPromises = this.providers.map((provider) =>
-            limit(async () => {
-                if (token?.isCancellationRequested) {
-                    return;
-                }
-
-                const providerResults = await provider.search(context);
-                if (token?.isCancellationRequested) {
-                    return;
-                }
-
-                // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
-                for (let i = 0; i < providerResults.length; i++) {
-                    allResults.push(providerResults[i]);
-                }
-                if (onResult) {
-                    for (const result of providerResults) {
-                        if (token?.isCancellationRequested) {
-                            break;
-                        }
-                        onResult(result);
+            allResults.push(...providerResults);
+            if (onResult) {
+                for (const result of providerResults) {
+                    if (token?.isCancellationRequested) {
+                        break;
                     }
+                    onResult(result);
                 }
-            }),
-        );
+            }
+        });
 
         const providerStatuses = await Promise.allSettled(providerPromises);
         for (let i = 0; i < providerStatuses.length; i++) {
@@ -1594,28 +1573,14 @@ export class SearchEngine implements ISearchProvider {
         let indices: number[] | undefined;
 
         if (context.scope === SearchScope.OPEN) {
-            const rawIndices = this.getIndicesForOpenFiles();
-            // ⚡ Bolt: Fast symbol filtering
-            // Replaces Array.prototype.filter() with a manual loop to avoid callback allocation and function execution overhead
-            indices = [];
-            for (let i = 0; i < rawIndices.length; i++) {
-                const idx = rawIndices[i];
-                if (this.items[idx].type !== SearchItemType.FILE) {
-                    indices.push(idx);
-                }
-            }
+            indices = this.getIndicesForOpenFiles();
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
         } else if (context.scope === SearchScope.MODIFIED) {
-            const rawIndices = (await this.getIndicesForModifiedFiles()) || [];
+            indices = await this.getIndicesForModifiedFiles();
 
-            // ⚡ Bolt: Fast array filtering without callback allocation overhead
-            // Replaces indices.filter() to avoid callback overhead in a hot path
-            indices = [];
-            for (let i = 0; i < rawIndices.length; i++) {
-                const idx = rawIndices[i];
-                if (this.items[idx].type !== SearchItemType.FILE) {
-                    indices.push(idx);
-                }
-            }
+            // Filter out files, keep only symbols
+            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
         } else {
             indices =
                 context.scope === SearchScope.EVERYTHING
@@ -2257,7 +2222,7 @@ export class SearchEngine implements ISearchProvider {
                 ? (prepared as unknown as ExtendedPrepared)._targetLower
                 : item.name.toLowerCase();
 
-            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower, this.preparedFullNames[i]);
+            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower);
             if (score > 0) {
                 addResult(item, this.itemTypeIds[i], score);
             }
@@ -2275,12 +2240,7 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private calculateMatchScore(
-        nameLower: string,
-        fullName: string | undefined,
-        queryLower: string,
-        preparedFullName: Fuzzysort.Prepared | null,
-    ): number {
+    private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
         // Fast path: Exact match or prefix match
         if (nameLower === queryLower || nameLower.indexOf(queryLower) === 0) {
             return 1.0;
@@ -2293,12 +2253,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Check fullName if it exists and is different from name
         if (fullName) {
-            // ⚡ Bolt: Fast string normalization
-            // Retrieve pre-computed lowercased strings from parallel prepared arrays
-            // to eliminate redundant string allocations in the hot loop.
-            const fullLower = preparedFullName
-                ? (preparedFullName as unknown as ExtendedPrepared)._targetLower
-                : fullName.toLowerCase();
+            const fullLower = fullName.toLowerCase();
             if (fullLower !== nameLower) {
                 if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
                     return 0.9;
@@ -2354,25 +2309,14 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast index tracking optimization
-        // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
-        // and provides O(1) array access. (~15x faster than Set for 1M items).
-        const searchedIndices = new Uint8Array(this.items.length);
-        const priorityScopesLength = priorityScopes.length;
-
-        for (let s = 0; s < priorityScopesLength; s++) {
-            const indices = this.scopedIndices.get(priorityScopes[s]);
-            if (indices) {
-                const len = indices.length;
-                for (let j = 0; j < len; j++) {
-                    searchedIndices[indices[j]] = 1;
-                }
-            }
-        }
+        const searchedIndices = new Set<number>();
+        priorityScopes.forEach((s) => {
+            this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
+        });
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] === 0) {
+            if (!searchedIndices.has(i)) {
                 processItem(i);
             }
         }
