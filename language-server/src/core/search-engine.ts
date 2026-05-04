@@ -1626,8 +1626,8 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
-        const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
         // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
+        const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
         const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
@@ -1671,7 +1671,8 @@ export class SearchEngine implements ISearchProvider {
 
         let candidateSet: Uint8Array | undefined;
         if (indices) {
-            // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
+            // ⚡ Bolt: Fast Unique Tracking Optimization
+            // Using Uint8Array instead of Set<number> to track candidate presence
             candidateSet = new Uint8Array(this.items.length);
             for (let i = 0; i < indices.length; i++) {
                 candidateSet[indices[i]] = 1;
@@ -2318,20 +2319,21 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
+        // ⚡ Bolt: Fast Unique Tracking Optimization
+        // Replace Set<number> with a pre-allocated Uint8Array
         const searchedIndices = new Uint8Array(this.items.length);
-        for (let i = 0; i < priorityScopes.length; i++) {
-            const indices = this.scopedIndices.get(priorityScopes[i]);
+        for (let j = 0; j < priorityScopes.length; j++) {
+            const indices = this.scopedIndices.get(priorityScopes[j]);
             if (indices) {
-                for (let j = 0; j < indices.length; j++) {
-                    searchedIndices[indices[j]] = 1;
+                for (let k = 0; k < indices.length; k++) {
+                    searchedIndices[indices[k]] = 1;
                 }
             }
         }
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] !== 1) {
+            if (searchedIndices[i] === 0) {
                 processItem(i);
             }
         }
