@@ -424,12 +424,19 @@ export class SearchEngine implements ISearchProvider {
 
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
-        const removedSet = new Set(indicesToRemove);
+        // ⚡ Bolt: Sparse tracking with descending pointer
+        // indicesToRemove is already sorted, so use a pointer instead of Set to avoid O(n) allocation
+        let r = indicesToRemove.length - 1;
         const fillers: number[] = [];
 
         // Identify fillers: valid items at [newCount, count)
         for (let i = count - 1; i >= newCount; i--) {
-            if (!removedSet.has(i)) {
+            // Check if i is in indicesToRemove using the descending pointer r
+            while (r >= 0 && i > indicesToRemove[r]) {
+                r--;
+            }
+            // i is removed if i === indicesToRemove[r]
+            if (r < 0 || i > indicesToRemove[r]) {
                 fillers.push(i);
             }
         }
@@ -1667,22 +1674,20 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Using Uint8Array instead of Set<number> to track candidate presence
-        let candidateSet: Uint8Array | undefined;
+        const preferred: number[] = [];
+        // ⚡ Bolt: Sparse candidate tracking
+        // Instead of zero-filling a Uint8Array, track candidates sparsely using a Set
+        // This avoids O(items.length) memory allocation per query keystroke
+        let candidateSet: Set<number> | undefined;
         if (indices) {
-            candidateSet = new Uint8Array(this.items.length);
-            for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
-            }
+            candidateSet = new Set(indices);
         }
 
-        const preferred: number[] = [];
         for (const index of memo.topIndices) {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] === 0) {
+            if (candidateSet && candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);

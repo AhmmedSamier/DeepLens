@@ -112,7 +112,7 @@ suite('ReferenceCodeLens Test Suite', () => {
             const lenses = await provider.provideCodeLenses(mockDocument, token);
             assert.ok(Array.isArray(lenses), 'Should return an array even on error');
         } catch (e) {
-             console.log('Skipping due to lack of language server symbols: ' + e);
+            console.log('Skipping due to lack of language server symbols: ' + e);
         }
     });
 
