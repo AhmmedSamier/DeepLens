@@ -45,6 +45,16 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
         // This eliminates head-of-line blocking so fast files don't wait for the slowest
         // file in a specific chunk. Results stream back to the parent continuously.
+        if (filePaths.length === 0) {
+            parentPort?.postMessage({
+                type: 'result',
+                items: [],
+                count: 0,
+                isPartial: false,
+            });
+            return;
+        }
+
         const limit = pLimit(BATCH_SIZE);
 
         let processedCount = 0;
