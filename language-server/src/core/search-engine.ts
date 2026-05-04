@@ -1623,7 +1623,10 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
+        // ⚡ Bolt: Fast Unique Tracking Optimization
+        // Replace Set<number> with a pre-allocated Uint8Array for O(1) integer presence tracking
+        // This avoids memory allocations and hash lookups during search iterations
+        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
             this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
@@ -1664,9 +1667,14 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Set<number> | undefined;
+        // ⚡ Bolt: Fast Unique Tracking Optimization
+        // Using Uint8Array instead of Set<number> to track candidate presence
+        let candidateSet: Uint8Array | undefined;
         if (indices) {
-            candidateSet = new Set(indices);
+            candidateSet = new Uint8Array(this.items.length);
+            for (let i = 0; i < indices.length; i++) {
+                candidateSet[indices[i]] = 1;
+            }
         }
 
         const preferred: number[] = [];
@@ -1674,7 +1682,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && !candidateSet.has(index)) {
+            if (candidateSet && candidateSet[index] === 0) {
                 continue;
             }
             preferred.push(index);
@@ -1750,16 +1758,16 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
             if (visited) {
-                if (visited.has(i)) {
+                if (visited[i] === 1) {
                     continue;
                 }
-                visited.add(i);
+                visited[i] = 1;
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1769,12 +1777,12 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        visited?: Uint8Array,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.has(i)) {
+            if (visited && visited[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
@@ -2309,14 +2317,21 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        const searchedIndices = new Set<number>();
-        priorityScopes.forEach((s) => {
-            this.scopedIndices.get(s)?.forEach((i) => searchedIndices.add(i));
-        });
+        // ⚡ Bolt: Fast Unique Tracking Optimization
+        // Replace Set<number> with a pre-allocated Uint8Array
+        const searchedIndices = new Uint8Array(this.items.length);
+        for (let j = 0; j < priorityScopes.length; j++) {
+            const indices = this.scopedIndices.get(priorityScopes[j]);
+            if (indices) {
+                for (let k = 0; k < indices.length; k++) {
+                    searchedIndices[indices[k]] = 1;
+                }
+            }
+        }
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (!searchedIndices.has(i)) {
+            if (searchedIndices[i] === 0) {
                 processItem(i);
             }
         }
