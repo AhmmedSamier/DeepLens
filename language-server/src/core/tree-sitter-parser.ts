@@ -469,11 +469,7 @@ export class TreeSitterParser {
     private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
         // Walk up to find the class declaration
         let parent = this.getParent(methodNode);
-        while (
-            parent &&
-            !TreeSitterParser.CLASS_NODE_TYPES.has(parent.type) &&
-            parent.type !== 'compilation_unit'
-        ) {
+        while (parent && !TreeSitterParser.CLASS_NODE_TYPES.has(parent.type) && parent.type !== 'compilation_unit') {
             parent = this.getParent(parent);
         }
 

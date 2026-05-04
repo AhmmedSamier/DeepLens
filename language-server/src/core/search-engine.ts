@@ -424,12 +424,16 @@ export class SearchEngine implements ISearchProvider {
 
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
-        const removedSet = new Set(indicesToRemove);
+        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
+        const removedSet = new Uint8Array(count);
+        for (let i = 0; i < indicesToRemove.length; i++) {
+            removedSet[indicesToRemove[i]] = 1;
+        }
         const fillers: number[] = [];
 
         // Identify fillers: valid items at [newCount, count)
         for (let i = count - 1; i >= newCount; i--) {
-            if (!removedSet.has(i)) {
+            if (removedSet[i] !== 1) {
                 fillers.push(i);
             }
         }
@@ -1622,10 +1626,8 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
+        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Replace Set<number> with a pre-allocated Uint8Array for O(1) integer presence tracking
-        // This avoids memory allocations and hash lookups during search iterations
         const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
@@ -1667,10 +1669,10 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Using Uint8Array instead of Set<number> to track candidate presence
         let candidateSet: Uint8Array | undefined;
         if (indices) {
+            // ⚡ Bolt: Fast Unique Tracking Optimization
+            // Using Uint8Array instead of Set<number> to track candidate presence
             candidateSet = new Uint8Array(this.items.length);
             for (let i = 0; i < indices.length; i++) {
                 candidateSet[indices[i]] = 1;
@@ -1682,7 +1684,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] === 0) {
+            if (candidateSet && candidateSet[index] !== 1) {
                 continue;
             }
             preferred.push(index);
