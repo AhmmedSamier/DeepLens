@@ -1629,10 +1629,8 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
+        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Replace Set<number> with a pre-allocated Uint8Array for O(1) integer presence tracking
-        // This avoids memory allocations and hash lookups during search iterations
         const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
         if (preferredIndices.length > 0) {
@@ -1674,6 +1672,7 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
+<<<<<<< HEAD
         const preferred: number[] = [];
         // ⚡ Bolt: Sparse candidate tracking
         // Instead of zero-filling a Uint8Array, track candidates sparsely using a Set
