@@ -424,16 +424,19 @@ export class SearchEngine implements ISearchProvider {
 
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
-        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
-        const removedSet = new Uint8Array(count);
-        for (let i = 0; i < indicesToRemove.length; i++) {
-            removedSet[indicesToRemove[i]] = 1;
-        }
+        // ⚡ Bolt: Sparse tracking with descending pointer
+        // indicesToRemove is already sorted, so use a pointer instead of Set to avoid O(n) allocation
+        let r = indicesToRemove.length - 1;
         const fillers: number[] = [];
 
         // Identify fillers: valid items at [newCount, count)
         for (let i = count - 1; i >= newCount; i--) {
-            if (removedSet[i] !== 1) {
+            // Check if i is in indicesToRemove using the descending pointer r
+            while (r >= 0 && i > indicesToRemove[r]) {
+                r--;
+            }
+            // i is removed if i === indicesToRemove[r]
+            if (r < 0 || i > indicesToRemove[r]) {
                 fillers.push(i);
             }
         }
@@ -1669,22 +1672,21 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Uint8Array | undefined;
+<<<<<<< HEAD
+        const preferred: number[] = [];
+        // ⚡ Bolt: Sparse candidate tracking
+        // Instead of zero-filling a Uint8Array, track candidates sparsely using a Set
+        // This avoids O(items.length) memory allocation per query keystroke
+        let candidateSet: Set<number> | undefined;
         if (indices) {
-            // ⚡ Bolt: Fast Unique Tracking Optimization
-            // Using Uint8Array instead of Set<number> to track candidate presence
-            candidateSet = new Uint8Array(this.items.length);
-            for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
-            }
+            candidateSet = new Set(indices);
         }
 
-        const preferred: number[] = [];
         for (const index of memo.topIndices) {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (candidateSet && candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);

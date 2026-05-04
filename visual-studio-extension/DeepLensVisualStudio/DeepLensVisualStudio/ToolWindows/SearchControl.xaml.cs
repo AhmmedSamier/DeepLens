@@ -269,6 +269,21 @@ namespace DeepLensVisualStudio.ToolWindows
 
         public bool ShowEmptyState => Results.Count == 0 && !string.IsNullOrWhiteSpace(SearchQuery) && StatusText != "Searching...";
 
+        public string SearchPlaceholder
+        {
+            get
+            {
+                if (FilterClasses) return "Search for classes, interfaces, or structs...";
+                if (FilterMethods) return "Search for methods, properties, or fields...";
+                if (FilterSymbols) return "Search for methods, properties, or fields...";
+                if (FilterTypes) return "Search for classes, interfaces, or structs...";
+                if (FilterFiles) return "Search for files by name...";
+                if (FilterText) return "Search file content...";
+                if (FilterEndpoints) return "Search API endpoints and routes...";
+                return "Search for classes, symbols, files, text, or endpoints";
+            }
+        }
+
         public bool FilterAll
         {
             get => _filterAll;
@@ -277,6 +292,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterAll == value) return;
                 _filterAll = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterAll));
@@ -293,6 +309,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterClasses == value) return;
                 _filterClasses = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterClasses));
@@ -309,6 +326,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterMethods == value) return;
                 _filterMethods = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterMethods));
@@ -325,6 +343,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterFiles == value) return;
                 _filterFiles = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterFiles));
@@ -341,6 +360,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterEndpoints == value) return;
                 _filterEndpoints = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterEndpoints));
@@ -357,6 +377,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterSymbols == value) return;
                 _filterSymbols = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterSymbols));
@@ -373,6 +394,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterTypes == value) return;
                 _filterTypes = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterTypes));
@@ -389,6 +411,7 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (_filterText == value) return;
                 _filterText = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(SearchPlaceholder));
                 if (value)
                 {
                     ClearOtherFilters(nameof(FilterText));
