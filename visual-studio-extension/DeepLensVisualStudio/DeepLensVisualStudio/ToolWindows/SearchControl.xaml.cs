@@ -274,7 +274,9 @@ namespace DeepLensVisualStudio.ToolWindows
             get
             {
                 if (FilterClasses) return "Search for classes, interfaces, or structs...";
+                if (FilterMethods) return "Search for methods, properties, or fields...";
                 if (FilterSymbols) return "Search for methods, properties, or fields...";
+                if (FilterTypes) return "Search for classes, interfaces, or structs...";
                 if (FilterFiles) return "Search for files by name...";
                 if (FilterText) return "Search file content...";
                 if (FilterEndpoints) return "Search API endpoints and routes...";
