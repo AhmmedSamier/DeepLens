@@ -48,3 +48,8 @@
 
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
+
+## 2026-05-04 - [Fast Tracker Reset with Reusable TypedArray]
+
+**Learning:** When using a pre-allocated `Uint8Array` to track visited items (replacing `Set<number>`), doing an O(N) operation like `array.fill(0)` to reset it defeats the purpose if N is large. Furthermore, if you don't reset the array properly, or if an error happens before the array is reset, subsequent searches will skip valid items.
+**Action:** Use a separate array (e.g. `visitedIndicesTracker = []`) to push exactly which indices were set to 1. Then, wrap the entire operation that uses the buffer in a `try/finally` block. In the `finally` block, iterate over the tracker array, set those specific indices back to 0 in the buffer, and set `tracker.length = 0`. This guarantees an O(K) reset (where K is the number of visited items) and prevents cross-request state corruption.

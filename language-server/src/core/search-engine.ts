@@ -169,6 +169,11 @@ export class SearchEngine implements ISearchProvider {
     // Map Scope -> Array of Indices
     private readonly scopedIndices: Map<SearchScope, number[]> = new Map();
 
+    // ⚡ Bolt: Fast Dense Integer Set Tracking
+    // Reusable arrays for O(1) visited checks instead of new Set<number>() per query.
+    private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
+    private visitedIndicesTracker: number[] = [];
+
     // Map Normalized File Path -> Array of Item Indices (Reverse Index for O(1) lookup)
     private readonly fileToItemIndices: Map<string, number[]> = new Map();
     private readonly itemIndexById: Map<string, number> = new Map();
@@ -242,6 +247,8 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCache.clear();
         this.lastRelativeInput = null;
         this.lastRelativeOutput = null;
+        this.visitedIndicesBuffer = new Uint8Array(items.length);
+        this.visitedIndicesTracker = [];
         this.filePaths = [];
         this.invalidateDerivedCaches();
         for (const item of items) {
@@ -279,6 +286,10 @@ export class SearchEngine implements ISearchProvider {
             const newNameLengths = new Uint16Array(newCapacity);
             newNameLengths.set(this.itemNameLengths);
             this.itemNameLengths = newNameLengths;
+
+            const newVisitedIndicesBuffer = new Uint8Array(newCapacity);
+            newVisitedIndicesBuffer.set(this.visitedIndicesBuffer);
+            this.visitedIndicesBuffer = newVisitedIndicesBuffer;
         }
 
         // Append items
@@ -466,6 +477,7 @@ export class SearchEngine implements ISearchProvider {
             this.itemTypeIds = this.itemTypeIds.slice(0, newCount);
             this.itemBitflags = this.itemBitflags.slice(0, newCount);
             this.itemNameBitflags = this.itemNameBitflags.slice(0, newCount);
+            this.visitedIndicesBuffer = this.visitedIndicesBuffer.slice(0, newCount);
             this.preparedNames.length = newCount;
             this.preparedFullNames.length = newCount;
             this.preparedPaths.length = newCount;
@@ -759,6 +771,8 @@ export class SearchEngine implements ISearchProvider {
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
         this.itemNameLengths = new Uint16Array(0);
+        this.visitedIndicesBuffer = new Uint8Array(0);
+        this.visitedIndicesTracker = [];
         this.preparedNames = [];
         this.preparedFullNames = [];
         this.preparedPaths = [];
@@ -1658,16 +1672,25 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
+        const trackVisited = preferredIndices.length > 0;
 
-        if (preferredIndices.length > 0) {
-            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
-        }
+        try {
+            if (preferredIndices.length > 0) {
+                this.searchWithIndices(preferredIndices, searchContext, heap, token, trackVisited);
+            }
 
-        if (indices) {
-            this.searchWithIndices(indices, searchContext, heap, token, visited);
-        } else {
-            this.searchAllItems(searchContext, heap, token, visited);
+            if (indices) {
+                this.searchWithIndices(indices, searchContext, heap, token, trackVisited);
+            } else {
+                this.searchAllItems(searchContext, heap, token, trackVisited);
+            }
+        } finally {
+            if (trackVisited) {
+                for (let i = 0; i < this.visitedIndicesTracker.length; i++) {
+                    this.visitedIndicesBuffer[this.visitedIndicesTracker[i]] = 0;
+                }
+                this.visitedIndicesTracker.length = 0;
+            }
         }
 
         const results = heap.getSorted();
@@ -1785,16 +1808,17 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        trackVisited: boolean = false,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
-            if (visited) {
-                if (visited.has(i)) {
+            if (trackVisited) {
+                if (this.visitedIndicesBuffer[i] === 1) {
                     continue;
                 }
-                visited.add(i);
+                this.visitedIndicesBuffer[i] = 1;
+                this.visitedIndicesTracker.push(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1804,12 +1828,12 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Set<number>,
+        trackVisited: boolean = false,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.has(i)) {
+            if (trackVisited && this.visitedIndicesBuffer[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
