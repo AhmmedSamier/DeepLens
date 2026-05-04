@@ -15,6 +15,11 @@
 **Learning:** In worker thread architectures that process batches of files, using a fixed-chunk `Promise.all` approach creates head-of-line blocking. If one file in the chunk takes significantly longer to parse, the entire chunk's response is delayed, and concurrent slots sit idle, increasing tail latency and slowing down streaming UI updates.
 **Action:** Replace fixed chunks with a rolling concurrency window using `pLimit`. Track processed counts within the mapping loop and manually batch results to emit them back to the main thread incrementally as exactly `BATCH_SIZE` items accumulate, keeping all parsing slots fully utilized and reducing time-to-first-result.
 
+## 2026-04-16 - [Fast Result Streaming Without Allocation Overhead]
+
+**Learning:** In worker thread environments handling large data structures (like AST parsing), accumulating an entire batch of results using a fixed-chunk `Promise.all` causes head-of-line blocking (one slow file blocks the whole chunk) and delays time-to-first-result. While replacing `Promise.all` with a concurrency queue (e.g., `pLimit`) allows streaming results continuously, you must carefully handle pushing the incoming item arrays to the batch array. Using `array.push(...items)` on large AST result sets can throw `Maximum Call Stack Size Exceeded` and allocates unnecessary intermediate iterators.
+**Action:** Use a concurrency limit queue (`pLimit`) instead of `Promise.all(chunk.map)` to process items efficiently, and always use a manual `for` loop to append incoming sub-arrays into the batch accumulator (`batchItems.push(items[i])`) to prevent call stack crashes and allocation overhead.
+
 ## 2026-04-08 - [Hoist Redundant String Conversions]
 
 **Learning:** In frequently executed hot paths (like key stroke handlers inside VS Code QuickPicks), calling methods like `String.prototype.toLowerCase()` inside a loop that iterates over static configuration maps (like command prefixes) causes redundant, repetitive memory allocations on every iteration. While V8 is fast, allocating strings continuously in rapid UI events leads to GC churn.
