@@ -74,6 +74,7 @@ export class SearchProvider {
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
+    private readonly CMD_CLEAR_QUERY = 'command:clear-query';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
@@ -1576,6 +1577,21 @@ export class SearchProvider {
             return true;
         }
 
+        if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
+            quickPick.value = '';
+
+            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
+            this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+
+            this.showFeedback('Search query cleared');
+            return true;
+        }
+
         return selected.result.item.id === this.ID_EMPTY_STATE;
     }
 
@@ -1672,6 +1688,14 @@ export class SearchProvider {
             'Check exclusion rules',
             new vscode.ThemeIcon('settings-gear'),
             this.CMD_SETTINGS,
+        );
+
+        // 7. Clear Query Action
+        addCommandItem(
+            'Clear Search Query',
+            'Start a new search',
+            new vscode.ThemeIcon('clear-all'),
+            this.CMD_CLEAR_QUERY,
         );
 
         return { items, prompt: detail };
