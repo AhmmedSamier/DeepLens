@@ -776,7 +776,11 @@ export class WorkspaceIndexer {
     }
 
     private finishIfNoActiveTasks(state: WorkerPoolState): void {
-        if (state.activeTasks === 0 && state.pendingItems.length === 0 && !state.finished) {
+        if (
+            state.activeTasks === 0 &&
+            (state.pendingItems.length === 0 || this.cancellationToken.cancelled) &&
+            !state.finished
+        ) {
             state.finished = true;
             state.resolveAll();
         }

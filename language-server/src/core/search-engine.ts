@@ -254,40 +254,38 @@ export class SearchEngine implements ISearchProvider {
      */
     async addItems(items: SearchableItem[]): Promise<void> {
         this.invalidateDerivedCaches();
-        // Pre-calculate start index for new items
-        const startIndex = this.items.length;
-        const requiredSize = startIndex + items.length;
-
-        // Resize itemTypeIds and itemBitflags with exponential growth
-        if (this.itemTypeIds.length < requiredSize) {
-            // Growth Strategy: 1.5x or requiredSize to prevent frequent allocations
-            const newCapacity = Math.max(requiredSize, Math.ceil(this.itemTypeIds.length * 1.5));
-
-            const newTypeIds = new Uint8Array(newCapacity);
-            newTypeIds.set(this.itemTypeIds);
-            this.itemTypeIds = newTypeIds;
-
-            const newBitflags = new Uint32Array(newCapacity);
-            newBitflags.set(this.itemBitflags);
-            this.itemBitflags = newBitflags;
-
-            const newNameBitflags = new Uint32Array(newCapacity);
-            newNameBitflags.set(this.itemNameBitflags);
-            this.itemNameBitflags = newNameBitflags;
-
-            const newNameLengths = new Uint16Array(newCapacity);
-            newNameLengths.set(this.itemNameLengths);
-            this.itemNameLengths = newNameLengths;
-        }
-
-        // Append items
-        this.items.push(...items);
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < items.length; i += CHUNK_SIZE) {
             const end = Math.min(i + CHUNK_SIZE, items.length);
+
+            // Ensure capacity for this chunk
+            const requiredSize = this.items.length + (end - i);
+            if (this.itemTypeIds.length < requiredSize) {
+                // Growth Strategy: 1.5x or requiredSize to prevent frequent allocations
+                const newCapacity = Math.max(requiredSize, Math.ceil(this.itemTypeIds.length * 1.5));
+
+                const newTypeIds = new Uint8Array(newCapacity);
+                newTypeIds.set(this.itemTypeIds);
+                this.itemTypeIds = newTypeIds;
+
+                const newBitflags = new Uint32Array(newCapacity);
+                newBitflags.set(this.itemBitflags);
+                this.itemBitflags = newBitflags;
+
+                const newNameBitflags = new Uint32Array(newCapacity);
+                newNameBitflags.set(this.itemNameBitflags);
+                this.itemNameBitflags = newNameBitflags;
+
+                const newNameLengths = new Uint16Array(newCapacity);
+                newNameLengths.set(this.itemNameLengths);
+                this.itemNameLengths = newNameLengths;
+            }
+
             for (let j = i; j < end; j++) {
-                this.processAddedItem(items[j], startIndex + j);
+                const globalIndex = this.items.length;
+                this.items.push(items[j]);
+                this.processAddedItem(items[j], globalIndex);
             }
 
             // Yield to main thread for responsiveness
@@ -460,9 +458,9 @@ export class SearchEngine implements ISearchProvider {
     private truncateArrays(newCount: number, count: number, normalizedRemovedPaths: Set<string>): void {
         if (newCount < count) {
             this.items.length = newCount;
-            this.itemTypeIds = this.itemTypeIds.slice(0, newCount);
-            this.itemBitflags = this.itemBitflags.slice(0, newCount);
-            this.itemNameBitflags = this.itemNameBitflags.slice(0, newCount);
+            // Note: We don't slice the typed arrays (itemTypeIds, itemBitflags, etc.) to avoid
+            // unnecessary allocations. Their lengths act as capacities, and valid items
+            // are bounded by this.items.length.
             this.preparedNames.length = newCount;
             this.preparedFullNames.length = newCount;
             this.preparedPaths.length = newCount;
