@@ -2319,21 +2319,24 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Replace Set<number> with a pre-allocated Uint8Array
-        const searchedIndices = new Uint8Array(this.items.length);
-        for (let j = 0; j < priorityScopes.length; j++) {
-            const indices = this.scopedIndices.get(priorityScopes[j]);
-            if (indices) {
-                for (let k = 0; k < indices.length; k++) {
-                    searchedIndices[indices[k]] = 1;
-                }
+        // ⚡ Bolt: Fast Remaining Scopes Iteration Optimization
+        // Instead of allocating a Uint8Array of size N to track already processed items,
+        // we precompute which type IDs belong to priority scopes and iterate sequentially.
+        // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
+        const prioritySet = new Set(priorityScopes);
+        const isPriorityTypeId = new Uint8Array(256);
+        for (let i = 0; i < ID_TO_SCOPE.length; i++) {
+            if (prioritySet.has(ID_TO_SCOPE[i])) {
+                isPriorityTypeId[i] = 1;
             }
         }
 
-        for (let i = 0; i < this.items.length; i++) {
+        const itemsLength = this.items.length;
+        const itemTypeIds = this.itemTypeIds;
+
+        for (let i = 0; i < itemsLength; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] === 0) {
+            if (isPriorityTypeId[itemTypeIds[i]] === 0) {
                 processItem(i);
             }
         }

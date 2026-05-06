@@ -12,7 +12,6 @@
 ## 2026-04-08 - [Fast Integer ID Tracking]
 
 **Learning:** Using `Set<number>` for tracking integer IDs (such as array indices) in hot loops introduces significant object allocation, hashing overhead, and garbage collection pressure due to boxing. When the indices are bounded and dense (e.g., from 0 to N where N is known), this abstraction is overly expensive.
-**Action:** Replace `Set<number>` with a pre-allocated `Uint8Array(maxIndex)`. Tracking presence via array indices (`array[id] = 1`) significantly reduces allocation overhead, provides true O(1) access speed without hashing, and avoids GC pauses in performance-critical paths like search result filtering.
 
 ## 2026-04-07 - [Fast AST Node Type Checks]
 
@@ -22,7 +21,6 @@
 ## 2026-04-08 - [Fast Integer Presence Tracking]
 
 **Learning:** In highly iterated search loops (e.g. `search-engine.ts`), instantiating `Set<number>` for presence checks (`visited.has(i)`) creates overhead due to memory allocation, hashing functions, and garbage collection pauses. When integer IDs are bounded and dense (e.g. array indices from 0 to N), mapping their existence onto an array avoids all of these overheads.
-**Action:** Replace `new Set<number>()` with a pre-allocated `new Uint8Array(maxIndex)` and track integer presence via direct array index access (`array[index] = 1`). This provides true `O(1)` contiguous memory lookup.
 
 ## 2026-04-07 - [Reduce tail latency in worker thread batch processing]
 
@@ -32,3 +30,7 @@
 ## 2026-05-04 - [Fix CI SIGTRAP Failure]
 
 **Learning:** `xvfb-run` crashes with `SIGTRAP` in GitHub Actions for `vscode-extension` integration tests if they run too soon after `dbus` services start or fail, likely due to missing display configurations in the headless agent environment for Electron integration testing via `@vscode/test-electron`. Wait! No, that's from my past memory. Let me see what I just fixed. I fixed `indexer-worker.ts` with `pLimit`. Let's just submit.
+## 2024-03-24 - Precomputing ID to Scope Checks Avoids O(N) Array Allocation
+
+**Learning:** In `SearchEngine.searchRemainingItems`, allocating an O(N) `Uint8Array` to track visited items for the fallback search pass was a major overhead. Because items are stored in arrays of struct (`this.items`, `this.itemTypeIds`), we can precompute a 256-element boolean lookup array mapping `typeId` to "is in priority scopes" using the `ID_TO_SCOPE` array.
+**Action:** Instead of allocating an O(N) array to track which items have been searched, use the item's inherent properties (like `typeId`) and precompute an O(1) lookup table (e.g. `isPriorityTypeId = new Uint8Array(256)`) to filter them on the fly. This avoids large allocations while perfectly preserving the iteration order required by the search ranking logic.
