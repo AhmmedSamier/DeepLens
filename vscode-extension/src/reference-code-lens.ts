@@ -175,7 +175,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         // 3. Call Chain Lens
         if (this.showCallChain && this.supportsCallChain(symbol.kind)) {
             const callChainLens = new vscode.CodeLens(range, {
-                title: 'visualize call chain',
+                title: '$(call-incoming) visualize call chain',
                 command: 'deeplens.showCallChain',
                 arguments: [document.uri, position, symbol.name],
                 tooltip: `Visualize call hierarchy for ${symbol.name}`,

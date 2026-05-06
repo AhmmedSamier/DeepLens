@@ -770,7 +770,15 @@ export async function activate(context: vscode.ExtensionContext) {
                 targetPosition = activeEditor.selection.active;
             }
 
-            await showCallChain(targetUri, targetPosition, symbolName);
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Window,
+                    title: `DeepLens: Building call chain for ${symbolName || 'symbol'}...`,
+                },
+                async () => {
+                    await showCallChain(targetUri, targetPosition, symbolName);
+                },
+            );
         },
     );
 
