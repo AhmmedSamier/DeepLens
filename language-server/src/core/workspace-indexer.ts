@@ -947,19 +947,25 @@ export class WorkspaceIndexer {
                 continue;
             }
 
-            const filePath = this.normalizeUriToPath(symbol.location.uri);
+            const filePath = this.intern(this.normalizeUriToPath(symbol.location.uri));
             uniqueFiles.add(filePath);
-            const id = `symbol:${filePath}:${symbol.name}:${symbol.location.range.start.line}`;
+
+            const name = this.intern(symbol.name);
+            const containerName = symbol.containerName ? this.intern(symbol.containerName) : undefined;
+            const fullName = this.intern(containerName ? `${containerName}.${name}` : name);
+            const relativePath = this.intern(this.env.asRelativePath(filePath));
+
+            const id = `symbol:${filePath}:${name}:${symbol.location.range.start.line}`;
             const item: SearchableItem = {
                 id,
-                name: symbol.name,
+                name: name,
                 type: itemType,
                 filePath,
-                relativeFilePath: this.env.asRelativePath(filePath),
+                relativeFilePath: relativePath,
                 line: symbol.location.range.start.line,
                 column: symbol.location.range.start.character,
-                containerName: symbol.containerName,
-                fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
+                containerName: containerName,
+                fullName: fullName,
             };
 
             batch.push(item);
