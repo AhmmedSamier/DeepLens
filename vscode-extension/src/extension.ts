@@ -640,7 +640,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         });
     } catch (err) {
         vscode.window.showErrorMessage('DeepLens: Failed to show call chain.');
-        console.error('showCallChain error', err);
+        logger.error(`showCallChain error: ${err}`);
         return;
     }
 }

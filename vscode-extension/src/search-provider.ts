@@ -10,7 +10,9 @@ import {
     SearchableItem,
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
+import { FileIconProvider } from './file-icon-provider';
 import { DeepLensLspClient } from './lsp-client';
+import { logger } from './services/logging-service';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
 
 /**
@@ -1182,7 +1184,7 @@ export class SearchProvider {
                 this.updateTitle(quickPick, instantResults.length);
             }
         } catch (error) {
-            console.error(`Phase 0 search error: ${error}`);
+            logger.error(`Phase 0 search error: ${error}`);
         }
     }
 
@@ -1223,7 +1225,7 @@ export class SearchProvider {
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
-                    console.error(`Phase 1 search error: ${error}`);
+                    logger.error(`Phase 1 search error: ${error}`);
                 }
             }, 10),
         );
@@ -1371,7 +1373,7 @@ export class SearchProvider {
             if (error instanceof vscode.CancellationError) {
                 return [];
             }
-            console.error(error);
+            logger.error(`Search error: ${error}`);
             return [];
         }
 
@@ -1485,7 +1487,7 @@ export class SearchProvider {
                 this.triggerAutoRebuild();
             }
         } catch (e) {
-            console.error('Failed to check index stats:', e);
+            logger.error(`Failed to check index stats: ${e}`);
         }
     }
 
@@ -1848,9 +1850,9 @@ export class SearchProvider {
                     iconPath: vscode.ThemeIcon.File,
                 };
             } else {
-                // Fallback to standard file icon
+                // Fallback to our codicon based file icon provider
                 return {
-                    iconPath: new vscode.ThemeIcon('file', new vscode.ThemeColor('symbolIcon.fileForeground')),
+                    iconPath: FileIconProvider.getIcon(item.filePath),
                 };
             }
         }
@@ -2150,7 +2152,7 @@ export class SearchProvider {
             if (!preview) {
                 vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
             }
-            console.error(`Navigation error for ${item.filePath}:`, error);
+            logger.error(`Navigation error for ${item.filePath}: ${error}`);
         }
     }
 
