@@ -32,3 +32,8 @@
 ## 2026-05-04 - [Fix CI SIGTRAP Failure]
 
 **Learning:** `xvfb-run` crashes with `SIGTRAP` in GitHub Actions for `vscode-extension` integration tests if they run too soon after `dbus` services start or fail, likely due to missing display configurations in the headless agent environment for Electron integration testing via `@vscode/test-electron`. Wait! No, that's from my past memory. Let me see what I just fixed. I fixed `indexer-worker.ts` with `pLimit`. Let's just submit.
+
+## 2026-05-07 - [O(1) Reset for Instance-level Tracking Buffers]
+
+**Learning:** When using a pre-allocated `Uint8Array` to track visited indices in highly iterated search loops (e.g. `search-engine.ts`), instantiating `new Uint8Array(this.items.length)` or calling `.fill(0)` on every search request still introduces an O(N) operation overhead. In burst scenarios or when N is very large (e.g., 50,000+ items), this zeroing overhead becomes a measurable bottleneck compared to the search operation itself.
+**Action:** Use an instance-level reusable buffer (`searchVisitedBuffer: Uint8Array`) combined with a tracking array (`searchVisitedIndices: number[]`) that strictly stores the indices modified during the current search pass. At the end of the pass, wrap the reset logic in a `finally` block and iterate only over the `searchVisitedIndices` to revert those specific elements in the buffer to `0`. This changes the tracking reset complexity from O(N) to O(K) where K is the number of visited items, completely eliminating the allocation and zero-fill overhead on the hot path.
