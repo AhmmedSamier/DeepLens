@@ -74,6 +74,7 @@ export class SearchProvider {
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
+    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
@@ -1526,6 +1527,18 @@ export class SearchProvider {
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
     ): Promise<boolean> {
+        if (selected.result.item.id === this.CMD_CLEAR_SEARCH) {
+            quickPick.value = '';
+            // Manually trigger handleQueryChange as programmatic update won't fire onDidChangeValue
+            this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+            return true;
+        }
+
         if (selected.result.item.id === this.CMD_NATIVE_SEARCH) {
             await vscode.commands.executeCommand('workbench.action.findInFiles', {
                 query: quickPick.value,
@@ -1652,7 +1665,15 @@ export class SearchProvider {
             });
         };
 
-        // 3. Native Search Action
+        // 3. Clear Search Action
+        addCommandItem(
+            'Clear Search',
+            'Clear current query and start over',
+            new vscode.ThemeIcon('clear-all'),
+            this.CMD_CLEAR_SEARCH,
+        );
+
+        // 4. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1660,7 +1681,7 @@ export class SearchProvider {
             this.CMD_NATIVE_SEARCH,
         );
 
-        // 4. Rebuild Index Action
+        // 5. Rebuild Index Action
         addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
         // 5. Clear Cache Action
