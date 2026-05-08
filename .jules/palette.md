@@ -1,0 +1,3 @@
+## 2024-05-18 - Added "Clear Search" Action to Empty State
+**Learning:** When users encounter an empty search state, providing an actionable recovery path directly in the list (like a "Clear Search" command) significantly reduces friction compared to requiring manual deletion. Additionally, programmatically clearing a `QuickPick.value` in VS Code does not trigger `onDidChangeValue`, so the associated search/refresh logic must be called manually to reset the UI state.
+**Action:** Always include an actionable "Clear" or "Reset" option directly within empty state UI elements, and remember to manually trigger update handlers when programmatically modifying VS Code `QuickPick` input values.
