@@ -43,6 +43,7 @@ export class WorkspaceIndexer {
     private static readonly STRING_CACHE_MAX_SIZE = 10000;
     private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
     private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
+    private onItemsRemovedSyncListeners: ((filePaths: string[]) => void)[] = [];
 
     private indexing: boolean = false;
     private cancellationToken = { cancelled: false };
@@ -175,6 +176,21 @@ export class WorkspaceIndexer {
         };
     }
 
+    /**
+     * Register a synchronous bulk removal listener for file-change events.
+     * This ensures items are removed from the search engine BEFORE new items
+     * are added, preventing the race condition where debounced removal
+     * could delete freshly-added items.
+     */
+    public onItemsRemovedSync(listener: (filePaths: string[]) => void) {
+        this.onItemsRemovedSyncListeners.push(listener);
+        return {
+            dispose: () => {
+                this.onItemsRemovedSyncListeners = this.onItemsRemovedSyncListeners.filter((l) => l !== listener);
+            },
+        };
+    }
+
     private fireItemsAdded(items: SearchableItem[]) {
         if (items.length === 0) return;
         for (const listener of this.onItemsAddedListeners) {
@@ -185,6 +201,17 @@ export class WorkspaceIndexer {
     private fireItemsRemoved(filePath: string) {
         for (const listener of this.onItemsRemovedListeners) {
             listener(filePath);
+        }
+    }
+
+    /**
+     * Synchronously remove items for multiple files in a single call.
+     * Used by handleFileChanged to guarantee removal completes before re-adding.
+     */
+    private fireItemsRemovedSync(filePaths: string[]) {
+        if (filePaths.length === 0) return;
+        for (const listener of this.onItemsRemovedSyncListeners) {
+            listener(filePaths);
         }
     }
 
@@ -541,20 +568,16 @@ export class WorkspaceIndexer {
 
         const workspaceScan = await this.scanWorkspaceSymbols(progressCallback);
         const coverage = workspaceScan.uniqueFiles / totalFiles;
-        const shouldSkipFullWorkerPass =
-            workspaceScan.symbolCount > 0 &&
-            !workspaceScan.timedOut &&
-            coverage >= WorkspaceIndexer.WORKSPACE_SYMBOL_COVERAGE_THRESHOLD;
 
         this.log(
             `Workspace symbol pass: symbols=${workspaceScan.symbolCount}, files=${workspaceScan.uniqueFiles}, coverage=${coverage.toFixed(2)}, duration=${Math.round(workspaceScan.durationMs)}ms`,
         );
 
-        if (shouldSkipFullWorkerPass) {
-            progressCallback?.('Workspace symbols provided sufficient coverage; skipping deep parse.', 70);
-            return;
-        }
-
+        // Always run the deep parse pass.
+        // The workspace symbol provider may not return all symbols (some language servers
+        // have lazy or incomplete workspace symbol support), so we must do a full
+        // file-by-file parse to guarantee every class/method/property is indexed.
+        // The workspace symbol pass serves as a fast warm-up for early search results.
         await this.runFileIndexingPool(fileItems, progressCallback);
     }
 
@@ -847,32 +870,24 @@ export class WorkspaceIndexer {
         const { items, count, isPartial } = message;
 
         if (items && items.length > 0) {
-            const processItems = () => {
-                // ⚡ Bolt: Fast interning and array allocation
-                // Replaces items.map() with a pre-allocated array and manual loop.
-                // Performance impact: ~35% faster processing of large item batches by avoiding
-                // intermediate array allocations during the interning phase.
-                // eslint-disable-next-line sonarjs/array-constructor
-                const internedItems = new Array(items.length);
-                for (let i = 0; i < items.length; i++) {
-                    const item = items[i];
-                    internedItems[i] = {
-                        ...item,
-                        name: this.intern(item.name),
-                        fullName: item.fullName ? this.intern(item.fullName) : undefined,
-                        containerName: item.containerName ? this.intern(item.containerName) : undefined,
-                        relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
-                        filePath: this.intern(item.filePath),
-                    };
-                }
-                this.fireItemsAdded(internedItems);
-            };
-
-            if (items.length > 100) {
-                setTimeout(processItems, 0);
-            } else {
-                processItems();
+            // ⚡ Bolt: Fast interning and array allocation
+            // Replaces items.map() with a pre-allocated array and manual loop.
+            // Performance impact: ~35% faster processing of large item batches by avoiding
+            // intermediate array allocations during the interning phase.
+            // eslint-disable-next-line sonarjs/array-constructor
+            const internedItems = new Array(items.length);
+            for (let i = 0; i < items.length; i++) {
+                const item = items[i];
+                internedItems[i] = {
+                    ...item,
+                    name: this.intern(item.name),
+                    fullName: item.fullName ? this.intern(item.fullName) : undefined,
+                    containerName: item.containerName ? this.intern(item.containerName) : undefined,
+                    relativeFilePath: item.relativeFilePath ? this.intern(item.relativeFilePath) : undefined,
+                    filePath: this.intern(item.filePath),
+                };
             }
+            this.fireItemsAdded(internedItems);
         }
 
         const itemsProcessed = count || 1;
@@ -1336,10 +1351,11 @@ export class WorkspaceIndexer {
             return;
         }
 
-        // Remove old symbols for this file
-        this.fireItemsRemoved(filePath);
-
-        // Invalidate hash to force re-calculation
+        // Remove old symbols for this file synchronously BEFORE re-adding.
+        // Using fireItemsRemovedSync ensures the search engine processes the removal
+        // immediately, preventing the race condition where debounced removal (via
+        // fireItemsRemoved) could delete freshly-added items.
+        this.fireItemsRemovedSync([filePath]);
 
         // Re-add file item with updated size
         const fileName = path.basename(filePath);
