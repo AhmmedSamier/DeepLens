@@ -1,5 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { SearchableItem } from './types';
 import { pLimit } from './p-limit';
 
 if (!parentPort) {
@@ -26,11 +27,26 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (message.chunkSize !== undefined) {
+            if (
+                typeof message.chunkSize !== 'number' ||
+                !Number.isFinite(message.chunkSize) ||
+                !Number.isInteger(message.chunkSize) ||
+                message.chunkSize <= 0
+            ) {
+                parentPort?.postMessage({
+                    type: 'error',
+                    error: `Invalid chunkSize: ${message.chunkSize}. Must be a finite positive integer.`,
+                });
+                return;
+            }
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
 
         const limit = pLimit(BATCH_SIZE);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let batchedItems: any[] = [];
+        let batchedItems: SearchableItem[] = [];
         let processedCount = 0;
         let filesInCurrentBatch = 0;
 

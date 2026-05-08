@@ -91,7 +91,7 @@ namespace DeepLensVisualStudio.ToolWindows
                     case "property": return "\uEB65"; // symbol-property (60261 = 0xEB65)
                     case "field": return "\uEB5F"; // symbol-field (60255 = 0xEB5F)
                     case "variable": return "\uEA88"; // symbol-variable (60040 = 0xEA88)
-                    case "file": return "\uEA7B"; // file (60027 = 0xEA7B)
+                    case "file": return GetFileIcon(FilePath);
                     case "text": return "\uEB7E"; // whole-word (60286 = 0xEB7E)
                     case "command": return "\uEB2C"; // run (60204 = 0xEB2C)
                     case "endpoint": return "\uEB01"; // globe (60161 = 0xEB01)
@@ -102,6 +102,65 @@ namespace DeepLensVisualStudio.ToolWindows
                     case "constructor": return "\uEA8C"; // symbol-constructor (60044 = 0xEA8C) - same as method
                     default: return "\uEB63"; // symbol-misc (60259 = 0xEB63)
                 }
+            }
+        }
+
+        private string GetFileIcon(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath)) return "\uEA7B";
+
+            var ext = System.IO.Path.GetExtension(filePath).ToLowerInvariant();
+            var fileName = System.IO.Path.GetFileName(filePath).ToLowerInvariant();
+
+            switch (fileName)
+            {
+                case "package.json":
+                case "tsconfig.json":
+                    return "\uEB0F"; // json (60175)
+                case "readme.md":
+                    return "\uEB1D"; // markdown (60189)
+            }
+
+            switch (ext)
+            {
+                case ".ts":
+                case ".tsx":
+                case ".js":
+                case ".jsx":
+                case ".html":
+                case ".css":
+                case ".py":
+                case ".go":
+                case ".java":
+                case ".c":
+                case ".cpp":
+                case ".h":
+                case ".hpp":
+                case ".cs":
+                case ".rb":
+                case ".php":
+                    return "\uEAE9"; // file-code (60137 = 0xEAE9)
+                case ".json":
+                    return "\uEB0F"; // json (60175 = 0xEB0F)
+                case ".md":
+                    return "\uEB1D"; // markdown (60189 = 0xEB1D)
+                case ".zip":
+                case ".tar":
+                case ".gz":
+                    return "\uEAEF"; // file-zip (60143 = 0xEAEF)
+                case ".pdf":
+                    return "\uEAEB"; // file-pdf (60139 = 0xEAEB)
+                case ".png":
+                case ".jpg":
+                case ".jpeg":
+                case ".gif":
+                case ".svg":
+                case ".mp4":
+                case ".mp3":
+                case ".wav":
+                    return "\uEAEA"; // file-media (60138 = 0xEAEA)
+                default:
+                    return "\uEA7B"; // file (60027 = 0xEA7B)
             }
         }
 
@@ -453,6 +512,7 @@ namespace DeepLensVisualStudio.ToolWindows
             _historyService = new HistoryService();
             _slashCommandService = new SlashCommandService();
             GetLspService().OnProgress += OnLspProgress;
+            GetLspService().OnResultStreamed += OnLspResultStreamed;
 
             OpenCommand = new RelayCommand(p =>
             {
@@ -495,6 +555,37 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 if (!string.IsNullOrEmpty(info.Message)) IndexingStatusText = info.Message;
+            });
+        }
+
+        private void OnLspResultStreamed(SearchResult result)
+        {
+            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
+            {
+                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
+                
+                // If cancellation is requested, don't append
+                if (_searchCts != null && _searchCts.IsCancellationRequested) return;
+
+                string relative = result.FilePath;
+                if (!string.IsNullOrEmpty(_solutionRoot) &&
+                    relative.StartsWith(_solutionRoot, StringComparison.OrdinalIgnoreCase))
+                {
+                    relative = relative.Substring(_solutionRoot.Length).TrimStart('\\', '/');
+                }
+
+                Results.Add(new SearchResultViewModel
+                {
+                    Name = result.Name,
+                    Kind = result.Kind,
+                    FilePath = result.FilePath,
+                    RelativePath = relative,
+                    Line = result.Line,
+                    ContainerName = result.ContainerName
+                });
+                
+                OnPropertyChanged(nameof(ResultCountText));
+                OnPropertyChanged(nameof(ShowEmptyState));
             });
         }
 
@@ -811,9 +902,16 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (token.IsCancellationRequested)
                     return;
 
-                Results.Clear();
+                var existingIds = new System.Collections.Generic.HashSet<string>(
+                    Results.Select(r => $"{r.FilePath}:{r.Line}:{r.Name}")
+                );
+
                 foreach (var result in searchResults)
                 {
+                    string id = $"{result.FilePath}:{result.Line}:{result.Name}";
+                    if (existingIds.Contains(id)) continue;
+                    existingIds.Add(id);
+
                     string relative = result.FilePath;
                     if (!string.IsNullOrEmpty(_solutionRoot) &&
                         relative.StartsWith(_solutionRoot, StringComparison.OrdinalIgnoreCase))
