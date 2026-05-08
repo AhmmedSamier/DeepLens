@@ -88,6 +88,16 @@ export class DeepLensLspClient implements ISearchProvider {
 
         this.client = new LanguageClient('deeplensLS', 'DeepLens Language Server', serverOptions, clientOptions);
 
+        // Clear stale progress tokens whenever the server (re)enters the Running state.
+        // Without this, a crash mid-indexing leaves the old token IDs in the set;
+        // on restart the server reuses the same numeric token IDs, causing the
+        // initial 'start' notification to be silently skipped (token already "known").
+        this.client.onDidChangeState((e) => {
+            if (e.newState === State.Running) {
+                this.activeProgressTokens.clear();
+            }
+        });
+
         this.client.onNotification(
             'deeplens/progress',
             (params: { token: string | number; message?: string; percentage?: number }) => {

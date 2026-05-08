@@ -156,6 +156,12 @@ export class SearchEngine implements ISearchProvider {
     private filePaths: string[] = [];
     private activeFileItems: SearchableItem[] = [];
     private inactiveFileItems: SearchableItem[] = [];
+
+    // Reusable scratch buffer for removeItemsByFiles — avoids allocating a new
+    // Uint8Array(N) on every file-change event. In large repos with frequent saves
+    // this would otherwise create significant GC pressure. Grows lazily (2× strategy)
+    // and is zeroed at only the used slots after each removal pass.
+    private removalScratchBuffer: Uint8Array = new Uint8Array(0);
     private filePriorityCacheDirty = true;
 
     // String normalization cache (1-item) for relativeFilePath
@@ -288,7 +294,12 @@ export class SearchEngine implements ISearchProvider {
                 this.processAddedItem(items[j], globalIndex);
             }
 
-            // Yield to main thread for responsiveness
+            // Yield to main thread for responsiveness.
+            // NOTE: This intentionally exposes a partial index state to concurrent searches —
+            // items processed so far are searchable, but items not yet added in this batch
+            // are not. The queryId guard in search-provider.ts prevents stale results from
+            // being displayed. We accept this trade-off to keep the UI responsive during
+            // large indexing operations (e.g. post-workspace-symbol-scan adds).
             if (end < items.length) {
                 await new Promise((resolve) => setTimeout(resolve, 0));
             }
@@ -422,8 +433,16 @@ export class SearchEngine implements ISearchProvider {
 
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
-        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
-        const removedSet = new Uint8Array(count);
+
+        // ⚡ Bolt: Reuse scratch buffer instead of allocating new Uint8Array(count) each call.
+        // In large repos (100k+ items) this saves 100-200 KB of heap per file-change event.
+        // The buffer grows lazily (2× strategy) and only the used slots are zeroed at the end.
+        if (this.removalScratchBuffer.length < count) {
+            this.removalScratchBuffer = new Uint8Array(Math.max(count, this.removalScratchBuffer.length * 2));
+        }
+        const removedSet = this.removalScratchBuffer;
+
+        // Mark removed indices
         for (let i = 0; i < indicesToRemove.length; i++) {
             removedSet[indicesToRemove[i]] = 1;
         }
@@ -452,6 +471,12 @@ export class SearchEngine implements ISearchProvider {
                 const idx = indices.indexOf(src);
                 if (idx !== -1) indices[idx] = dest;
             }
+        }
+
+        // Reset only the bits we set so the buffer is clean for the next call.
+        // This is O(K) where K = indicesToRemove.length, not O(N) like fill(0).
+        for (let i = 0; i < indicesToRemove.length; i++) {
+            removedSet[indicesToRemove[i]] = 0;
         }
     }
 
@@ -2160,6 +2185,11 @@ export class SearchEngine implements ISearchProvider {
         // Performance impact: ~20% faster path normalization in hot loops.
         const normalizedQuery =
             effectiveQuery.indexOf('\\') !== -1 ? effectiveQuery.replace(/\\/g, '/') : effectiveQuery;
+        // NOTE: burstSearch intentionally lowercases the query for fast substring matching,
+        // while search() passes the original-case query to fuzzysort (which handles its own
+        // case-insensitive comparison internally). Both paths produce equivalent results since
+        // fuzzysort is case-insensitive — the difference is that burstSearch prioritizes
+        // speed for instant initial results, while search() prioritizes match accuracy.
         const queryLower = normalizedQuery.toLowerCase();
 
         let indices: number[] | undefined;
