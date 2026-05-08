@@ -207,6 +207,27 @@ describe('WorkspaceIndexer', () => {
 
             expect(addedItems).toHaveLength(0);
         });
+
+        it('should use synchronous removal for file change events', async () => {
+            const customConfig = new Config();
+            customConfig.update({ respectGitignore: false });
+            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+
+            const syncRemovedPaths: string[][] = [];
+            const asyncRemovedPaths: string[] = [];
+
+            indexer.onItemsRemovedSync((filePaths) => syncRemovedPaths.push(filePaths));
+            indexer.onItemsRemoved((filePath) => asyncRemovedPaths.push(filePath));
+
+            await indexer.processFileEvent('/root/src/updated-file.ts', 'change');
+
+            // Synchronous removal should have been called
+            expect(syncRemovedPaths.length).toBe(1);
+            expect(syncRemovedPaths[0]).toContain('/root/src/updated-file.ts');
+
+            // Async (debounced) removal should NOT have been called
+            expect(asyncRemovedPaths.length).toBe(0);
+        });
     });
     describe('dispose', () => {
         it('should clear timers on dispose', () => {
