@@ -2,6 +2,7 @@ import * as Fuzzysort from 'fuzzysort';
 import * as vscode from 'vscode';
 import { Config } from '../../language-server/src/core/config';
 import { SearchableItem, SearchItemType, SearchResult, SearchScope } from '../../language-server/src/core/types';
+import { logger } from './services/logging-service';
 
 interface PreparedCommand {
     item: SearchableItem;
@@ -62,9 +63,9 @@ export class CommandIndexer {
                 });
             }
 
-            console.log(`Indexed ${this.commandItems.length} commands`);
+            logger.log(`Indexed ${this.commandItems.length} commands`);
         } catch (error) {
-            console.error('Failed to index commands:', error);
+            logger.error(`Failed to index commands: ${error}`);
         }
     }
 
@@ -186,7 +187,7 @@ export class CommandIndexer {
             await vscode.commands.executeCommand(commandId);
         } catch (error) {
             vscode.window.showErrorMessage(`Failed to execute command: ${commandId}`);
-            console.error(`Command execution failed:`, error);
+            logger.error(`Command execution failed: ${error}`);
         }
     }
 }
