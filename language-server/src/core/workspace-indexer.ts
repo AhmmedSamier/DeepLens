@@ -734,7 +734,7 @@ export class WorkspaceIndexer {
     }
 
     private startInitialWorkerTasks(workers: Worker[], state: WorkerPoolState, batchSize: number): void {
-        const initialCount = Math.min(workers.length, state.pendingItems.length - state.pendingHead);
+        const initialCount = Math.min(workers.length, this.getPendingCount(state));
         if (initialCount === 0) {
             state.finished = true;
             state.resolveAll();
@@ -793,7 +793,7 @@ export class WorkspaceIndexer {
 
     private collectBatch(state: WorkerPoolState, batchSize: number): string[] {
         const batchFiles: string[] = [];
-        while (state.pendingItems.length - state.pendingHead > 0 && batchFiles.length < batchSize) {
+        while (this.getPendingCount(state) > 0 && batchFiles.length < batchSize) {
             const fileItem = state.pendingItems[state.pendingHead];
             state.pendingHead++;
             if (fileItem) {
@@ -810,6 +810,10 @@ export class WorkspaceIndexer {
         return batchFiles;
     }
 
+    private getPendingCount(state: WorkerPoolState): number {
+        return state.pendingItems.length - state.pendingHead;
+    }
+
     private finalizeTask(state: WorkerPoolState): void {
         state.activeTasks--;
         this.finishIfNoActiveTasks(state);
@@ -818,7 +822,7 @@ export class WorkspaceIndexer {
     private finishIfNoActiveTasks(state: WorkerPoolState): void {
         if (
             state.activeTasks === 0 &&
-            (state.pendingItems.length - state.pendingHead === 0 || this.cancellationToken.cancelled) &&
+            (this.getPendingCount(state) === 0 || this.cancellationToken.cancelled) &&
             !state.finished
         ) {
             state.finished = true;
@@ -920,7 +924,7 @@ export class WorkspaceIndexer {
             return;
         }
 
-        if (state.pendingItems.length - state.pendingHead > 0) {
+        if (this.getPendingCount(state) > 0) {
             this.assignWorkerTask(worker, batchSize, state);
         } else {
             this.finishIfNoActiveTasks(state);
@@ -929,7 +933,7 @@ export class WorkspaceIndexer {
 
     private handleWorkerErrorMessage(worker: Worker, state: WorkerPoolState, batchSize: number): void {
         state.activeTasks--;
-        if (state.pendingItems.length - state.pendingHead > 0) {
+        if (this.getPendingCount(state) > 0) {
             this.assignWorkerTask(worker, batchSize, state);
         } else {
             this.finishIfNoActiveTasks(state);
