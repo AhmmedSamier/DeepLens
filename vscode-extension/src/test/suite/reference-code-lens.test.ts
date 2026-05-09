@@ -413,7 +413,7 @@ export const variable = 42;
                     if (args && args.length >= 3 && Array.isArray(args[2])) {
                         const locations = args[2];
                         const hasDeclaration = locations.some(
-                            (loc: any) =>
+                            (loc: vscode.Location) =>
                                 loc.uri.toString() === mockDocument.uri.toString() &&
                                 loc.range.isEqual(lenses[0].range),
                         );

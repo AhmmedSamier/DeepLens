@@ -75,6 +75,7 @@ export class SearchProvider {
     private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
+    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly CMD_SETTINGS = 'command:open-settings';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
@@ -1578,6 +1579,17 @@ export class SearchProvider {
             return true;
         }
 
+        if (selected.result.item.id === this.CMD_CLEAR_SEARCH) {
+            quickPick.value = '';
+            this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+            return true;
+        }
+
         return selected.result.item.id === this.ID_EMPTY_STATE;
     }
 
@@ -1662,13 +1674,16 @@ export class SearchProvider {
             this.CMD_NATIVE_SEARCH,
         );
 
-        // 4. Rebuild Index Action
+        // 4. Clear Search Action
+        addCommandItem('Clear Search', 'Start a new search', new vscode.ThemeIcon('clear-all'), this.CMD_CLEAR_SEARCH);
+
+        // 5. Rebuild Index Action
         addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
-        // 5. Clear Cache Action
+        // 6. Clear Cache Action
         addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
-        // 6. Settings Action
+        // 7. Settings Action
         addCommandItem(
             'Configure Settings',
             'Check exclusion rules',

@@ -1,0 +1,3 @@
+## 2024-05-09 - Providing Actionable Recovery Paths in Empty States
+**Learning:** When users encounter an empty search state, simply showing a "No results" message creates friction, forcing them to manually clear the input to try again. By providing an actionable recovery path directly within the empty state container (like a 'Clear Search' button), the interface becomes much more intuitive and reduces the number of interactions required to recover from a failed search.
+**Action:** When designing empty states in the UI (e.g., no search results, empty lists), always provide an actionable recovery path directly within the empty state container to reduce interaction friction.
