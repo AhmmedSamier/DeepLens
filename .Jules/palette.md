@@ -9,5 +9,5 @@
 **Action:** Bind the empty state watermark/placeholder (both visual `TextBlock.Text` and accessibility attributes like `TextBox.ToolTip` or `AutomationProperties.Name`) to a dynamic property that reacts to the selected filter state.
 
 ## 2024-05-24 - Dynamic Contextual Accessibility Placeholders
-**Learning:** Hardcoded accessibility names (like `AutomationProperties.Name="Search query"`) in a unified search bar fail to guide screen reader users when they switch specific context filters. Providing context-aware search query suggestions directly inside the empty `TextBox` via accessibility properties drastically improves feature discoverability for all users.
-**Action:** When a UI component manages multiple scopes or filters, ensure the empty state watermark/placeholder is synchronized with accessibility properties (like `AutomationProperties.Name`) using dynamic bindings (e.g., `{Binding SearchPlaceholder}`), rather than using generic static strings.
+**Learning:** Hardcoded accessibility names (like `AutomationProperties.Name="Search query"`) in a unified search bar or components with multiple context filters fail to guide screen reader users. They miss the specific filter context (e.g., "Classes", "Endpoints") that is visible to sighted users via placeholders.
+**Action:** Always bind accessibility attributes (such as `AutomationProperties.Name` and `ToolTip`) to the same dynamic properties that drive visual placeholders (e.g., `{Binding SearchPlaceholder}`), ensuring parity between visual and accessible context discoverability.

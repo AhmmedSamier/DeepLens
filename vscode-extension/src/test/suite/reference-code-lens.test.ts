@@ -92,7 +92,6 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should handle documents with no symbols', async () => {
-        // Use the mock document instead of trying to open a real one which can fail in CI
         const token = new vscode.CancellationTokenSource().token;
 
         try {
@@ -117,10 +116,46 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should provide code lenses for supported symbol kinds', async () => {
+        // Create a test document with a class
+        const testContent = `
+export class TestClass {
+    public testMethod(): void {
+        console.log('test');
+    }
+}
+
+export interface TestInterface {
+    prop: string;
+}
+
+export function testFunction() {
+    return 42;
+}
+`;
+        const doc = await vscode.workspace.openTextDocument({
+            content: testContent,
+            language: 'typescript',
+        });
+
+        // Show the document to ensure TypeScript language server is activated
+        await vscode.window.showTextDocument(doc);
+
+        // Wait for TypeScript language server to initialize by polling for symbols
+        for (let i = 0; i < 50; i++) {
+            const symbols = await vscode.commands.executeCommand<any[]>(
+                'vscode.executeDocumentSymbolProvider',
+                doc.uri,
+            );
+            if (symbols && symbols.length > 0) {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
+
         const token = new vscode.CancellationTokenSource().token;
 
         try {
-            const lenses = await provider.provideCodeLenses(mockDocument, token);
+            const lenses = await provider.provideCodeLenses(doc, token);
             assert.ok(Array.isArray(lenses), 'Should return an array of code lenses');
             if (lenses.length > 0) {
                 assert.ok(
@@ -273,8 +308,17 @@ export function callChainFunction() {
             // Show the document to ensure TypeScript language server is activated
             await vscode.window.showTextDocument(doc);
 
-            // Wait for TypeScript language server to initialize
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait for TypeScript language server to initialize by polling for symbols
+            for (let i = 0; i < 50; i++) {
+                const symbols = await vscode.commands.executeCommand<any[]>(
+                    'vscode.executeDocumentSymbolProvider',
+                    doc.uri,
+                );
+                if (symbols && symbols.length > 0) {
+                    break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
 
             const token = new vscode.CancellationTokenSource().token;
             const lenses = await provider.provideCodeLenses(doc, token);
@@ -330,8 +374,17 @@ export const variable = 42;
             // Show the document to ensure TypeScript language server is activated
             await vscode.window.showTextDocument(doc);
 
-            // Wait for TypeScript language server to initialize
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait for TypeScript language server to initialize by polling for symbols
+            for (let i = 0; i < 50; i++) {
+                const symbols = await vscode.commands.executeCommand<any[]>(
+                    'vscode.executeDocumentSymbolProvider',
+                    doc.uri,
+                );
+                if (symbols && symbols.length > 0) {
+                    break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
 
             const token = new vscode.CancellationTokenSource().token;
             const lenses = await provider.provideCodeLenses(doc, token);
