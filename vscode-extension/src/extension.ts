@@ -640,7 +640,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
         });
     } catch (err) {
         vscode.window.showErrorMessage('DeepLens: Failed to show call chain.');
-        console.error('showCallChain error', err);
+        logger.error(`showCallChain error: ${err}`);
         return;
     }
 }
@@ -670,7 +670,7 @@ export async function activate(context: vscode.ExtensionContext) {
     activityTracker = new ActivityTracker(context);
 
     // UI remains local
-    searchProvider = new SearchProvider(lspClient, config, activityTracker, commandIndexer);
+    searchProvider = new SearchProvider(lspClient, config, context.globalState, activityTracker, commandIndexer);
 
     // T013: Listen for ripgrep unavailability
     context.subscriptions.push(

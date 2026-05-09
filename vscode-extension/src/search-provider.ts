@@ -10,7 +10,9 @@ import {
     SearchableItem,
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
+import { FileIconProvider } from './file-icon-provider';
 import { DeepLensLspClient } from './lsp-client';
+import { logger } from './services/logging-service';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
 
 /**
@@ -120,15 +122,28 @@ export class SearchProvider {
         ['>', SearchScope.COMMANDS],
     ]);
 
+    private storage?: vscode.Memento;
+    private readonly STORAGE_KEY = 'deeplens.userSelectedScope';
+
     constructor(
         searchEngine: ISearchProvider,
         config: Config,
+        storage?: vscode.Memento,
         activityTracker?: ActivityTracker,
         commandIndexer?: CommandIndexer,
     ) {
         this.searchEngine = searchEngine;
         this.config = config;
+        this.storage = storage;
         this.activityTracker = activityTracker;
+
+        if (this.storage) {
+            const savedScope = this.storage.get<SearchScope>(this.STORAGE_KEY);
+            if (savedScope) {
+                this.userSelectedScope = savedScope;
+                this.currentScope = savedScope;
+            }
+        }
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
@@ -449,13 +464,22 @@ export class SearchProvider {
     /**
      * Show search UI with specific scope and optional initial query
      */
+    private setUserSelectedScope(scope: SearchScope): void {
+        this.userSelectedScope = scope;
+        if (this.storage) {
+            this.storage.update(this.STORAGE_KEY, scope);
+        }
+    }
+
+    /**
+     * Show search UI with specific scope and optional initial query
+     */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope;
         } else {
             this.currentScope = scope;
-            this.userSelectedScope = scope;
+            this.setUserSelectedScope(scope);
         }
         await this.showInternal(initialQuery);
     }
@@ -880,7 +904,7 @@ export class SearchProvider {
     }
 
     private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        this.userSelectedScope = SearchScope.EVERYTHING;
+        this.setUserSelectedScope(SearchScope.EVERYTHING);
         this.currentScope = SearchScope.EVERYTHING;
 
         const currentQuery = quickPick.value;
@@ -998,10 +1022,6 @@ export class SearchProvider {
             quickPick.items = commandSuggestions.map((r) => this.resultToSlashCommandQuickPickItem(r));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
-        } else {
-            quickPick.items = [];
-            quickPick.title = 'DeepLens - No matching commands';
-            quickPick.busy = false;
         }
     }
 
@@ -1103,7 +1123,7 @@ export class SearchProvider {
             return false;
         }
 
-        this.userSelectedScope = scope;
+        this.setUserSelectedScope(scope);
         this.currentScope = scope;
         this.updateFilterButtons(quickPick);
         quickPick.placeholder = this.getPlaceholder();
@@ -1128,7 +1148,7 @@ export class SearchProvider {
         }
 
         this.suggestSlashCommands(quickPick, query);
-        return true;
+        return quickPick.items.length > 0;
     }
 
     private async showRecentHistoryAndResetState(
@@ -1186,7 +1206,7 @@ export class SearchProvider {
                 this.updateTitle(quickPick, instantResults.length);
             }
         } catch (error) {
-            console.error(`Phase 0 search error: ${error}`);
+            logger.error(`Phase 0 search error: ${error}`);
         }
     }
 
@@ -1227,7 +1247,7 @@ export class SearchProvider {
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
-                    console.error(`Phase 1 search error: ${error}`);
+                    logger.error(`Phase 1 search error: ${error}`);
                 }
             }, 10),
         );
@@ -1291,7 +1311,7 @@ export class SearchProvider {
 
             if (buttonBaseName === baseName) {
                 // Update user selection
-                this.userSelectedScope = scope;
+                this.setUserSelectedScope(scope);
 
                 // Also update current scope (though it might be overridden by query prefix in next step)
                 this.currentScope = scope;
@@ -1375,7 +1395,7 @@ export class SearchProvider {
             if (error instanceof vscode.CancellationError) {
                 return [];
             }
-            console.error(error);
+            logger.error(`Search error: ${error}`);
             return [];
         }
 
@@ -1489,7 +1509,7 @@ export class SearchProvider {
                 this.triggerAutoRebuild();
             }
         } catch (e) {
-            console.error('Failed to check index stats:', e);
+            logger.error(`Failed to check index stats: ${e}`);
         }
     }
 
@@ -1540,7 +1560,7 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_SWITCH_SCOPE) {
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.setUserSelectedScope(SearchScope.EVERYTHING);
             this.currentScope = SearchScope.EVERYTHING;
 
             const currentQuery = quickPick.value;
@@ -1852,9 +1872,9 @@ export class SearchProvider {
                     iconPath: vscode.ThemeIcon.File,
                 };
             } else {
-                // Fallback to standard file icon
+                // Fallback to our codicon based file icon provider
                 return {
-                    iconPath: new vscode.ThemeIcon('file', new vscode.ThemeColor('symbolIcon.fileForeground')),
+                    iconPath: FileIconProvider.getIcon(item.filePath),
                 };
             }
         }
@@ -2082,7 +2102,7 @@ export class SearchProvider {
             // Find scope for this prefix (add space to match PREFIX_MAP)
             const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
             if (scope) {
-                this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                this.setUserSelectedScope(scope);
                 this.currentScope = scope;
                 this.updateFilterButtons(this.currentQuickPick);
                 this.currentQuickPick.value = ''; // Clear the command text
@@ -2154,7 +2174,7 @@ export class SearchProvider {
             if (!preview) {
                 vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
             }
-            console.error(`Navigation error for ${item.filePath}:`, error);
+            logger.error(`Navigation error for ${item.filePath}: ${error}`);
         }
     }
 
