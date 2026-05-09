@@ -2340,21 +2340,12 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Replace Set<number> with a pre-allocated Uint8Array
-        const searchedIndices = new Uint8Array(this.items.length);
-        for (let j = 0; j < priorityScopes.length; j++) {
-            const indices = this.scopedIndices.get(priorityScopes[j]);
-            if (indices) {
-                for (let k = 0; k < indices.length; k++) {
-                    searchedIndices[indices[k]] = 1;
-                }
-            }
-        }
-
+        // ⚡ Bolt: Eliminate Tracking Array Allocation
+        // Check the item's inherent scope instead of allocating an O(N) visited array
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] === 0) {
+            const scope = ID_TO_SCOPE[this.itemTypeIds[i]];
+            if (!priorityScopes.includes(scope)) {
                 processItem(i);
             }
         }

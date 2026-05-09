@@ -40,3 +40,8 @@
 
 **Learning:** In hot paths that traverse an Abstract Syntax Tree (AST), using dynamic string manipulations like `!parent.type.toLowerCase().includes('class_declaration')` inside a `while` loop creates redundant memory allocations (garbage collection overhead) and slows down the loop significantly. The string `.toLowerCase()` allocation happens on every single node iteration.
 **Action:** Replace dynamic string manipulations with a static, pre-allocated `Set` of exact node names (e.g., `'class_declaration'`, `'class_definition'`, `'class'`) and use `.has(parent.type)` to achieve O(1) lookups and eliminate string allocation entirely in the loop.
+
+## 2026-05-06 - [Eliminate Tracking Arrays in O(N) Fallbacks]
+
+**Learning:** When performing a final multi-pass search or filtering fallback that iterates over the entire dataset (e.g., `searchRemainingItems`), allocating an O(N) tracker array (like `new Uint8Array(items.length)`) and running pre-population loops to mark previously visited items introduces unnecessary memory allocation, garbage collection pressure, and O(N) initialization overhead.
+**Action:** Instead of dynamically tracking what has already been processed, evaluate the item's inherent metadata or pre-computed lookup maps (like `ID_TO_SCOPE` combined with `this.itemTypeIds`) to determine if it belongs to an already-processed category (e.g., `priorityScopes.includes(scope)`). This provides an O(1) condition check and completely eliminates the need for visited tracking arrays in the final sweep.
