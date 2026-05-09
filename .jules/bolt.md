@@ -43,3 +43,6 @@
 ## 2026-04-20 - [Fast Array Shifting via Head Index]
 **Learning:** In worker queues processing very large numbers of items (e.g., hundreds of thousands or millions of files), continuously calling `Array.prototype.shift()` introduces an O(N^2) time complexity bottleneck because every shift requires moving all subsequent elements in memory.
 **Action:** Replace `Array.prototype.shift()` with a `head` index integer (`array[head++]`) for O(1) dequeuing. To prevent memory leaks, reset `head = 0` and `array.length = 0` whenever the queue is completely emptied (`head >= array.length`).
+## 2026-04-21 - Streaming Indexer Worker Results
+**Learning:** Fixed-chunk `Promise.all` processing inside indexing worker threads caused severe head-of-line blocking. The worker waited for the slowest file in a batch before sending results back, idling the main thread's aggregation and delaying partial UI updates.
+**Action:** Replace unconstrained or chunked `Promise.all` with a concurrency-limited task pool (`pLimit`) in worker threads. Stream results back to the parent thread incrementally (e.g., in batches of `BATCH_SIZE`) as tasks finish, rather than waiting for the entire chunk. Ensure messages are sent securely in Node.js by immediately resetting arrays `pendingItems.length = 0` to prevent memory bloat.

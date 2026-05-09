@@ -51,44 +51,59 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         let totalProcessed = 0;
         const totalFiles = filePaths.length;
 
-        // ⚡ Bolt: Fast streaming queue optimization
-        // Replaces fixed-chunk Promise.all with a continuous task pool (pLimit).
-        // This avoids head-of-line blocking where fast files wait for the slowest file in a chunk
-        // before results can be sent back to the parent thread.
-        await Promise.all(
-            filePaths.map((filePath) =>
-                limit(async () => {
-                    try {
-                        const items = await parser.parseFile(filePath);
-                        // Prevent call stack limits via flat/spread on large outputs by using manual loop
-                        for (let j = 0; j < items.length; j++) {
-                            pendingItems.push(items[j]);
-                        }
-                    } catch {
-                        // ignore
-                    } finally {
-                        processedCount++;
-                        totalProcessed++;
+        // ⚡ Bolt: Bounded producer loop optimization
+        // Replaces eager filePaths.map with a worker pool to avoid allocating all closures upfront.
+        // This ensures memory usage remains bounded even for massive workspaces.
+        let currentIndex = 0;
+        const workers = [];
+        const numWorkers = Math.min(BATCH_SIZE, totalFiles);
 
-                        // Stream results back as soon as we have a batch-worth of files processed
-                        if (processedCount >= BATCH_SIZE || totalProcessed === totalFiles) {
-                            const chunkItems = pendingItems.slice();
-                            const currentCount = processedCount;
+        for (let i = 0; i < numWorkers; i++) {
+            workers.push(
+                (async () => {
+                    while (currentIndex < totalFiles) {
+                        const filePath = filePaths[currentIndex++];
+                        if (!filePath) break;
 
-                            pendingItems.length = 0;
-                            processedCount = 0;
+                        // schedules work through limit but only creates tasks as concurrency frees up
+                        await limit(() =>
+                            parser
+                                .parseFile(filePath)
+                                .then((items) => {
+                                    for (let j = 0; j < items.length; j++) {
+                                        pendingItems.push(items[j]);
+                                    }
+                                })
+                                .catch(() => {
+                                    // ignore errors
+                                })
+                                .finally(() => {
+                                    processedCount++;
+                                    totalProcessed++;
 
-                            parentPort?.postMessage({
-                                type: 'result',
-                                items: chunkItems,
-                                count: currentCount,
-                                isPartial: totalProcessed < totalFiles,
-                            });
-                        }
+                                    // Stream results back as soon as we have a batch-worth of items processed
+                                    if (processedCount >= BATCH_SIZE || totalProcessed === totalFiles) {
+                                        const chunkItems = pendingItems.slice();
+                                        const currentCount = processedCount;
+
+                                        pendingItems.length = 0;
+                                        processedCount = 0;
+
+                                        parentPort?.postMessage({
+                                            type: 'result',
+                                            items: chunkItems,
+                                            count: currentCount,
+                                            isPartial: totalProcessed < totalFiles,
+                                        });
+                                    }
+                                }),
+                        );
                     }
-                }),
-            ),
-        );
+                })(),
+            );
+        }
+
+        await Promise.all(workers);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
