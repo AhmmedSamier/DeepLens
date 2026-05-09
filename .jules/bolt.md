@@ -40,3 +40,6 @@
 
 **Learning:** In hot paths that traverse an Abstract Syntax Tree (AST), using dynamic string manipulations like `!parent.type.toLowerCase().includes('class_declaration')` inside a `while` loop creates redundant memory allocations (garbage collection overhead) and slows down the loop significantly. The string `.toLowerCase()` allocation happens on every single node iteration.
 **Action:** Replace dynamic string manipulations with a static, pre-allocated `Set` of exact node names (e.g., `'class_declaration'`, `'class_definition'`, `'class'`) and use `.has(parent.type)` to achieve O(1) lookups and eliminate string allocation entirely in the loop.
+## 2026-04-20 - [Fast Array Shifting via Head Index]
+**Learning:** In worker queues processing very large numbers of items (e.g., hundreds of thousands or millions of files), continuously calling `Array.prototype.shift()` introduces an O(N^2) time complexity bottleneck because every shift requires moving all subsequent elements in memory.
+**Action:** Replace `Array.prototype.shift()` with a `head` index integer (`array[head++]`) for O(1) dequeuing. To prevent memory leaks, reset `head = 0` and `array.length = 0` whenever the queue is completely emptied (`head >= array.length`).
