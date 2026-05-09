@@ -7,3 +7,7 @@
 
 **Learning:** In C# WPF applications (and UIs generally), when users select a filter (e.g., "Classes" vs "Files"), leaving a generic placeholder in the empty state (like "Search for classes, symbols, files, text, or endpoints") fails to reinforce the active scope.
 **Action:** Bind the empty state watermark/placeholder (both visual `TextBlock.Text` and accessibility attributes like `TextBox.ToolTip` or `AutomationProperties.Name`) to a dynamic property that reacts to the selected filter state.
+
+## 2024-05-24 - Dynamic Contextual Accessibility Placeholders
+**Learning:** Hardcoded accessibility names (like `AutomationProperties.Name="Search query"`) in a unified search bar fail to guide screen reader users when they switch specific context filters. Providing context-aware search query suggestions directly inside the empty `TextBox` via accessibility properties drastically improves feature discoverability for all users.
+**Action:** When a UI component manages multiple scopes or filters, ensure the empty state watermark/placeholder is synchronized with accessibility properties (like `AutomationProperties.Name`) using dynamic bindings (e.g., `{Binding SearchPlaceholder}`), rather than using generic static strings.
