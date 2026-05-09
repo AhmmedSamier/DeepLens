@@ -1,5 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { SearchableItem } from './types';
+import { pLimit } from './p-limit';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -25,32 +27,68 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (message.chunkSize !== undefined) {
+            if (
+                typeof message.chunkSize !== 'number' ||
+                !Number.isFinite(message.chunkSize) ||
+                !Number.isInteger(message.chunkSize) ||
+                message.chunkSize <= 0
+            ) {
+                parentPort?.postMessage({
+                    type: 'error',
+                    error: `Invalid chunkSize: ${message.chunkSize}. Must be a finite positive integer.`,
+                });
+                return;
+            }
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const limit = pLimit(BATCH_SIZE);
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        const pendingItems: SearchableItem[] = [];
+        let processedCount = 0;
+        let totalProcessed = 0;
+        const totalFiles = filePaths.length;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
+        // ⚡ Bolt: Fast streaming queue optimization
+        // Replaces fixed-chunk Promise.all with a continuous task pool (pLimit).
+        // This avoids head-of-line blocking where fast files wait for the slowest file in a chunk
+        // before results can be sent back to the parent thread.
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
                     try {
-                        return await parser.parseFile(filePath);
+                        const items = await parser.parseFile(filePath);
+                        // Prevent call stack limits via flat/spread on large outputs by using manual loop
+                        for (let j = 0; j < items.length; j++) {
+                            pendingItems.push(items[j]);
+                        }
                     } catch {
-                        return [];
+                        // ignore
+                    } finally {
+                        processedCount++;
+                        totalProcessed++;
+
+                        // Stream results back as soon as we have a batch-worth of files processed
+                        if (processedCount >= BATCH_SIZE || totalProcessed === totalFiles) {
+                            const chunkItems = pendingItems.slice();
+                            const currentCount = processedCount;
+
+                            pendingItems.length = 0;
+                            processedCount = 0;
+
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: chunkItems,
+                                count: currentCount,
+                                isPartial: totalProcessed < totalFiles,
+                            });
+                        }
                     }
                 }),
-            );
-
-            const chunkItems = results.flat();
-
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+            ),
+        );
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',

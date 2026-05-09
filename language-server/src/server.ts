@@ -247,6 +247,17 @@ connection.onInitialize(async (params: InitializeParams) => {
         }
     });
 
+    // Synchronous removal for file-change events. This runs BEFORE the new items
+    // are added, preventing the race condition where debounced removal could
+    // delete freshly-added items.
+    workspaceIndexer.onItemsRemovedSync((filePaths) => {
+        // Also clear these from the pending debounced set to avoid double-removal
+        for (const fp of filePaths) {
+            pendingRemovedFilePaths.delete(fp);
+        }
+        searchEngine.removeItemsByFiles(filePaths);
+    });
+
     if (config.isActivityTrackingEnabled()) {
         searchEngine.setActivityCallback(
             (itemId) => activityTracker.getActivityScore(itemId),
