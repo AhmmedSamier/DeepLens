@@ -460,18 +460,20 @@ export class TreeSitterParser {
         return `${cleanPrefix}/${cleanSuffix}`;
     }
 
+    // ⚡ Bolt: Fast AST node type checks
+    // Replaces dynamic string allocations (.toLowerCase()) and substring matching (.includes())
+    // inside traversal loops with an O(1) lookup against a static Set.
+    // Performance impact: Eliminates redundant allocations during AST traversal.
+    private static readonly CLASS_NODE_TYPES = new Set(['class_declaration', 'class_definition', 'class']);
+
     private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
         // Walk up to find the class declaration
         let parent = this.getParent(methodNode);
-        while (
-            parent &&
-            !parent.type.toLowerCase().includes('class_declaration') &&
-            parent.type !== 'compilation_unit'
-        ) {
+        while (parent && !TreeSitterParser.CLASS_NODE_TYPES.has(parent.type) && parent.type !== 'compilation_unit') {
             parent = this.getParent(parent);
         }
 
-        if (parent?.type.toLowerCase().includes('class_declaration')) {
+        if (parent && TreeSitterParser.CLASS_NODE_TYPES.has(parent.type)) {
             const results: { method: string | null; route: string | null } = {
                 method: null,
                 route: null,
