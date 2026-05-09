@@ -140,8 +140,17 @@ export function testFunction() {
         // Show the document to ensure TypeScript language server is activated
         await vscode.window.showTextDocument(doc);
 
-        // Wait for TypeScript language server to initialize
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // Wait for TypeScript language server to initialize by polling for symbols
+        for (let i = 0; i < 50; i++) {
+            const symbols = await vscode.commands.executeCommand<any[]>(
+                'vscode.executeDocumentSymbolProvider',
+                doc.uri,
+            );
+            if (symbols && symbols.length > 0) {
+                break;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+        }
 
         const token = new vscode.CancellationTokenSource().token;
 
@@ -299,8 +308,17 @@ export function callChainFunction() {
             // Show the document to ensure TypeScript language server is activated
             await vscode.window.showTextDocument(doc);
 
-            // Wait for TypeScript language server to initialize
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait for TypeScript language server to initialize by polling for symbols
+            for (let i = 0; i < 50; i++) {
+                const symbols = await vscode.commands.executeCommand<any[]>(
+                    'vscode.executeDocumentSymbolProvider',
+                    doc.uri,
+                );
+                if (symbols && symbols.length > 0) {
+                    break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
 
             const token = new vscode.CancellationTokenSource().token;
             const lenses = await provider.provideCodeLenses(doc, token);
@@ -356,8 +374,17 @@ export const variable = 42;
             // Show the document to ensure TypeScript language server is activated
             await vscode.window.showTextDocument(doc);
 
-            // Wait for TypeScript language server to initialize
-            await new Promise((resolve) => setTimeout(resolve, 500));
+            // Wait for TypeScript language server to initialize by polling for symbols
+            for (let i = 0; i < 50; i++) {
+                const symbols = await vscode.commands.executeCommand<any[]>(
+                    'vscode.executeDocumentSymbolProvider',
+                    doc.uri,
+                );
+                if (symbols && symbols.length > 0) {
+                    break;
+                }
+                await new Promise((resolve) => setTimeout(resolve, 100));
+            }
 
             const token = new vscode.CancellationTokenSource().token;
             const lenses = await provider.provideCodeLenses(doc, token);
