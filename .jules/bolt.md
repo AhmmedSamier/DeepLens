@@ -36,3 +36,7 @@
 
 **Learning:** In worker threads processing large batches of files, using fixed-chunk arrays mapped with unconstrained `Promise.all` introduces head-of-line blocking. The entire chunk must wait for its slowest file to finish parsing before sending results back to the main thread.
 **Action:** Replace fixed-chunk `Promise.all` with an unbounded `Promise.all` mapped over all files, constrained by `pLimit`. Maintain a local accumulator array in the worker and send partial results (`parentPort?.postMessage`) back as soon as a `BATCH_SIZE` worth of items is parsed. This keeps the parent thread's indexing pipeline saturated and lowers indexing latency.
+## 2026-04-19 - [O(1) Set Lookups for AST Node Traversal]
+
+**Learning:** In hot paths that traverse an Abstract Syntax Tree (AST), using dynamic string manipulations like `!parent.type.toLowerCase().includes('class_declaration')` inside a `while` loop creates redundant memory allocations (garbage collection overhead) and slows down the loop significantly. The string `.toLowerCase()` allocation happens on every single node iteration.
+**Action:** Replace dynamic string manipulations with a static, pre-allocated `Set` of exact node names (e.g., `'class_declaration'`, `'class_definition'`, `'class'`) and use `.has(parent.type)` to achieve O(1) lookups and eliminate string allocation entirely in the loop.
