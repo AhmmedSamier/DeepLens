@@ -434,7 +434,10 @@ export class SearchEngine implements ISearchProvider {
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
         // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
-        const removedSet = new Uint8Array(count);
+        if (this.removalScratchBuffer.length < count) {
+            this.removalScratchBuffer = new Uint8Array(Math.max(count, this.removalScratchBuffer.length * 2));
+        }
+        const removedSet = this.removalScratchBuffer.subarray(0, count);
         for (let i = 0; i < indicesToRemove.length; i++) {
             removedSet[indicesToRemove[i]] = 1;
         }
@@ -1697,7 +1700,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet.has(index)) {
+            if (candidateSet && !candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);

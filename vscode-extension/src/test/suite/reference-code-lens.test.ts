@@ -409,8 +409,18 @@ export const variable = 42;
 
                 if (resolved && resolved.command) {
                     // The reference count should not include the declaration itself
-                    // This is tested implicitly by checking that resolution works correctly
-                    assert.ok(true, 'Should filter declaration from references');
+                    const args = resolved.command.arguments;
+                    if (args && args.length >= 3 && Array.isArray(args[2])) {
+                        const locations = args[2];
+                        const hasDeclaration = locations.some(
+                            (loc: any) =>
+                                loc.uri.toString() === mockDocument.uri.toString() &&
+                                loc.range.isEqual(lenses[0].range),
+                        );
+                        assert.strictEqual(hasDeclaration, false, 'Should filter declaration from references');
+                    } else {
+                        assert.fail('Expected resolved command to have locations array in arguments[2]');
+                    }
                 }
             }
         } catch (e) {
