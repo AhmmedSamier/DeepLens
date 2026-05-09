@@ -433,16 +433,11 @@ export class SearchEngine implements ISearchProvider {
 
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
-
-        // ⚡ Bolt: Reuse scratch buffer instead of allocating new Uint8Array(count) each call.
-        // In large repos (100k+ items) this saves 100-200 KB of heap per file-change event.
-        // The buffer grows lazily (2× strategy) and only the used slots are zeroed at the end.
+        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
         if (this.removalScratchBuffer.length < count) {
             this.removalScratchBuffer = new Uint8Array(Math.max(count, this.removalScratchBuffer.length * 2));
         }
-        const removedSet = this.removalScratchBuffer;
-
-        // Mark removed indices
+        const removedSet = this.removalScratchBuffer.subarray(0, count);
         for (let i = 0; i < indicesToRemove.length; i++) {
             removedSet[indicesToRemove[i]] = 1;
         }
@@ -1692,22 +1687,20 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Uint8Array | undefined;
+        const preferred: number[] = [];
+        // ⚡ Bolt: Sparse candidate tracking
+        // Instead of zero-filling a Uint8Array, track candidates sparsely using a Set
+        // This avoids O(items.length) memory allocation per query keystroke
+        let candidateSet: Set<number> | undefined;
         if (indices) {
-            // ⚡ Bolt: Fast Unique Tracking Optimization
-            // Using Uint8Array instead of Set<number> to track candidate presence
-            candidateSet = new Uint8Array(this.items.length);
-            for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
-            }
+            candidateSet = new Set(indices);
         }
 
-        const preferred: number[] = [];
         for (const index of memo.topIndices) {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (candidateSet && !candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);
