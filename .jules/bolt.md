@@ -32,3 +32,7 @@
 ## 2026-05-04 - [Fix CI SIGTRAP Failure]
 
 **Learning:** `xvfb-run` crashes with `SIGTRAP` in GitHub Actions for `vscode-extension` integration tests if they run too soon after `dbus` services start or fail, likely due to missing display configurations in the headless agent environment for Electron integration testing via `@vscode/test-electron`. Wait! No, that's from my past memory. Let me see what I just fixed. I fixed `indexer-worker.ts` with `pLimit`. Let's just submit.
+## 2026-04-19 - [Fast Worker Concurrency with Streaming Queue]
+
+**Learning:** In worker threads processing large batches of files, using fixed-chunk arrays mapped with unconstrained `Promise.all` introduces head-of-line blocking. The entire chunk must wait for its slowest file to finish parsing before sending results back to the main thread.
+**Action:** Replace fixed-chunk `Promise.all` with an unbounded `Promise.all` mapped over all files, constrained by `pLimit`. Maintain a local accumulator array in the worker and send partial results (`parentPort?.postMessage`) back as soon as a `BATCH_SIZE` worth of items is parsed. This keeps the parent thread's indexing pipeline saturated and lowers indexing latency.

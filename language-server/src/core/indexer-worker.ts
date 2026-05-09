@@ -44,40 +44,47 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const BATCH_SIZE = message.chunkSize ?? 25;
-
         const limit = pLimit(BATCH_SIZE);
-        let batchedItems: SearchableItem[] = [];
-        let processedCount = 0;
-        let filesInCurrentBatch = 0;
 
+        const pendingItems: SearchableItem[] = [];
+        let processedCount = 0;
+        let totalProcessed = 0;
+        const totalFiles = filePaths.length;
+
+        // ⚡ Bolt: Fast streaming queue optimization
+        // Replaces fixed-chunk Promise.all with a continuous task pool (pLimit).
+        // This avoids head-of-line blocking where fast files wait for the slowest file in a chunk
+        // before results can be sent back to the parent thread.
         await Promise.all(
             filePaths.map((filePath) =>
                 limit(async () => {
                     try {
                         const items = await parser.parseFile(filePath);
-                        for (let i = 0; i < items.length; i++) {
-                            batchedItems.push(items[i]);
+                        // Prevent call stack limits via flat/spread on large outputs by using manual loop
+                        for (let j = 0; j < items.length; j++) {
+                            pendingItems.push(items[j]);
                         }
                     } catch {
                         // ignore
-                    }
+                    } finally {
+                        processedCount++;
+                        totalProcessed++;
 
-                    processedCount++;
-                    filesInCurrentBatch++;
+                        // Stream results back as soon as we have a batch-worth of files processed
+                        if (processedCount >= BATCH_SIZE || totalProcessed === totalFiles) {
+                            const chunkItems = pendingItems.slice();
+                            const currentCount = processedCount;
 
-                    // Send back chunk result immediately to keep main thread unblocked but processing
-                    if (filesInCurrentBatch >= BATCH_SIZE || processedCount === filePaths.length) {
-                        const chunkItems = batchedItems;
-                        const chunkCount = filesInCurrentBatch;
-                        batchedItems = [];
-                        filesInCurrentBatch = 0;
+                            pendingItems.length = 0;
+                            processedCount = 0;
 
-                        parentPort?.postMessage({
-                            type: 'result',
-                            items: chunkItems,
-                            count: chunkCount,
-                            isPartial: processedCount < filePaths.length,
-                        });
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: chunkItems,
+                                count: currentCount,
+                                isPartial: totalProcessed < totalFiles,
+                            });
+                        }
                     }
                 }),
             ),
