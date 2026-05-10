@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './services/logging-service';
 
 /**
  * Symbol kinds to show references for
@@ -87,7 +88,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
                 this.collectFlatSymbols(symbols, codeLenses, document);
             }
         } catch (error) {
-            console.error('[DeepLens] Error getting document symbols:', error);
+            logger.error(`[DeepLens] Error getting document symbols: ${error}`);
         }
 
         return codeLenses;
@@ -288,7 +289,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
                 tooltip: `Show all ${isReference ? 'references' : 'implementations'} to ${lens.symbolName}`,
             };
         } catch (error) {
-            console.error(`[DeepLens] Error resolving ${lens.type} for ${lens.symbolName}:`, error);
+            logger.error(`[DeepLens] Error resolving ${lens.type} for ${lens.symbolName}: ${error}`);
             // Hide the lens entirely if the provider fails
             return null;
         }

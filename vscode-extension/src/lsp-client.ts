@@ -16,6 +16,7 @@ import {
     SearchOptions,
     SearchResult,
 } from '../../language-server/src/core/types';
+import { logger } from './services/logging-service';
 
 export class DeepLensLspClient implements ISearchProvider {
     private client: LanguageClient | null = null;
@@ -87,6 +88,16 @@ export class DeepLensLspClient implements ISearchProvider {
 
         this.client = new LanguageClient('deeplensLS', 'DeepLens Language Server', serverOptions, clientOptions);
 
+        // Clear stale progress tokens whenever the server (re)enters the Running state.
+        // Without this, a crash mid-indexing leaves the old token IDs in the set;
+        // on restart the server reuses the same numeric token IDs, causing the
+        // initial 'start' notification to be silently skipped (token already "known").
+        this.client.onDidChangeState((e) => {
+            if (e.newState === State.Running) {
+                this.activeProgressTokens.clear();
+            }
+        });
+
         this.client.onNotification(
             'deeplens/progress',
             (params: { token: string | number; message?: string; percentage?: number }) => {
@@ -142,7 +153,7 @@ export class DeepLensLspClient implements ISearchProvider {
         } catch (error) {
             // Silently handle errors during shutdown
             if (!this.isStopping) {
-                console.error('DeepLens search error:', error);
+                logger.error(`DeepLens search error: ${error}`);
             }
             return [];
         }
@@ -156,7 +167,7 @@ export class DeepLensLspClient implements ISearchProvider {
             return await client.sendRequest<SearchResult[]>('deeplens/burstSearch', options, token);
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens burstSearch error:', error);
+                logger.error(`DeepLens burstSearch error: ${error}`);
             }
             return [];
         }
@@ -170,7 +181,7 @@ export class DeepLensLspClient implements ISearchProvider {
             return await client.sendRequest<SearchResult[]>('deeplens/resolveItems', { itemIds });
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens resolveItems error:', error);
+                logger.error(`DeepLens resolveItems error: ${error}`);
             }
             return [];
         }
@@ -184,7 +195,7 @@ export class DeepLensLspClient implements ISearchProvider {
             return await client.sendRequest<SearchResult[]>('deeplens/getRecentItems', { count });
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens getRecentItems error:', error);
+                logger.error(`DeepLens getRecentItems error: ${error}`);
             }
             return [];
         }
@@ -198,7 +209,7 @@ export class DeepLensLspClient implements ISearchProvider {
             await client.sendRequest('deeplens/clearHistory');
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens clearHistory error:', error);
+                logger.error(`DeepLens clearHistory error: ${error}`);
             }
         }
     }
@@ -211,7 +222,7 @@ export class DeepLensLspClient implements ISearchProvider {
             await client.sendRequest('deeplens/removeHistoryItem', { itemId });
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens removeHistoryItem error:', error);
+                logger.error(`DeepLens removeHistoryItem error: ${error}`);
             }
         }
     }
@@ -235,7 +246,7 @@ export class DeepLensLspClient implements ISearchProvider {
             await client.sendRequest('deeplens/setActiveFiles', { files });
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens setActiveFiles error:', error);
+                logger.error(`DeepLens setActiveFiles error: ${error}`);
             }
         }
     }
@@ -248,7 +259,7 @@ export class DeepLensLspClient implements ISearchProvider {
             await client.sendRequest('deeplens/rebuildIndex', { force });
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens rebuildIndex error:', error);
+                logger.error(`DeepLens rebuildIndex error: ${error}`);
             }
         }
     }
@@ -261,7 +272,7 @@ export class DeepLensLspClient implements ISearchProvider {
             await client.sendRequest('deeplens/clearCache');
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens clearCache error:', error);
+                logger.error(`DeepLens clearCache error: ${error}`);
             }
         }
     }
@@ -274,7 +285,7 @@ export class DeepLensLspClient implements ISearchProvider {
             return await client.sendRequest<IndexStats>('deeplens/indexStats');
         } catch (error) {
             if (!this.isStopping) {
-                console.error('DeepLens getIndexStats error:', error);
+                logger.error(`DeepLens getIndexStats error: ${error}`);
             }
             return undefined;
         }
