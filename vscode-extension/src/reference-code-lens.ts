@@ -304,11 +304,12 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         const label = isRef ? 'reference' : 'implementation';
         const plural = count === 1 ? label : `${label}s`;
         const shortcut = isRef ? 'Shift+F12' : 'Ctrl+F12';
+        const icon = isRef ? '$(references)' : '$(symbol-interface)';
 
         if (count === 0) {
-            return `no ${plural} (${shortcut})`;
+            return `${icon} no ${plural} (${shortcut})`;
         }
-        return `${count} ${plural} (${shortcut})`;
+        return `${icon} ${count} ${plural} (${shortcut})`;
     }
 
     /**
