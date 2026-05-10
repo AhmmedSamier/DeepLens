@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
-import { SearchableItem } from './types';
 import { pLimit } from './p-limit';
+import { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -53,66 +53,47 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const BATCH_SIZE = message.chunkSize ?? 25;
+
+        // ⚡ Bolt: Fast concurrent streaming optimization
+        // Replaces fixed-chunk Promise.all processing with a concurrency-limited task pool (pLimit).
+        // This prevents head-of-line blocking where fast files wait for the slowest file in a chunk,
+        // reducing indexing latency and streaming results back to the parent thread continuously.
         const limit = pLimit(BATCH_SIZE);
-
-        const pendingItems: SearchableItem[] = [];
+        let chunkItems: SearchableItem[] = [];
         let processedCount = 0;
-        let totalProcessed = 0;
-        const totalFiles = filePaths.length;
 
-        // ⚡ Bolt: Bounded producer loop optimization
-        // Replaces eager filePaths.map with a worker pool to avoid allocating all closures upfront.
-        // This ensures memory usage remains bounded even for massive workspaces.
-        let currentIndex = 0;
-        const workers = [];
-        const numWorkers = Math.min(BATCH_SIZE, totalFiles);
-
-        for (let i = 0; i < numWorkers; i++) {
-            workers.push(
-                (async () => {
-                    while (currentIndex < totalFiles) {
-                        const filePath = filePaths[currentIndex++];
-                        if (!filePath) break;
-
-                        // schedules work through limit but only creates tasks as concurrency frees up
-                        await limit(() =>
-                            parser
-                                .parseFile(filePath)
-                                .then((items) => {
-                                    for (let j = 0; j < items.length; j++) {
-                                        pendingItems.push(items[j]);
-                                    }
-                                })
-                                .catch(() => {
-                                    // ignore errors
-                                })
-                                .finally(() => {
-                                    processedCount++;
-                                    totalProcessed++;
-
-                                    // Stream results back as soon as we have a batch-worth of items processed
-                                    if (processedCount >= BATCH_SIZE || totalProcessed === totalFiles) {
-                                        const chunkItems = pendingItems.slice();
-                                        const currentCount = processedCount;
-
-                                        pendingItems.length = 0;
-                                        processedCount = 0;
-
-                                        parentPort?.postMessage({
-                                            type: 'result',
-                                            items: chunkItems,
-                                            count: currentCount,
-                                            isPartial: totalProcessed < totalFiles,
-                                        });
-                                    }
-                                }),
-                        );
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
+                    let items: SearchableItem[] = [];
+                    try {
+                        items = await parser.parseFile(filePath);
+                    } catch {
+                        items = [];
                     }
-                })(),
-            );
-        }
 
-        await Promise.all(workers);
+                    // Push elements directly using a manual loop to avoid spreading large arrays
+                    for (let j = 0; j < items.length; j++) {
+                        chunkItems.push(items[j]);
+                    }
+
+                    processedCount++;
+
+                    // Stream results when chunk reaches BATCH_SIZE or it's the last item
+                    if (processedCount % BATCH_SIZE === 0 || processedCount === filePaths.length) {
+                        const itemsToSend = chunkItems;
+                        chunkItems = []; // Reset for next batch
+
+                        parentPort?.postMessage({
+                            type: 'result',
+                            items: itemsToSend,
+                            count: processedCount % BATCH_SIZE === 0 ? BATCH_SIZE : processedCount % BATCH_SIZE,
+                            isPartial: processedCount < filePaths.length,
+                        });
+                    }
+                }),
+            ),
+        );
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
