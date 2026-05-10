@@ -3,6 +3,7 @@ import * as cp from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
@@ -31,6 +32,24 @@ interface WorkerPoolState {
  */
 export class WorkspaceIndexer {
     private static readonly STRING_CACHE_MAX_SIZE = 10000;
+    private static readonly TREE_SITTER_EXTENSIONS = new Set([
+        '.ts',
+        '.tsx',
+        '.js',
+        '.jsx',
+        '.cs',
+        '.py',
+        '.java',
+        '.go',
+        '.cpp',
+        '.cc',
+        '.cxx',
+        '.hpp',
+        '.c',
+        '.h',
+        '.rb',
+        '.php',
+    ]);
     private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
     private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
 
@@ -522,7 +541,116 @@ export class WorkspaceIndexer {
             return;
         }
 
-        await this.runFileIndexingPool(fileItems, progressCallback);
+        const supportedFileItems: SearchableItem[] = [];
+        const unsupportedFileItems: SearchableItem[] = [];
+        this.partitionFilesByTreeSitterSupport(fileItems, supportedFileItems, unsupportedFileItems);
+
+        if (supportedFileItems.length > 0) {
+            await this.runFileIndexingPool(supportedFileItems, progressCallback);
+        }
+
+        if (unsupportedFileItems.length > 0) {
+            await this.indexUnsupportedFilesWithWorkspaceSymbols(unsupportedFileItems, progressCallback);
+        }
+    }
+
+    private partitionFilesByTreeSitterSupport(
+        fileItems: SearchableItem[],
+        supportedFileItems: SearchableItem[],
+        unsupportedFileItems: SearchableItem[],
+    ): void {
+        for (const fileItem of fileItems) {
+            if (this.isTreeSitterSupportedFile(fileItem.filePath)) {
+                supportedFileItems.push(fileItem);
+            } else {
+                unsupportedFileItems.push(fileItem);
+            }
+        }
+    }
+
+    private isTreeSitterSupportedFile(filePath: string): boolean {
+        return WorkspaceIndexer.TREE_SITTER_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+    }
+
+    private async indexUnsupportedFilesWithWorkspaceSymbols(
+        fileItems: SearchableItem[],
+        progressCallback?: (message: string, increment?: number) => void,
+    ): Promise<void> {
+        if (!this.env.executeWorkspaceSymbolProvider) {
+            this.log(`No workspace symbol provider available for ${fileItems.length} unsupported files.`);
+            return;
+        }
+
+        progressCallback?.(`Indexing ${fileItems.length} unsupported-language files with workspace symbols...`, 5);
+
+        try {
+            const workspaceSymbols = await this.env.executeWorkspaceSymbolProvider();
+            this.processWorkspaceSymbolsForFiles(workspaceSymbols, fileItems);
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : JSON.stringify(error) || String(error);
+            this.log(`Workspace symbol fallback failed for unsupported files: ${errorMessage}`);
+        }
+    }
+
+    private processWorkspaceSymbolsForFiles(
+        symbols: import('./indexer-interfaces').LeanSymbolInformation[],
+        fileItems: SearchableItem[],
+    ): void {
+        if (symbols.length === 0) {
+            return;
+        }
+
+        const unsupportedFiles = new Set<string>();
+        for (const fileItem of fileItems) {
+            unsupportedFiles.add(this.normalizeFileKey(fileItem.filePath));
+        }
+
+        const batch: SearchableItem[] = [];
+        for (const symbol of symbols) {
+            const itemType = this.mapSymbolKindToItemType(symbol.kind);
+            if (!itemType) {
+                continue;
+            }
+
+            const filePath = this.normalizeUriToPath(symbol.location.uri);
+            if (!unsupportedFiles.has(this.normalizeFileKey(filePath))) {
+                continue;
+            }
+
+            const name = this.intern(symbol.name);
+            const containerName = symbol.containerName ? this.intern(symbol.containerName) : undefined;
+            const fullName = this.intern(containerName ? `${containerName}.${symbol.name}` : symbol.name);
+
+            batch.push({
+                id: `symbol:${filePath}:${fullName}:${symbol.location.range.start.line}`,
+                name,
+                type: itemType,
+                filePath: this.intern(filePath),
+                relativeFilePath: this.intern(this.env.asRelativePath(filePath)),
+                line: symbol.location.range.start.line,
+                column: symbol.location.range.start.character,
+                containerName,
+                fullName,
+            });
+        }
+
+        this.fireItemsAdded(batch);
+    }
+
+    private normalizeUriToPath(uriOrPath: string): string {
+        if (uriOrPath.startsWith('file://')) {
+            try {
+                return fileURLToPath(uriOrPath);
+            } catch {
+                return uriOrPath;
+            }
+        }
+        return uriOrPath;
+    }
+
+    private normalizeFileKey(filePath: string): string {
+        const normalized = path.normalize(filePath);
+        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
     }
 
     private async runFileIndexingPool(
