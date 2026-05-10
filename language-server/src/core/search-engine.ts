@@ -162,6 +162,10 @@ export class SearchEngine implements ISearchProvider {
     // this would otherwise create significant GC pressure. Grows lazily (2× strategy)
     // and is zeroed at only the used slots after each removal pass.
     private removalScratchBuffer: Uint8Array = new Uint8Array(0);
+    private visitedEpoch: Uint32Array = new Uint32Array(0);
+    private visitedEpochCount: number = 0;
+    private candidateEpoch: Uint32Array = new Uint32Array(0);
+    private candidateEpochCount: number = 0;
     private filePriorityCacheDirty = true;
 
     // String normalization cache (1-item) for relativeFilePath
@@ -241,6 +245,8 @@ export class SearchEngine implements ISearchProvider {
         this.itemBitflags = new Uint32Array(items.length);
         this.itemNameBitflags = new Uint32Array(items.length);
         this.itemNameLengths = new Uint16Array(items.length);
+        this.visitedEpoch = new Uint32Array(items.length);
+        this.candidateEpoch = new Uint32Array(items.length);
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
         this.itemIndexById.clear();
@@ -286,6 +292,14 @@ export class SearchEngine implements ISearchProvider {
                 const newNameLengths = new Uint16Array(newCapacity);
                 newNameLengths.set(this.itemNameLengths);
                 this.itemNameLengths = newNameLengths;
+
+                const newVisitedEpoch = new Uint32Array(newCapacity);
+                newVisitedEpoch.set(this.visitedEpoch);
+                this.visitedEpoch = newVisitedEpoch;
+
+                const newCandidateEpoch = new Uint32Array(newCapacity);
+                newCandidateEpoch.set(this.candidateEpoch);
+                this.candidateEpoch = newCandidateEpoch;
             }
 
             for (let j = i; j < end; j++) {
@@ -771,6 +785,8 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds = new Uint8Array(0);
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
+        this.visitedEpoch = new Uint32Array(0);
+        this.candidateEpoch = new Uint32Array(0);
         this.itemNameLengths = new Uint16Array(0);
         this.preparedNames = [];
         this.preparedFullNames = [];
@@ -1644,17 +1660,27 @@ export class SearchEngine implements ISearchProvider {
         const searchContext = this.prepareSearchContext(query, scope);
         // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        // ⚡ Bolt: Fast Dense Integer Set Tracking - Replace Set<number> with Uint8Array for O(1) allocation and access
-        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
+
+        // ⚡ Bolt: Fast Dense Integer Set Tracking - Reuse shared epoch-mark buffer to avoid per-query allocations
+        let visited: Uint32Array | undefined;
+        let epoch = 0;
+        if (preferredIndices.length > 0 || indices) {
+            if (++this.visitedEpochCount >= 0xffffffff) {
+                this.visitedEpoch.fill(0);
+                this.visitedEpochCount = 1;
+            }
+            visited = this.visitedEpoch;
+            epoch = this.visitedEpochCount;
+        }
 
         if (preferredIndices.length > 0) {
-            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited, epoch);
         }
 
         if (indices) {
-            this.searchWithIndices(indices, searchContext, heap, token, visited);
+            this.searchWithIndices(indices, searchContext, heap, token, visited, epoch);
         } else {
-            this.searchAllItems(searchContext, heap, token, visited);
+            this.searchAllItems(searchContext, heap, token, visited, epoch);
         }
 
         const results = heap.getSorted();
@@ -1688,13 +1714,20 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const preferred: number[] = [];
-        // ⚡ Bolt: Fast Dense Integer Set Tracking
-        let candidateSet: Uint8Array | undefined;
+        // ⚡ Bolt: Fast Dense Integer Set Tracking - Reuse shared epoch buffer
+        let candidateSet: Uint32Array | undefined;
+        let candidateEpoch = 0;
         if (indices) {
-            candidateSet = new Uint8Array(this.items.length);
+            if (++this.candidateEpochCount >= 0xffffffff) {
+                this.candidateEpoch.fill(0);
+                this.candidateEpochCount = 1;
+            }
+            candidateSet = this.candidateEpoch;
+            candidateEpoch = this.candidateEpochCount;
             for (let i = 0; i < indices.length; i++) {
-                if (indices[i] >= 0 && indices[i] < this.items.length) {
-                    candidateSet[indices[i]] = 1;
+                const idx = indices[i];
+                if (idx >= 0 && idx < this.items.length) {
+                    candidateSet[idx] = candidateEpoch;
                 }
             }
         }
@@ -1703,7 +1736,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (candidateSet && candidateSet[index] !== candidateEpoch) {
                 continue;
             }
             preferred.push(index);
@@ -1779,16 +1812,17 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        visited?: Uint32Array,
+        epoch?: number,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
-            if (visited) {
-                if (visited[i] === 1) {
+            if (visited && epoch !== undefined) {
+                if (visited[i] === epoch) {
                     continue;
                 }
-                visited[i] = 1;
+                visited[i] = epoch;
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1798,12 +1832,13 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        visited?: Uint32Array,
+        epoch?: number,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited && visited[i] === 1) {
+            if (visited && epoch !== undefined && visited[i] === epoch) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);

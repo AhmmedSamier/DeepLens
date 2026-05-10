@@ -28,23 +28,21 @@
 **Learning:** In Tree-sitter AST traversal loops (e.g., searching for parent class declarations), using dynamic string manipulation like `type.toLowerCase().includes('class_declaration')` inside a `while` loop creates redundant string allocations and slows down parsing execution.
 **Action:** Replace dynamic substring checks with a static `Set` of exact node names (e.g., `'class_declaration'`, `'class_definition'`, `'class'`) for O(1) lookups to eliminate redundant allocations and improve traversal speed.
 
-## 2026-04-08 - [Fast Integer Presence Tracking]
-
-**Learning:** In highly iterated search loops (e.g. `search-engine.ts`), instantiating `Set<number>` for presence checks (`visited.has(i)`) creates overhead due to memory allocation, hashing functions, and garbage collection pauses. When integer IDs are bounded and dense (e.g. array indices from 0 to N), mapping their existence onto an array avoids all of these overheads.
-**Action:** Replace `new Set<number>()` with a pre-allocated `new Uint8Array(maxIndex)` and track integer presence via direct array index access (`array[index] = 1`). This provides true `O(1)` contiguous memory lookup.
-
 ## 2026-04-07 - [Reduce tail latency in worker thread batch processing]
 
 **Learning:** In worker thread architectures that process batches of files, using a fixed-chunk `Promise.all` approach creates head-of-line blocking. If one file in the chunk takes significantly longer to parse, the entire chunk's response is delayed, and concurrent slots sit idle, increasing tail latency and slowing down streaming UI updates.
 **Action:** Replace fixed chunks with a rolling concurrency window using `pLimit`. Track processed counts within the mapping loop and manually batch results to emit them back to the main thread incrementally as exactly `BATCH_SIZE` items accumulate, keeping all parsing slots fully utilized and reducing time-to-first-result.
 
-## 2026-05-04 - [Fix CI SIGTRAP Failure]
+## 2026-04-08 - [Fast Integer ID Tracking]
 
-**Learning:** `xvfb-run` crashes with `SIGTRAP` in GitHub Actions for `vscode-extension` integration tests if they run too soon after `dbus` services start or fail, likely due to missing display configurations in the headless agent environment for Electron integration testing via `@vscode/test-electron`. Wait! No, that's from my past memory. Let me see what I just fixed. I fixed `indexer-worker.ts` with `pLimit`. Let's just submit.
+**Learning:** Using `Set<number>` for tracking integer IDs (such as array indices) in hot loops introduces significant object allocation, hashing overhead, and garbage collection pressure due to boxing. When the indices are bounded and dense (e.g., from 0 to N where N is known), this abstraction is overly expensive.
+**Action:** Replace `Set<number>` with a pre-allocated `Uint8Array(maxIndex)`. Tracking presence via array indices (`array[id] = 1`) significantly reduces allocation overhead, provides true O(1) access speed without hashing, and avoids GC pauses in performance-critical paths like search result filtering.
+
 ## 2026-04-19 - [Fast Worker Concurrency with Streaming Queue]
 
 **Learning:** In worker threads processing large batches of files, using fixed-chunk arrays mapped with unconstrained `Promise.all` introduces head-of-line blocking. The entire chunk must wait for its slowest file to finish parsing before sending results back to the main thread.
 **Action:** Replace fixed-chunk `Promise.all` with an unbounded `Promise.all` mapped over all files, constrained by `pLimit`. Maintain a local accumulator array in the worker and send partial results (`parentPort?.postMessage`) back as soon as a `BATCH_SIZE` worth of items is parsed. This keeps the parent thread's indexing pipeline saturated and lowers indexing latency.
+
 ## 2026-04-19 - [O(1) Set Lookups for AST Node Traversal]
 
 **Learning:** In hot paths that traverse an Abstract Syntax Tree (AST), using dynamic string manipulations like `!parent.type.toLowerCase().includes('class_declaration')` inside a `while` loop creates redundant memory allocations (garbage collection overhead) and slows down the loop significantly. The string `.toLowerCase()` allocation happens on every single node iteration.
@@ -59,3 +57,8 @@
 
 **Learning:** Fixed-chunk `Promise.all` processing inside indexing worker threads caused severe head-of-line blocking. The worker waited for the slowest file in a batch before sending results back, idling the main thread's aggregation and delaying partial UI updates.
 **Action:** Replace unconstrained or chunked `Promise.all` with a concurrency-limited task pool (`pLimit`) in worker threads. Stream results back to the parent thread incrementally (e.g., in batches of `BATCH_SIZE`) as tasks finish, rather than waiting for the entire chunk. Ensure messages are sent securely in Node.js by immediately resetting arrays `pendingItems.length = 0` to prevent memory bloat.
+
+## 2026-05-04 - [Fix CI SIGTRAP Failure]
+
+**Learning:** `xvfb-run` crashes with `SIGTRAP` in GitHub Actions for `vscode-extension` integration tests if they run too soon after `dbus` services start or fail, likely due to missing display configurations in the headless agent environment for Electron integration testing via `@vscode/test-electron`. 
+**Action:** Implement a retry mechanism or a delay after `dbus` startup to ensure environment stability before launching Electron-based tests.
