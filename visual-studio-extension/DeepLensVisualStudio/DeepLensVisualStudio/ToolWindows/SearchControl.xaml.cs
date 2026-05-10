@@ -91,7 +91,7 @@ namespace DeepLensVisualStudio.ToolWindows
                     case "property": return "\uEB65"; // symbol-property (60261 = 0xEB65)
                     case "field": return "\uEB5F"; // symbol-field (60255 = 0xEB5F)
                     case "variable": return "\uEA88"; // symbol-variable (60040 = 0xEA88)
-                    case "file": return GetFileIcon(FilePath);
+                    case "file": return "\uEA7B"; // file (60027 = 0xEA7B)
                     case "text": return "\uEB7E"; // whole-word (60286 = 0xEB7E)
                     case "command": return "\uEB2C"; // run (60204 = 0xEB2C)
                     case "endpoint": return "\uEB01"; // globe (60161 = 0xEB01)
@@ -102,65 +102,6 @@ namespace DeepLensVisualStudio.ToolWindows
                     case "constructor": return "\uEA8C"; // symbol-constructor (60044 = 0xEA8C) - same as method
                     default: return "\uEB63"; // symbol-misc (60259 = 0xEB63)
                 }
-            }
-        }
-
-        private string GetFileIcon(string filePath)
-        {
-            if (string.IsNullOrEmpty(filePath)) return "\uEA7B";
-
-            var ext = System.IO.Path.GetExtension(filePath).ToLowerInvariant();
-            var fileName = System.IO.Path.GetFileName(filePath).ToLowerInvariant();
-
-            switch (fileName)
-            {
-                case "package.json":
-                case "tsconfig.json":
-                    return "\uEB0F"; // json (60175)
-                case "readme.md":
-                    return "\uEB1D"; // markdown (60189)
-            }
-
-            switch (ext)
-            {
-                case ".ts":
-                case ".tsx":
-                case ".js":
-                case ".jsx":
-                case ".html":
-                case ".css":
-                case ".py":
-                case ".go":
-                case ".java":
-                case ".c":
-                case ".cpp":
-                case ".h":
-                case ".hpp":
-                case ".cs":
-                case ".rb":
-                case ".php":
-                    return "\uEAE9"; // file-code (60137 = 0xEAE9)
-                case ".json":
-                    return "\uEB0F"; // json (60175 = 0xEB0F)
-                case ".md":
-                    return "\uEB1D"; // markdown (60189 = 0xEB1D)
-                case ".zip":
-                case ".tar":
-                case ".gz":
-                    return "\uEAEF"; // file-zip (60143 = 0xEAEF)
-                case ".pdf":
-                    return "\uEAEB"; // file-pdf (60139 = 0xEAEB)
-                case ".png":
-                case ".jpg":
-                case ".jpeg":
-                case ".gif":
-                case ".svg":
-                case ".mp4":
-                case ".mp3":
-                case ".wav":
-                    return "\uEAEA"; // file-media (60138 = 0xEAEA)
-                default:
-                    return "\uEA7B"; // file (60027 = 0xEA7B)
             }
         }
 
@@ -332,151 +273,76 @@ namespace DeepLensVisualStudio.ToolWindows
         {
             get
             {
-                if (FilterClasses) return "Search for classes, interfaces, or structs...";
-                if (FilterMethods) return "Search for methods, properties, or fields...";
-                if (FilterSymbols) return "Search for methods, properties, or fields...";
-                if (FilterTypes) return "Search for classes, interfaces, or structs...";
-                if (FilterFiles) return "Search for files by name...";
-                if (FilterText) return "Search file content...";
-                if (FilterEndpoints) return "Search API endpoints and routes...";
-                return "Search for classes, symbols, files, text, or endpoints";
+                if (FilterClasses) return "Classes: Try 'UserService', 'IConfig', or 'AuthError'...";
+                if (FilterTypes) return "Types: Try 'User', 'IConfig', or 'AuthError'...";
+                if (FilterMethods) return "Methods: Try 'getUser', 'setConfig', or 'initialize'...";
+                if (FilterSymbols) return "Symbols: Try 'getUser', 'onInit', or 'MAX_RETRIES'...";
+                if (FilterFiles) return "Files: Try 'app.ts', 'components/Button', or 'index.html'...";
+                if (FilterText) return "Text: Try 'async function', 'TODO:', or 'extends Component'...";
+                if (FilterEndpoints) return "Endpoints: Try 'GET /api/users', '/auth/login', or 'POST'...";
+                return "Global: Try 'UserService', 'app.ts', 'GET /api', or '/t'...";
+            }
+        }
+
+        private void UpdateFilter(ref bool field, bool value, [CallerMemberName] string? propertyName = null)
+        {
+            if (field == value) return;
+            field = value;
+            OnPropertyChanged(propertyName);
+            OnPropertyChanged(nameof(SearchPlaceholder));
+            if (value)
+            {
+                ClearOtherFilters(propertyName ?? string.Empty);
+                _ = PerformSearchAsync();
             }
         }
 
         public bool FilterAll
         {
             get => _filterAll;
-            set
-            {
-                if (_filterAll == value) return;
-                _filterAll = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterAll));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterAll, value);
         }
 
         public bool FilterClasses
         {
             get => _filterClasses;
-            set
-            {
-                if (_filterClasses == value) return;
-                _filterClasses = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterClasses));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterClasses, value);
         }
 
         public bool FilterMethods
         {
             get => _filterMethods;
-            set
-            {
-                if (_filterMethods == value) return;
-                _filterMethods = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterMethods));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterMethods, value);
         }
 
         public bool FilterFiles
         {
             get => _filterFiles;
-            set
-            {
-                if (_filterFiles == value) return;
-                _filterFiles = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterFiles));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterFiles, value);
         }
 
         public bool FilterEndpoints
         {
             get => _filterEndpoints;
-            set
-            {
-                if (_filterEndpoints == value) return;
-                _filterEndpoints = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterEndpoints));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterEndpoints, value);
         }
 
         public bool FilterSymbols
         {
             get => _filterSymbols;
-            set
-            {
-                if (_filterSymbols == value) return;
-                _filterSymbols = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterSymbols));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterSymbols, value);
         }
 
         public bool FilterTypes
         {
             get => _filterTypes;
-            set
-            {
-                if (_filterTypes == value) return;
-                _filterTypes = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterTypes));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterTypes, value);
         }
 
         public bool FilterText
         {
             get => _filterText;
-            set
-            {
-                if (_filterText == value) return;
-                _filterText = value;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(SearchPlaceholder));
-                if (value)
-                {
-                    ClearOtherFilters(nameof(FilterText));
-                    _ = PerformSearchAsync();
-                }
-            }
+            set => UpdateFilter(ref _filterText, value);
         }
 
         public SearchResultViewModel? SelectedResult
@@ -512,7 +378,6 @@ namespace DeepLensVisualStudio.ToolWindows
             _historyService = new HistoryService();
             _slashCommandService = new SlashCommandService();
             GetLspService().OnProgress += OnLspProgress;
-            GetLspService().OnResultStreamed += OnLspResultStreamed;
 
             OpenCommand = new RelayCommand(p =>
             {
@@ -555,37 +420,6 @@ namespace DeepLensVisualStudio.ToolWindows
                 }
 
                 if (!string.IsNullOrEmpty(info.Message)) IndexingStatusText = info.Message;
-            });
-        }
-
-        private void OnLspResultStreamed(SearchResult result)
-        {
-            ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-            {
-                await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                
-                // If cancellation is requested, don't append
-                if (_searchCts != null && _searchCts.IsCancellationRequested) return;
-
-                string relative = result.FilePath;
-                if (!string.IsNullOrEmpty(_solutionRoot) &&
-                    relative.StartsWith(_solutionRoot, StringComparison.OrdinalIgnoreCase))
-                {
-                    relative = relative.Substring(_solutionRoot.Length).TrimStart('\\', '/');
-                }
-
-                Results.Add(new SearchResultViewModel
-                {
-                    Name = result.Name,
-                    Kind = result.Kind,
-                    FilePath = result.FilePath,
-                    RelativePath = relative,
-                    Line = result.Line,
-                    ContainerName = result.ContainerName
-                });
-                
-                OnPropertyChanged(nameof(ResultCountText));
-                OnPropertyChanged(nameof(ShowEmptyState));
             });
         }
 
@@ -902,16 +736,9 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (token.IsCancellationRequested)
                     return;
 
-                var existingIds = new System.Collections.Generic.HashSet<string>(
-                    Results.Select(r => $"{r.FilePath}:{r.Line}:{r.Name}")
-                );
-
+                Results.Clear();
                 foreach (var result in searchResults)
                 {
-                    string id = $"{result.FilePath}:{result.Line}:{result.Name}";
-                    if (existingIds.Contains(id)) continue;
-                    existingIds.Add(id);
-
                     string relative = result.FilePath;
                     if (!string.IsNullOrEmpty(_solutionRoot) &&
                         relative.StartsWith(_solutionRoot, StringComparison.OrdinalIgnoreCase))
