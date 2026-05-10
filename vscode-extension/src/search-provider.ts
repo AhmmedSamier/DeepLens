@@ -897,9 +897,18 @@ export class SearchProvider {
         this.updateFilterButtons(quickPick);
         this.updateTitle(quickPick, quickPick.items.length);
 
+        this.rerunSearchForCurrentQuery(quickPick);
+    }
+
+    private async rerunSearchForCurrentQuery(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
         const { text } = this.parseQuery(quickPick.value);
         const queryId = ++this.lastQueryId;
-        this.performSearch(quickPick, text, queryId);
+        if (text.trim().length === 0) {
+            await this.showRecentHistoryAndResetState(quickPick, queryId);
+            return;
+        }
+
+        await this.performSearch(quickPick, text, queryId);
     }
 
     /**
@@ -1318,17 +1327,12 @@ export class SearchProvider {
                 this.updateFilterButtons(quickPick);
                 this.updateTitle(quickPick, quickPick.items.length);
 
-                // Re-run search with new filter
-                // We use parseQuery to ensure we handle the (potentially updated) text correctly
-                const { text } = this.parseQuery(quickPick.value);
-
                 // If the value changed, onDidChangeValue will take care of the search
                 if (currentQuery !== quickPick.value) {
                     return;
                 }
 
-                const queryId = ++this.lastQueryId;
-                await this.performSearch(quickPick, text, queryId);
+                await this.rerunSearchForCurrentQuery(quickPick);
                 break;
             }
         }
