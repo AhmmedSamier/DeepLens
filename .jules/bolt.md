@@ -62,3 +62,8 @@
 
 **Learning:** `xvfb-run` crashes with `SIGTRAP` in GitHub Actions for `vscode-extension` integration tests if they run too soon after `dbus` services start or fail, likely due to missing display configurations in the headless agent environment for Electron integration testing via `@vscode/test-electron`. 
 **Action:** Implement a retry mechanism or a delay after `dbus` startup to ensure environment stability before launching Electron-based tests.
+
+## 2026-05-05 - [O(1) Array Tracking via Static Mappings]
+
+**Learning:** Allocating an O(N) array inside an inner method repeatedly (e.g., `new Uint8Array(this.items.length)` in `searchRemainingItems`) can be extremely slow and cause unnecessary GC pressure. We can eliminate the array allocation entirely if we track the "skipped" parameters via an O(1) loop map (e.g. mapping `priorityScopes` to `skipTypeId` array based on `ID_TO_SCOPE` relationship), transforming the lookup into an O(1) comparison against an item's TypeId (`skipTypeId[this.itemTypeIds[i]] === 0`).
+**Action:** Replace dynamically allocated `Uint8Array` of size `N` with an O(1) fixed-size array mapping `priorityScopes` to static item Type IDs, avoiding costly dynamic allocations and looping setups.

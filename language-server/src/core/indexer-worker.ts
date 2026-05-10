@@ -62,7 +62,8 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
             workers.push(
                 (async () => {
                     while (currentIndex < totalFiles) {
-                        const filePath = filePaths[currentIndex++];
+                        const filePath = filePaths[currentIndex];
+                        currentIndex++;
                         if (!filePath) break;
 
                         // schedules work through limit but only creates tasks as concurrency frees up

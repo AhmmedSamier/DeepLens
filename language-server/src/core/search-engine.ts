@@ -1665,7 +1665,8 @@ export class SearchEngine implements ISearchProvider {
         let visited: Uint32Array | undefined;
         let epoch = 0;
         if (preferredIndices.length > 0 || indices) {
-            if (++this.visitedEpochCount >= 0xffffffff) {
+            this.visitedEpochCount++;
+            if (this.visitedEpochCount >= 0xffffffff) {
                 this.visitedEpoch.fill(0);
                 this.visitedEpochCount = 1;
             }
@@ -1718,7 +1719,8 @@ export class SearchEngine implements ISearchProvider {
         let candidateSet: Uint32Array | undefined;
         let candidateEpoch = 0;
         if (indices) {
-            if (++this.candidateEpochCount >= 0xffffffff) {
+            this.candidateEpochCount++;
+            if (this.candidateEpochCount >= 0xffffffff) {
                 this.candidateEpoch.fill(0);
                 this.candidateEpochCount = 1;
             }
@@ -2378,21 +2380,23 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast Unique Tracking Optimization
-        // Replace Set<number> with a pre-allocated Uint8Array
-        const searchedIndices = new Uint8Array(this.items.length);
-        for (let j = 0; j < priorityScopes.length; j++) {
-            const indices = this.scopedIndices.get(priorityScopes[j]);
-            if (indices) {
-                for (let k = 0; k < indices.length; k++) {
-                    searchedIndices[indices[k]] = 1;
+        // ⚡ Bolt: O(1) Unique Tracking Optimization
+        // Instead of allocating an O(N) array to track which items were processed,
+        // we map the priorityScopes to their type IDs and do an O(1) lookup on this.itemTypeIds.
+        // This completely eliminates the array allocation and the O(N) setup loops.
+        const skipTypeId = new Uint8Array(256);
+        for (let i = 0; i < priorityScopes.length; i++) {
+            const scope = priorityScopes[i];
+            for (let typeId = 0; typeId < ID_TO_SCOPE.length; typeId++) {
+                if (ID_TO_SCOPE[typeId] === scope) {
+                    skipTypeId[typeId] = 1;
                 }
             }
         }
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] === 0) {
+            if (skipTypeId[this.itemTypeIds[i]] === 0) {
                 processItem(i);
             }
         }

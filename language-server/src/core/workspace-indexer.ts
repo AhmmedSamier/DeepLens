@@ -875,6 +875,7 @@ export class WorkspaceIndexer {
         return true;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private handleWorkerResultMessage(
         message: {
             type: string;
