@@ -28,6 +28,16 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         const { filePaths } = message;
 
+        if (filePaths.length === 0) {
+            parentPort?.postMessage({
+                type: 'result',
+                items: [],
+                count: 0,
+                isPartial: false,
+            });
+            return;
+        }
+
         if (message.chunkSize !== undefined) {
             if (
                 typeof message.chunkSize !== 'number' ||
