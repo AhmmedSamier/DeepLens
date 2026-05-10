@@ -1,3 +1,3 @@
 setTimeout(() => {
-    console.log("Still hanging");
+    console.log('Still hanging');
 }, 2000);

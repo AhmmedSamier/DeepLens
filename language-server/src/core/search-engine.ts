@@ -1652,7 +1652,6 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-
         // ⚡ Bolt: Fast index tracking optimization
         // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
         // and provides O(1) array access. (~15x faster than Set for 1M items).
