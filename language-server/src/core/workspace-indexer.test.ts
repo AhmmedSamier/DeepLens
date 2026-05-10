@@ -246,4 +246,108 @@ describe('WorkspaceIndexer', () => {
             expect(indexer.getStringCacheSize()).toBeLessThanOrEqual(maxSize);
         });
     });
+
+    describe('symbol indexing strategy', () => {
+        it('should deep parse Tree-sitter supported files', async () => {
+            const customEnv: IndexerEnvironment = {
+                ...mockEnv,
+                executeWorkspaceSymbolProvider: async () => {
+                    throw new Error('Workspace symbol provider should not be used for supported files');
+                },
+            };
+            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, customEnv, process.cwd());
+            const fileItems = [
+                {
+                    id: 'file:/root/src/Foo.cs',
+                    name: 'Foo.cs',
+                    type: SearchItemType.FILE,
+                    filePath: '/root/src/Foo.cs',
+                    relativeFilePath: 'src/Foo.cs',
+                },
+                {
+                    id: 'file:/root/src/Bar.ts',
+                    name: 'Bar.ts',
+                    type: SearchItemType.FILE,
+                    filePath: '/root/src/Bar.ts',
+                    relativeFilePath: 'src/Bar.ts',
+                },
+            ];
+            const deepParsedFiles: string[] = [];
+
+            // @ts-expect-error - replacing private method to verify indexing strategy
+            indexer.runFileIndexingPool = async (items: typeof fileItems) => {
+                deepParsedFiles.push(...items.map((item) => item.filePath));
+            };
+
+            // @ts-expect-error - exercising private symbol-indexing strategy
+            await indexer.indexSymbols(fileItems);
+
+            expect(deepParsedFiles).toEqual(['/root/src/Foo.cs', '/root/src/Bar.ts']);
+        });
+
+        it('should use workspace symbols as a fallback for unsupported languages', async () => {
+            const customEnv: IndexerEnvironment = {
+                ...mockEnv,
+                executeWorkspaceSymbolProvider: async () => [
+                    {
+                        name: 'RustService',
+                        kind: 4,
+                        location: {
+                            uri: '/root/src/rust_service.rs',
+                            range: {
+                                start: { line: 3, character: 7 },
+                                end: { line: 12, character: 1 },
+                            },
+                        },
+                        containerName: 'crate',
+                    },
+                    {
+                        name: 'SupportedClass',
+                        kind: 4,
+                        location: {
+                            uri: '/root/src/Supported.cs',
+                            range: {
+                                start: { line: 1, character: 14 },
+                                end: { line: 5, character: 1 },
+                            },
+                        },
+                    },
+                ],
+            };
+            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, customEnv, process.cwd());
+            const addedItems: any[] = [];
+            const deepParsedFiles: string[] = [];
+            const fileItems = [
+                {
+                    id: 'file:/root/src/Supported.cs',
+                    name: 'Supported.cs',
+                    type: SearchItemType.FILE,
+                    filePath: '/root/src/Supported.cs',
+                    relativeFilePath: 'src/Supported.cs',
+                },
+                {
+                    id: 'file:/root/src/rust_service.rs',
+                    name: 'rust_service.rs',
+                    type: SearchItemType.FILE,
+                    filePath: '/root/src/rust_service.rs',
+                    relativeFilePath: 'src/rust_service.rs',
+                },
+            ];
+
+            indexer.onItemsAdded((items) => addedItems.push(...items));
+
+            // @ts-expect-error - replacing private method to verify indexing strategy
+            indexer.runFileIndexingPool = async (items: typeof fileItems) => {
+                deepParsedFiles.push(...items.map((item) => item.filePath));
+            };
+
+            // @ts-expect-error - exercising private symbol-indexing strategy
+            await indexer.indexSymbols(fileItems);
+
+            expect(deepParsedFiles).toEqual(['/root/src/Supported.cs']);
+            expect(addedItems.map((item) => item.name)).toEqual(['RustService']);
+            expect(addedItems[0].fullName).toBe('crate.RustService');
+            expect(addedItems[0].relativeFilePath).toBe('src/rust_service.rs');
+        });
+    });
 });
