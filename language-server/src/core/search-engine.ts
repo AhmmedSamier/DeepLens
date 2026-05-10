@@ -974,7 +974,10 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                allResults.push(...providerResults);
+                const len = providerResults.length;
+                for (let i = 0; i < len; i++) {
+                    allResults.push(providerResults[i]);
+                }
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
