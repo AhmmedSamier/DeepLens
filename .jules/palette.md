@@ -1,0 +1,3 @@
+## 2024-04-23 - Dynamic Accessibility Names for Dynamic Inputs
+**Learning:** In WPF XAML components with multiple scopes or filters, screen readers can announce generic, static names (e.g. "Search query") for inputs even when visual placeholders update dynamically based on context (e.g. "Search classes..."). This leads to disconnected experiences between visual and screen-reader context.
+**Action:** Always bind accessibility attributes like `AutomationProperties.Name` to the same dynamic property used for the visual placeholder (e.g., `AutomationProperties.Name="{Binding SearchPlaceholder}"`) rather than hardcoding static strings, ensuring parity between visual state and assistive technology context.
