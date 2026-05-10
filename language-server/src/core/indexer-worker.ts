@@ -29,12 +29,11 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         const { filePaths } = message;
 
         if (filePaths.length === 0) {
-            parentPort?.postMessage({
-                type: 'result',
-                items: [],
-                count: 0,
-                isPartial: false,
-            });
+            // Warmup path: parser was initialized above; no response needed.
+            // Do NOT post a reply here — a spurious result message would be
+            // queued and delivered into the worker pool during real indexing,
+            // decrementing activeTasks prematurely and resolving the pool
+            // before any symbols are parsed.
             return;
         }
 
