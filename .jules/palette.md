@@ -1,0 +1,3 @@
+## $(date +%Y-%m-%d) - Context-Aware Empty States and Screen Reader Context in WPF
+**Learning:** In WPF applications with multiple scopes or filters, using a generic static string (like "No results found" or "Search query") for empty states and screen reader accessibility labels fails to convey the active UI context to the user.
+**Action:** Bind the empty state watermark/placeholder (both visual `TextBlock.Text` and accessibility attributes like `TextBox.ToolTip` or `AutomationProperties.Name`) to a dynamic property that reacts to the selected filter state, improving both feature discoverability and screen reader context.

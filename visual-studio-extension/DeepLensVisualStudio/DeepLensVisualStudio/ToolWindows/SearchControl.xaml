@@ -444,7 +444,7 @@
                 VerticalAlignment="Center"
                 Visibility="{Binding ShowEmptyState, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <TextBlock
-                    Text="No results found"
+                    Text="{Binding EmptyStateMessage}"
                     FontSize="16"
                     FontWeight="SemiBold"
                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
