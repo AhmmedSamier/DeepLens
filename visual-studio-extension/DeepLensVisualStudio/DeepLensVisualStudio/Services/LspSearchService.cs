@@ -264,36 +264,12 @@ namespace DeepLensVisualStudio.Services
             _rpc = null;
         }
 
-        public event Action<SearchResult>? OnResultStreamed;
-
         private void OnStreamResult(JToken parameters)
         {
             if (!_firstRecorded)
             {
                 _lastTimings.FirstResultMs = _searchSw.ElapsedMilliseconds;
                 _firstRecorded = true;
-            }
-
-            try
-            {
-                var r = parameters.ToObject<LspSearchResult>();
-                if (r != null)
-                {
-                    var result = new SearchResult
-                    {
-                        Name = r.Item.Name,
-                        Kind = MapLspKind(r.Item.Type),
-                        FilePath = r.Item.FilePath,
-                        Line = (r.Item.Line ?? 0) + 1,
-                        ContainerName = r.Item.ContainerName,
-                        Score = (int)(r.Score * 10000)
-                    };
-                    OnResultStreamed?.Invoke(result);
-                }
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DeepLens: Error parsing streamed result: {ex.Message}");
             }
         }
 
@@ -525,7 +501,7 @@ namespace DeepLensVisualStudio.Services
 
 
             var lspResults =
-                await _rpc.InvokeWithParameterObjectAsync<List<LspSearchResult>>("deeplens/burstSearch", searchParams, ct);
+                await _rpc.InvokeWithParameterObjectAsync<List<LspSearchResult>>("deeplens/search", searchParams, ct);
 
             _lastTimings.TotalMs = _searchSw.ElapsedMilliseconds;
             if (!_firstRecorded && lspResults.Any())
@@ -635,20 +611,6 @@ namespace DeepLensVisualStudio.Services
             catch (Exception ex)
             {
                 Debug.WriteLine($"DeepLens: RecordActivity error: {ex.Message}");
-            }
-        }
-
-        public async Task SetActiveFilesAsync(IEnumerable<string> files)
-        {
-            if (!_isInitialized || _rpc == null) return;
-
-            try
-            {
-                await _rpc.NotifyWithParameterObjectAsync("deeplens/setActiveFiles", new { files = files });
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DeepLens: SetActiveFiles error: {ex.Message}");
             }
         }
 
