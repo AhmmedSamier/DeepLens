@@ -3,7 +3,6 @@ import * as cp from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 import { Config } from './config';
 import { IndexerEnvironment } from './indexer-interfaces';
@@ -27,19 +26,10 @@ interface WorkerPoolState {
     resolveAll: () => void;
 }
 
-interface WorkspaceSymbolScanResult {
-    symbolCount: number;
-    uniqueFiles: number;
-    durationMs: number;
-    timedOut: boolean;
-}
-
 /**
  * Workspace indexer that scans files and extracts symbols
  */
 export class WorkspaceIndexer {
-    private static readonly WORKSPACE_SYMBOL_TIMEOUT_MS = 1200;
-    private static readonly WORKSPACE_SYMBOL_COVERAGE_THRESHOLD = 0.6;
     private static readonly STRING_CACHE_MAX_SIZE = 10000;
     private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
     private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
@@ -528,100 +518,11 @@ export class WorkspaceIndexer {
         fileItems: SearchableItem[],
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
-        const totalFiles = fileItems.length;
-
-        if (totalFiles === 0) {
-            return;
-        }
-
-        if (!this.env.executeWorkspaceSymbolProvider) {
-            await this.runFileIndexingPool(fileItems, progressCallback);
-            return;
-        }
-
-        const workspaceScan = await this.scanWorkspaceSymbols(progressCallback);
-        const coverage = workspaceScan.uniqueFiles / totalFiles;
-        const shouldSkipFullWorkerPass =
-            workspaceScan.symbolCount > 0 &&
-            !workspaceScan.timedOut &&
-            coverage >= WorkspaceIndexer.WORKSPACE_SYMBOL_COVERAGE_THRESHOLD;
-
-        this.log(
-            `Workspace symbol pass: symbols=${workspaceScan.symbolCount}, files=${workspaceScan.uniqueFiles}, coverage=${coverage.toFixed(2)}, duration=${Math.round(workspaceScan.durationMs)}ms`,
-        );
-
-        if (shouldSkipFullWorkerPass) {
-            progressCallback?.('Workspace symbols provided sufficient coverage; skipping deep parse.', 70);
+        if (fileItems.length === 0) {
             return;
         }
 
         await this.runFileIndexingPool(fileItems, progressCallback);
-    }
-
-    /**
-     * Perform workspace-wide symbol extraction pass
-     */
-    private async scanWorkspaceSymbols(
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<WorkspaceSymbolScanResult> {
-        progressCallback?.('Fast-scanning workspace symbols...', 5);
-        if (!this.env.executeWorkspaceSymbolProvider) {
-            return {
-                symbolCount: 0,
-                uniqueFiles: 0,
-                durationMs: 0,
-                timedOut: false,
-            };
-        }
-
-        const start = Date.now();
-
-        try {
-            const workspaceSymbolsPromise = this.env.executeWorkspaceSymbolProvider();
-            const timeoutPromise = new Promise<'timeout'>((resolve) => {
-                setTimeout(() => resolve('timeout'), WorkspaceIndexer.WORKSPACE_SYMBOL_TIMEOUT_MS);
-            });
-
-            const resolved = await Promise.race([workspaceSymbolsPromise, timeoutPromise]);
-
-            if (resolved === 'timeout') {
-                return {
-                    symbolCount: 0,
-                    uniqueFiles: 0,
-                    durationMs: Date.now() - start,
-                    timedOut: true,
-                };
-            }
-
-            const workspaceSymbols = resolved;
-
-            if (workspaceSymbols && workspaceSymbols.length > 0) {
-                const uniqueFiles = await this.processWorkspaceSymbols(workspaceSymbols);
-                return {
-                    symbolCount: workspaceSymbols.length,
-                    uniqueFiles,
-                    durationMs: Date.now() - start,
-                    timedOut: false,
-                };
-            }
-
-            return {
-                symbolCount: 0,
-                uniqueFiles: 0,
-                durationMs: Date.now() - start,
-                timedOut: false,
-            };
-        } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : JSON.stringify(error) || String(error);
-            console.debug(`Workspace symbol pass failed, moving to file-by-file: ${errorMessage}`);
-
-            return {
-                symbolCount: 0,
-                uniqueFiles: 0,
-                durationMs: Date.now() - start,
-                timedOut: false,
-            };
-        }
     }
 
     private async runFileIndexingPool(
@@ -926,54 +827,6 @@ export class WorkspaceIndexer {
                 state.nextReportingPercentage = percentage + 5;
             }
         }
-    }
-
-    /**
-     * Process symbols from workspace provider
-     */
-    private async processWorkspaceSymbols(
-        symbols: import('./indexer-interfaces').LeanSymbolInformation[],
-    ): Promise<number> {
-        const batch: SearchableItem[] = [];
-        const uniqueFiles = new Set<string>();
-
-        for (const symbol of symbols) {
-            const itemType = this.mapSymbolKindToItemType(symbol.kind);
-            if (!itemType) {
-                continue;
-            }
-
-            const filePath = this.normalizeUriToPath(symbol.location.uri);
-            uniqueFiles.add(filePath);
-            const id = `symbol:${filePath}:${symbol.name}:${symbol.location.range.start.line}`;
-            const item: SearchableItem = {
-                id,
-                name: symbol.name,
-                type: itemType,
-                filePath,
-                relativeFilePath: this.env.asRelativePath(filePath),
-                line: symbol.location.range.start.line,
-                column: symbol.location.range.start.character,
-                containerName: symbol.containerName,
-                fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
-            };
-
-            batch.push(item);
-        }
-
-        this.fireItemsAdded(batch);
-        return uniqueFiles.size;
-    }
-
-    private normalizeUriToPath(uriOrPath: string): string {
-        if (uriOrPath.startsWith('file://')) {
-            try {
-                return fileURLToPath(uriOrPath);
-            } catch {
-                return uriOrPath;
-            }
-        }
-        return uriOrPath;
     }
 
     /**

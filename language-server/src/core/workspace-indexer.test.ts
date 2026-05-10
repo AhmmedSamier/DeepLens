@@ -246,4 +246,43 @@ describe('WorkspaceIndexer', () => {
             expect(indexer.getStringCacheSize()).toBeLessThanOrEqual(maxSize);
         });
     });
+
+    describe('symbol indexing strategy', () => {
+        it('should deep parse every file without using the workspace symbol shortcut', async () => {
+            const customEnv: IndexerEnvironment = {
+                ...mockEnv,
+                executeWorkspaceSymbolProvider: async () => {
+                    throw new Error('Workspace symbol provider should not be used');
+                },
+            };
+            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, customEnv, process.cwd());
+            const fileItems = [
+                {
+                    id: 'file:/root/src/Foo.cs',
+                    name: 'Foo.cs',
+                    type: SearchItemType.FILE,
+                    filePath: '/root/src/Foo.cs',
+                    relativeFilePath: 'src/Foo.cs',
+                },
+                {
+                    id: 'file:/root/src/Bar.cs',
+                    name: 'Bar.cs',
+                    type: SearchItemType.FILE,
+                    filePath: '/root/src/Bar.cs',
+                    relativeFilePath: 'src/Bar.cs',
+                },
+            ];
+            const deepParsedFiles: string[] = [];
+
+            // @ts-expect-error - replacing private method to verify indexing strategy
+            indexer.runFileIndexingPool = async (items: typeof fileItems) => {
+                deepParsedFiles.push(...items.map((item) => item.filePath));
+            };
+
+            // @ts-expect-error - exercising private symbol-indexing strategy
+            await indexer.indexSymbols(fileItems);
+
+            expect(deepParsedFiles).toEqual(['/root/src/Foo.cs', '/root/src/Bar.cs']);
+        });
+    });
 });
