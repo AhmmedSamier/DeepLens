@@ -26,7 +26,6 @@ namespace DeepLensVisualStudio
         private static DeepLensPackage? _instance;
         private uint _solutionEventsCookie;
         private KeyboardHookService? _keyboardHookService;
-        private EnvDTE.WindowEvents? _windowEvents;
 
         protected override async Task InitializeAsync(CancellationToken cancellationToken,
             IProgress<ServiceProgressData> progress)
@@ -59,51 +58,10 @@ namespace DeepLensVisualStudio
                         _ = InitializeLspInBackgroundAsync();
                     }
                 }
-
-                var dte = await GetServiceAsync(typeof(EnvDTE.DTE)) as EnvDTE.DTE;
-                if (dte != null)
-                {
-                    _windowEvents = dte.Events.WindowEvents;
-                    _windowEvents.WindowActivated += (gotFocus, lostFocus) =>
-                    {
-                        ThreadHelper.JoinableTaskFactory.RunAsync(async () =>
-                        {
-                            await ThreadHelper.JoinableTaskFactory.SwitchToMainThreadAsync();
-                            UpdateActiveFiles(dte);
-                        });
-                    };
-                }
             }
             catch (Exception ex)
             {
                 Debug.WriteLine($"DeepLens: Initialization error: {ex.Message}");
-            }
-        }
-
-        private void UpdateActiveFiles(EnvDTE.DTE dte)
-        {
-            ThreadHelper.ThrowIfNotOnUIThread();
-            try
-            {
-                var files = new System.Collections.Generic.List<string>();
-                foreach (EnvDTE.Window window in dte.Windows)
-                {
-                    if (window.Kind == "Document" && window.Document != null)
-                    {
-                        var path = window.Document.FullName;
-                        if (!string.IsNullOrEmpty(path))
-                        {
-                            files.Add(path);
-                        }
-                    }
-                }
-                
-                var service = SearchControl.GetLspService();
-                _ = service.SetActiveFilesAsync(files);
-            }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"DeepLens: Error updating active files: {ex.Message}");
             }
         }
 
