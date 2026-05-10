@@ -1,5 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import { pLimit } from './p-limit';
+import { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -25,32 +27,73 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
+
+        if (filePaths.length === 0) {
+            // Warmup path: parser was initialized above; no response needed.
+            // Do NOT post a reply here — a spurious result message would be
+            // queued and delivered into the worker pool during real indexing,
+            // decrementing activeTasks prematurely and resolving the pool
+            // before any symbols are parsed.
+            return;
+        }
+
+        if (message.chunkSize !== undefined) {
+            if (
+                typeof message.chunkSize !== 'number' ||
+                !Number.isFinite(message.chunkSize) ||
+                !Number.isInteger(message.chunkSize) ||
+                message.chunkSize <= 0
+            ) {
+                parentPort?.postMessage({
+                    type: 'error',
+                    error: `Invalid chunkSize: ${message.chunkSize}. Must be a finite positive integer.`,
+                });
+                return;
+            }
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
 
-        for (let i = 0; i < filePaths.length; i += BATCH_SIZE) {
-            const chunk = filePaths.slice(i, i + BATCH_SIZE);
+        // ⚡ Bolt: Fast concurrent streaming optimization
+        // Replaces fixed-chunk Promise.all processing with a concurrency-limited task pool (pLimit).
+        // This prevents head-of-line blocking where fast files wait for the slowest file in a chunk,
+        // reducing indexing latency and streaming results back to the parent thread continuously.
+        const limit = pLimit(BATCH_SIZE);
+        let chunkItems: SearchableItem[] = [];
+        let processedCount = 0;
 
-            // Parallelize file reading and parsing within the chunk
-            const results = await Promise.all(
-                chunk.map(async (filePath) => {
+        await Promise.all(
+            filePaths.map((filePath) =>
+                limit(async () => {
+                    let items: SearchableItem[] = [];
                     try {
-                        return await parser.parseFile(filePath);
+                        items = await parser.parseFile(filePath);
                     } catch {
-                        return [];
+                        items = [];
+                    }
+
+                    // Push elements directly using a manual loop to avoid spreading large arrays
+                    for (let j = 0; j < items.length; j++) {
+                        chunkItems.push(items[j]);
+                    }
+
+                    processedCount++;
+
+                    // Stream results when chunk reaches BATCH_SIZE or it's the last item
+                    if (processedCount % BATCH_SIZE === 0 || processedCount === filePaths.length) {
+                        const itemsToSend = chunkItems;
+                        chunkItems = []; // Reset for next batch
+
+                        parentPort?.postMessage({
+                            type: 'result',
+                            items: itemsToSend,
+                            count: processedCount % BATCH_SIZE === 0 ? BATCH_SIZE : processedCount % BATCH_SIZE,
+                            isPartial: processedCount < filePaths.length,
+                        });
                     }
                 }),
-            );
-
-            const chunkItems = results.flat();
-
-            // Send back chunk result immediately to keep main thread unblocked but processing
-            parentPort?.postMessage({
-                type: 'result',
-                items: chunkItems,
-                count: chunk.length,
-                isPartial: i + BATCH_SIZE < filePaths.length,
-            });
-        }
+            ),
+        );
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',

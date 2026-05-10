@@ -1,0 +1,3 @@
+## 2024-04-24 - Dynamic Accessibility Names for Search Scopes
+**Learning:** Hardcoded accessibility names (like "Search query") fail to provide context when the input's purpose shifts dynamically based on UI state (e.g., active filters). Screen reader users lose the contextual hints provided visually by dynamic watermarks/placeholders.
+**Action:** Always bind accessibility attributes (`AutomationProperties.Name` in WPF/XAML, or `aria-label` in HTML) to the same dynamic property driving the visual placeholder or state (e.g., `{Binding SearchPlaceholder}`) to ensure screen reader context stays perfectly synchronized with visual context.
