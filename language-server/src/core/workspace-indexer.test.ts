@@ -68,19 +68,19 @@ class TestWorkspaceIndexer extends WorkspaceIndexer {
     }
 }
 
-describe('WorkspaceIndexer', () => {
-    // Mock dependencies
-    const mockConfig = new Config();
-    const mockEnv: IndexerEnvironment = {
-        getWorkspaceFolders: () => ['/root'],
-        findFiles: async () => [],
-        asRelativePath: (p) => p.replace('/root/', ''),
-        log: () => {},
-    };
+// Mock dependencies
+const mockConfig = new Config();
+const mockEnv: IndexerEnvironment = {
+    getWorkspaceFolders: () => ['/root'],
+    findFiles: async () => [],
+    asRelativePath: (p) => p.replace('/root/', ''),
+    log: () => {},
+};
 
-    // We can cast mock to any because we won't strictly use all methods
-    const mockTreeSitter = {} as unknown as TreeSitterParser;
+// We can cast mock to any because we won't strictly use all methods
+const mockTreeSitter = {} as unknown as TreeSitterParser;
 
+describe('WorkspaceIndexer gitignore and excludes', () => {
     it('should return true if git check-ignore succeeds (exit code 0)', async () => {
         const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
 
@@ -146,104 +146,213 @@ describe('WorkspaceIndexer', () => {
 
         expect(indexer.checkShouldExcludeFile('/root/temp/temp.js')).toBe(true);
     });
+});
 
-    describe('file event updates', () => {
-        it('should include relativeFilePath when creating a file item', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
+describe('WorkspaceIndexer file event updates', () => {
+    it('should include relativeFilePath when creating a file item', async () => {
+        const customConfig = new Config();
+        customConfig.update({ respectGitignore: false });
+        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+        const addedItems: any[] = [];
 
-            indexer.onItemsAdded((items) => addedItems.push(...items));
+        indexer.onItemsAdded((items) => addedItems.push(...items));
 
-            await indexer.processFileEvent('/root/src/new-file.ts', 'create');
+        await indexer.processFileEvent('/root/src/new-file.ts', 'create');
 
-            const fileItem = addedItems.find(
-                (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/new-file.ts',
-            );
-            expect(fileItem).toBeDefined();
-            expect(fileItem.relativeFilePath).toBe('src/new-file.ts');
-        });
-
-        it('should include relativeFilePath when changing a file item', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/src/updated-file.ts', 'change');
-
-            const fileItem = addedItems.find(
-                (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/updated-file.ts',
-            );
-            expect(fileItem).toBeDefined();
-            expect(fileItem.relativeFilePath).toBe('src/updated-file.ts');
-        });
-
-        it('should skip likely generated C# files when creating', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/obj/Debug/net8.0/SomeFile.g.cs', 'create');
-
-            expect(addedItems).toHaveLength(0);
-        });
-
-        it('should skip likely generated C# files when changing', async () => {
-            const customConfig = new Config();
-            customConfig.update({ respectGitignore: false });
-            const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
-            const addedItems: any[] = [];
-
-            indexer.onItemsAdded((items) => addedItems.push(...items));
-
-            await indexer.processFileEvent('/root/generated/SomeFile.Designer.cs', 'change');
-
-            expect(addedItems).toHaveLength(0);
-        });
-    });
-    describe('dispose', () => {
-        it('should clear timers on dispose', () => {
-            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
-
-            indexer.setGitCheckTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
-            indexer.setWatcherCooldownTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
-
-            expect(indexer.getGitCheckTimer()).not.toBeNull();
-            expect(indexer.getWatcherCooldownTimer()).not.toBeNull();
-
-            indexer.dispose();
-
-            expect(indexer.getGitCheckTimer()).toBeNull();
-            expect(indexer.getWatcherCooldownTimer()).toBeNull();
-        });
+        const fileItem = addedItems.find(
+            (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/new-file.ts',
+        );
+        expect(fileItem).toBeDefined();
+        expect(fileItem.relativeFilePath).toBe('src/new-file.ts');
     });
 
-    describe('stringCache', () => {
-        it('should cache strings and return same reference', () => {
-            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+    it('should include relativeFilePath when changing a file item', async () => {
+        const customConfig = new Config();
+        customConfig.update({ respectGitignore: false });
+        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+        const addedItems: any[] = [];
 
-            const str1 = indexer.testIntern('/path/to/file.ts');
-            const str2 = indexer.testIntern('/path/to/file.ts');
+        indexer.onItemsAdded((items) => addedItems.push(...items));
 
-            expect(str1).toBe(str2);
-        });
+        await indexer.processFileEvent('/root/src/updated-file.ts', 'change');
 
-        it('should evict oldest entry when cache exceeds max size', () => {
-            const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+        const fileItem = addedItems.find(
+            (item) => item.type === SearchItemType.FILE && item.filePath === '/root/src/updated-file.ts',
+        );
+        expect(fileItem).toBeDefined();
+        expect(fileItem.relativeFilePath).toBe('src/updated-file.ts');
+    });
 
-            const maxSize = 10000;
-            for (let i = 0; i < maxSize + 100; i++) {
-                indexer.testIntern(`/unique/path/${i}.ts`);
+    it('should skip likely generated C# files when creating', async () => {
+        const customConfig = new Config();
+        customConfig.update({ respectGitignore: false });
+        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+        const addedItems: any[] = [];
+
+        indexer.onItemsAdded((items) => addedItems.push(...items));
+
+        await indexer.processFileEvent('/root/obj/Debug/net8.0/SomeFile.g.cs', 'create');
+
+        expect(addedItems).toHaveLength(0);
+    });
+
+    it('should skip likely generated C# files when changing', async () => {
+        const customConfig = new Config();
+        customConfig.update({ respectGitignore: false });
+        const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
+        const addedItems: any[] = [];
+
+        indexer.onItemsAdded((items) => addedItems.push(...items));
+
+        await indexer.processFileEvent('/root/generated/SomeFile.Designer.cs', 'change');
+
+        expect(addedItems).toHaveLength(0);
+    });
+});
+
+describe('WorkspaceIndexer dispose', () => {
+    it('should clear timers on dispose', () => {
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+        indexer.setGitCheckTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
+        indexer.setWatcherCooldownTimer(setTimeout(() => {}, 10000) as unknown as NodeJS.Timeout);
+
+        expect(indexer.getGitCheckTimer()).not.toBeNull();
+        expect(indexer.getWatcherCooldownTimer()).not.toBeNull();
+
+        indexer.dispose();
+
+        expect(indexer.getGitCheckTimer()).toBeNull();
+        expect(indexer.getWatcherCooldownTimer()).toBeNull();
+    });
+});
+
+describe('WorkspaceIndexer stringCache', () => {
+    it('should cache strings and return same reference', () => {
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+        const str1 = indexer.testIntern('/path/to/file.ts');
+        const str2 = indexer.testIntern('/path/to/file.ts');
+
+        expect(str1).toBe(str2);
+    });
+
+    it('should evict oldest entry when cache exceeds max size', () => {
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, mockEnv, process.cwd());
+
+        const maxSize = 10000;
+        for (let i = 0; i < maxSize + 100; i++) {
+            indexer.testIntern(`/unique/path/${i}.ts`);
+        }
+
+        expect(indexer.getStringCacheSize()).toBeLessThanOrEqual(maxSize);
+    });
+});
+
+describe('WorkspaceIndexer symbol indexing strategy', () => {
+    it('should deep parse Tree-sitter supported files', async () => {
+        const customEnv: IndexerEnvironment = {
+            ...mockEnv,
+            executeWorkspaceSymbolProvider: async () => {
+                throw new Error('Workspace symbol provider should not be used for supported files');
+            },
+        };
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, customEnv, process.cwd());
+        const fileItems = [
+            {
+                id: 'file:/root/src/Foo.cs',
+                name: 'Foo.cs',
+                type: SearchItemType.FILE,
+                filePath: '/root/src/Foo.cs',
+                relativeFilePath: 'src/Foo.cs',
+            },
+            {
+                id: 'file:/root/src/Bar.ts',
+                name: 'Bar.ts',
+                type: SearchItemType.FILE,
+                filePath: '/root/src/Bar.ts',
+                relativeFilePath: 'src/Bar.ts',
+            },
+        ];
+        const deepParsedFiles: string[] = [];
+
+        // @ts-expect-error - replacing private method to verify indexing strategy
+        indexer.runFileIndexingPool = async (items: typeof fileItems) => {
+            for (const item of items) {
+                deepParsedFiles.push(item.filePath);
             }
+        };
 
-            expect(indexer.getStringCacheSize()).toBeLessThanOrEqual(maxSize);
-        });
+        // @ts-expect-error - exercising private symbol-indexing strategy
+        await indexer.indexSymbols(fileItems);
+
+        expect(deepParsedFiles).toEqual(['/root/src/Foo.cs', '/root/src/Bar.ts']);
+    });
+
+    it('should use workspace symbols as a fallback for unsupported languages', async () => {
+        const customEnv: IndexerEnvironment = {
+            ...mockEnv,
+            executeWorkspaceSymbolProvider: async () => [
+                {
+                    name: 'RustService',
+                    kind: 4,
+                    location: {
+                        uri: '/root/src/rust_service.rs',
+                        range: {
+                            start: { line: 3, character: 7 },
+                            end: { line: 12, character: 1 },
+                        },
+                    },
+                    containerName: 'crate',
+                },
+                {
+                    name: 'SupportedClass',
+                    kind: 4,
+                    location: {
+                        uri: '/root/src/Supported.cs',
+                        range: {
+                            start: { line: 1, character: 14 },
+                            end: { line: 5, character: 1 },
+                        },
+                    },
+                },
+            ],
+        };
+        const indexer = new TestWorkspaceIndexer(mockConfig, mockTreeSitter, customEnv, process.cwd());
+        const addedItems: any[] = [];
+        const deepParsedFiles: string[] = [];
+        const fileItems = [
+            {
+                id: 'file:/root/src/Supported.cs',
+                name: 'Supported.cs',
+                type: SearchItemType.FILE,
+                filePath: '/root/src/Supported.cs',
+                relativeFilePath: 'src/Supported.cs',
+            },
+            {
+                id: 'file:/root/src/rust_service.rs',
+                name: 'rust_service.rs',
+                type: SearchItemType.FILE,
+                filePath: '/root/src/rust_service.rs',
+                relativeFilePath: 'src/rust_service.rs',
+            },
+        ];
+
+        indexer.onItemsAdded((items) => addedItems.push(...items));
+
+        // @ts-expect-error - replacing private method to verify indexing strategy
+        indexer.runFileIndexingPool = async (items: typeof fileItems) => {
+            for (const item of items) {
+                deepParsedFiles.push(item.filePath);
+            }
+        };
+
+        // @ts-expect-error - exercising private symbol-indexing strategy
+        await indexer.indexSymbols(fileItems);
+
+        expect(deepParsedFiles).toEqual(['/root/src/Supported.cs']);
+        expect(addedItems.map((item) => item.name)).toEqual(['RustService']);
+        expect(addedItems[0].fullName).toBe('crate.RustService');
+        expect(addedItems[0].relativeFilePath).toBe('src/rust_service.rs');
     });
 });

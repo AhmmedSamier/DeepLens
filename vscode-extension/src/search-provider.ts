@@ -123,6 +123,7 @@ export class SearchProvider {
     constructor(
         searchEngine: ISearchProvider,
         config: Config,
+        private readonly storage: vscode.Memento,
         activityTracker?: ActivityTracker,
         commandIndexer?: CommandIndexer,
     ) {
@@ -131,6 +132,7 @@ export class SearchProvider {
         this.activityTracker = activityTracker;
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
+        this.userSelectedScope = this.storage.get<SearchScope>('deeplens.userSelectedScope', SearchScope.EVERYTHING);
         this.createFilterButtons();
 
         // Start with a random tip
@@ -150,6 +152,14 @@ export class SearchProvider {
     /**
      * Show transient feedback in status bar and as title flash
      */
+
+    /**
+     * Set and persist the user's selected search scope
+     */
+    private setUserSelectedScope(scope: SearchScope): void {
+        this.userSelectedScope = scope;
+        this.storage.update('deeplens.userSelectedScope', scope);
+    }
     private showFeedback(message: string): void {
         if (this.currentQuickPick) {
             if (this.feedbackTimeout) {
@@ -451,11 +461,10 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope;
         } else {
             this.currentScope = scope;
-            this.userSelectedScope = scope;
+            this.setUserSelectedScope(scope);
         }
         await this.showInternal(initialQuery);
     }
@@ -880,7 +889,7 @@ export class SearchProvider {
     }
 
     private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        this.userSelectedScope = SearchScope.EVERYTHING;
+        this.setUserSelectedScope(SearchScope.EVERYTHING);
         this.currentScope = SearchScope.EVERYTHING;
 
         const currentQuery = quickPick.value;
@@ -1103,7 +1112,7 @@ export class SearchProvider {
             return false;
         }
 
-        this.userSelectedScope = scope;
+        this.setUserSelectedScope(scope);
         this.currentScope = scope;
         this.updateFilterButtons(quickPick);
         quickPick.placeholder = this.getPlaceholder();
@@ -1291,7 +1300,7 @@ export class SearchProvider {
 
             if (buttonBaseName === baseName) {
                 // Update user selection
-                this.userSelectedScope = scope;
+                this.setUserSelectedScope(scope);
 
                 // Also update current scope (though it might be overridden by query prefix in next step)
                 this.currentScope = scope;
@@ -1540,7 +1549,7 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_SWITCH_SCOPE) {
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.setUserSelectedScope(SearchScope.EVERYTHING);
             this.currentScope = SearchScope.EVERYTHING;
 
             const currentQuery = quickPick.value;
@@ -2082,7 +2091,7 @@ export class SearchProvider {
             // Find scope for this prefix (add space to match PREFIX_MAP)
             const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
             if (scope) {
-                this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                this.setUserSelectedScope(scope); // <--- FIX: Persist user selection
                 this.currentScope = scope;
                 this.updateFilterButtons(this.currentQuickPick);
                 this.currentQuickPick.value = ''; // Clear the command text
