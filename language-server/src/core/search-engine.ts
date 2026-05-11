@@ -168,6 +168,10 @@ export class SearchEngine implements ISearchProvider {
     private lastRelativeInput: string | null = null;
     private lastRelativeOutput: string | null = null;
 
+    // String normalization cache (1-item) for absolute path normalization
+    private lastNormalizedInput: string | null = null;
+    private lastNormalizedOutput: string | null = null;
+
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
 
@@ -247,6 +251,8 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCache.clear();
         this.lastRelativeInput = null;
         this.lastRelativeOutput = null;
+        this.lastNormalizedInput = null;
+        this.lastNormalizedOutput = null;
         this.filePaths = [];
         this.invalidateDerivedCaches();
         for (const item of items) {
@@ -779,6 +785,8 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCache.clear();
         this.lastRelativeInput = null;
         this.lastRelativeOutput = null;
+        this.lastNormalizedInput = null;
+        this.lastNormalizedOutput = null;
         this.activeFileItems = [];
         this.inactiveFileItems = [];
         this.invalidateDerivedCaches();
@@ -1059,8 +1067,14 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private normalizePath(filePath: string): string {
+        if (filePath === this.lastNormalizedInput) {
+            return this.lastNormalizedOutput as string;
+        }
         const normalized = path.normalize(filePath);
-        return this.isWindows ? normalized.toLowerCase() : normalized;
+        const result = this.isWindows ? normalized.toLowerCase() : normalized;
+        this.lastNormalizedInput = filePath;
+        this.lastNormalizedOutput = result;
+        return result;
     }
 
     private isActive(filePath: string): boolean {
