@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
 import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
-import { SearchableItem } from './types';
+import type { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -19,7 +19,7 @@ const workerLogger: Logger = {
 const parser = new TreeSitterParser(extensionPath, workerLogger);
 let isInitialized = false;
 
-parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: number }) => {
+parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: number; concurrency?: number }) => {
     try {
         if (!isInitialized) {
             await parser.init();
@@ -53,12 +53,13 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const concurrencyLimit = message.concurrency ?? 15;
 
         // ⚡ Bolt: Fast concurrent streaming optimization
         // Replaces fixed-chunk Promise.all processing with a concurrency-limited task pool (pLimit).
         // This prevents head-of-line blocking where fast files wait for the slowest file in a chunk,
         // reducing indexing latency and streaming results back to the parent thread continuously.
-        const limit = pLimit(BATCH_SIZE);
+        const limit = pLimit(concurrencyLimit);
         let pendingItems: SearchableItem[] = [];
         let processedCount = 0;
         let totalCompleted = 0;
