@@ -147,6 +147,11 @@ export class SearchEngine implements ISearchProvider {
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
+    // ⚡ Bolt: Fast Visited Tracker Array Reuse
+    // Pre-allocating a single instance-level array prevents per-request memory allocation
+    // and eliminates garbage collection pauses during frequent searches.
+    private visitedBuffer: Uint8Array = new Uint8Array(0);
+    private visitedIndicesBuffer: number[] = [];
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
     private itemNameLengths: Uint16Array = new Uint16Array(0);
@@ -267,6 +272,10 @@ export class SearchEngine implements ISearchProvider {
             const newTypeIds = new Uint8Array(newCapacity);
             newTypeIds.set(this.itemTypeIds);
             this.itemTypeIds = newTypeIds;
+
+            const newVisitedBuffer = new Uint8Array(newCapacity);
+            newVisitedBuffer.set(this.visitedBuffer);
+            this.visitedBuffer = newVisitedBuffer;
 
             const newBitflags = new Uint32Array(newCapacity);
             newBitflags.set(this.itemBitflags);
@@ -519,6 +528,8 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedPatterns = [];
+        this.visitedBuffer = new Uint8Array(this.items.length);
+        this.visitedIndicesBuffer = [];
     }
 
     /**
@@ -751,6 +762,8 @@ export class SearchEngine implements ISearchProvider {
     clear(): void {
         this.items = [];
         this.itemTypeIds = new Uint8Array(0);
+        this.visitedBuffer = new Uint8Array(0);
+        this.visitedIndicesBuffer = [];
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
         this.itemNameLengths = new Uint16Array(0);
@@ -1653,19 +1666,30 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        // ⚡ Bolt: Fast index tracking optimization
-        // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
-        // and provides O(1) array access. (~15x faster than Set for 1M items).
-        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
+        const hasPreferred = preferredIndices.length > 0;
 
-        if (preferredIndices.length > 0) {
-            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
-        }
+        // ⚡ Bolt: Fast Visited Tracker Array Reuse
+        // Use a pre-allocated instance-level array to prevent per-request memory allocation
+        // and garbage collection pauses.
+        const visited = hasPreferred ? this.visitedBuffer : undefined;
 
-        if (indices) {
-            this.searchWithIndices(indices, searchContext, heap, token, visited);
-        } else {
-            this.searchAllItems(searchContext, heap, token, visited);
+        try {
+            if (hasPreferred) {
+                this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+            }
+
+            if (indices) {
+                this.searchWithIndices(indices, searchContext, heap, token, visited);
+            } else {
+                this.searchAllItems(searchContext, heap, token, visited);
+            }
+        } finally {
+            if (hasPreferred && this.visitedIndicesBuffer.length > 0) {
+                for (let i = 0; i < this.visitedIndicesBuffer.length; i++) {
+                    this.visitedBuffer[this.visitedIndicesBuffer[i]] = 0;
+                }
+                this.visitedIndicesBuffer.length = 0;
+            }
         }
 
         const results = heap.getSorted();
@@ -1796,6 +1820,7 @@ export class SearchEngine implements ISearchProvider {
                     continue;
                 }
                 visited[i] = 1;
+                this.visitedIndicesBuffer.push(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -2345,25 +2370,21 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast index tracking optimization
-        // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
-        // and provides O(1) array access. (~15x faster than Set for 1M items).
-        const searchedIndices = new Uint8Array(this.items.length);
-        const priorityScopesLength = priorityScopes.length;
-
-        for (let s = 0; s < priorityScopesLength; s++) {
-            const indices = this.scopedIndices.get(priorityScopes[s]);
-            if (indices) {
-                const len = indices.length;
-                for (let j = 0; j < len; j++) {
-                    searchedIndices[indices[j]] = 1;
-                }
+        // ⚡ Bolt: Fast inherent metadata check
+        // Eliminates O(N) tracker array allocation by using the item's inherent typeId metadata
+        // to determine if it belongs to a priority scope. This provides an O(1) condition check
+        // and avoids memory allocation and initialization overhead for large codebases.
+        const isPriorityScope = new Uint8Array(256);
+        for (let typeId = 0; typeId < ID_TO_SCOPE.length; typeId++) {
+            if (priorityScopes.includes(ID_TO_SCOPE[typeId])) {
+                isPriorityScope[typeId] = 1;
             }
         }
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (searchedIndices[i] === 0) {
+            const typeId = this.itemTypeIds[i];
+            if (isPriorityScope[typeId] === 0) {
                 processItem(i);
             }
         }

@@ -31,3 +31,6 @@
 
 **Learning:** Fixed-chunk `Promise.all` batching in IO/CPU pipelines (e.g., worker threads) causes head-of-line blocking, where fast tasks must wait for the slowest task in the array before yielding results, which inflates tail latencies and slows down UI updates.
 **Action:** Replace unconstrained or fixed-chunk `Promise.all` iterations with a concurrency-limited task queue (e.g., `pLimit`) that pushes to a shared array and streams results as soon as `BATCH_SIZE` items accumulate or processing completes. This maximizes throughput without blocking.
+## 2026-05-11 - [Instance-level Tracker Array Reuse]
+**Learning:** In multi-pass fallback operations like `SearchEngine.searchAllItems` or `SearchEngine.searchWithIndices`, tracking visited indices dynamically per-request using `new Uint8Array(n)` creates massive object allocation overhead and GC pressure. For large data sets (e.g. 100,000+ items), this severely degrades burst search performance.
+**Action:** Replace dynamically instantiated arrays with an instance-level pre-allocated tracker (`this.visitedBuffer = new Uint8Array(n)`) alongside a tracking array for indices to reset (`this.visitedIndicesBuffer = []`). Always use a `try...finally` block to guarantee the buffer is cleanly reset (`buffer[i] = 0`) across requests to avoid state corruption while eliminating allocation pauses.
