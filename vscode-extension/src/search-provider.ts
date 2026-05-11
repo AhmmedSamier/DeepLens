@@ -153,7 +153,6 @@ export class SearchProvider {
      * Show transient feedback in status bar and as title flash
      */
 
-
     /**
      * Set and persist the user's selected search scope
      */

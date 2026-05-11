@@ -1,7 +1,7 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import { pLimit } from './p-limit';
-import { SearchableItem } from './types';
+import { Logger, TreeSitterParser } from './tree-sitter-parser';
+import type { SearchableItem } from './types';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -19,7 +19,7 @@ const workerLogger: Logger = {
 const parser = new TreeSitterParser(extensionPath, workerLogger);
 let isInitialized = false;
 
-parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: number }) => {
+parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: number; concurrency?: number }) => {
     try {
         if (!isInitialized) {
             await parser.init();
@@ -52,48 +52,73 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
             }
         }
 
+        if (message.concurrency !== undefined) {
+            if (
+                typeof message.concurrency !== 'number' ||
+                !Number.isFinite(message.concurrency) ||
+                !Number.isInteger(message.concurrency) ||
+                message.concurrency <= 0
+            ) {
+                parentPort?.postMessage({
+                    type: 'error',
+                    error: `Invalid concurrency: ${message.concurrency}. Must be a finite positive integer.`,
+                });
+                return;
+            }
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const concurrencyLimit = message.concurrency ?? 15;
 
         // ⚡ Bolt: Fast concurrent streaming optimization
         // Replaces fixed-chunk Promise.all processing with a concurrency-limited task pool (pLimit).
         // This prevents head-of-line blocking where fast files wait for the slowest file in a chunk,
         // reducing indexing latency and streaming results back to the parent thread continuously.
-        const limit = pLimit(BATCH_SIZE);
-        let chunkItems: SearchableItem[] = [];
+        const limit = pLimit(concurrencyLimit);
+        let pendingItems: SearchableItem[] = [];
         let processedCount = 0;
+        let totalCompleted = 0;
 
-        await Promise.all(
-            filePaths.map((filePath) =>
-                limit(async () => {
-                    let items: SearchableItem[] = [];
-                    try {
-                        items = await parser.parseFile(filePath);
-                    } catch {
-                        items = [];
+        const flushBatch = (isPartial: boolean) => {
+            if (pendingItems.length > 0 || !isPartial) {
+                parentPort?.postMessage({
+                    type: 'result',
+                    items: pendingItems,
+                    count: processedCount,
+                    isPartial,
+                });
+                pendingItems = [];
+                processedCount = 0;
+            }
+        };
+
+        const tasks = filePaths.map((filePath) => {
+            return limit(async () => {
+                let itemsCount = 0;
+                try {
+                    const parsedItems = await parser.parseFile(filePath);
+                    itemsCount = parsedItems.length;
+
+                    // Avoid array spread to prevent Call Stack Size Exceeded
+                    for (let i = 0; i < itemsCount; i++) {
+                        pendingItems.push(parsedItems[i]);
                     }
+                } catch {
+                    // Ignore parse errors for individual files
+                } finally {
+                    processedCount += itemsCount;
+                    totalCompleted++;
 
-                    // Push elements directly using a manual loop to avoid spreading large arrays
-                    for (let j = 0; j < items.length; j++) {
-                        chunkItems.push(items[j]);
+                    // Flush when we hit batch size or it's the very last item
+                    const isLast = totalCompleted === filePaths.length;
+                    if (processedCount >= BATCH_SIZE || isLast) {
+                        flushBatch(!isLast);
                     }
+                }
+            });
+        });
 
-                    processedCount++;
-
-                    // Stream results when chunk reaches BATCH_SIZE or it's the last item
-                    if (processedCount % BATCH_SIZE === 0 || processedCount === filePaths.length) {
-                        const itemsToSend = chunkItems;
-                        chunkItems = []; // Reset for next batch
-
-                        parentPort?.postMessage({
-                            type: 'result',
-                            items: itemsToSend,
-                            count: processedCount % BATCH_SIZE === 0 ? BATCH_SIZE : processedCount % BATCH_SIZE,
-                            isPartial: processedCount < filePaths.length,
-                        });
-                    }
-                }),
-            ),
-        );
+        await Promise.all(tasks);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',

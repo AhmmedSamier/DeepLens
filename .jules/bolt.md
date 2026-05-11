@@ -14,6 +14,10 @@
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
 
+## 2026-04-25 - [Fast Concurrent Batch Processing in Workers]
+**Learning:** In worker threads switching from fixed-chunk Promise.all/fixed-chunk mapping to a concurrency-limited task pool (pLimit), tasks resolve out of order. Relying on the original mapped array index (index === array.length - 1) to signal the final flush creates an out-of-order completion bug (premature termination signal). This occurs because when using a concurrency-limited task pool (pLimit), the task at the highest array index no longer guarantees being the last to finish; the logic fails because it incorrectly assumes completion order matches array order, which is not guaranteed by pLimit.
+**Action:** Replace fixed-chunk Promise.all with a bounded concurrency pool (using pLimit). Maintain a totalCompleted counter incremented in the finally block of each task, and trigger the final batch flush when totalCompleted === array.length to guarantee all data is safely streamed.
+
 ## 2026-04-29 - [Fast Tree-Sitter Node Type Checks via Sets]
 
 **Learning:** In hot paths like AST traversal and node type mapping (e.g., `getSearchItemType`), repeatedly executing `RegExp.test()` against a small set of known literal strings (like `"class_declaration"`) adds significant overhead due to regex engine execution and matching.
