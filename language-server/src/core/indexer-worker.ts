@@ -52,6 +52,21 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
             }
         }
 
+        if (message.concurrency !== undefined) {
+            if (
+                typeof message.concurrency !== 'number' ||
+                !Number.isFinite(message.concurrency) ||
+                !Number.isInteger(message.concurrency) ||
+                message.concurrency <= 0
+            ) {
+                parentPort?.postMessage({
+                    type: 'error',
+                    error: `Invalid concurrency: ${message.concurrency}. Must be a finite positive integer.`,
+                });
+                return;
+            }
+        }
+
         const BATCH_SIZE = message.chunkSize ?? 25;
         const concurrencyLimit = message.concurrency ?? 15;
 
@@ -79,17 +94,19 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         const tasks = filePaths.map((filePath) => {
             return limit(async () => {
+                let itemsCount = 0;
                 try {
                     const parsedItems = await parser.parseFile(filePath);
+                    itemsCount = parsedItems.length;
 
                     // Avoid array spread to prevent Call Stack Size Exceeded
-                    for (let i = 0; i < parsedItems.length; i++) {
+                    for (let i = 0; i < itemsCount; i++) {
                         pendingItems.push(parsedItems[i]);
                     }
                 } catch {
                     // Ignore parse errors for individual files
                 } finally {
-                    processedCount++;
+                    processedCount += itemsCount;
                     totalCompleted++;
 
                     // Flush when we hit batch size or it's the very last item
