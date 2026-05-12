@@ -147,11 +147,6 @@ export class SearchEngine implements ISearchProvider {
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
-    // ⚡ Bolt: Fast Visited Tracker Array Reuse
-    // Pre-allocating a single instance-level array prevents per-request memory allocation
-    // and eliminates garbage collection pauses during frequent searches.
-    private visitedBuffer: Uint8Array = new Uint8Array(0);
-    private visitedIndicesBuffer: number[] = [];
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
     private itemNameLengths: Uint16Array = new Uint16Array(0);
@@ -272,10 +267,6 @@ export class SearchEngine implements ISearchProvider {
             const newTypeIds = new Uint8Array(newCapacity);
             newTypeIds.set(this.itemTypeIds);
             this.itemTypeIds = newTypeIds;
-
-            const newVisitedBuffer = new Uint8Array(newCapacity);
-            newVisitedBuffer.set(this.visitedBuffer);
-            this.visitedBuffer = newVisitedBuffer;
 
             const newBitflags = new Uint32Array(newCapacity);
             newBitflags.set(this.itemBitflags);
@@ -528,8 +519,6 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedPatterns = [];
-        this.visitedBuffer = new Uint8Array(this.items.length);
-        this.visitedIndicesBuffer = [];
     }
 
     /**
@@ -762,8 +751,6 @@ export class SearchEngine implements ISearchProvider {
     clear(): void {
         this.items = [];
         this.itemTypeIds = new Uint8Array(0);
-        this.visitedBuffer = new Uint8Array(0);
-        this.visitedIndicesBuffer = [];
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
         this.itemNameLengths = new Uint16Array(0);
@@ -1672,6 +1659,7 @@ export class SearchEngine implements ISearchProvider {
         return this.performUnifiedSearch(indices, context.normalizedQuery, context.maxResults, context.scope);
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1682,30 +1670,16 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const hasPreferred = preferredIndices.length > 0;
+        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
-        // ⚡ Bolt: Fast Visited Tracker Array Reuse
-        // Use a pre-allocated instance-level array to prevent per-request memory allocation
-        // and garbage collection pauses.
-        const visited = hasPreferred ? this.visitedBuffer : undefined;
+        if (preferredIndices.length > 0) {
+            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+        }
 
-        try {
-            if (hasPreferred) {
-                this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
-            }
-
-            if (indices) {
-                this.searchWithIndices(indices, searchContext, heap, token, visited);
-            } else {
-                this.searchAllItems(searchContext, heap, token, visited);
-            }
-        } finally {
-            if (hasPreferred && this.visitedIndicesBuffer.length > 0) {
-                for (let i = 0; i < this.visitedIndicesBuffer.length; i++) {
-                    this.visitedBuffer[this.visitedIndicesBuffer[i]] = 0;
-                }
-                this.visitedIndicesBuffer.length = 0;
-            }
+        if (indices) {
+            this.searchWithIndices(indices, searchContext, heap, token, visited);
+        } else {
+            this.searchAllItems(searchContext, heap, token, visited);
         }
 
         const results = heap.getSorted();
@@ -1728,6 +1702,7 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
@@ -1737,11 +1712,11 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Uint8Array | undefined;
+        let candidateBitmap: Uint8Array | undefined;
         if (indices) {
-            candidateSet = new Uint8Array(this.items.length);
+            candidateBitmap = new Uint8Array(this.items.length);
             for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
+                candidateBitmap[indices[i]] = 1;
             }
         }
 
@@ -1750,7 +1725,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (candidateBitmap && candidateBitmap[index] !== 1) {
                 continue;
             }
             preferred.push(index);
@@ -1758,6 +1733,7 @@ export class SearchEngine implements ISearchProvider {
                 break;
             }
         }
+
         return preferred;
     }
 
@@ -1836,7 +1812,6 @@ export class SearchEngine implements ISearchProvider {
                     continue;
                 }
                 visited[i] = 1;
-                this.visitedIndicesBuffer.push(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1851,7 +1826,7 @@ export class SearchEngine implements ISearchProvider {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited && visited[i] === 1) {
+            if (visited?.[i] === 1) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
