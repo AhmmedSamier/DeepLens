@@ -5,6 +5,7 @@ import { CancellationToken } from 'vscode-languageserver';
 import { Config } from './config';
 import { GitProvider } from './git-provider';
 import { MinHeap } from './min-heap';
+import { pLimit } from './p-limit';
 import { RipgrepService } from './ripgrep-service';
 import { PreparedPath, RouteMatcher, RoutePattern } from './route-matcher';
 import {
@@ -157,6 +158,11 @@ export class SearchEngine implements ISearchProvider {
     private activeFileItems: SearchableItem[] = [];
     private inactiveFileItems: SearchableItem[] = [];
     private filePriorityCacheDirty = true;
+
+    // Reusable buffers for index tracking to avoid allocations in hot loops
+    private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
+    private visitedIndicesList: number[] = [];
+    private _isSearching = false;
 
     // String normalization cache (1-item) for relativeFilePath
     private lastRelativeInput: string | null = null;
@@ -424,16 +430,12 @@ export class SearchEngine implements ISearchProvider {
 
     private moveFillersToGaps(indicesToRemove: number[], newCount: number, count: number): void {
         const gaps = indicesToRemove.filter((i) => i < newCount);
-        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
-        const removedSet = new Uint8Array(count);
-        for (let i = 0; i < indicesToRemove.length; i++) {
-            removedSet[indicesToRemove[i]] = 1;
-        }
+        const removedSet = new Set(indicesToRemove);
         const fillers: number[] = [];
 
         // Identify fillers: valid items at [newCount, count)
         for (let i = count - 1; i >= newCount; i--) {
-            if (removedSet[i] !== 1) {
+            if (!removedSet.has(i)) {
                 fillers.push(i);
             }
         }
@@ -770,6 +772,8 @@ export class SearchEngine implements ISearchProvider {
         this.lastRelativeOutput = null;
         this.activeFileItems = [];
         this.inactiveFileItems = [];
+        this.visitedIndicesBuffer = new Uint8Array(0);
+        this.visitedIndicesList.length = 0;
         this.invalidateDerivedCaches();
     }
 
@@ -957,26 +961,37 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): Promise<SearchResult[]> {
         let allResults: SearchResult[] = [];
-        const providerPromises = this.providers.map(async (provider) => {
-            if (token?.isCancellationRequested) {
-                return;
-            }
 
-            const providerResults = await provider.search(context);
-            if (token?.isCancellationRequested) {
-                return;
-            }
+        // ⚡ Bolt: Prevent Resource Exhaustion
+        // Replaced unconstrained Promise.all mapping with a bounded concurrency pool (pLimit).
+        // Why: Running all search providers concurrently without limits can cause severe CPU thrashing
+        // and potential file descriptor exhaustion, especially in environments with many providers
+        // or during high-throughput burst searches.
+        // Impact: Stabilizes memory usage and reduces tail latency during heavy concurrent searches.
+        const limit = pLimit(4);
 
-            allResults.push(...providerResults);
-            if (onResult) {
-                for (const result of providerResults) {
-                    if (token?.isCancellationRequested) {
-                        break;
-                    }
-                    onResult(result);
+        const providerPromises = this.providers.map((provider) =>
+            limit(async () => {
+                if (token?.isCancellationRequested) {
+                    return;
                 }
-            }
-        });
+
+                const providerResults = await provider.search(context);
+                if (token?.isCancellationRequested) {
+                    return;
+                }
+
+                allResults.push(...providerResults);
+                if (onResult) {
+                    for (const result of providerResults) {
+                        if (token?.isCancellationRequested) {
+                            break;
+                        }
+                        onResult(result);
+                    }
+                }
+            }),
+        );
 
         const providerStatuses = await Promise.allSettled(providerPromises);
         for (let i = 0; i < providerStatuses.length; i++) {
@@ -1577,14 +1592,28 @@ export class SearchEngine implements ISearchProvider {
         let indices: number[] | undefined;
 
         if (context.scope === SearchScope.OPEN) {
-            indices = this.getIndicesForOpenFiles();
-            // Filter out files, keep only symbols
-            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            const rawIndices = this.getIndicesForOpenFiles() || [];
+            // ⚡ Bolt: Fast array filtering without callback allocation overhead
+            // Replaces indices.filter() to avoid callback overhead in a hot path
+            indices = [];
+            for (let i = 0; i < rawIndices.length; i++) {
+                const idx = rawIndices[i];
+                if (this.items[idx].type !== SearchItemType.FILE) {
+                    indices.push(idx);
+                }
+            }
         } else if (context.scope === SearchScope.MODIFIED) {
-            indices = await this.getIndicesForModifiedFiles();
+            const rawIndices = (await this.getIndicesForModifiedFiles()) || [];
 
-            // Filter out files, keep only symbols
-            indices = indices.filter((i) => this.items[i].type !== SearchItemType.FILE);
+            // ⚡ Bolt: Fast array filtering without callback allocation overhead
+            // Replaces indices.filter() to avoid callback overhead in a hot path
+            indices = [];
+            for (let i = 0; i < rawIndices.length; i++) {
+                const idx = rawIndices[i];
+                if (this.items[idx].type !== SearchItemType.FILE) {
+                    indices.push(idx);
+                }
+            }
         } else {
             indices =
                 context.scope === SearchScope.EVERYTHING
@@ -1626,18 +1655,29 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
-        // ⚡ Bolt: Fast integer ID tracking using Uint8Array instead of Set
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
 
+        let trackVisited = false;
         if (preferredIndices.length > 0) {
-            this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+            trackVisited = true;
+            if (this.visitedIndicesBuffer.length < this.items.length) {
+                this.visitedIndicesBuffer = new Uint8Array(this.items.length);
+            }
+            this.visitedIndicesList.length = 0;
         }
 
-        if (indices) {
-            this.searchWithIndices(indices, searchContext, heap, token, visited);
-        } else {
-            this.searchAllItems(searchContext, heap, token, visited);
+        try {
+            if (preferredIndices.length > 0) {
+                this.searchWithIndices(preferredIndices, searchContext, heap, token, trackVisited);
+            }
+
+            if (indices) {
+                this.searchWithIndices(indices, searchContext, heap, token, trackVisited);
+            } else {
+                this.searchAllItems(searchContext, heap, token, trackVisited);
+            }
+        } finally {
+            this.cleanupVisitedTracker(trackVisited);
         }
 
         const results = heap.getSorted();
@@ -1660,6 +1700,16 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
+    private cleanupVisitedTracker(trackVisited: boolean): void {
+        if (trackVisited) {
+            const modifiedLen = this.visitedIndicesList.length;
+            for (let i = 0; i < modifiedLen; i++) {
+                this.visitedIndicesBuffer[this.visitedIndicesList[i]] = 0;
+            }
+            this.visitedIndicesList.length = 0;
+        }
+    }
+
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
@@ -1669,14 +1719,9 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Uint8Array | undefined;
+        let candidateSet: Set<number> | undefined;
         if (indices) {
-            // ⚡ Bolt: Fast Unique Tracking Optimization
-            // Using Uint8Array instead of Set<number> to track candidate presence
-            candidateSet = new Uint8Array(this.items.length);
-            for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
-            }
+            candidateSet = new Set(indices);
         }
 
         const preferred: number[] = [];
@@ -1684,7 +1729,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (candidateSet && !candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);
@@ -1760,16 +1805,17 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        trackVisited: boolean = false,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
-            if (visited) {
-                if (visited[i] === 1) {
+            if (trackVisited) {
+                if (this.visitedIndicesBuffer[i] !== 0) {
                     continue;
                 }
-                visited[i] = 1;
+                this.visitedIndicesBuffer[i] = 1;
+                this.visitedIndicesList.push(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1779,13 +1825,18 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        trackVisited: boolean = false,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited && visited[i] === 1) {
-                continue;
+            if (trackVisited) {
+                if (this.visitedIndicesBuffer[i] !== 0) {
+                    continue;
+                }
+                // Optimization: searchAllItems is the final fallback pass.
+                // It only needs to check the tracker to skip previously visited items,
+                // but it never needs to write to it because there are no subsequent passes.
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -2312,6 +2363,7 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private searchRemainingItems(
         priorityScopes: SearchScope[],
         maxResults: number,

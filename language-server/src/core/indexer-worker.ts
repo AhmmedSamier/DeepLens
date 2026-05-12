@@ -27,41 +27,41 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         const { filePaths } = message;
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const CONCURRENCY = 15;
 
-        const limit = pLimit(BATCH_SIZE);
+        // ⚡ Bolt: Remove head-of-line blocking by using a concurrency task pool
+        // instead of chunked Promise.all
+        const limit = pLimit(CONCURRENCY);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let batchedItems: any[] = [];
-        let processedCount = 0;
-        let filesInCurrentBatch = 0;
+        let batchItems: any[] = [];
+        let batchProcessedFiles = 0;
+        let totalCompleted = 0;
 
         await Promise.all(
             filePaths.map((filePath) =>
                 limit(async () => {
                     try {
                         const items = await parser.parseFile(filePath);
+                        // ⚡ Bolt: Fast manual loop pushing to avoid Maximum Call Stack Size Exceeded
                         for (let i = 0; i < items.length; i++) {
-                            batchedItems.push(items[i]);
+                            batchItems.push(items[i]);
                         }
                     } catch {
-                        // ignore
-                    }
+                        // Ignore
+                    } finally {
+                        totalCompleted++;
+                        batchProcessedFiles++;
 
-                    processedCount++;
-                    filesInCurrentBatch++;
-
-                    // Send back chunk result immediately to keep main thread unblocked but processing
-                    if (filesInCurrentBatch >= BATCH_SIZE || processedCount === filePaths.length) {
-                        const chunkItems = batchedItems;
-                        const chunkCount = filesInCurrentBatch;
-                        batchedItems = [];
-                        filesInCurrentBatch = 0;
-
-                        parentPort?.postMessage({
-                            type: 'result',
-                            items: chunkItems,
-                            count: chunkCount,
-                            isPartial: processedCount < filePaths.length,
-                        });
+                        if (batchProcessedFiles >= BATCH_SIZE || totalCompleted === filePaths.length) {
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: batchItems,
+                                count: batchProcessedFiles,
+                                isPartial: totalCompleted < filePaths.length,
+                            });
+                            batchItems = [];
+                            batchProcessedFiles = 0;
+                        }
                     }
                 }),
             ),
