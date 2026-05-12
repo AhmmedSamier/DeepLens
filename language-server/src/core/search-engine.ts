@@ -282,23 +282,17 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Append items
-        // ⚡ Bolt: Fast safe array push
-        // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
-        // Snapshot length to guard against infinite loop if items === this.items
-        const originalLen = items.length;
-        for (let i = 0; i < originalLen; i++) {
-            this.items.push(items[i]);
-        }
+        this.items.push(...items);
 
         const CHUNK_SIZE = 500;
-        for (let i = 0; i < originalLen; i += CHUNK_SIZE) {
-            const end = Math.min(i + CHUNK_SIZE, originalLen);
+        for (let i = 0; i < items.length; i += CHUNK_SIZE) {
+            const end = Math.min(i + CHUNK_SIZE, items.length);
             for (let j = i; j < end; j++) {
                 this.processAddedItem(items[j], startIndex + j);
             }
 
             // Yield to main thread for responsiveness
-            if (end < originalLen) {
+            if (end < items.length) {
                 await new Promise((resolve) => setTimeout(resolve, 0));
             }
         }
@@ -398,11 +392,7 @@ export class SearchEngine implements ISearchProvider {
             if (indices && indices.length > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    // ⚡ Bolt: Fast safe array push
-                    // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
-                    for (let i = 0; i < indices.length; i++) {
-                        indicesToRemove.push(indices[i]);
-                    }
+                    indicesToRemove.push(...indices);
                 }
             }
         }
@@ -470,7 +460,6 @@ export class SearchEngine implements ISearchProvider {
             this.itemTypeIds = this.itemTypeIds.slice(0, newCount);
             this.itemBitflags = this.itemBitflags.slice(0, newCount);
             this.itemNameBitflags = this.itemNameBitflags.slice(0, newCount);
-            this.itemNameLengths = this.itemNameLengths.slice(0, newCount);
             this.preparedNames.length = newCount;
             this.preparedFullNames.length = newCount;
             this.preparedPaths.length = newCount;
@@ -985,12 +974,7 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                // ⚡ Bolt: Fast safe array push
-                // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
-                const len = providerResults.length;
-                for (let i = 0; i < len; i++) {
-                    allResults.push(providerResults[i]);
-                }
+                allResults.push(...providerResults);
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
@@ -1225,6 +1209,8 @@ export class SearchEngine implements ISearchProvider {
         const prioritizedFiles = this.getPrioritizedFileItems();
 
         const configuredConcurrency = this.config?.getSearchConcurrency() || 20;
+        const initialConcurrency = Math.max(1, Math.min(configuredConcurrency, 8));
+        let currentConcurrency = initialConcurrency;
 
         let processedFiles = 0;
         const pendingResults: SearchResult[] = [];
@@ -1248,29 +1234,18 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
-        // ⚡ Bolt: Stream search concurrency optimization
-        // Replaced fixed chunking Promise.all with a pLimit task pool to avoid head-of-line blocking.
-        // This architecture allows results to be streamed back in batches as they are parsed,
-        // rather than waiting for the slowest file in a specific chunk.
-
-        // Use configuredConcurrency directly, since pLimit does not dynamically scale
-        const limit = pLimit(configuredConcurrency);
-        const tasks: Promise<void>[] = [];
-        let totalCompleted = 0;
-        const totalFiles = prioritizedFiles.length;
-
-        for (let i = 0; i < totalFiles; i++) {
+        for (let start = 0; start < prioritizedFiles.length; start += currentConcurrency) {
             if (results.length >= maxResults || token?.isCancellationRequested) {
                 break;
             }
 
-            const fileItem = prioritizedFiles[i];
+            const chunk = prioritizedFiles.slice(start, start + currentConcurrency);
 
-            tasks.push(
-                limit(async () => {
+            await Promise.all(
+                chunk.map(async (fileItem) => {
+                    if (results.length >= maxResults || token?.isCancellationRequested) return;
+
                     try {
-                        if (results.length >= maxResults || token?.isCancellationRequested) return;
-
                         // Optimization: Use cached size if available to avoid fs.stat calls
                         let fileSize = fileItem.size;
                         if (fileSize === undefined) {
@@ -1299,32 +1274,25 @@ export class SearchEngine implements ISearchProvider {
                         await this.scanFileStream(scanContext, fileSize);
                     } catch {
                         // Ignore read/stat errors
-                    } finally {
-                        totalCompleted++;
-
-                        // Safely trigger batch flush using a completed counter
-                        if (pendingResults.length >= 5 || totalCompleted === totalFiles) {
-                            flushBatch();
-                        }
-
-                        if (processedFiles % 100 === 0 || (results.length > 0 && processedFiles % 10 === 0)) {
-                            this.logger?.log(
-                                `Searched ${processedFiles}/${prioritizedFiles.length} files... found ${results.length} matches`,
-                            );
-                        }
                     }
                 }),
             );
 
-            // Yield occasionally to process queued callbacks, allowing `results.length`
-            // to update. This prevents queueing all items synchronously and exhausting memory.
-            // Also limits memory overhead by throttling enqueue rate.
-            if (i > 0 && i % 50 === 0) {
-                await new Promise((resolve) => setTimeout(resolve, 0));
+            if (pendingResults.length >= 5) {
+                flushBatch();
             }
-        }
 
-        await Promise.all(tasks);
+            if (results.length > 0 && currentConcurrency !== configuredConcurrency) {
+                currentConcurrency = configuredConcurrency;
+            }
+
+            if (processedFiles % 100 === 0 || results.length > 0) {
+                this.logger?.log(
+                    `Searched ${processedFiles}/${prioritizedFiles.length} files... found ${results.length} matches`,
+                );
+            }
+            flushBatch();
+        }
 
         flushBatch();
         const durationMs = Date.now() - startTime;
@@ -1671,7 +1639,6 @@ export class SearchEngine implements ISearchProvider {
         return this.performUnifiedSearch(indices, context.normalizedQuery, context.maxResults, context.scope);
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1682,7 +1649,7 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const visited = preferredIndices.length > 0 ? new Uint8Array(this.items.length) : undefined;
+        const visited = preferredIndices.length > 0 ? new Set<number>() : undefined;
 
         if (preferredIndices.length > 0) {
             this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
@@ -1714,7 +1681,6 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
@@ -1724,12 +1690,9 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateBitmap: Uint8Array | undefined;
+        let candidateSet: Set<number> | undefined;
         if (indices) {
-            candidateBitmap = new Uint8Array(this.items.length);
-            for (let i = 0; i < indices.length; i++) {
-                candidateBitmap[indices[i]] = 1;
-            }
+            candidateSet = new Set(indices);
         }
 
         const preferred: number[] = [];
@@ -1737,7 +1700,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateBitmap && candidateBitmap[index] !== 1) {
+            if (candidateSet && !candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);
@@ -1745,7 +1708,6 @@ export class SearchEngine implements ISearchProvider {
                 break;
             }
         }
-
         return preferred;
     }
 
@@ -1814,16 +1776,16 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        visited?: Set<number>,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
             if (visited) {
-                if (visited[i] === 1) {
+                if (visited.has(i)) {
                     continue;
                 }
-                visited[i] = 1;
+                visited.add(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1833,12 +1795,12 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        visited?: Set<number>,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited?.[i] === 1) {
+            if (visited?.has(i)) {
                 continue;
             }
             this.processItemForSearch(i, context, heap);
@@ -2286,11 +2248,7 @@ export class SearchEngine implements ISearchProvider {
                 ? (prepared as unknown as ExtendedPrepared)._targetLower
                 : item.name.toLowerCase();
 
-            // ⚡ Bolt: Fast Object Lowercase Optimization
-            // Pass the precomputed preparedFullName to avoid allocating `fullName.toLowerCase()` in the hot loop
-            const preparedFullName = this.preparedFullNames?.[i] as unknown as ExtendedPrepared | null;
-
-            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower, preparedFullName);
+            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower);
             if (score > 0) {
                 addResult(item, this.itemTypeIds[i], score);
             }
@@ -2308,12 +2266,7 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private calculateMatchScore(
-        nameLower: string,
-        fullName: string | undefined,
-        queryLower: string,
-        preparedFullName?: ExtendedPrepared | null,
-    ): number {
+    private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
         // Fast path: Exact match or prefix match
         if (nameLower === queryLower || nameLower.indexOf(queryLower) === 0) {
             return 1.0;
@@ -2326,10 +2279,7 @@ export class SearchEngine implements ISearchProvider {
 
         // Check fullName if it exists and is different from name
         if (fullName) {
-            // ⚡ Bolt: Eliminate Redundant String Allocations
-            // Use the precomputed _targetLower string from preparedFullName if available,
-            // falling back to .toLowerCase() only when necessary.
-            const fullLower = preparedFullName ? preparedFullName._targetLower : fullName.toLowerCase();
+            const fullLower = fullName.toLowerCase();
             if (fullLower !== nameLower) {
                 if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
                     return 0.9;
@@ -2385,21 +2335,25 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast inherent metadata check
-        // Eliminates O(N) tracker array allocation by using the item's inherent typeId metadata
-        // to determine if it belongs to a priority scope. This provides an O(1) condition check
-        // and avoids memory allocation and initialization overhead for large codebases.
-        const isPriorityScope = new Uint8Array(256);
-        for (let typeId = 0; typeId < ID_TO_SCOPE.length; typeId++) {
-            if (priorityScopes.includes(ID_TO_SCOPE[typeId])) {
-                isPriorityScope[typeId] = 1;
+        // ⚡ Bolt: Fast index tracking optimization
+        // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
+        // and provides O(1) array access. (~15x faster than Set for 1M items).
+        const searchedIndices = new Uint8Array(this.items.length);
+        const priorityScopesLength = priorityScopes.length;
+
+        for (let s = 0; s < priorityScopesLength; s++) {
+            const indices = this.scopedIndices.get(priorityScopes[s]);
+            if (indices) {
+                const len = indices.length;
+                for (let j = 0; j < len; j++) {
+                    searchedIndices[indices[j]] = 1;
+                }
             }
         }
 
         for (let i = 0; i < this.items.length; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            const typeId = this.itemTypeIds[i];
-            if (isPriorityScope[typeId] === 0) {
+            if (searchedIndices[i] === 0) {
                 processItem(i);
             }
         }
