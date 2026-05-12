@@ -69,11 +69,13 @@ export class SearchProvider {
     private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
     // Command IDs for empty state actions
+    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly CMD_NATIVE_SEARCH = 'command:native-search';
     private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
+    private readonly CMD_CLEAR_QUERY = 'command:clear-query';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
@@ -123,7 +125,6 @@ export class SearchProvider {
     constructor(
         searchEngine: ISearchProvider,
         config: Config,
-        private readonly storage: vscode.Memento,
         activityTracker?: ActivityTracker,
         commandIndexer?: CommandIndexer,
     ) {
@@ -132,7 +133,6 @@ export class SearchProvider {
         this.activityTracker = activityTracker;
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
-        this.userSelectedScope = this.storage.get<SearchScope>('deeplens.userSelectedScope', SearchScope.EVERYTHING);
         this.createFilterButtons();
 
         // Start with a random tip
@@ -152,14 +152,6 @@ export class SearchProvider {
     /**
      * Show transient feedback in status bar and as title flash
      */
-
-    /**
-     * Set and persist the user's selected search scope
-     */
-    private setUserSelectedScope(scope: SearchScope): void {
-        this.userSelectedScope = scope;
-        this.storage.update('deeplens.userSelectedScope', scope);
-    }
     private showFeedback(message: string): void {
         if (this.currentQuickPick) {
             if (this.feedbackTimeout) {
@@ -461,10 +453,10 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = this.userSelectedScope;
+            this.currentScope = this.userSelectedScope ?? SearchScope.EVERYTHING;
         } else {
             this.currentScope = scope;
-            this.setUserSelectedScope(scope);
+            this.userSelectedScope = scope;
         }
         await this.showInternal(initialQuery);
     }
@@ -519,6 +511,8 @@ export class SearchProvider {
      * Prompt for confirmation before clearing history
      */
     private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        quickPick.busy = false;
+
         const confirmItem: SearchResultItem = {
             label: 'Confirm Clear History',
             detail: 'This cannot be undone',
@@ -889,7 +883,7 @@ export class SearchProvider {
     }
 
     private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        this.setUserSelectedScope(SearchScope.EVERYTHING);
+        this.userSelectedScope = SearchScope.EVERYTHING;
         this.currentScope = SearchScope.EVERYTHING;
 
         const currentQuery = quickPick.value;
@@ -906,9 +900,18 @@ export class SearchProvider {
         this.updateFilterButtons(quickPick);
         this.updateTitle(quickPick, quickPick.items.length);
 
+        this.rerunSearchForCurrentQuery(quickPick);
+    }
+
+    private async rerunSearchForCurrentQuery(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
         const { text } = this.parseQuery(quickPick.value);
         const queryId = ++this.lastQueryId;
-        this.performSearch(quickPick, text, queryId);
+        if (text.trim().length === 0) {
+            await this.showRecentHistoryAndResetState(quickPick, queryId);
+            return;
+        }
+
+        await this.performSearch(quickPick, text, queryId);
     }
 
     /**
@@ -1112,7 +1115,7 @@ export class SearchProvider {
             return false;
         }
 
-        this.setUserSelectedScope(scope);
+        this.userSelectedScope = scope;
         this.currentScope = scope;
         this.updateFilterButtons(quickPick);
         quickPick.placeholder = this.getPlaceholder();
@@ -1300,7 +1303,7 @@ export class SearchProvider {
 
             if (buttonBaseName === baseName) {
                 // Update user selection
-                this.setUserSelectedScope(scope);
+                this.userSelectedScope = scope;
 
                 // Also update current scope (though it might be overridden by query prefix in next step)
                 this.currentScope = scope;
@@ -1327,17 +1330,12 @@ export class SearchProvider {
                 this.updateFilterButtons(quickPick);
                 this.updateTitle(quickPick, quickPick.items.length);
 
-                // Re-run search with new filter
-                // We use parseQuery to ensure we handle the (potentially updated) text correctly
-                const { text } = this.parseQuery(quickPick.value);
-
                 // If the value changed, onDidChangeValue will take care of the search
                 if (currentQuery !== quickPick.value) {
                     return;
                 }
 
-                const queryId = ++this.lastQueryId;
-                await this.performSearch(quickPick, text, queryId);
+                await this.rerunSearchForCurrentQuery(quickPick);
                 break;
             }
         }
@@ -1539,6 +1537,19 @@ export class SearchProvider {
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
     ): Promise<boolean> {
+        if (selected.result.item.id === this.CMD_CLEAR_SEARCH) {
+            quickPick.value = '';
+            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
+            // We must manually trigger the query change logic to update the list
+            this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+            return true;
+        }
+
         if (selected.result.item.id === this.CMD_NATIVE_SEARCH) {
             await vscode.commands.executeCommand('workbench.action.findInFiles', {
                 query: quickPick.value,
@@ -1549,7 +1560,7 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_SWITCH_SCOPE) {
-            this.setUserSelectedScope(SearchScope.EVERYTHING);
+            this.userSelectedScope = SearchScope.EVERYTHING;
             this.currentScope = SearchScope.EVERYTHING;
 
             const currentQuery = quickPick.value;
@@ -1586,6 +1597,21 @@ export class SearchProvider {
 
         if (selected.result.item.id === this.CMD_SETTINGS) {
             vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+            return true;
+        }
+
+        if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
+            quickPick.value = '';
+
+            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
+            await this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+
+            this.showFeedback('Search query cleared');
             return true;
         }
 
@@ -1665,7 +1691,15 @@ export class SearchProvider {
             });
         };
 
-        // 3. Native Search Action
+        // 3. Clear Search Action
+        addCommandItem(
+            'Clear Search',
+            'Reset your search query',
+            new vscode.ThemeIcon('clear-all'),
+            this.CMD_CLEAR_SEARCH,
+        );
+
+        // 4. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1673,18 +1707,26 @@ export class SearchProvider {
             this.CMD_NATIVE_SEARCH,
         );
 
-        // 4. Rebuild Index Action
+        // 5. Rebuild Index Action
         addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
-        // 5. Clear Cache Action
+        // 6. Clear Cache Action
         addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
-        // 6. Settings Action
+        // 7. Settings Action
         addCommandItem(
             'Configure Settings',
             'Check exclusion rules',
             new vscode.ThemeIcon('settings-gear'),
             this.CMD_SETTINGS,
+        );
+
+        // 7. Clear Query Action
+        addCommandItem(
+            'Clear Search Query',
+            'Start a new search',
+            new vscode.ThemeIcon('clear-all'),
+            this.CMD_CLEAR_QUERY,
         );
 
         return { items, prompt: detail };
@@ -2091,7 +2133,7 @@ export class SearchProvider {
             // Find scope for this prefix (add space to match PREFIX_MAP)
             const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
             if (scope) {
-                this.setUserSelectedScope(scope); // <--- FIX: Persist user selection
+                this.userSelectedScope = scope; // <--- FIX: Persist user selection
                 this.currentScope = scope;
                 this.updateFilterButtons(this.currentQuickPick);
                 this.currentQuickPick.value = ''; // Clear the command text
