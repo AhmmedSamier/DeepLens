@@ -147,11 +147,6 @@ export class SearchEngine implements ISearchProvider {
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
     private itemTypeIds: Uint8Array = new Uint8Array(0);
-    // ⚡ Bolt: Fast Visited Tracker Array Reuse
-    // Pre-allocating a single instance-level array prevents per-request memory allocation
-    // and eliminates garbage collection pauses during frequent searches.
-    private visitedBuffer: Uint8Array = new Uint8Array(0);
-    private visitedIndicesBuffer: number[] = [];
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
     private itemNameLengths: Uint16Array = new Uint16Array(0);
@@ -164,9 +159,18 @@ export class SearchEngine implements ISearchProvider {
     private inactiveFileItems: SearchableItem[] = [];
     private filePriorityCacheDirty = true;
 
+    // Reusable buffers for index tracking to avoid allocations in hot loops
+    private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
+    private visitedIndicesList: number[] = [];
+    private _isSearching = false;
+
     // String normalization cache (1-item) for relativeFilePath
     private lastRelativeInput: string | null = null;
     private lastRelativeOutput: string | null = null;
+
+    // String normalization cache (1-item) for absolute path normalization
+    private lastNormalizedInput: string | null = null;
+    private lastNormalizedOutput: string | null = null;
 
     // Deduplication cache for prepared strings
     private readonly preparedCache: Map<string, { prepared: Fuzzysort.Prepared; refCount: number }> = new Map();
@@ -174,8 +178,8 @@ export class SearchEngine implements ISearchProvider {
     // Map Scope -> Array of Indices
     private readonly scopedIndices: Map<SearchScope, number[]> = new Map();
 
-    // Map Normalized File Path -> Array of Item Indices (Reverse Index for O(1) lookup)
-    private readonly fileToItemIndices: Map<string, number[]> = new Map();
+    // Map Normalized File Path -> Set of Item Indices (Reverse Index for O(1) removal)
+    private readonly fileToItemIndices: Map<string, Set<number>> = new Map();
     private readonly itemIndexById: Map<string, number> = new Map();
 
     private modifiedIndicesCache: {
@@ -247,6 +251,8 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCache.clear();
         this.lastRelativeInput = null;
         this.lastRelativeOutput = null;
+        this.lastNormalizedInput = null;
+        this.lastNormalizedOutput = null;
         this.filePaths = [];
         this.invalidateDerivedCaches();
         for (const item of items) {
@@ -272,10 +278,6 @@ export class SearchEngine implements ISearchProvider {
             const newTypeIds = new Uint8Array(newCapacity);
             newTypeIds.set(this.itemTypeIds);
             this.itemTypeIds = newTypeIds;
-
-            const newVisitedBuffer = new Uint8Array(newCapacity);
-            newVisitedBuffer.set(this.visitedBuffer);
-            this.visitedBuffer = newVisitedBuffer;
 
             const newBitflags = new Uint32Array(newCapacity);
             newBitflags.set(this.itemBitflags);
@@ -341,10 +343,10 @@ export class SearchEngine implements ISearchProvider {
         const normalizedFilePath = this.normalizePath(item.filePath);
         let fileIndices = this.fileToItemIndices.get(normalizedFilePath);
         if (!fileIndices) {
-            fileIndices = [];
+            fileIndices = new Set<number>();
             this.fileToItemIndices.set(normalizedFilePath, fileIndices);
         }
-        fileIndices.push(globalIndex);
+        fileIndices.add(globalIndex);
     }
 
     /**
@@ -398,10 +400,12 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of filePaths) {
             const normalized = this.normalizePath(filePath);
             const indices = this.fileToItemIndices.get(normalized);
-            if (indices && indices.length > 0) {
+            if (indices && indices.size > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    indicesToRemove.push(...indices);
+                    for (const index of indices) {
+                        indicesToRemove.push(index);
+                    }
                 }
             }
         }
@@ -427,8 +431,7 @@ export class SearchEngine implements ISearchProvider {
         const normalized = this.normalizePath(item.filePath);
         const indices = this.fileToItemIndices.get(normalized);
         if (indices) {
-            const idx = indices.indexOf(index);
-            if (idx !== -1) indices.splice(idx, 1);
+            indices.delete(index);
         }
     }
 
@@ -457,8 +460,8 @@ export class SearchEngine implements ISearchProvider {
             const normalized = this.normalizePath(item.filePath);
             const indices = this.fileToItemIndices.get(normalized);
             if (indices) {
-                const idx = indices.indexOf(src);
-                if (idx !== -1) indices[idx] = dest;
+                indices.delete(src);
+                indices.add(dest);
             }
         }
     }
@@ -469,7 +472,6 @@ export class SearchEngine implements ISearchProvider {
             this.itemTypeIds = this.itemTypeIds.slice(0, newCount);
             this.itemBitflags = this.itemBitflags.slice(0, newCount);
             this.itemNameBitflags = this.itemNameBitflags.slice(0, newCount);
-            this.itemNameLengths = this.itemNameLengths.slice(0, newCount);
             this.preparedNames.length = newCount;
             this.preparedFullNames.length = newCount;
             this.preparedPaths.length = newCount;
@@ -528,8 +530,6 @@ export class SearchEngine implements ISearchProvider {
         this.preparedFullNames = [];
         this.preparedPaths = [];
         this.preparedPatterns = [];
-        this.visitedBuffer = new Uint8Array(this.items.length);
-        this.visitedIndicesBuffer = [];
     }
 
     /**
@@ -633,10 +633,10 @@ export class SearchEngine implements ISearchProvider {
             const filePath = this.normalizePath(this.items[i].filePath);
             let indices = this.fileToItemIndices.get(filePath);
             if (!indices) {
-                indices = [];
+                indices = new Set<number>();
                 this.fileToItemIndices.set(filePath, indices);
             }
-            indices.push(i);
+            indices.add(i);
         }
     }
 
@@ -762,8 +762,6 @@ export class SearchEngine implements ISearchProvider {
     clear(): void {
         this.items = [];
         this.itemTypeIds = new Uint8Array(0);
-        this.visitedBuffer = new Uint8Array(0);
-        this.visitedIndicesBuffer = [];
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
         this.itemNameLengths = new Uint16Array(0);
@@ -779,8 +777,12 @@ export class SearchEngine implements ISearchProvider {
         this.preparedCache.clear();
         this.lastRelativeInput = null;
         this.lastRelativeOutput = null;
+        this.lastNormalizedInput = null;
+        this.lastNormalizedOutput = null;
         this.activeFileItems = [];
         this.inactiveFileItems = [];
+        this.visitedIndicesBuffer = new Uint8Array(0);
+        this.visitedIndicesList.length = 0;
         this.invalidateDerivedCaches();
     }
 
@@ -988,10 +990,7 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                const len = providerResults.length;
-                for (let i = 0; i < len; i++) {
-                    allResults.push(providerResults[i]);
-                }
+                allResults.push(...providerResults);
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
@@ -1059,8 +1058,14 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private normalizePath(filePath: string): string {
+        if (filePath === this.lastNormalizedInput) {
+            return this.lastNormalizedOutput as string;
+        }
         const normalized = path.normalize(filePath);
-        return this.isWindows ? normalized.toLowerCase() : normalized;
+        const result = this.isWindows ? normalized.toLowerCase() : normalized;
+        this.lastNormalizedInput = filePath;
+        this.lastNormalizedOutput = result;
+        return result;
     }
 
     private isActive(filePath: string): boolean {
@@ -1075,8 +1080,8 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of this.activeFiles) {
             const itemIndices = this.fileToItemIndices.get(filePath);
             if (itemIndices) {
-                for (let i = 0; i < itemIndices.length; i++) {
-                    indices.push(itemIndices[i]);
+                for (const index of itemIndices) {
+                    indices.push(index);
                 }
             }
         }
@@ -1666,30 +1671,28 @@ export class SearchEngine implements ISearchProvider {
         const heap = new MinHeap<SearchResult>(maxResults, (a, b) => a.score - b.score);
         const searchContext = this.prepareSearchContext(query, scope);
         const preferredIndices = this.getPreferredIndicesForQuery(scope, query, indices);
-        const hasPreferred = preferredIndices.length > 0;
 
-        // ⚡ Bolt: Fast Visited Tracker Array Reuse
-        // Use a pre-allocated instance-level array to prevent per-request memory allocation
-        // and garbage collection pauses.
-        const visited = hasPreferred ? this.visitedBuffer : undefined;
+        let trackVisited = false;
+        if (preferredIndices.length > 0) {
+            trackVisited = true;
+            if (this.visitedIndicesBuffer.length < this.items.length) {
+                this.visitedIndicesBuffer = new Uint8Array(this.items.length);
+            }
+            this.visitedIndicesList.length = 0;
+        }
 
         try {
-            if (hasPreferred) {
-                this.searchWithIndices(preferredIndices, searchContext, heap, token, visited);
+            if (preferredIndices.length > 0) {
+                this.searchWithIndices(preferredIndices, searchContext, heap, token, trackVisited);
             }
 
             if (indices) {
-                this.searchWithIndices(indices, searchContext, heap, token, visited);
+                this.searchWithIndices(indices, searchContext, heap, token, trackVisited);
             } else {
-                this.searchAllItems(searchContext, heap, token, visited);
+                this.searchAllItems(searchContext, heap, token, trackVisited);
             }
         } finally {
-            if (hasPreferred && this.visitedIndicesBuffer.length > 0) {
-                for (let i = 0; i < this.visitedIndicesBuffer.length; i++) {
-                    this.visitedBuffer[this.visitedIndicesBuffer[i]] = 0;
-                }
-                this.visitedIndicesBuffer.length = 0;
-            }
+            this.cleanupVisitedTracker(trackVisited);
         }
 
         const results = heap.getSorted();
@@ -1712,6 +1715,16 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
+    private cleanupVisitedTracker(trackVisited: boolean): void {
+        if (trackVisited) {
+            const modifiedLen = this.visitedIndicesList.length;
+            for (let i = 0; i < modifiedLen; i++) {
+                this.visitedIndicesBuffer[this.visitedIndicesList[i]] = 0;
+            }
+            this.visitedIndicesList.length = 0;
+        }
+    }
+
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
@@ -1721,12 +1734,9 @@ export class SearchEngine implements ISearchProvider {
             return [];
         }
 
-        let candidateSet: Uint8Array | undefined;
+        let candidateSet: Set<number> | undefined;
         if (indices) {
-            candidateSet = new Uint8Array(this.items.length);
-            for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 1;
-            }
+            candidateSet = new Set(indices);
         }
 
         const preferred: number[] = [];
@@ -1734,7 +1744,7 @@ export class SearchEngine implements ISearchProvider {
             if (index < 0 || index >= this.items.length) {
                 continue;
             }
-            if (candidateSet && candidateSet[index] !== 1) {
+            if (candidateSet && !candidateSet.has(index)) {
                 continue;
             }
             preferred.push(index);
@@ -1810,17 +1820,17 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        trackVisited: boolean = false,
     ): void {
         for (let j = 0; j < indices.length; j++) {
             if (j % 500 === 0 && token?.isCancellationRequested) break;
             const i = indices[j];
-            if (visited) {
-                if (visited[i] === 1) {
+            if (trackVisited) {
+                if (this.visitedIndicesBuffer[i] !== 0) {
                     continue;
                 }
-                visited[i] = 1;
-                this.visitedIndicesBuffer.push(i);
+                this.visitedIndicesBuffer[i] = 1;
+                this.visitedIndicesList.push(i);
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -1830,13 +1840,18 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
         token?: CancellationToken,
-        visited?: Uint8Array,
+        trackVisited: boolean = false,
     ): void {
         const count = context.items.length;
         for (let i = 0; i < count; i++) {
             if (i % 500 === 0 && token?.isCancellationRequested) break;
-            if (visited && visited[i] === 1) {
-                continue;
+            if (trackVisited) {
+                if (this.visitedIndicesBuffer[i] !== 0) {
+                    continue;
+                }
+                // Optimization: searchAllItems is the final fallback pass.
+                // It only needs to check the tracker to skip previously visited items,
+                // but it never needs to write to it because there are no subsequent passes.
             }
             this.processItemForSearch(i, context, heap);
         }
@@ -2283,7 +2298,7 @@ export class SearchEngine implements ISearchProvider {
                 ? (prepared as unknown as ExtendedPrepared)._targetLower
                 : item.name.toLowerCase();
 
-            const score = this.calculateMatchScore(nameLower, item.fullName, queryLower);
+            const score = this.calculateMatchScore(nameLower, item.fullName, this.preparedFullNames[i], queryLower);
             if (score > 0) {
                 addResult(item, this.itemTypeIds[i], score);
             }
@@ -2301,7 +2316,12 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    private calculateMatchScore(nameLower: string, fullName: string | undefined, queryLower: string): number {
+    private calculateMatchScore(
+        nameLower: string,
+        fullName: string | undefined,
+        preparedFullName: Fuzzysort.Prepared | null,
+        queryLower: string,
+    ): number {
         // Fast path: Exact match or prefix match
         if (nameLower === queryLower || nameLower.indexOf(queryLower) === 0) {
             return 1.0;
@@ -2312,9 +2332,13 @@ export class SearchEngine implements ISearchProvider {
             return 0.8;
         }
 
-        // Check fullName if it exists and is different from name
+        // Check fullName if it exists
         if (fullName) {
-            const fullLower = fullName.toLowerCase();
+            // ⚡ Bolt: Lazy retrieval of pre-computed lowercased fullName to avoid redundant string allocations
+            const fullLower = preparedFullName
+                ? (preparedFullName as unknown as ExtendedPrepared)._targetLower
+                : fullName.toLowerCase();
+
             if (fullLower !== nameLower) {
                 if (fullLower === queryLower || fullLower.indexOf(queryLower) === 0) {
                     return 0.9;
@@ -2363,6 +2387,7 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private searchRemainingItems(
         priorityScopes: SearchScope[],
         maxResults: number,
@@ -2370,21 +2395,24 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast inherent metadata check
-        // Eliminates O(N) tracker array allocation by using the item's inherent typeId metadata
-        // to determine if it belongs to a priority scope. This provides an O(1) condition check
-        // and avoids memory allocation and initialization overhead for large codebases.
-        const isPriorityScope = new Uint8Array(256);
-        for (let typeId = 0; typeId < ID_TO_SCOPE.length; typeId++) {
-            if (priorityScopes.includes(ID_TO_SCOPE[typeId])) {
-                isPriorityScope[typeId] = 1;
+        // ⚡ Bolt: Fast Remaining Scopes Iteration Optimization
+        // Instead of allocating a Uint8Array of size N to track already processed items,
+        // we precompute which type IDs belong to priority scopes and iterate sequentially.
+        // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
+        const prioritySet = new Set(priorityScopes);
+        const isPriorityTypeId = new Uint8Array(256);
+        for (let i = 0; i < ID_TO_SCOPE.length; i++) {
+            if (prioritySet.has(ID_TO_SCOPE[i])) {
+                isPriorityTypeId[i] = 1;
             }
         }
 
-        for (let i = 0; i < this.items.length; i++) {
+        const itemsLength = this.items.length;
+        const itemTypeIds = this.itemTypeIds;
+
+        for (let i = 0; i < itemsLength; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            const typeId = this.itemTypeIds[i];
-            if (isPriorityScope[typeId] === 0) {
+            if (isPriorityTypeId[itemTypeIds[i]] === 0) {
                 processItem(i);
             }
         }

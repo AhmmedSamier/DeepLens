@@ -1,6 +1,9 @@
-## 2026-05-10 - Context-Aware Empty States and Screen Reader Context in WPF
-**Learning:** In WPF applications with multiple scopes or filters, using a generic static string (like "No results found" or "Search query") for empty states and screen reader accessibility labels fails to convey the active UI context to the user.
-**Action:** Bind the empty state watermark/placeholder (both visual `TextBlock.Text` and accessibility attributes like `TextBox.ToolTip` or `AutomationProperties.Name`) to a dynamic property that reacts to the selected filter state, improving both feature discoverability and screen reader context.
-## 2026-05-10 - Enhance CodeLens Visual Hierarchy
-**Learning:** Text-only CodeLens annotations (like "3 references (Shift+F12)") can blend into the source code, reducing scannability and visual appeal.
-**Action:** Prepend relevant VS Code Codicons (like `$(references)` or `$(symbol-interface)`) to the CodeLens titles to establish visual anchors, improving micro-UX and making the annotations quicker to identify at a glance.
+## 2026-05-02 - Actionable Empty States
+**Learning:** Empty states present an opportunity to lower user friction when a search yields zero results. Providing a "Clear Search" or "Switch Scope" directly in the empty state acts as an actionable recovery path, so users don't have to manually clear the input field or change settings themselves.
+**Action:** When designing or refactoring empty state components, always provide an inline action button (such as "Clear Search", "Reset Filters", or "Back to Global Scope") directly within the empty state context to simplify recovery.
+## 2026-05-03 - [Empty State Actionability]
+**Learning:** Empty states without actionable elements increase interaction friction. Users shouldn't have to manually clear filters when no results are found.
+**Action:** Always provide an actionable recovery path (like a 'Clear Search' button) directly within the empty state container when building UI views.
+## 2026-05-05 - [Integrated Quick Pick Search Clear Action]
+**Learning:** For empty search states in a VS Code QuickPick dropdown, users encounter friction if they must manually select and delete text to retry. Adding a custom command bound to an icon (like `clear-all`) directly into the `getEmptyStateItems` provides an immediate, discoverable recovery path.
+**Action:** Always include an actionable "Clear Input/Search" recovery button within `QuickPick` empty state lists to reduce interaction friction and improve the search UX.
