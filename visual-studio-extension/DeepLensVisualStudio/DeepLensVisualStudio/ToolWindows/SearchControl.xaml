@@ -455,6 +455,19 @@
                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                     HorizontalAlignment="Center"
                     Margin="0,4,0,0" />
+                <Button
+                    Content="Clear Search"
+                    Margin="0,12,0,0"
+                    Padding="16,6"
+                    HorizontalAlignment="Center"
+                    Background="Transparent"
+                    BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBorderKey}}"
+                    BorderThickness="1"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                    Cursor="Hand"
+                    Click="ClearSearchButton_Click"
+                    AutomationProperties.Name="Clear search"
+                    ToolTip="Clear current search query and filters" />
             </StackPanel>
 
             <!--  Status Bar (Sticky at Bottom)  -->
