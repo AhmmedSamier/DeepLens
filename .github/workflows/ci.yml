@@ -26,7 +26,14 @@ jobs:
               uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
-                  cache: true
+
+            - name: Cache Bun dependencies
+              uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-bun-
 
             - name: Install Dependencies
               run: |
@@ -53,7 +60,14 @@ jobs:
               uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
-                  cache: true
+
+            - name: Cache Bun dependencies
+              uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-ls-${{ hashFiles('language-server/bun.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-bun-ls-
 
             - name: Install Dependencies
               working-directory: language-server
@@ -75,7 +89,14 @@ jobs:
               uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
-                  cache: true
+
+            - name: Cache Bun dependencies
+              uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-vscode-${{ hashFiles('vscode-extension/bun.lock', 'language-server/bun.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-bun-vscode-
 
             - name: Install Dependencies
               run: |
@@ -85,7 +106,7 @@ jobs:
             - name: Install Linux Dependencies
               run: |
                   sudo apt-get update -yq
-                  sudo apt-get install -yq --no-install-recommends xvfb libasound2 libatk1.0-0 libgbm1 libgtk-3-0 libnss3 libxkbfile1 libxss1
+                  sudo apt-get install -yq --no-install-recommends xvfb libasound2t64 libatk1.0-0t64 libgbm1 libgtk-3-0t64 libnss3 libxkbfile1 libxss1
 
             - name: Run VS Code Extension Tests
               working-directory: vscode-extension
@@ -106,7 +127,14 @@ jobs:
               uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
-                  cache: true
+
+            - name: Cache Bun dependencies
+              uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-bench-${{ hashFiles('language-server/bun.lock', 'vscode-extension/bun.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-bun-bench-
 
             - name: Install Dependencies
               run: |
@@ -116,7 +144,7 @@ jobs:
             - name: Install Linux Dependencies (for extension benchmarks)
               run: |
                   sudo apt-get update -yq
-                  sudo apt-get install -yq --no-install-recommends xvfb libasound2 libatk1.0-0 libgbm1 libgtk-3-0 libnss3 libxkbfile1 libxss1
+                  sudo apt-get install -yq --no-install-recommends xvfb libasound2t64 libatk1.0-0t64 libgbm1 libgtk-3-0t64 libnss3 libxkbfile1 libxss1
 
             - name: Run Benchmarks
               run: |
