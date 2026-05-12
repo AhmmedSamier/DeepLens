@@ -1226,8 +1226,6 @@ export class SearchEngine implements ISearchProvider {
         const prioritizedFiles = this.getPrioritizedFileItems();
 
         const configuredConcurrency = this.config?.getSearchConcurrency() || 20;
-        const initialConcurrency = Math.max(1, Math.min(configuredConcurrency, 8));
-        let currentConcurrency = initialConcurrency;
 
         let processedFiles = 0;
         const pendingResults: SearchResult[] = [];
@@ -1251,18 +1249,29 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
-        for (let start = 0; start < prioritizedFiles.length; start += currentConcurrency) {
+        // ⚡ Bolt: Stream search concurrency optimization
+        // Replaced fixed chunking Promise.all with a pLimit task pool to avoid head-of-line blocking.
+        // This architecture allows results to be streamed back in batches as they are parsed,
+        // rather than waiting for the slowest file in a specific chunk.
+
+        // Use configuredConcurrency directly, since pLimit does not dynamically scale
+        const limit = pLimit(configuredConcurrency);
+        const tasks: Promise<void>[] = [];
+        let totalCompleted = 0;
+        const totalFiles = prioritizedFiles.length;
+
+        for (let i = 0; i < totalFiles; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) {
                 break;
             }
 
-            const chunk = prioritizedFiles.slice(start, start + currentConcurrency);
+            const fileItem = prioritizedFiles[i];
 
-            await Promise.all(
-                chunk.map(async (fileItem) => {
-                    if (results.length >= maxResults || token?.isCancellationRequested) return;
-
+            tasks.push(
+                limit(async () => {
                     try {
+                        if (results.length >= maxResults || token?.isCancellationRequested) return;
+
                         // Optimization: Use cached size if available to avoid fs.stat calls
                         let fileSize = fileItem.size;
                         if (fileSize === undefined) {
@@ -1291,25 +1300,32 @@ export class SearchEngine implements ISearchProvider {
                         await this.scanFileStream(scanContext, fileSize);
                     } catch {
                         // Ignore read/stat errors
+                    } finally {
+                        totalCompleted++;
+
+                        // Safely trigger batch flush using a completed counter
+                        if (pendingResults.length >= 5 || totalCompleted === totalFiles) {
+                            flushBatch();
+                        }
+
+                        if (processedFiles % 100 === 0 || (results.length > 0 && processedFiles % 10 === 0)) {
+                            this.logger?.log(
+                                `Searched ${processedFiles}/${prioritizedFiles.length} files... found ${results.length} matches`,
+                            );
+                        }
                     }
                 }),
             );
 
-            if (pendingResults.length >= 5) {
-                flushBatch();
+            // Yield occasionally to process queued callbacks, allowing `results.length`
+            // to update. This prevents queueing all items synchronously and exhausting memory.
+            // Also limits memory overhead by throttling enqueue rate.
+            if (i > 0 && i % 50 === 0) {
+                await new Promise((resolve) => setTimeout(resolve, 0));
             }
-
-            if (results.length > 0 && currentConcurrency !== configuredConcurrency) {
-                currentConcurrency = configuredConcurrency;
-            }
-
-            if (processedFiles % 100 === 0 || results.length > 0) {
-                this.logger?.log(
-                    `Searched ${processedFiles}/${prioritizedFiles.length} files... found ${results.length} matches`,
-                );
-            }
-            flushBatch();
         }
+
+        await Promise.all(tasks);
 
         flushBatch();
         const durationMs = Date.now() - startTime;
