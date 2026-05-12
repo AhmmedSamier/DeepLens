@@ -38,3 +38,7 @@
 ## 2026-05-11 - [Instance-level Tracker Array Reuse]
 **Learning:** In multi-pass fallback operations like `SearchEngine.searchAllItems` or `SearchEngine.searchWithIndices`, tracking visited indices dynamically per-request using `new Uint8Array(n)` creates massive object allocation overhead and GC pressure. For large data sets (e.g. 100,000+ items), this severely degrades burst search performance.
 **Action:** Replace dynamically instantiated arrays with an instance-level pre-allocated tracker (`this.visitedBuffer = new Uint8Array(n)`) alongside a tracking array for indices to reset (`this.visitedIndicesBuffer = []`). Always use a `try...finally` block to guarantee the buffer is cleanly reset (`buffer[i] = 0`) across requests to avoid state corruption while eliminating allocation pauses.
+
+## 2024-06-25 - Tree-Sitter AST Traversal Optimization
+**Learning:** Checking node types during hot path AST traversals (like finding a parent class) by creating new lowercase strings and running `.includes()` is significantly slower than doing an `O(1)` check against a pre-populated static `Set` of exact node names.
+**Action:** When evaluating Tree-sitter AST nodes in loops, always perform exact string matches against a pre-allocated `Set` to eliminate redundant string allocation and garbage collection overhead.
