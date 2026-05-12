@@ -451,8 +451,7 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope ?? SearchScope.EVERYTHING;
         } else {
             this.currentScope = scope;
             this.userSelectedScope = scope;
@@ -510,6 +509,8 @@ export class SearchProvider {
      * Prompt for confirmation before clearing history
      */
     private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        quickPick.busy = false;
+
         const confirmItem: SearchResultItem = {
             label: 'Confirm Clear History',
             detail: 'This cannot be undone',
