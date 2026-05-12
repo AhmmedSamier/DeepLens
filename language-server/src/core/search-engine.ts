@@ -282,17 +282,23 @@ export class SearchEngine implements ISearchProvider {
         }
 
         // Append items
-        this.items.push(...items);
+        // ⚡ Bolt: Fast safe array push
+        // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
+        // Snapshot length to guard against infinite loop if items === this.items
+        const originalLen = items.length;
+        for (let i = 0; i < originalLen; i++) {
+            this.items.push(items[i]);
+        }
 
         const CHUNK_SIZE = 500;
-        for (let i = 0; i < items.length; i += CHUNK_SIZE) {
-            const end = Math.min(i + CHUNK_SIZE, items.length);
+        for (let i = 0; i < originalLen; i += CHUNK_SIZE) {
+            const end = Math.min(i + CHUNK_SIZE, originalLen);
             for (let j = i; j < end; j++) {
                 this.processAddedItem(items[j], startIndex + j);
             }
 
             // Yield to main thread for responsiveness
-            if (end < items.length) {
+            if (end < originalLen) {
                 await new Promise((resolve) => setTimeout(resolve, 0));
             }
         }
@@ -392,7 +398,11 @@ export class SearchEngine implements ISearchProvider {
             if (indices && indices.length > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    indicesToRemove.push(...indices);
+                    // ⚡ Bolt: Fast safe array push
+                    // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
+                    for (let i = 0; i < indices.length; i++) {
+                        indicesToRemove.push(indices[i]);
+                    }
                 }
             }
         }
@@ -975,6 +985,8 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
+                // ⚡ Bolt: Fast safe array push
+                // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
                 const len = providerResults.length;
                 for (let i = 0; i < len; i++) {
                     allResults.push(providerResults[i]);
