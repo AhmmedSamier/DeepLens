@@ -158,6 +158,23 @@ describe('SearchEngine', () => {
         expect(results[0].item.name).toBe('File2.ts');
     });
 
+    it('should keep parallel array lengths in sync after removing items', async () => {
+        const engine = new SearchEngine();
+        const items: SearchableItem[] = [
+            createTestItem('1', 'File1.ts', SearchItemType.FILE, 'src/File1.ts'),
+            createTestItem('2', 'Class1', SearchItemType.CLASS, 'src/File1.ts'),
+            createTestItem('3', 'File2.ts', SearchItemType.FILE, 'src/File2.ts'),
+        ];
+        await engine.setItems(items);
+
+        engine.removeItemsByFile(path.normalize('/src/File1.ts'));
+
+        expect((engine as any).itemTypeIds.length).toBe(engine.getItemCount());
+        expect((engine as any).itemBitflags.length).toBe(engine.getItemCount());
+        expect((engine as any).itemNameBitflags.length).toBe(engine.getItemCount());
+        expect((engine as any).itemNameLengths.length).toBe(engine.getItemCount());
+    });
+
     it('should deduplicate prepared strings', async () => {
         const engine = new SearchEngine();
         const items: SearchableItem[] = [
