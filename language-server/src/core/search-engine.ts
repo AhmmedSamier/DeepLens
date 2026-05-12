@@ -162,6 +162,7 @@ export class SearchEngine implements ISearchProvider {
     // Reusable buffers for index tracking to avoid allocations in hot loops
     private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
     private visitedIndicesList: number[] = [];
+    private _isSearching = false;
 
     // String normalization cache (1-item) for relativeFilePath
     private lastRelativeInput: string | null = null;
@@ -2372,12 +2373,26 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast index tracking optimization
         // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
         // and provides O(1) array access. (~15x faster than Set for 1M items).
-        if (this.visitedIndicesBuffer.length < this.items.length) {
-            this.visitedIndicesBuffer = new Uint8Array(this.items.length);
-        }
-        this.visitedIndicesList.length = 0;
 
-        const searchedIndices = this.visitedIndicesBuffer;
+        // Re-entrancy guard: processItem may synchronously re-enter search.
+        // If already searching, allocate local buffers to avoid corrupting outer state.
+        const isReentrant = this._isSearching;
+        let searchedIndices: Uint8Array;
+        let visitedIndicesList: number[];
+
+        if (isReentrant) {
+            searchedIndices = new Uint8Array(this.items.length);
+            visitedIndicesList = [];
+        } else {
+            this._isSearching = true;
+            if (this.visitedIndicesBuffer.length < this.items.length) {
+                this.visitedIndicesBuffer = new Uint8Array(this.items.length);
+            }
+            this.visitedIndicesList.length = 0;
+            searchedIndices = this.visitedIndicesBuffer;
+            visitedIndicesList = this.visitedIndicesList;
+        }
+
         const priorityScopesLength = priorityScopes.length;
 
         for (let s = 0; s < priorityScopesLength; s++) {
@@ -2387,7 +2402,7 @@ export class SearchEngine implements ISearchProvider {
                 for (let j = 0; j < len; j++) {
                     const idx = indices[j];
                     searchedIndices[idx] = 1;
-                    this.visitedIndicesList.push(idx);
+                    visitedIndicesList.push(idx);
                 }
             }
         }
@@ -2400,12 +2415,17 @@ export class SearchEngine implements ISearchProvider {
                 }
             }
         } finally {
-            // Fast cleanup: clear only the modified slots using the tracked list
-            const modifiedLen = this.visitedIndicesList.length;
-            for (let i = 0; i < modifiedLen; i++) {
-                searchedIndices[this.visitedIndicesList[i]] = 0;
+            if (isReentrant) {
+                // Local buffers will be GC'd; nothing to clean up
+            } else {
+                // Fast cleanup: clear only the modified slots using the tracked list
+                const modifiedLen = visitedIndicesList.length;
+                for (let i = 0; i < modifiedLen; i++) {
+                    searchedIndices[visitedIndicesList[i]] = 0;
+                }
+                visitedIndicesList.length = 0;
+                this._isSearching = false;
             }
-            this.visitedIndicesList.length = 0;
         }
     }
 
