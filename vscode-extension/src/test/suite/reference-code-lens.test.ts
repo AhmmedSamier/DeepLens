@@ -173,6 +173,9 @@ export class ReferenceTestClass {
             language: 'typescript',
         });
 
+        // Add a small delay for TS extension to be fully ready before getting lenses to avoid timeout flakes
+        await new Promise((resolve) => setTimeout(resolve, 200));
+
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(doc, token);
 
