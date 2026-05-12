@@ -87,7 +87,7 @@ jobs:
     test-vscode-extension:
         runs-on: ubuntu-24.04
         container:
-            image: ghcr.io/${{ github.repository_owner }}/deeplens-ci:latest
+            image: ghcr.io/${{ lower(github.repository_owner) }}/deeplens-ci:latest
         needs: test-language-server
         timeout-minutes: 15
         steps:
@@ -139,7 +139,7 @@ jobs:
     benchmarks:
         runs-on: ubuntu-24.04
         container:
-            image: ghcr.io/${{ github.repository_owner }}/deeplens-ci:latest
+            image: ghcr.io/${{ lower(github.repository_owner) }}/deeplens-ci:latest
         needs: test-language-server
         timeout-minutes: 20
         if: |
