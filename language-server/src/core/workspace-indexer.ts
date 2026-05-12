@@ -227,10 +227,7 @@ export class WorkspaceIndexer {
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
             await this.indexFiles((items) => {
-                // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
-                for (let i = 0; i < items.length; i++) {
-                    fileItems.push(items[i]);
-                }
+                fileItems.push(...items);
                 this.fireItemsAdded(items);
             });
 

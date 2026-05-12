@@ -583,7 +583,6 @@ namespace DeepLensVisualStudio.ToolWindows
                 if (currentFilter != nameof(FilterSymbols)) FilterSymbols = false;
                 if (currentFilter != nameof(FilterTypes)) FilterTypes = false;
                 if (currentFilter != nameof(FilterText)) FilterText = false;
-                OnPropertyChanged(nameof(SearchPlaceholder));
             }
             finally
             {
