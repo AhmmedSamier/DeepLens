@@ -4,3 +4,6 @@
 ## 2026-05-03 - [Empty State Actionability]
 **Learning:** Empty states without actionable elements increase interaction friction. Users shouldn't have to manually clear filters when no results are found.
 **Action:** Always provide an actionable recovery path (like a 'Clear Search' button) directly within the empty state container when building UI views.
+## 2026-05-05 - [Integrated Quick Pick Search Clear Action]
+**Learning:** For empty search states in a VS Code QuickPick dropdown, users encounter friction if they must manually select and delete text to retry. Adding a custom command bound to an icon (like `clear-all`) directly into the `getEmptyStateItems` provides an immediate, discoverable recovery path.
+**Action:** Always include an actionable "Clear Input/Search" recovery button within `QuickPick` empty state lists to reduce interaction friction and improve the search UX.
