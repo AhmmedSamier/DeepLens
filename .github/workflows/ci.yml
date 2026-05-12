@@ -75,7 +75,16 @@ jobs:
 
             - name: Run Language Server Tests
               working-directory: language-server
-              run: bun run test
+              run: |
+                  bun run build
+                  bun run test
+
+            - name: Upload Language Server Artifact
+              uses: actions/upload-artifact@v4
+              with:
+                  name: language-server-dist
+                  path: language-server/dist
+                  retention-days: 1
 
     test-vscode-extension:
         runs-on: ubuntu-24.04
@@ -103,6 +112,20 @@ jobs:
                   cd language-server && bun install --frozen-lockfile
                   cd ../vscode-extension && bun install --frozen-lockfile
 
+            - name: Download Language Server Artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: language-server-dist
+                  path: language-server/dist
+
+            - name: Cache VS Code Binary
+              uses: actions/cache@v4
+              with:
+                  path: vscode-extension/.vscode-test
+                  key: ${{ runner.os }}-vscode-${{ hashFiles('vscode-extension/package.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-vscode-
+
             - name: Install Linux Dependencies
               run: |
                   sudo apt-get update -yq
@@ -110,7 +133,13 @@ jobs:
 
             - name: Run VS Code Extension Tests
               working-directory: vscode-extension
-              run: xvfb-run -a bun run test
+              run: |
+                  bun run esbuild
+                  bun run scripts/copy-artifacts.ts
+                  bun x tsc -p .
+                  xvfb-run -a node ./out/vscode-extension/src/test/runTest.js
+              env:
+                  DBUS_SESSION_BUS_ADDRESS: /dev/null
 
     benchmarks:
         runs-on: ubuntu-24.04
@@ -141,6 +170,20 @@ jobs:
                   cd language-server && bun install --frozen-lockfile
                   cd ../vscode-extension && bun install --frozen-lockfile
 
+            - name: Download Language Server Artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: language-server-dist
+                  path: language-server/dist
+
+            - name: Cache VS Code Binary
+              uses: actions/cache@v4
+              with:
+                  path: vscode-extension/.vscode-test
+                  key: ${{ runner.os }}-vscode-bench-${{ hashFiles('vscode-extension/package.json') }}
+                  restore-keys: |
+                      ${{ runner.os }}-vscode-bench-
+
             - name: Install Linux Dependencies (for extension benchmarks)
               run: |
                   sudo apt-get update -yq
@@ -150,6 +193,8 @@ jobs:
               run: |
                   chmod +x run_benchmarks.sh
                   ./run_benchmarks.sh
+              env:
+                  DBUS_SESSION_BUS_ADDRESS: /dev/null
 
             - name: Upload Benchmark Report
               if: always()
