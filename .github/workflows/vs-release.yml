@@ -21,9 +21,17 @@ jobs:
                   dotnet-version: '8.0.x'
 
             - name: Setup Bun
-              uses: oven-sh/setup-bun@v1
+              uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
+
+            - name: Cache Bun dependencies
+              uses: actions/cache@v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: ${{ runner.os }}-bun-vs-release-${{ hashFiles('language-server/bun.lock', 'vscode-extension/bun.lock') }}
+                  restore-keys: |
+                      ${{ runner.os }}-bun-vs-release-
 
             - name: Add MSBuild to PATH
               uses: microsoft/setup-msbuild@v1.0.2
