@@ -1600,7 +1600,7 @@ export class SearchProvider {
             quickPick.value = '';
 
             // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
-            this.handleQueryChange(
+            await this.handleQueryChange(
                 quickPick,
                 '',
                 () => {},
