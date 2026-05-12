@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
@@ -420,12 +421,49 @@ function findEnclosingSymbol(
     return enclosing;
 }
 
+function getNonce(): string {
+    return crypto.randomBytes(16).toString('base64url');
+}
+
+interface WebviewNavigationPayload {
+    readonly uri: string;
+    readonly line: number;
+    readonly character: number;
+}
+
+function isWebviewNavigationPayload(value: unknown): value is WebviewNavigationPayload {
+    if (typeof value !== 'object' || value === null) {
+        return false;
+    }
+
+    const candidate = value as Record<string, unknown>;
+    return (
+        typeof candidate.uri === 'string' &&
+        typeof candidate.line === 'number' &&
+        Number.isInteger(candidate.line) &&
+        candidate.line >= 0 &&
+        typeof candidate.character === 'number' &&
+        Number.isInteger(candidate.character) &&
+        candidate.character >= 0
+    );
+}
+
+function parseWebviewNavigationPayload(location: string): WebviewNavigationPayload | null {
+    try {
+        const decoded = JSON.parse(decodeURIComponent(location)) as unknown;
+        return isWebviewNavigationPayload(decoded) ? decoded : null;
+    } catch {
+        return null;
+    }
+}
+
 // escapeHtml is used when rendering CallHierarchyItem data in the call-chain webview.
 // Inputs originate from language-server-provided symbol names and file paths, and output stays
 // inside this extension-owned webview, so a minimal five-character replacement is sufficient.
 // ⚡ Bolt: Fast string escaping optimization
 // Using charCodeAt and slice avoids multiple engine passes and string allocations
 // caused by chained .replaceAll() calls. This is roughly ~4x faster for short strings.
+
 function escapeHtml(value: string): string {
     let res = '';
     let last = 0;
@@ -550,15 +588,17 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
                 enableScripts: true,
             },
         );
+        const nonce = getNonce();
 
         panel.webview.html = `
         <!DOCTYPE html>
         <html lang="en">
             <head>
                 <meta charset="UTF-8" />
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${panel.webview.cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}';" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
                 <title>Call Chain</title>
-                <style>
+                <style nonce="${nonce}">
                     body { font-family: var(--vscode-font-family); color: var(--vscode-editor-foreground); background: var(--vscode-editor-background); padding: 12px; }
                     .header { margin-bottom: 12px; }
                     .tree, .tree ul { list-style: none; padding-left: 14px; margin: 0; }
@@ -600,7 +640,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
                     <p>Incoming call chain (depth ${CALL_CHAIN_DEPTH}). ${useRefFallback ? 'Built from references (call hierarchy not available for this language).' : ''} Click any node to navigate.</p>
                 </div>
                 ${treeMarkup}
-                <script>
+                <script nonce="${nonce}">
                     const vscodeApi = acquireVsCodeApi();
                     document.querySelectorAll('.node').forEach((node) => {
                         node.addEventListener('click', () => {
@@ -619,12 +659,18 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
             }
 
             try {
-                const parsed = JSON.parse(decodeURIComponent(message.location)) as {
-                    uri: string;
-                    line: number;
-                    character: number;
-                };
+                const parsed = parseWebviewNavigationPayload(message.location);
+                if (!parsed) {
+                    logger.error('Ignored malformed call chain webview navigation payload.');
+                    return;
+                }
+
                 const targetUri = vscode.Uri.parse(parsed.uri);
+                if (targetUri.scheme !== 'file') {
+                    logger.error(`Ignored unsupported call chain navigation URI scheme: ${targetUri.scheme}`);
+                    return;
+                }
+
                 const pos = new vscode.Position(parsed.line, parsed.character);
                 const doc = await vscode.workspace.openTextDocument(targetUri);
                 await vscode.window.showTextDocument(doc, {
@@ -770,15 +816,7 @@ export async function activate(context: vscode.ExtensionContext) {
                 targetPosition = activeEditor.selection.active;
             }
 
-            await vscode.window.withProgress(
-                {
-                    location: vscode.ProgressLocation.Window,
-                    title: `DeepLens: Building call chain for ${symbolName || 'symbol'}...`,
-                },
-                async () => {
-                    await showCallChain(targetUri, targetPosition, symbolName);
-                },
-            );
+            await showCallChain(targetUri, targetPosition, symbolName);
         },
     );
 
