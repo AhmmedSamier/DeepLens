@@ -154,11 +154,7 @@ describe('WorkspaceIndexer', () => {
             const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
             const addedItems: any[] = [];
 
-            indexer.onItemsAdded((items) => {
-                for (let i = 0; i < items.length; i++) {
-                    addedItems.push(items[i]);
-                }
-            });
+            indexer.onItemsAdded((items) => addedItems.push(...items));
 
             await indexer.processFileEvent('/root/src/new-file.ts', 'create');
 
@@ -175,11 +171,7 @@ describe('WorkspaceIndexer', () => {
             const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
             const addedItems: any[] = [];
 
-            indexer.onItemsAdded((items) => {
-                for (let i = 0; i < items.length; i++) {
-                    addedItems.push(items[i]);
-                }
-            });
+            indexer.onItemsAdded((items) => addedItems.push(...items));
 
             await indexer.processFileEvent('/root/src/updated-file.ts', 'change');
 
@@ -196,11 +188,7 @@ describe('WorkspaceIndexer', () => {
             const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
             const addedItems: any[] = [];
 
-            indexer.onItemsAdded((items) => {
-                for (let i = 0; i < items.length; i++) {
-                    addedItems.push(items[i]);
-                }
-            });
+            indexer.onItemsAdded((items) => addedItems.push(...items));
 
             await indexer.processFileEvent('/root/obj/Debug/net8.0/SomeFile.g.cs', 'create');
 
@@ -213,11 +201,7 @@ describe('WorkspaceIndexer', () => {
             const indexer = new TestWorkspaceIndexer(customConfig, mockTreeSitter, mockEnv, process.cwd());
             const addedItems: any[] = [];
 
-            indexer.onItemsAdded((items) => {
-                for (let i = 0; i < items.length; i++) {
-                    addedItems.push(items[i]);
-                }
-            });
+            indexer.onItemsAdded((items) => addedItems.push(...items));
 
             await indexer.processFileEvent('/root/generated/SomeFile.Designer.cs', 'change');
 

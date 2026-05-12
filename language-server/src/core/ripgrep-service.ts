@@ -129,10 +129,7 @@ export class RipgrepService {
                 try {
                     const batchResults = await this.runRgBatch(baseArgs, batches[batchIndex], remaining, token);
                     if (batchResults.length > 0) {
-                        // ⚡ Bolt: Fast array pushing without spread operator allocation overhead and call stack limits
-                        for (let i = 0; i < batchResults.length; i++) {
-                            allResults.push(batchResults[i]);
-                        }
+                        allResults.push(...batchResults);
                     }
                 } catch {
                     // Ignore batch failure

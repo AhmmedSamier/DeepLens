@@ -1,7 +1,6 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
-import { SearchableItem } from './types';
+import { pLimit } from './p-limit';
 
 if (!parentPort) {
     throw new Error('This script must be run as a worker thread');
@@ -27,59 +26,42 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         }
 
         const { filePaths } = message;
-
-        if (message.chunkSize !== undefined && (!Number.isInteger(message.chunkSize) || message.chunkSize <= 0)) {
-            const errorMsg = `Invalid chunkSize: ${message.chunkSize}`;
-            workerLogger.appendLine(errorMsg);
-            throw new Error(errorMsg);
-        }
-
         const BATCH_SIZE = message.chunkSize ?? 25;
+        const CONCURRENCY = 15;
 
-        if (!Number.isInteger(BATCH_SIZE) || BATCH_SIZE <= 0) {
-            const errorMsg = `Invalid BATCH_SIZE: ${BATCH_SIZE}`;
-            workerLogger.appendLine(errorMsg);
-            throw new Error(errorMsg);
-        }
-
-        // ⚡ Bolt: Use a concurrency-limited task pool instead of fixed-chunk Promise.all
-        // This eliminates head-of-line blocking so fast files don't wait for the slowest
-        // file in a specific chunk. Results stream back to the parent continuously.
-        const limit = pLimit(BATCH_SIZE);
-
-        let processedCount = 0;
-        let pendingCount = 0;
-        const pendingItems: SearchableItem[] = [];
+        // ⚡ Bolt: Remove head-of-line blocking by using a concurrency task pool
+        // instead of chunked Promise.all
+        const limit = pLimit(CONCURRENCY);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let batchItems: any[] = [];
+        let batchProcessedFiles = 0;
+        let totalCompleted = 0;
 
         await Promise.all(
             filePaths.map((filePath) =>
                 limit(async () => {
-                    let items: import('./types').SearchableItem[] = [];
                     try {
-                        items = await parser.parseFile(filePath);
+                        const items = await parser.parseFile(filePath);
+                        // ⚡ Bolt: Fast manual loop pushing to avoid Maximum Call Stack Size Exceeded
+                        for (let i = 0; i < items.length; i++) {
+                            batchItems.push(items[i]);
+                        }
                     } catch {
-                        items = [];
-                    }
+                        // Ignore
+                    } finally {
+                        totalCompleted++;
+                        batchProcessedFiles++;
 
-                    // ⚡ Bolt: Manual array push to avoid "Maximum Call Stack Size Exceeded"
-                    // when aggregating large numbers of parsed symbols.
-                    for (let j = 0; j < items.length; j++) {
-                        pendingItems.push(items[j]);
-                    }
-
-                    processedCount++;
-                    pendingCount++;
-
-                    // Stream results back as they complete
-                    if (pendingCount >= BATCH_SIZE || processedCount === filePaths.length) {
-                        parentPort?.postMessage({
-                            type: 'result',
-                            items: [...pendingItems],
-                            count: pendingCount,
-                            isPartial: processedCount < filePaths.length,
-                        });
-                        pendingItems.length = 0;
-                        pendingCount = 0;
+                        if (batchProcessedFiles >= BATCH_SIZE || totalCompleted === filePaths.length) {
+                            parentPort?.postMessage({
+                                type: 'result',
+                                items: batchItems,
+                                count: batchProcessedFiles,
+                                isPartial: totalCompleted < filePaths.length,
+                            });
+                            batchItems = [];
+                            batchProcessedFiles = 0;
+                        }
                     }
                 }),
             ),
