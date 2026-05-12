@@ -69,11 +69,13 @@ export class SearchProvider {
     private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
     // Command IDs for empty state actions
+    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly CMD_NATIVE_SEARCH = 'command:native-search';
     private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
+    private readonly CMD_CLEAR_QUERY = 'command:clear-query';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
@@ -451,8 +453,7 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope ?? SearchScope.EVERYTHING;
         } else {
             this.currentScope = scope;
             this.userSelectedScope = scope;
@@ -510,6 +511,8 @@ export class SearchProvider {
      * Prompt for confirmation before clearing history
      */
     private promptClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): void {
+        quickPick.busy = false;
+
         const confirmItem: SearchResultItem = {
             label: 'Confirm Clear History',
             detail: 'This cannot be undone',
@@ -998,6 +1001,10 @@ export class SearchProvider {
             quickPick.items = commandSuggestions.map((r) => this.resultToSlashCommandQuickPickItem(r));
             this.updateTitle(quickPick, commandSuggestions.length);
             quickPick.busy = false;
+        } else {
+            quickPick.items = [];
+            quickPick.title = 'DeepLens - No matching commands';
+            quickPick.busy = false;
         }
     }
 
@@ -1124,7 +1131,7 @@ export class SearchProvider {
         }
 
         this.suggestSlashCommands(quickPick, query);
-        return quickPick.items.length > 0;
+        return true;
     }
 
     private async showRecentHistoryAndResetState(
@@ -1526,6 +1533,19 @@ export class SearchProvider {
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
     ): Promise<boolean> {
+        if (selected.result.item.id === this.CMD_CLEAR_SEARCH) {
+            quickPick.value = '';
+            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
+            // We must manually trigger the query change logic to update the list
+            this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+            return true;
+        }
+
         if (selected.result.item.id === this.CMD_NATIVE_SEARCH) {
             await vscode.commands.executeCommand('workbench.action.findInFiles', {
                 query: quickPick.value,
@@ -1573,6 +1593,21 @@ export class SearchProvider {
 
         if (selected.result.item.id === this.CMD_SETTINGS) {
             vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+            return true;
+        }
+
+        if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
+            quickPick.value = '';
+
+            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
+            await this.handleQueryChange(
+                quickPick,
+                '',
+                () => {},
+                () => {},
+            );
+
+            this.showFeedback('Search query cleared');
             return true;
         }
 
@@ -1652,7 +1687,15 @@ export class SearchProvider {
             });
         };
 
-        // 3. Native Search Action
+        // 3. Clear Search Action
+        addCommandItem(
+            'Clear Search',
+            'Reset your search query',
+            new vscode.ThemeIcon('clear-all'),
+            this.CMD_CLEAR_SEARCH,
+        );
+
+        // 4. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
@@ -1660,18 +1703,26 @@ export class SearchProvider {
             this.CMD_NATIVE_SEARCH,
         );
 
-        // 4. Rebuild Index Action
+        // 5. Rebuild Index Action
         addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
-        // 5. Clear Cache Action
+        // 6. Clear Cache Action
         addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
-        // 6. Settings Action
+        // 7. Settings Action
         addCommandItem(
             'Configure Settings',
             'Check exclusion rules',
             new vscode.ThemeIcon('settings-gear'),
             this.CMD_SETTINGS,
+        );
+
+        // 7. Clear Query Action
+        addCommandItem(
+            'Clear Search Query',
+            'Start a new search',
+            new vscode.ThemeIcon('clear-all'),
+            this.CMD_CLEAR_QUERY,
         );
 
         return { items, prompt: detail };
