@@ -451,8 +451,7 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope ?? SearchScope.EVERYTHING;
         } else {
             this.currentScope = scope;
             this.userSelectedScope = scope;
