@@ -25,3 +25,6 @@
 ## 2026-05-11 - [Fast Absolute Path Normalization Cache]
 **Learning:** In the `SearchEngine`'s hot loops (like filtering modified files or processing symbols within the same file), `path.normalize(filePath)` combined with `toLowerCase()` for Windows is called repeatedly with the same file path. String manipulation in tight loops causes significant garbage collection overhead and CPU cycles.
 **Action:** Implemented a 1-item cache (`lastNormalizedInput` and `lastNormalizedOutput`) for absolute path normalization, similar to the existing `relativeFilePath` cache. This avoids redundant string allocations and path processing, yielding a ~45% reduction in time taken for repeated normalizations (1469ms -> 802ms for 1M iterations in micro-benchmarks).
+## 2026-06-25 - [Tree-Sitter AST Traversal Optimization]
+**Learning:** Checking node types during hot path AST traversals (like finding a parent class) by creating new lowercase strings and running `.includes()` is significantly slower than doing an `O(1)` check against a pre-populated static `Set` of exact node names.
+**Action:** When evaluating Tree-sitter AST nodes in loops, always perform exact string matches against a pre-allocated `Set` to eliminate redundant string allocation and garbage collection overhead.

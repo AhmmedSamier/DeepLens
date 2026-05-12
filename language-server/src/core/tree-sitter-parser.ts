@@ -2,9 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { SearchItemType, SearchableItem } from './types';
 
-/**
- * Simple interface for logging to allow decoupling from vscode
- */
+const CLASS_TYPES = new Set(['class_declaration', 'class_definition', 'class']);
+
 export interface Logger {
     appendLine(message: string): void;
 }
@@ -463,15 +462,15 @@ export class TreeSitterParser {
     private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
         // Walk up to find the class declaration
         let parent = this.getParent(methodNode);
-        while (
-            parent &&
-            !parent.type.toLowerCase().includes('class_declaration') &&
-            parent.type !== 'compilation_unit'
-        ) {
+        // ⚡ Bolt: Fast tree-sitter node type checks
+        // Replaced dynamic string manipulation (toLowerCase().includes) with O(1) Set lookups
+        // using the pre-existing CLASS_TYPES Set. This eliminates redundant allocations
+        // and improves performance during AST traversal loops.
+        while (parent && !CLASS_TYPES.has(parent.type) && parent.type !== 'compilation_unit') {
             parent = this.getParent(parent);
         }
 
-        if (parent?.type.toLowerCase().includes('class_declaration')) {
+        if (parent && CLASS_TYPES.has(parent.type)) {
             const results: { method: string | null; route: string | null } = {
                 method: null,
                 route: null,
