@@ -13,6 +13,7 @@ RUN apt-get update -yq && \
         ca-certificates \
         curl \
         git \
+        nodejs \
         unzip \
         && \
     apt-get clean && \
