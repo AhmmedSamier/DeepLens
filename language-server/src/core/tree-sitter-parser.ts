@@ -39,8 +39,23 @@ interface TreeSitterLib {
 }
 
 export class TreeSitterParser {
-    private static readonly CLASS_NODE_TYPES = new Set(['class_declaration', 'class_definition', 'class', 'struct_declaration', 'struct_definition', 'struct']);
-    private static readonly INTERFACE_NODE_TYPES = new Set(['interface_declaration', 'interface_definition', 'interface', 'trait_declaration', 'trait_definition', 'trait']);
+    private static readonly CLASS_NODE_TYPES = new Set([
+        'class_declaration',
+        'class_definition',
+        'class',
+        'struct_declaration',
+        'struct_definition',
+        'struct',
+    ]);
+    private static readonly CONTROLLER_CLASS_NODE_TYPES = new Set(['class_declaration', 'class_definition', 'class']);
+    private static readonly INTERFACE_NODE_TYPES = new Set([
+        'interface_declaration',
+        'interface_definition',
+        'interface',
+        'trait_declaration',
+        'trait_definition',
+        'trait',
+    ]);
     private static readonly ENUM_NODE_TYPES = new Set(['enum_declaration', 'enum_definition', 'enum']);
     private static readonly METHOD_NODE_TYPES = new Set(['method_declaration', 'method_definition', 'method']);
     private static readonly FUNCTION_NODE_TYPES = new Set(['function_declaration', 'function_definition', 'function']);
@@ -469,18 +484,17 @@ export class TreeSitterParser {
     }
 
     private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
-        // Walk up to find the class declaration
+        // Walk up to find the class declaration (structs are not controllers)
         let parent = this.getParent(methodNode);
         while (
             parent &&
-            // ⚡ Bolt: Fast O(1) Set lookup replacing dynamic string manipulation
-            !TreeSitterParser.CLASS_NODE_TYPES.has(parent.type) &&
+            !TreeSitterParser.CONTROLLER_CLASS_NODE_TYPES.has(parent.type) &&
             parent.type !== 'compilation_unit'
         ) {
             parent = this.getParent(parent);
         }
 
-        if (parent && TreeSitterParser.CLASS_NODE_TYPES.has(parent.type)) {
+        if (parent && TreeSitterParser.CONTROLLER_CLASS_NODE_TYPES.has(parent.type)) {
             const results: { method: string | null; route: string | null } = {
                 method: null,
                 route: null,
