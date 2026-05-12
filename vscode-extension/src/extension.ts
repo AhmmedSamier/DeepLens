@@ -670,7 +670,7 @@ export async function activate(context: vscode.ExtensionContext) {
     activityTracker = new ActivityTracker(context);
 
     // UI remains local
-    searchProvider = new SearchProvider(lspClient, config, activityTracker, commandIndexer);
+    searchProvider = new SearchProvider(lspClient, config, context.workspaceState, activityTracker, commandIndexer);
 
     // T013: Listen for ripgrep unavailability
     context.subscriptions.push(
@@ -770,7 +770,15 @@ export async function activate(context: vscode.ExtensionContext) {
                 targetPosition = activeEditor.selection.active;
             }
 
-            await showCallChain(targetUri, targetPosition, symbolName);
+            await vscode.window.withProgress(
+                {
+                    location: vscode.ProgressLocation.Window,
+                    title: `DeepLens: Building call chain for ${symbolName || 'symbol'}...`,
+                },
+                async () => {
+                    await showCallChain(targetUri, targetPosition, symbolName);
+                },
+            );
         },
     );
 
