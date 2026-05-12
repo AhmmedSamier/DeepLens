@@ -2363,6 +2363,7 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private searchRemainingItems(
         priorityScopes: SearchScope[],
         maxResults: number,
@@ -2401,8 +2402,10 @@ export class SearchEngine implements ISearchProvider {
                 const len = indices.length;
                 for (let j = 0; j < len; j++) {
                     const idx = indices[j];
-                    searchedIndices[idx] = 1;
-                    visitedIndicesList.push(idx);
+                    if (searchedIndices[idx] === 0) {
+                        searchedIndices[idx] = 1;
+                        visitedIndicesList.push(idx);
+                    }
                 }
             }
         }
