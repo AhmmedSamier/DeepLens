@@ -2387,7 +2387,6 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private searchRemainingItems(
         priorityScopes: SearchScope[],
         maxResults: number,
