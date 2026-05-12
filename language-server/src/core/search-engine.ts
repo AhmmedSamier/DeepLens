@@ -1269,9 +1269,9 @@ export class SearchEngine implements ISearchProvider {
 
             tasks.push(
                 limit(async () => {
-                    if (results.length >= maxResults || token?.isCancellationRequested) return;
-
                     try {
+                        if (results.length >= maxResults || token?.isCancellationRequested) return;
+
                         // Optimization: Use cached size if available to avoid fs.stat calls
                         let fileSize = fileItem.size;
                         if (fileSize === undefined) {
@@ -1308,7 +1308,7 @@ export class SearchEngine implements ISearchProvider {
                             flushBatch();
                         }
 
-                        if (processedFiles % 100 === 0 || results.length > 0) {
+                        if (processedFiles % 100 === 0 || (results.length > 0 && processedFiles % 10 === 0)) {
                             this.logger?.log(
                                 `Searched ${processedFiles}/${prioritizedFiles.length} files... found ${results.length} matches`,
                             );
@@ -1320,7 +1320,7 @@ export class SearchEngine implements ISearchProvider {
             // Yield occasionally to process queued callbacks, allowing `results.length`
             // to update. This prevents queueing all items synchronously and exhausting memory.
             // Also limits memory overhead by throttling enqueue rate.
-            if (i % 50 === 0) {
+            if (i > 0 && i % 50 === 0) {
                 await new Promise((resolve) => setTimeout(resolve, 0));
             }
         }
