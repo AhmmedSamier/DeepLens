@@ -123,6 +123,7 @@ export class SearchProvider {
     constructor(
         searchEngine: ISearchProvider,
         config: Config,
+        private readonly storage: vscode.Memento,
         activityTracker?: ActivityTracker,
         commandIndexer?: CommandIndexer,
     ) {
@@ -131,6 +132,7 @@ export class SearchProvider {
         this.activityTracker = activityTracker;
         this.commandIndexer = commandIndexer;
         this.slashCommandService = new SlashCommandService();
+        this.userSelectedScope = this.storage.get<SearchScope>('deeplens.userSelectedScope', SearchScope.EVERYTHING);
         this.createFilterButtons();
 
         // Start with a random tip
@@ -150,6 +152,14 @@ export class SearchProvider {
     /**
      * Show transient feedback in status bar and as title flash
      */
+
+    /**
+     * Set and persist the user's selected search scope
+     */
+    private setUserSelectedScope(scope: SearchScope): void {
+        this.userSelectedScope = scope;
+        this.storage.update('deeplens.userSelectedScope', scope);
+    }
     private showFeedback(message: string): void {
         if (this.currentQuickPick) {
             if (this.feedbackTimeout) {
@@ -451,11 +461,10 @@ export class SearchProvider {
      */
     async show(scope?: SearchScope, initialQuery?: string): Promise<void> {
         if (scope === undefined) {
-            this.currentScope = SearchScope.EVERYTHING;
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = this.userSelectedScope;
         } else {
             this.currentScope = scope;
-            this.userSelectedScope = scope;
+            this.setUserSelectedScope(scope);
         }
         await this.showInternal(initialQuery);
     }
@@ -880,7 +889,7 @@ export class SearchProvider {
     }
 
     private handleSearchEverywhereButton(quickPick: vscode.QuickPick<SearchResultItem>): void {
-        this.userSelectedScope = SearchScope.EVERYTHING;
+        this.setUserSelectedScope(SearchScope.EVERYTHING);
         this.currentScope = SearchScope.EVERYTHING;
 
         const currentQuery = quickPick.value;
@@ -905,12 +914,23 @@ export class SearchProvider {
     /**
      * Create a search result for a slash command
      */
-    private createCommandSuggestion(cmd: SlashCommand, score: number, isRecent: boolean = false): SearchResult {
+    private createCommandSuggestion(
+        cmd: SlashCommand,
+        score: number,
+        indicatorType: 'recent' | 'popular' | 'normal' = 'normal',
+    ): SearchResult {
         const primaryAlias = this.slashCommandService.getPrimaryAlias(cmd);
         const aliasText = this.formatAliasText(cmd);
         const shortcutText = cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : '';
         const exampleText = cmd.example ? ` • Try: ${cmd.example}` : '';
         const description = `${cmd.description}${aliasText}${shortcutText}${exampleText}`;
+
+        let detailPrefix = '';
+        if (indicatorType === 'recent') {
+            detailPrefix = '$(history) Recent • ';
+        } else if (indicatorType === 'popular') {
+            detailPrefix = '$(star) Popular • ';
+        }
 
         return {
             item: {
@@ -918,7 +938,7 @@ export class SearchProvider {
                 name: primaryAlias,
                 type: SearchItemType.COMMAND,
                 filePath: '',
-                detail: isRecent ? `$(history) Recent • ${description}` : description,
+                detail: `${detailPrefix}${description}`,
                 containerName: this.getCategoryLabel(cmd.category),
             },
             score: score,
@@ -961,9 +981,11 @@ export class SearchProvider {
     /**
      * Suggest slash commands based on query
      */
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private suggestSlashCommands(quickPick: vscode.QuickPick<SearchResultItem>, query: string): void {
         const commands = this.slashCommandService.getCommands(query);
         const recentCommands = this.slashCommandService.getRecentCommands();
+        const popularCommands = this.slashCommandService.getPopularCommands();
 
         const commandSuggestions: SearchResult[] = [];
         const seen = new Set<string>();
@@ -982,7 +1004,21 @@ export class SearchProvider {
             )
                 continue;
 
-            commandSuggestions.push(this.createCommandSuggestion(cmd, 1000, true));
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 1000, 'recent'));
+            seen.add(cmd.name);
+        }
+
+        // Add popular commands
+        for (const cmd of popularCommands) {
+            if (seen.has(cmd.name)) continue;
+            if (
+                queryLower &&
+                !cmd.name.toLowerCase().startsWith(queryLower) &&
+                !cmd.aliases.some((a) => a.toLowerCase().startsWith(queryLower))
+            )
+                continue;
+
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 500, 'popular'));
             seen.add(cmd.name);
         }
 
@@ -990,7 +1026,7 @@ export class SearchProvider {
         for (const cmd of commands) {
             if (seen.has(cmd.name)) continue;
 
-            commandSuggestions.push(this.createCommandSuggestion(cmd, 1, false));
+            commandSuggestions.push(this.createCommandSuggestion(cmd, 1, 'normal'));
             seen.add(cmd.name);
         }
 
@@ -1103,7 +1139,7 @@ export class SearchProvider {
             return false;
         }
 
-        this.userSelectedScope = scope;
+        this.setUserSelectedScope(scope);
         this.currentScope = scope;
         this.updateFilterButtons(quickPick);
         quickPick.placeholder = this.getPlaceholder();
@@ -1291,7 +1327,7 @@ export class SearchProvider {
 
             if (buttonBaseName === baseName) {
                 // Update user selection
-                this.userSelectedScope = scope;
+                this.setUserSelectedScope(scope);
 
                 // Also update current scope (though it might be overridden by query prefix in next step)
                 this.currentScope = scope;
@@ -1540,7 +1576,7 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_SWITCH_SCOPE) {
-            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.setUserSelectedScope(SearchScope.EVERYTHING);
             this.currentScope = SearchScope.EVERYTHING;
 
             const currentQuery = quickPick.value;
@@ -2082,7 +2118,7 @@ export class SearchProvider {
             // Find scope for this prefix (add space to match PREFIX_MAP)
             const scope = this.PREFIX_MAP.get(functionalPrefix + ' ');
             if (scope) {
-                this.userSelectedScope = scope; // <--- FIX: Persist user selection
+                this.setUserSelectedScope(scope); // <--- FIX: Persist user selection
                 this.currentScope = scope;
                 this.updateFilterButtons(this.currentQuickPick);
                 this.currentQuickPick.value = ''; // Clear the command text

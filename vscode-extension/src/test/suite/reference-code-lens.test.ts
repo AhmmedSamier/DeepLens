@@ -91,21 +91,21 @@ suite('ReferenceCodeLens Test Suite', () => {
         assert.ok(Array.isArray(lenses), 'Should return an array even when cancelled');
     });
 
-    test('Provider should handle documents with no symbols', async function () {
-        this.timeout(5000); // Increase timeout to avoid flake
-        // Create a new document with no symbols
-        const emptyDoc = await vscode.workspace.openTextDocument({
-            content: '// Empty file\n',
-            language: 'typescript',
-        });
+    test('Provider should handle documents with no symbols', async () => {
+        // Create a new document with no symbols using the filesystem to avoid "no project" typescript errors
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0].uri.fsPath || '';
+        const uri = vscode.Uri.file(workspaceFolder + '/empty_test_file.ts');
+        await vscode.workspace.fs.writeFile(uri, new Uint8Array(Buffer.from('// Empty file\n')));
 
-        // Add a small delay for TS extension to be fully ready before getting lenses to avoid timeout flakes
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        try {
+            const emptyDoc = await vscode.workspace.openTextDocument(uri);
+            const token = new vscode.CancellationTokenSource().token;
+            const lenses = await provider.provideCodeLenses(emptyDoc, token);
 
-        const token = new vscode.CancellationTokenSource().token;
-        const lenses = await provider.provideCodeLenses(emptyDoc, token);
-
-        assert.ok(Array.isArray(lenses), 'Should return an array for empty document');
+            assert.ok(Array.isArray(lenses), 'Should return an array for empty document');
+        } finally {
+            await vscode.workspace.fs.delete(uri);
+        }
     });
 
     test('Provider should handle errors in symbol retrieval gracefully', async () => {
