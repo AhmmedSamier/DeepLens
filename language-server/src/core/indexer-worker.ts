@@ -1,5 +1,4 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { pLimit } from './p-limit';
 import { Logger, TreeSitterParser } from './tree-sitter-parser';
 import type { SearchableItem } from './types';
 
@@ -70,10 +69,10 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         const BATCH_SIZE = message.chunkSize ?? 25;
         const concurrencyLimit = message.concurrency ?? 15;
 
-        const limit = pLimit(concurrencyLimit);
         let pendingItems: SearchableItem[] = [];
         let processedCount = 0;
         let totalCompleted = 0;
+        let nextIndex = 0;
 
         const flushBatch = (isPartial: boolean) => {
             if (pendingItems.length > 0 || !isPartial) {
@@ -88,11 +87,14 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
             }
         };
 
-        const tasks = filePaths.map((filePath) => {
-            return limit(async () => {
+        const runner = async () => {
+            while (true) {
+                const idx = nextIndex++;
+                if (idx >= filePaths.length) break;
+
                 let itemsCount = 0;
                 try {
-                    const parsedItems = await parser.parseFile(filePath);
+                    const parsedItems = await parser.parseFile(filePaths[idx]);
                     itemsCount = parsedItems.length;
 
                     for (let i = 0; i < itemsCount; i++) {
@@ -109,10 +111,15 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
                         flushBatch(!isLast);
                     }
                 }
-            });
-        });
+            }
+        };
 
-        await Promise.all(tasks);
+        const runnerCount = Math.min(concurrencyLimit, filePaths.length);
+        const runners: Promise<void>[] = [];
+        for (let i = 0; i < runnerCount; i++) {
+            runners.push(runner());
+        }
+        await Promise.all(runners);
     } catch (error) {
         parentPort?.postMessage({
             type: 'error',
