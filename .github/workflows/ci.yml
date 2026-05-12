@@ -21,12 +21,13 @@ jobs:
     lint:
         runs-on: ubuntu-24.04
         timeout-minutes: 5
+        strategy:
+            matrix:
+                project: [language-server, vscode-extension]
         steps:
-            - name: Checkout
-              uses: actions/checkout@v4
+            - uses: actions/checkout@v4
 
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
+            - uses: oven-sh/setup-bun@v2
               with:
                   bun-version: latest
 
@@ -34,26 +35,20 @@ jobs:
               uses: actions/cache@v4
               with:
                   path: ~/.bun/install/cache
-                  key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+                  key: ${{ runner.os }}-bun-${{ matrix.project }}-${{ hashFiles(format('{0}/bun.lock', matrix.project)) }}
                   restore-keys: |
-                      ${{ runner.os }}-bun-
+                      ${{ runner.os }}-bun-${{ matrix.project }}-
 
             - name: Install Dependencies
-              run: |
-                  cd language-server && bun install --frozen-lockfile
-                  cd ../vscode-extension && bun install --frozen-lockfile
+              working-directory: ${{ matrix.project }}
+              run: bun install --frozen-lockfile
 
-            - name: Lint Language Server
-              working-directory: language-server
-              run: bun run lint
-
-            - name: Lint VS Code Extension
-              working-directory: vscode-extension
+            - name: Lint
+              working-directory: ${{ matrix.project }}
               run: bun run lint
 
     test-language-server:
         runs-on: ubuntu-24.04
-        needs: lint
         timeout-minutes: 10
         steps:
             - name: Checkout
@@ -91,7 +86,9 @@ jobs:
 
     test-vscode-extension:
         runs-on: ubuntu-24.04
-        needs: [lint, test-language-server]
+        container:
+            image: ghcr.io/${{ github.repository_owner }}/deeplens-ci:latest
+        needs: test-language-server
         timeout-minutes: 15
         steps:
             - name: Checkout
@@ -129,11 +126,6 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-vscode-
 
-            - name: Install Linux Dependencies
-              run: |
-                  sudo apt-get update -yq
-                  sudo apt-get install -yq --no-install-recommends xvfb libasound2t64 libatk1.0-0t64 libgbm1 libgtk-3-0t64 libnss3 libxkbfile1 libxss1
-
             - name: Run VS Code Extension Tests
               working-directory: vscode-extension
               run: |
@@ -146,7 +138,9 @@ jobs:
 
     benchmarks:
         runs-on: ubuntu-24.04
-        needs: [lint, test-language-server, test-vscode-extension]
+        container:
+            image: ghcr.io/${{ github.repository_owner }}/deeplens-ci:latest
+        needs: test-language-server
         timeout-minutes: 20
         if: |
             (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
@@ -173,12 +167,6 @@ jobs:
                   cd language-server && bun install --frozen-lockfile
                   cd ../vscode-extension && bun install --frozen-lockfile
 
-            - name: Download Language Server Artifact
-              uses: actions/download-artifact@v4
-              with:
-                  name: language-server-dist
-                  path: language-server/dist
-
             - name: Cache VS Code Binary
               uses: actions/cache@v4
               with:
@@ -186,11 +174,6 @@ jobs:
                   key: ${{ runner.os }}-vscode-bench-${{ hashFiles('vscode-extension/package.json') }}
                   restore-keys: |
                       ${{ runner.os }}-vscode-bench-
-
-            - name: Install Linux Dependencies (for extension benchmarks)
-              run: |
-                  sudo apt-get update -yq
-                  sudo apt-get install -yq --no-install-recommends xvfb libasound2t64 libatk1.0-0t64 libgbm1 libgtk-3-0t64 libnss3 libxkbfile1 libxss1
 
             - name: Run Benchmarks
               run: |
