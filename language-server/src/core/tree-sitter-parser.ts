@@ -43,9 +43,11 @@ export class TreeSitterParser {
         'class_declaration',
         'class_definition',
         'class',
+        'class_specifier',
         'struct_declaration',
         'struct_definition',
         'struct',
+        'struct_specifier',
     ]);
     private static readonly CONTROLLER_CLASS_NODE_TYPES = new Set(['class_declaration', 'class_definition', 'class']);
     private static readonly INTERFACE_NODE_TYPES = new Set([
@@ -56,7 +58,12 @@ export class TreeSitterParser {
         'trait_definition',
         'trait',
     ]);
-    private static readonly ENUM_NODE_TYPES = new Set(['enum_declaration', 'enum_definition', 'enum']);
+    private static readonly ENUM_NODE_TYPES = new Set([
+        'enum_declaration',
+        'enum_definition',
+        'enum',
+        'enum_specifier',
+    ]);
     private static readonly METHOD_NODE_TYPES = new Set(['method_declaration', 'method_definition', 'method']);
     private static readonly FUNCTION_NODE_TYPES = new Set(['function_declaration', 'function_definition', 'function']);
     private static readonly PROPERTY_NODE_TYPES = new Set(['property_declaration', 'property_definition']);
