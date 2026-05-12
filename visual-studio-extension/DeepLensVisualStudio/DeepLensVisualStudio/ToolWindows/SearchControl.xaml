@@ -215,12 +215,12 @@
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
                             Text="{Binding SearchQuery, UpdateSourceTrigger=PropertyChanged}"
                             AutomationProperties.Name="Search query"
-                            ToolTip="Search for classes, symbols, files, text, or endpoints" />
+                            ToolTip="{Binding SearchPlaceholder}" />
 
                         <!-- Watermark Overlay (Rendered after TextBox to appear on top) -->
                         <TextBlock
                             IsHitTestVisible="False"
-                            Text="Search for classes, symbols, files, text, or endpoints"
+                            Text="{Binding SearchPlaceholder}"
                             VerticalAlignment="Center"
                             FontSize="{Binding FontSize, ElementName=SearchTextBox}"
                             Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
@@ -455,6 +455,19 @@
                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
                     HorizontalAlignment="Center"
                     Margin="0,4,0,0" />
+                <Button
+                    Content="Clear Search"
+                    Margin="0,12,0,0"
+                    Padding="16,6"
+                    HorizontalAlignment="Center"
+                    Background="Transparent"
+                    BorderBrush="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowBorderKey}}"
+                    BorderThickness="1"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.ToolWindowTextKey}}"
+                    Cursor="Hand"
+                    Click="ClearSearchButton_Click"
+                    AutomationProperties.Name="Clear search"
+                    ToolTip="Clear current search query and filters" />
             </StackPanel>
 
             <!--  Status Bar (Sticky at Bottom)  -->
