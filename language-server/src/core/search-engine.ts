@@ -1731,12 +1731,6 @@ export class SearchEngine implements ISearchProvider {
             }
         }
 
-        if (candidateSet && indices) {
-            for (let i = 0; i < indices.length; i++) {
-                candidateSet[indices[i]] = 0;
-            }
-        }
-
         return preferred;
     }
 
