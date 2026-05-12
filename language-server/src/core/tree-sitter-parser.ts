@@ -38,29 +38,37 @@ interface TreeSitterLib {
     Parser?: ParserConstructor;
 }
 
-const CLASS_TYPES = new Set([
-    'class_declaration',
-    'class_definition',
-    'class',
-    'struct_declaration',
-    'struct_definition',
-    'struct',
-]);
-const INTERFACE_TYPES = new Set([
-    'interface_declaration',
-    'interface_definition',
-    'interface',
-    'trait_declaration',
-    'trait_definition',
-    'trait',
-]);
-const ENUM_TYPES = new Set(['enum_declaration', 'enum_definition', 'enum']);
-const METHOD_TYPES = new Set(['method_declaration', 'method_definition', 'method']);
-const FUNCTION_TYPES = new Set(['function_declaration', 'function_definition', 'function']);
-const PROPERTY_TYPES = new Set(['property_declaration', 'property_definition']);
-const VARIABLE_TYPES = new Set(['variable_declaration', 'variable_declarator']);
-
 export class TreeSitterParser {
+    private static readonly CLASS_NODE_TYPES = new Set([
+        'class_declaration',
+        'class_definition',
+        'class',
+        'class_specifier',
+        'struct_declaration',
+        'struct_definition',
+        'struct',
+        'struct_specifier',
+    ]);
+    private static readonly CONTROLLER_CLASS_NODE_TYPES = new Set(['class_declaration', 'class_definition', 'class']);
+    private static readonly INTERFACE_NODE_TYPES = new Set([
+        'interface_declaration',
+        'interface_definition',
+        'interface',
+        'trait_declaration',
+        'trait_definition',
+        'trait',
+    ]);
+    private static readonly ENUM_NODE_TYPES = new Set([
+        'enum_declaration',
+        'enum_definition',
+        'enum',
+        'enum_specifier',
+    ]);
+    private static readonly METHOD_NODE_TYPES = new Set(['method_declaration', 'method_definition', 'method']);
+    private static readonly FUNCTION_NODE_TYPES = new Set(['function_declaration', 'function_definition', 'function']);
+    private static readonly PROPERTY_NODE_TYPES = new Set(['property_declaration', 'property_definition']);
+    private static readonly VARIABLE_NODE_TYPES = new Set(['variable_declaration', 'variable_declarator']);
+
     private isInitialized: boolean = false;
     private readonly languages: Map<string, unknown> = new Map();
     private ParserClass: ParserConstructor | undefined = undefined;
@@ -483,17 +491,17 @@ export class TreeSitterParser {
     }
 
     private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
-        // Walk up to find the class declaration
+        // Walk up to find the class declaration (structs are not controllers)
         let parent = this.getParent(methodNode);
         while (
             parent &&
-            !parent.type.toLowerCase().includes('class_declaration') &&
+            !TreeSitterParser.CONTROLLER_CLASS_NODE_TYPES.has(parent.type) &&
             parent.type !== 'compilation_unit'
         ) {
             parent = this.getParent(parent);
         }
 
-        if (parent?.type.toLowerCase().includes('class_declaration')) {
+        if (parent && TreeSitterParser.CONTROLLER_CLASS_NODE_TYPES.has(parent.type)) {
             const results: { method: string | null; route: string | null } = {
                 method: null,
                 route: null,
@@ -629,23 +637,23 @@ export class TreeSitterParser {
     }
 
     private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
+        // ⚡ Bolt: Fast O(1) Set lookups replacing RegExp checks
         // Classes & Types
-        // ⚡ Bolt: Fast tree-sitter node type lookups via Sets
-        if (CLASS_TYPES.has(nodeType)) {
+        if (TreeSitterParser.CLASS_NODE_TYPES.has(nodeType)) {
             return SearchItemType.CLASS;
         }
-        if (INTERFACE_TYPES.has(nodeType)) {
+        if (TreeSitterParser.INTERFACE_NODE_TYPES.has(nodeType)) {
             return SearchItemType.INTERFACE;
         }
-        if (ENUM_TYPES.has(nodeType)) {
+        if (TreeSitterParser.ENUM_NODE_TYPES.has(nodeType)) {
             return SearchItemType.ENUM;
         }
 
         // Functions & Methods
-        if (METHOD_TYPES.has(nodeType)) {
+        if (TreeSitterParser.METHOD_NODE_TYPES.has(nodeType)) {
             return SearchItemType.METHOD;
         }
-        if (FUNCTION_TYPES.has(nodeType)) {
+        if (TreeSitterParser.FUNCTION_NODE_TYPES.has(nodeType)) {
             return SearchItemType.FUNCTION;
         }
 
@@ -669,10 +677,10 @@ export class TreeSitterParser {
         }
 
         // Fallback for common properties and variables
-        if (PROPERTY_TYPES.has(nodeType)) {
+        if (TreeSitterParser.PROPERTY_NODE_TYPES.has(nodeType)) {
             return SearchItemType.PROPERTY;
         }
-        if (VARIABLE_TYPES.has(nodeType)) {
+        if (TreeSitterParser.VARIABLE_NODE_TYPES.has(nodeType)) {
             return SearchItemType.VARIABLE;
         }
 
