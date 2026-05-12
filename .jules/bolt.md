@@ -6,6 +6,7 @@
 ## 2026-04-07 - [Fast Unbounded Queue Reset]
 **Learning:** In array-based queue implementations (e.g., `pLimit`) that advance a `head` index instead of using `Array.prototype.shift()` to avoid O(N) operations, the backing array can grow indefinitely and leak memory if tasks are continuously queued.
 **Action:** Prevent unbounded memory growth by resetting `head = 0` and `queue.length = 0` whenever the queue is emptied (`head >= queue.length`).
+
 ## 2026-04-08 - [Fast Dense Integer Set Tracking]
 **Learning:** When keeping track of seen integer IDs that are dense and bounded (e.g. from 0 to N), using `new Set<number>()` incurs heavy allocation and insertion overhead compared to a fixed-size byte array.
 **Action:** Replace `Set<number>` with `new Uint8Array(maxIndex)` and use `array[id] = 1` to track presence, which is ~15x faster and avoids garbage collection pauses in hot paths. (Benchmark context: `N=100,000` IDs, `bun` version 1.2.14, Linux x86_64, Intel Xeon 2.30GHz, 4 cores, 8GB RAM, averaged over 100 iterations comparing `Set<number>` addition vs `new Uint8Array(maxIndex)` indexed assignment `array[id] = 1`).
@@ -18,3 +19,6 @@
 ## 2026-05-06 - [Precomputing ID to Scope Checks Avoids O(N) Array Allocation]
 **Learning:** In `SearchEngine.searchRemainingItems`, allocating an O(N) `Uint8Array` to track visited items for the fallback search pass was a major overhead. Because items are stored in arrays of struct (`this.items`, `this.itemTypeIds`), we can precompute a 256-element boolean lookup array mapping `typeId` to "is in priority scopes" using the `ID_TO_SCOPE` array.
 **Action:** Instead of allocating an O(N) array to track which items have been searched, use the item's inherent properties (like `typeId`) and precompute an O(1) lookup table (e.g. `isPriorityTypeId = new Uint8Array(256)`) to filter them on the fly. This avoids large allocations while perfectly preserving the iteration order required by the search ranking logic.
+## 2026-05-06 - [Lazy Evaluation of Pre-computed Full Names in Search Engine]
+**Learning:** In the `SearchEngine.burstSearch` hot loop, calling `fullName.toLowerCase()` for every item when no fast-path exact or prefix match is found creates a significant amount of redundant string allocations, leading to performance bottlenecks during exhaustive scans.
+**Action:** Implemented lazy evaluation of `_targetLower` from the parallel `this.preparedFullNames` array in `calculateMatchScore`. By passing the pre-computed Fuzzysort prepared object down, we only extract its lowercased string if the fast paths fail, avoiding unnecessary O(N) evaluations and memory allocations.
