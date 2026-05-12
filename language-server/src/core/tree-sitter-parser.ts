@@ -38,6 +38,28 @@ interface TreeSitterLib {
     Parser?: ParserConstructor;
 }
 
+const CLASS_TYPES = new Set([
+    'class_declaration',
+    'class_definition',
+    'class',
+    'struct_declaration',
+    'struct_definition',
+    'struct',
+]);
+const INTERFACE_TYPES = new Set([
+    'interface_declaration',
+    'interface_definition',
+    'interface',
+    'trait_declaration',
+    'trait_definition',
+    'trait',
+]);
+const ENUM_TYPES = new Set(['enum_declaration', 'enum_definition', 'enum']);
+const METHOD_TYPES = new Set(['method_declaration', 'method_definition', 'method']);
+const FUNCTION_TYPES = new Set(['function_declaration', 'function_definition', 'function']);
+const PROPERTY_TYPES = new Set(['property_declaration', 'property_definition']);
+const VARIABLE_TYPES = new Set(['variable_declaration', 'variable_declarator']);
+
 export class TreeSitterParser {
     private isInitialized: boolean = false;
     private readonly languages: Map<string, unknown> = new Map();
@@ -608,27 +630,22 @@ export class TreeSitterParser {
 
     private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
         // Classes & Types
-        if (/class_declaration|class_definition|^class$/.test(nodeType)) {
+        // ⚡ Bolt: Fast tree-sitter node type lookups via Sets
+        if (CLASS_TYPES.has(nodeType)) {
             return SearchItemType.CLASS;
         }
-        if (/interface_declaration|interface_definition|^interface$/.test(nodeType)) {
+        if (INTERFACE_TYPES.has(nodeType)) {
             return SearchItemType.INTERFACE;
         }
-        if (/enum_declaration|enum_definition|^enum$/.test(nodeType)) {
+        if (ENUM_TYPES.has(nodeType)) {
             return SearchItemType.ENUM;
-        }
-        if (/struct_declaration|struct_definition|^struct$/.test(nodeType)) {
-            return SearchItemType.CLASS;
-        }
-        if (/trait_declaration|trait_definition|^trait$/.test(nodeType)) {
-            return SearchItemType.INTERFACE;
         }
 
         // Functions & Methods
-        if (/method_declaration|method_definition|^method$/.test(nodeType)) {
+        if (METHOD_TYPES.has(nodeType)) {
             return SearchItemType.METHOD;
         }
-        if (/function_declaration|function_definition|^function$/.test(nodeType)) {
+        if (FUNCTION_TYPES.has(nodeType)) {
             return SearchItemType.FUNCTION;
         }
 
@@ -652,10 +669,10 @@ export class TreeSitterParser {
         }
 
         // Fallback for common properties and variables
-        if (/property_declaration|property_definition/.test(nodeType)) {
+        if (PROPERTY_TYPES.has(nodeType)) {
             return SearchItemType.PROPERTY;
         }
-        if (/variable_declaration|variable_declarator/.test(nodeType)) {
+        if (VARIABLE_TYPES.has(nodeType)) {
             return SearchItemType.VARIABLE;
         }
 

@@ -266,6 +266,23 @@ export class SlashCommandService {
         return recent;
     }
 
+    /**
+     * Get a list of popular commands to suggest to users
+     */
+    getPopularCommands(): SlashCommand[] {
+        const popularCommandIds = ['/files', '/txt', '/types', '/symbols', '/m'];
+        const popular: SlashCommand[] = [];
+
+        for (const id of popularCommandIds) {
+            const cmd = this.commands.get(id);
+            if (cmd) {
+                popular.push(cmd);
+            }
+        }
+
+        return popular;
+    }
+
     getCommandsByCategory(category: SlashCommandCategory): SlashCommand[] {
         return this.categoryGroups.get(category) || [];
     }
@@ -286,6 +303,9 @@ export class SlashCommandService {
     private sortResults(results: SlashCommand[], query: string): void {
         const lowerQuery = query.toLowerCase();
 
+        // ⚡ Bolt: Pre-compute Set for O(1) recency lookups instead of O(N) Array.includes during sort
+        const recentSet = new Set(this.recentlyUsed);
+
         results.sort((a, b) => {
             const aExact = a.name === lowerQuery;
             const bExact = b.name === lowerQuery;
@@ -293,8 +313,8 @@ export class SlashCommandService {
             if (aExact && !bExact) return -1;
             if (!aExact && bExact) return 1;
 
-            const aRecent = this.recentlyUsed.includes(a.name.toLowerCase());
-            const bRecent = this.recentlyUsed.includes(b.name.toLowerCase());
+            const aRecent = recentSet.has(a.name.toLowerCase());
+            const bRecent = recentSet.has(b.name.toLowerCase());
 
             if (aRecent && !bRecent) return -1;
             if (!aRecent && bRecent) return 1;
