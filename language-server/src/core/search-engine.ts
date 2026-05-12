@@ -2371,63 +2371,25 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast index tracking optimization
-        // Replacing `Set<number>` with a pre-allocated `Uint8Array` prevents massive object allocation
-        // and provides O(1) array access. (~15x faster than Set for 1M items).
-
-        // Re-entrancy guard: processItem may synchronously re-enter search.
-        // If already searching, allocate local buffers to avoid corrupting outer state.
-        const isReentrant = this._isSearching;
-        let searchedIndices: Uint8Array;
-        let visitedIndicesList: number[];
-
-        if (isReentrant) {
-            searchedIndices = new Uint8Array(this.items.length);
-            visitedIndicesList = [];
-        } else {
-            this._isSearching = true;
-            if (this.visitedIndicesBuffer.length < this.items.length) {
-                this.visitedIndicesBuffer = new Uint8Array(this.items.length);
-            }
-            this.visitedIndicesList.length = 0;
-            searchedIndices = this.visitedIndicesBuffer;
-            visitedIndicesList = this.visitedIndicesList;
-        }
-
-        const priorityScopesLength = priorityScopes.length;
-
-        for (let s = 0; s < priorityScopesLength; s++) {
-            const indices = this.scopedIndices.get(priorityScopes[s]);
-            if (indices) {
-                const len = indices.length;
-                for (let j = 0; j < len; j++) {
-                    const idx = indices[j];
-                    if (searchedIndices[idx] === 0) {
-                        searchedIndices[idx] = 1;
-                        visitedIndicesList.push(idx);
-                    }
-                }
+        // ⚡ Bolt: Fast Remaining Scopes Iteration Optimization
+        // Instead of allocating a Uint8Array of size N to track already processed items,
+        // we precompute which type IDs belong to priority scopes and iterate sequentially.
+        // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
+        const prioritySet = new Set(priorityScopes);
+        const isPriorityTypeId = new Uint8Array(256);
+        for (let i = 0; i < ID_TO_SCOPE.length; i++) {
+            if (prioritySet.has(ID_TO_SCOPE[i])) {
+                isPriorityTypeId[i] = 1;
             }
         }
 
-        try {
-            for (let i = 0; i < this.items.length; i++) {
-                if (results.length >= maxResults || token?.isCancellationRequested) break;
-                if (searchedIndices[i] === 0) {
-                    processItem(i);
-                }
-            }
-        } finally {
-            if (isReentrant) {
-                // Local buffers will be GC'd; nothing to clean up
-            } else {
-                // Fast cleanup: clear only the modified slots using the tracked list
-                const modifiedLen = visitedIndicesList.length;
-                for (let i = 0; i < modifiedLen; i++) {
-                    searchedIndices[visitedIndicesList[i]] = 0;
-                }
-                visitedIndicesList.length = 0;
-                this._isSearching = false;
+        const itemsLength = this.items.length;
+        const itemTypeIds = this.itemTypeIds;
+
+        for (let i = 0; i < itemsLength; i++) {
+            if (results.length >= maxResults || token?.isCancellationRequested) break;
+            if (isPriorityTypeId[itemTypeIds[i]] === 0) {
+                processItem(i);
             }
         }
     }
