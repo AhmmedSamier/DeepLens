@@ -27,29 +27,20 @@ interface WorkerPoolState {
     resolveAll: () => void;
 }
 
+interface WorkspaceSymbolScanResult {
+    symbolCount: number;
+    uniqueFiles: number;
+    durationMs: number;
+    timedOut: boolean;
+}
+
 /**
  * Workspace indexer that scans files and extracts symbols
  */
 export class WorkspaceIndexer {
+    private static readonly WORKSPACE_SYMBOL_TIMEOUT_MS = 1200;
+    private static readonly WORKSPACE_SYMBOL_COVERAGE_THRESHOLD = 0.6;
     private static readonly STRING_CACHE_MAX_SIZE = 10000;
-    private static readonly TREE_SITTER_EXTENSIONS = new Set([
-        '.ts',
-        '.tsx',
-        '.js',
-        '.jsx',
-        '.cs',
-        '.py',
-        '.java',
-        '.go',
-        '.cpp',
-        '.cc',
-        '.cxx',
-        '.hpp',
-        '.c',
-        '.h',
-        '.rb',
-        '.php',
-    ]);
     private onItemsAddedListeners: ((items: SearchableItem[]) => void)[] = [];
     private onItemsRemovedListeners: ((filePath: string) => void)[] = [];
 
@@ -236,11 +227,7 @@ export class WorkspaceIndexer {
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
             await this.indexFiles((items) => {
-                // ⚡ Bolt: Fast safe array push
-                // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
-                for (let i = 0; i < items.length; i++) {
-                    fileItems.push(items[i]);
-                }
+                fileItems.push(...items);
                 this.fireItemsAdded(items);
             });
 
@@ -541,120 +528,100 @@ export class WorkspaceIndexer {
         fileItems: SearchableItem[],
         progressCallback?: (message: string, increment?: number) => void,
     ): Promise<void> {
-        if (fileItems.length === 0) {
+        const totalFiles = fileItems.length;
+
+        if (totalFiles === 0) {
             return;
         }
 
-        const supportedFileItems: SearchableItem[] = [];
-        const unsupportedFileItems: SearchableItem[] = [];
-        this.partitionFilesByTreeSitterSupport(fileItems, supportedFileItems, unsupportedFileItems);
-
-        if (supportedFileItems.length > 0) {
-            await this.runFileIndexingPool(supportedFileItems, progressCallback);
-        }
-
-        if (unsupportedFileItems.length > 0) {
-            await this.indexUnsupportedFilesWithWorkspaceSymbols(unsupportedFileItems, progressCallback);
-        }
-    }
-
-    private partitionFilesByTreeSitterSupport(
-        fileItems: SearchableItem[],
-        supportedFileItems: SearchableItem[],
-        unsupportedFileItems: SearchableItem[],
-    ): void {
-        for (const fileItem of fileItems) {
-            if (this.isTreeSitterSupportedFile(fileItem.filePath)) {
-                supportedFileItems.push(fileItem);
-            } else {
-                unsupportedFileItems.push(fileItem);
-            }
-        }
-    }
-
-    private isTreeSitterSupportedFile(filePath: string): boolean {
-        return WorkspaceIndexer.TREE_SITTER_EXTENSIONS.has(path.extname(filePath).toLowerCase());
-    }
-
-    private async indexUnsupportedFilesWithWorkspaceSymbols(
-        fileItems: SearchableItem[],
-        progressCallback?: (message: string, increment?: number) => void,
-    ): Promise<void> {
         if (!this.env.executeWorkspaceSymbolProvider) {
-            this.log(`No workspace symbol provider available for ${fileItems.length} unsupported files.`);
+            await this.runFileIndexingPool(fileItems, progressCallback);
             return;
         }
 
-        progressCallback?.(`Indexing ${fileItems.length} unsupported-language files with workspace symbols...`, 5);
+        const workspaceScan = await this.scanWorkspaceSymbols(progressCallback);
+        const coverage = workspaceScan.uniqueFiles / totalFiles;
+        const shouldSkipFullWorkerPass =
+            workspaceScan.symbolCount > 0 &&
+            !workspaceScan.timedOut &&
+            coverage >= WorkspaceIndexer.WORKSPACE_SYMBOL_COVERAGE_THRESHOLD;
+
+        this.log(
+            `Workspace symbol pass: symbols=${workspaceScan.symbolCount}, files=${workspaceScan.uniqueFiles}, coverage=${coverage.toFixed(2)}, duration=${Math.round(workspaceScan.durationMs)}ms`,
+        );
+
+        if (shouldSkipFullWorkerPass) {
+            progressCallback?.('Workspace symbols provided sufficient coverage; skipping deep parse.', 70);
+            return;
+        }
+
+        await this.runFileIndexingPool(fileItems, progressCallback);
+    }
+
+    /**
+     * Perform workspace-wide symbol extraction pass
+     */
+    private async scanWorkspaceSymbols(
+        progressCallback?: (message: string, increment?: number) => void,
+    ): Promise<WorkspaceSymbolScanResult> {
+        progressCallback?.('Fast-scanning workspace symbols...', 5);
+        if (!this.env.executeWorkspaceSymbolProvider) {
+            return {
+                symbolCount: 0,
+                uniqueFiles: 0,
+                durationMs: 0,
+                timedOut: false,
+            };
+        }
+
+        const start = Date.now();
 
         try {
-            const workspaceSymbols = await this.env.executeWorkspaceSymbolProvider();
-            this.processWorkspaceSymbolsForFiles(workspaceSymbols, fileItems);
+            const workspaceSymbolsPromise = this.env.executeWorkspaceSymbolProvider();
+            const timeoutPromise = new Promise<'timeout'>((resolve) => {
+                setTimeout(() => resolve('timeout'), WorkspaceIndexer.WORKSPACE_SYMBOL_TIMEOUT_MS);
+            });
+
+            const resolved = await Promise.race([workspaceSymbolsPromise, timeoutPromise]);
+
+            if (resolved === 'timeout') {
+                return {
+                    symbolCount: 0,
+                    uniqueFiles: 0,
+                    durationMs: Date.now() - start,
+                    timedOut: true,
+                };
+            }
+
+            const workspaceSymbols = resolved;
+
+            if (workspaceSymbols && workspaceSymbols.length > 0) {
+                const uniqueFiles = await this.processWorkspaceSymbols(workspaceSymbols);
+                return {
+                    symbolCount: workspaceSymbols.length,
+                    uniqueFiles,
+                    durationMs: Date.now() - start,
+                    timedOut: false,
+                };
+            }
+
+            return {
+                symbolCount: 0,
+                uniqueFiles: 0,
+                durationMs: Date.now() - start,
+                timedOut: false,
+            };
         } catch (error) {
             const errorMessage = error instanceof Error ? error.message : JSON.stringify(error) || String(error);
-            this.log(`Workspace symbol fallback failed for unsupported files: ${errorMessage}`);
+            console.debug(`Workspace symbol pass failed, moving to file-by-file: ${errorMessage}`);
+
+            return {
+                symbolCount: 0,
+                uniqueFiles: 0,
+                durationMs: Date.now() - start,
+                timedOut: false,
+            };
         }
-    }
-
-    private processWorkspaceSymbolsForFiles(
-        symbols: import('./indexer-interfaces').LeanSymbolInformation[],
-        fileItems: SearchableItem[],
-    ): void {
-        if (symbols.length === 0) {
-            return;
-        }
-
-        const unsupportedFiles = new Set<string>();
-        for (const fileItem of fileItems) {
-            unsupportedFiles.add(this.normalizeFileKey(fileItem.filePath));
-        }
-
-        const batch: SearchableItem[] = [];
-        for (const symbol of symbols) {
-            const itemType = this.mapSymbolKindToItemType(symbol.kind);
-            if (!itemType) {
-                continue;
-            }
-
-            const filePath = this.normalizeUriToPath(symbol.location.uri);
-            if (!unsupportedFiles.has(this.normalizeFileKey(filePath))) {
-                continue;
-            }
-
-            const name = this.intern(symbol.name);
-            const containerName = symbol.containerName ? this.intern(symbol.containerName) : undefined;
-            const fullName = this.intern(containerName ? `${containerName}.${symbol.name}` : symbol.name);
-
-            batch.push({
-                id: `symbol:${filePath}:${fullName}:${symbol.location.range.start.line}`,
-                name,
-                type: itemType,
-                filePath: this.intern(filePath),
-                relativeFilePath: this.intern(this.env.asRelativePath(filePath)),
-                line: symbol.location.range.start.line,
-                column: symbol.location.range.start.character,
-                containerName,
-                fullName,
-            });
-        }
-
-        this.fireItemsAdded(batch);
-    }
-
-    private normalizeUriToPath(uriOrPath: string): string {
-        if (uriOrPath.startsWith('file://')) {
-            try {
-                return fileURLToPath(uriOrPath);
-            } catch {
-                return uriOrPath;
-            }
-        }
-        return uriOrPath;
-    }
-
-    private normalizeFileKey(filePath: string): string {
-        const normalized = path.normalize(filePath);
-        return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
     }
 
     private async runFileIndexingPool(
@@ -959,6 +926,54 @@ export class WorkspaceIndexer {
                 state.nextReportingPercentage = percentage + 5;
             }
         }
+    }
+
+    /**
+     * Process symbols from workspace provider
+     */
+    private async processWorkspaceSymbols(
+        symbols: import('./indexer-interfaces').LeanSymbolInformation[],
+    ): Promise<number> {
+        const batch: SearchableItem[] = [];
+        const uniqueFiles = new Set<string>();
+
+        for (const symbol of symbols) {
+            const itemType = this.mapSymbolKindToItemType(symbol.kind);
+            if (!itemType) {
+                continue;
+            }
+
+            const filePath = this.normalizeUriToPath(symbol.location.uri);
+            uniqueFiles.add(filePath);
+            const id = `symbol:${filePath}:${symbol.name}:${symbol.location.range.start.line}`;
+            const item: SearchableItem = {
+                id,
+                name: symbol.name,
+                type: itemType,
+                filePath,
+                relativeFilePath: this.env.asRelativePath(filePath),
+                line: symbol.location.range.start.line,
+                column: symbol.location.range.start.character,
+                containerName: symbol.containerName,
+                fullName: symbol.containerName ? `${symbol.containerName}.${symbol.name}` : symbol.name,
+            };
+
+            batch.push(item);
+        }
+
+        this.fireItemsAdded(batch);
+        return uniqueFiles.size;
+    }
+
+    private normalizeUriToPath(uriOrPath: string): string {
+        if (uriOrPath.startsWith('file://')) {
+            try {
+                return fileURLToPath(uriOrPath);
+            } catch {
+                return uriOrPath;
+            }
+        }
+        return uriOrPath;
     }
 
     /**

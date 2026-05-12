@@ -129,11 +129,7 @@ export class RipgrepService {
                 try {
                     const batchResults = await this.runRgBatch(baseArgs, batches[batchIndex], remaining, token);
                     if (batchResults.length > 0) {
-                        // ⚡ Bolt: Fast safe array push
-                        // Prevents 'Maximum Call Stack Size Exceeded' for very large arrays.
-                        for (let i = 0; i < batchResults.length; i++) {
-                            allResults.push(batchResults[i]);
-                        }
+                        allResults.push(...batchResults);
                     }
                 } catch {
                     // Ignore batch failure
