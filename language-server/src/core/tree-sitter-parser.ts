@@ -485,15 +485,19 @@ export class TreeSitterParser {
     private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
         // Walk up to find the class declaration
         let parent = this.getParent(methodNode);
+        // ⚡ Bolt: Fast tree-sitter node type checks
+        // Replaced dynamic string manipulation (toLowerCase().includes) with O(1) Set lookups
+        // using the pre-existing CLASS_TYPES Set. This eliminates redundant allocations
+        // and improves performance during AST traversal loops.
         while (
             parent &&
-            !parent.type.toLowerCase().includes('class_declaration') &&
+            !CLASS_TYPES.has(parent.type) &&
             parent.type !== 'compilation_unit'
         ) {
             parent = this.getParent(parent);
         }
 
-        if (parent?.type.toLowerCase().includes('class_declaration')) {
+        if (parent && CLASS_TYPES.has(parent.type)) {
             const results: { method: string | null; route: string | null } = {
                 method: null,
                 route: null,
