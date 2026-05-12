@@ -89,7 +89,8 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
 
         const runner = async () => {
             while (true) {
-                const idx = nextIndex++;
+                const idx = nextIndex;
+                nextIndex++;
                 if (idx >= filePaths.length) break;
 
                 let itemsCount = 0;

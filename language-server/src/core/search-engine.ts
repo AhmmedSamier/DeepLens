@@ -1671,7 +1671,6 @@ export class SearchEngine implements ISearchProvider {
         return this.performUnifiedSearch(indices, context.normalizedQuery, context.maxResults, context.scope);
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private performUnifiedSearch(
         indices: number[] | undefined,
         query: string,
@@ -1714,7 +1713,6 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
     private getPreferredIndicesForQuery(scope: SearchScope, query: string, indices?: number[]): number[] {
         const memo = this.lastQueryMemo;
         if (!memo || memo.scope !== scope) {
