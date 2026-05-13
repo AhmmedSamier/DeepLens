@@ -2317,6 +2317,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private calculateMatchScore(
         nameLower: string,
         fullName: string | undefined,
@@ -2331,7 +2332,7 @@ export class SearchEngine implements ISearchProvider {
         if (nameIdx !== -1) {
             // Check for exact match or prefix match
             if (nameIdx === 0) {
-                return 1.0;
+                return nameLower.length === queryLower.length ? 1.0 : 0.9;
             }
             return 0.8;
         }
@@ -2347,7 +2348,7 @@ export class SearchEngine implements ISearchProvider {
                 const fullIdx = fullLower.indexOf(queryLower);
                 if (fullIdx !== -1) {
                     if (fullIdx === 0) {
-                        return 0.9;
+                        return fullLower.length === queryLower.length ? 0.9 : 0.8;
                     }
                     return 0.7;
                 }
