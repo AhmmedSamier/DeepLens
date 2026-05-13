@@ -2330,7 +2330,10 @@ export class SearchEngine implements ISearchProvider {
         if (nameIdx !== -1) {
             // Check for exact match or prefix match
             if (nameIdx === 0) {
-                return 1.0;
+                if (nameLower.length === queryLower.length) {
+                    return 1.0;
+                }
+                return 0.9;
             }
             return 0.8;
         }
