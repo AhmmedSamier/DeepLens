@@ -28,6 +28,10 @@
 ## 2026-06-25 - [Tree-Sitter AST Traversal Optimization]
 **Learning:** Checking node types during hot path AST traversals (like finding a parent class) by creating new lowercase strings and running `.includes()` is significantly slower than doing an `O(1)` check against a pre-populated static `Set` of exact node names.
 **Action:** When evaluating Tree-sitter AST nodes in loops, always perform exact string matches against a pre-allocated `Set` to eliminate redundant string allocation and garbage collection overhead.
+## 2026-06-25 - [Hot path string manipulation optimization]
+**Learning:** When checking string prefixes or suffixes in hot paths (like AST traversal node type evaluations), calling `.toLowerCase()` creates redundant string allocations on every node. Furthermore, using `.includes()` requires scanning the whole string. Tree-sitter node types are already typically lowercase snake_case, making the lowercase conversion entirely superfluous.
+**Action:** Remove unnecessary `.toLowerCase()` calls. Replace `.includes()` with `.startsWith()`, `.endsWith()`, or strict equality (`===`) checks to optimize execution speed. Avoid extreme micro-optimizations like manual `charCodeAt` checks that sacrifice readability.
+
 ## 2026-06-25 - [Optimize Match Score Fast Paths via Single IndexOf Evaluation]
 **Learning:** In the `SearchEngine.calculateMatchScore` hot path, combining exact string equality checks and prefix checks using repeated `.indexOf()` calls wastes execution cycles and string traversal overhead. Evaluating `nameLower.indexOf(queryLower)` once and using the returned `index` along with `length` comparisons provides the same semantics while reducing execution time by ~50% in exhaustive multi-pass fallback search loops.
 **Action:** When validating substrings or prefixes in highly iterative string-matching loops, perform and capture a single `.indexOf()` operation. Use the index to simultaneously determine the match state, prefix state (`=== 0`), and exact match state (`length` equality), rather than chaining separate validation methods.

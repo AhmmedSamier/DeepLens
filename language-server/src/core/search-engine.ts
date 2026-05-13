@@ -2316,7 +2316,6 @@ export class SearchEngine implements ISearchProvider {
         return results;
     }
 
-
     // eslint-disable-next-line sonarjs/cognitive-complexity
     private calculateMatchScore(
         nameLower: string,

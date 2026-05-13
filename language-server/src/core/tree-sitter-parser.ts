@@ -356,17 +356,17 @@ export class TreeSitterParser {
         results: { method: string | null; route: string | null },
         isRoot: boolean = true,
     ): void {
-        const type = node.type.toLowerCase();
+        const type = node.type;
 
         // Stop if we hit something that clearly isn't an attribute prefix (like a body or another member)
         if (
             !isRoot &&
-            (type.includes('body') || type === 'block' || type === 'parameter_list' || type.includes('declaration'))
+            (type === 'block' || type === 'parameter_list' || type.endsWith('body') || type.endsWith('declaration'))
         ) {
             return;
         }
 
-        if (type.includes('attribute_list')) {
+        if (type === 'attribute_list') {
             this.processAttributeList(node, results);
         }
 
@@ -383,7 +383,7 @@ export class TreeSitterParser {
         const children = node.children;
         if (children) {
             for (const child of children) {
-                if (!child.type.includes('attribute')) continue;
+                if (!child.type.startsWith('attribute')) continue;
 
                 const info = this.getHttpAttributeInfo(child);
                 if (!info) continue;
