@@ -175,7 +175,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         // 3. Call Chain Lens
         if (this.showCallChain && this.supportsCallChain(symbol.kind)) {
             const callChainLens = new vscode.CodeLens(range, {
-                title: 'visualize call chain',
+                title: '$(call-incoming) visualize call chain',
                 command: 'deeplens.showCallChain',
                 arguments: [document.uri, position, symbol.name],
                 tooltip: `Visualize call hierarchy for ${symbol.name}`,
@@ -302,13 +302,14 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
     private formatLensText(count: number, type: CodeLensType): string {
         const isRef = type === CodeLensType.REFERENCE;
         const label = isRef ? 'reference' : 'implementation';
+        const icon = isRef ? '$(references)' : '$(symbol-interface)';
         const plural = count === 1 ? label : `${label}s`;
         const shortcut = isRef ? 'Shift+F12' : 'Ctrl+F12';
 
         if (count === 0) {
-            return `no ${plural} (${shortcut})`;
+            return `${icon} no ${plural} (${shortcut})`;
         }
-        return `${count} ${plural} (${shortcut})`;
+        return `${icon} ${count} ${plural} (${shortcut})`;
     }
 
     /**
