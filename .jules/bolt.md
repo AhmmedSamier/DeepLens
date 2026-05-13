@@ -28,3 +28,6 @@
 ## 2026-06-25 - [Tree-Sitter AST Traversal Optimization]
 **Learning:** Checking node types during hot path AST traversals (like finding a parent class) by creating new lowercase strings and running `.includes()` is significantly slower than doing an `O(1)` check against a pre-populated static `Set` of exact node names.
 **Action:** When evaluating Tree-sitter AST nodes in loops, always perform exact string matches against a pre-allocated `Set` to eliminate redundant string allocation and garbage collection overhead.
+## 2026-06-25 - [Hot path string manipulation optimization]
+**Learning:** When checking string prefixes or suffixes in hot paths (like AST traversal node type evaluations), calling `.toLowerCase()` creates redundant string allocations on every node. Furthermore, using `.includes()` requires scanning the whole string. Tree-sitter node types are already typically lowercase snake_case, making the lowercase conversion entirely superfluous.
+**Action:** Remove unnecessary `.toLowerCase()` calls. Replace `.includes()` with `.startsWith()`, `.endsWith()`, or strict equality (`===`) checks to optimize execution speed. Avoid extreme micro-optimizations like manual `charCodeAt` checks that sacrifice readability.
