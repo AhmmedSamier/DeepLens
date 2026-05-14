@@ -75,7 +75,6 @@ export class SearchProvider {
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
     private readonly CMD_CLEAR_CACHE = 'command:clear-cache';
     private readonly CMD_SETTINGS = 'command:open-settings';
-    private readonly CMD_CLEAR_QUERY = 'command:clear-query';
     private readonly ID_EMPTY_STATE = 'empty-state';
 
     private static readonly CANCEL_BUTTON: vscode.QuickInputButton = {
@@ -1541,12 +1540,13 @@ export class SearchProvider {
             quickPick.value = '';
             // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
             // We must manually trigger the query change logic to update the list
-            this.handleQueryChange(
+            await this.handleQueryChange(
                 quickPick,
                 '',
                 () => {},
                 () => {},
             );
+            this.showFeedback('Search query cleared');
             return true;
         }
 
@@ -1600,20 +1600,6 @@ export class SearchProvider {
             return true;
         }
 
-        if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
-            quickPick.value = '';
-
-            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
-            await this.handleQueryChange(
-                quickPick,
-                '',
-                () => {},
-                () => {},
-            );
-
-            this.showFeedback('Search query cleared');
-            return true;
-        }
 
         return selected.result.item.id === this.ID_EMPTY_STATE;
     }
@@ -1649,27 +1635,6 @@ export class SearchProvider {
             },
         });
 
-        // 2. Switch Scope Action (if not already global)
-        if (this.currentScope !== SearchScope.EVERYTHING) {
-            items.push({
-                label: 'Switch to Global Search',
-                description: 'Search everywhere (/all)',
-                alwaysShow: true,
-                iconPath: new vscode.ThemeIcon('search'),
-                result: {
-                    item: {
-                        id: this.CMD_SWITCH_SCOPE,
-                        name: 'Switch to Global Search',
-                        type: SearchItemType.COMMAND,
-                        filePath: '',
-                        detail: '',
-                    },
-                    score: 0,
-                    scope: SearchScope.COMMANDS,
-                },
-            });
-        }
-
         // Helper method to create command items
         const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
             items.push({
@@ -1691,13 +1656,34 @@ export class SearchProvider {
             });
         };
 
-        // 3. Clear Search Action
+        // 2. Clear Search Action (Prioritize recovery)
         addCommandItem(
-            'Clear Search',
-            'Reset your search query',
+            'Clear Search Query',
+            'Start a new search',
             new vscode.ThemeIcon('clear-all'),
             this.CMD_CLEAR_SEARCH,
         );
+
+        // 3. Switch Scope Action (if not already global)
+        if (this.currentScope !== SearchScope.EVERYTHING) {
+            items.push({
+                label: 'Switch to Global Search',
+                description: 'Search everywhere (/all)',
+                alwaysShow: true,
+                iconPath: new vscode.ThemeIcon('search'),
+                result: {
+                    item: {
+                        id: this.CMD_SWITCH_SCOPE,
+                        name: 'Switch to Global Search',
+                        type: SearchItemType.COMMAND,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: SearchScope.COMMANDS,
+                },
+            });
+        }
 
         // 4. Native Search Action
         addCommandItem(
@@ -1719,14 +1705,6 @@ export class SearchProvider {
             'Check exclusion rules',
             new vscode.ThemeIcon('settings-gear'),
             this.CMD_SETTINGS,
-        );
-
-        // 7. Clear Query Action
-        addCommandItem(
-            'Clear Search Query',
-            'Start a new search',
-            new vscode.ThemeIcon('clear-all'),
-            this.CMD_CLEAR_QUERY,
         );
 
         return { items, prompt: detail };
