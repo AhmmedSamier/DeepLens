@@ -92,31 +92,9 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should handle documents with no symbols', async () => {
-        // In testing, opening a file triggers TS server, but it can occasionally timeout
-        // Mocking the document avoids this entirely for this specific test
-        const emptyDoc = {
-            uri: vscode.Uri.file('/test/empty.ts'),
-            fileName: '/test/empty.ts',
-            isUntitled: false,
-            languageId: 'typescript',
-            version: 1,
-            isDirty: false,
-            isClosed: false,
-            save: async () => true,
-            eol: vscode.EndOfLine.LF,
-            lineCount: 1,
-            lineAt: () => ({ text: '', range: new vscode.Range(0,0,0,0) } as any),
-            getText: () => '// Empty file\n',
-            offsetAt: () => 0,
-            positionAt: () => new vscode.Position(0,0),
-            validateRange: (r: any) => r,
-            validatePosition: (p: any) => p,
-            getWordRangeAtPosition: () => undefined
-        } as unknown as vscode.TextDocument;
-
         const token = new vscode.CancellationTokenSource().token;
-        const lenses = await provider.provideCodeLenses(emptyDoc, token);
-
+        const fakeDoc = { uri: vscode.Uri.parse('fake:empty') } as vscode.TextDocument;
+        const lenses = await provider.provideCodeLenses(fakeDoc, token);
         assert.ok(Array.isArray(lenses), 'Should return an array for empty document');
     });
 
