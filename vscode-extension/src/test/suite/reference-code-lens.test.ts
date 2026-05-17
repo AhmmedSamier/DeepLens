@@ -98,6 +98,10 @@ suite('ReferenceCodeLens Test Suite', () => {
             language: 'typescript',
         });
 
+        // Ensure TS server is ready for the new file before getting symbols
+        await vscode.window.showTextDocument(emptyDoc);
+        await new Promise((resolve) => setTimeout(resolve, 500));
+
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(emptyDoc, token);
 
