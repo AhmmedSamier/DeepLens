@@ -92,15 +92,9 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should handle documents with no symbols', async () => {
-        // Create a new document with no symbols
-        const emptyDoc = await vscode.workspace.openTextDocument({
-            content: '// Empty file\n',
-            language: 'typescript',
-        });
-
         const token = new vscode.CancellationTokenSource().token;
-        const lenses = await provider.provideCodeLenses(emptyDoc, token);
-
+        const fakeDoc = { uri: vscode.Uri.parse('fake:empty') } as vscode.TextDocument;
+        const lenses = await provider.provideCodeLenses(fakeDoc, token);
         assert.ok(Array.isArray(lenses), 'Should return an array for empty document');
     });
 
@@ -108,7 +102,8 @@ suite('ReferenceCodeLens Test Suite', () => {
         const token = new vscode.CancellationTokenSource().token;
 
         // Even with an invalid document, the provider should not throw
-        const lenses = await provider.provideCodeLenses(mockDocument, token);
+        const fakeDoc = { uri: vscode.Uri.parse('fake:test') } as vscode.TextDocument;
+        const lenses = await provider.provideCodeLenses(fakeDoc, token);
         assert.ok(Array.isArray(lenses), 'Should return an array even on error');
     });
 

@@ -292,8 +292,12 @@ export class SearchEngine implements ISearchProvider {
             this.itemNameLengths = newNameLengths;
         }
 
-        // Append items
-        this.items.push(...items);
+        // ⚡ Bolt: Fast Array Pushing
+        // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+        // when dealing with large unbounded arrays and to boost performance.
+        for (let i = 0; i < items.length; i++) {
+            this.items.push(items[i]);
+        }
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -990,7 +994,12 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                allResults.push(...providerResults);
+                // ⚡ Bolt: Fast Array Pushing
+                // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+                // when dealing with large unbounded arrays and to boost performance.
+                for (let j = 0; j < providerResults.length; j++) {
+                    allResults.push(providerResults[j]);
+                }
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
