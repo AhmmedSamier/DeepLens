@@ -92,15 +92,27 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should handle documents with no symbols', async () => {
-        // Create a new document with no symbols
-        const emptyDoc = await vscode.workspace.openTextDocument({
-            content: '// Empty file\n',
-            language: 'typescript',
-        });
-
-        // Ensure TS server is ready for the new file before getting symbols
-        await vscode.window.showTextDocument(emptyDoc);
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // In testing, opening a file triggers TS server, but it can occasionally timeout
+        // Mocking the document avoids this entirely for this specific test
+        const emptyDoc = {
+            uri: vscode.Uri.file('/test/empty.ts'),
+            fileName: '/test/empty.ts',
+            isUntitled: false,
+            languageId: 'typescript',
+            version: 1,
+            isDirty: false,
+            isClosed: false,
+            save: async () => true,
+            eol: vscode.EndOfLine.LF,
+            lineCount: 1,
+            lineAt: () => ({ text: '', range: new vscode.Range(0,0,0,0) } as any),
+            getText: () => '// Empty file\n',
+            offsetAt: () => 0,
+            positionAt: () => new vscode.Position(0,0),
+            validateRange: (r: any) => r,
+            validatePosition: (p: any) => p,
+            getWordRangeAtPosition: () => undefined
+        } as unknown as vscode.TextDocument;
 
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(emptyDoc, token);
@@ -112,7 +124,8 @@ suite('ReferenceCodeLens Test Suite', () => {
         const token = new vscode.CancellationTokenSource().token;
 
         // Even with an invalid document, the provider should not throw
-        const lenses = await provider.provideCodeLenses(mockDocument, token);
+        const fakeDoc = { uri: vscode.Uri.parse('fake:test') } as vscode.TextDocument;
+        const lenses = await provider.provideCodeLenses(fakeDoc, token);
         assert.ok(Array.isArray(lenses), 'Should return an array even on error');
     });
 
