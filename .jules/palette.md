@@ -11,3 +11,7 @@
 ## 2026-05-12 - CodeLens Visual Clarity
 **Learning:** CodeLens titles without icons can blend into the text, reducing scannability and discoverability.
 **Action:** Use standard VS Code Codicons (e.g., $(call-incoming), $(references)) in CodeLens titles and UI elements to improve visual hierarchy and micro-UX.
+
+## 2026-05-17 - [Integrated Quick Pick Search Clear Action]
+**Learning:** For empty search states in a VS Code QuickPick dropdown, users encounter friction if they must manually select and delete text to retry. Adding a custom command bound to an icon (like `clear-all`) directly into the `getEmptyStateItems` provides an immediate, discoverable recovery path.
+**Action:** Always include an actionable "Clear Input/Search" recovery button within `QuickPick` empty state lists to reduce interaction friction and improve the search UX.
