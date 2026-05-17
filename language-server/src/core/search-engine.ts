@@ -2239,10 +2239,12 @@ export class SearchEngine implements ISearchProvider {
             indices = scope === SearchScope.EVERYTHING ? undefined : this.scopedIndices.get(scope);
         }
 
+        const queryBitflags = this.calculateBitflags(queryLower);
         let results: SearchResult[] = this.findBurstMatches(
             indices,
             queryLower,
             maxResults,
+            queryBitflags,
             onResult,
             cancellationToken,
         );
@@ -2270,10 +2272,12 @@ export class SearchEngine implements ISearchProvider {
         indices: number[] | undefined,
         queryLower: string,
         maxResults: number,
+        queryBitflags: number,
         onResult?: (result: SearchResult) => void,
         token?: CancellationToken,
     ): SearchResult[] {
         const results: SearchResult[] = [];
+        const itemBitflags = this.itemBitflags;
 
         const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0) => {
             const result: SearchResult = {
@@ -2289,6 +2293,10 @@ export class SearchEngine implements ISearchProvider {
 
         const processItem = (i: number) => {
             if (results.length >= maxResults) return;
+
+            if ((itemBitflags[i] & queryBitflags) !== queryBitflags) {
+                return;
+            }
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
