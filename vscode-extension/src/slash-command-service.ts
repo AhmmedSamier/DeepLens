@@ -286,6 +286,11 @@ export class SlashCommandService {
     private sortResults(results: SlashCommand[], query: string): void {
         const lowerQuery = query.toLowerCase();
 
+        // ⚡ Bolt: Fast recency lookup
+        // Convert recently used commands to a Set before sorting to change O(N) array includes
+        // inside the O(M log M) sort into an O(1) check, improving overall complexity.
+        const recentSet = new Set(this.recentlyUsed);
+
         results.sort((a, b) => {
             const aExact = a.name === lowerQuery;
             const bExact = b.name === lowerQuery;
@@ -293,8 +298,8 @@ export class SlashCommandService {
             if (aExact && !bExact) return -1;
             if (!aExact && bExact) return 1;
 
-            const aRecent = this.recentlyUsed.includes(a.name.toLowerCase());
-            const bRecent = this.recentlyUsed.includes(b.name.toLowerCase());
+            const aRecent = recentSet.has(a.name.toLowerCase());
+            const bRecent = recentSet.has(b.name.toLowerCase());
 
             if (aRecent && !bRecent) return -1;
             if (!aRecent && bRecent) return 1;
