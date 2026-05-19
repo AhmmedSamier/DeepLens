@@ -591,8 +591,14 @@ export class SearchEngine implements ISearchProvider {
      */
     private updateFileCache(item: SearchableItem): void {
         if (item.type === SearchItemType.FILE) {
-            this.filePaths.push(item.filePath);
-            this.fileItemByNormalizedPath.set(this.normalizePath(item.filePath), item);
+            // ⚡ Bolt: Guard against duplicate paths — if this file is already tracked,
+            // skip the push. This is a defensive check against out-of-order incremental
+            // updates where addItems is called for a file that was not yet fully removed.
+            const normalized = this.normalizePath(item.filePath);
+            if (!this.fileItemByNormalizedPath.has(normalized)) {
+                this.filePaths.push(item.filePath);
+            }
+            this.fileItemByNormalizedPath.set(normalized, item);
         }
     }
 
