@@ -11,3 +11,6 @@
 ## 2026-05-12 - CodeLens Visual Clarity
 **Learning:** CodeLens titles without icons can blend into the text, reducing scannability and discoverability.
 **Action:** Use standard VS Code Codicons (e.g., $(call-incoming), $(references)) in CodeLens titles and UI elements to improve visual hierarchy and micro-UX.
+## 2026-05-18 - [Empty State Action Consolidation]
+**Learning:** Duplicate or overly similar empty state recovery actions (like 'Clear Search' vs 'Clear Search Query') increase cognitive load and force users to make unnecessary choices.
+**Action:** Consolidate duplicate empty state actions to streamline the UI. Prioritize the primary recovery action by placing it first, directly below the informational 'No results found' separator, saving users from scrolling.
