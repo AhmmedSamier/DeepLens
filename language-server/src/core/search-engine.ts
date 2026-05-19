@@ -2287,8 +2287,17 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
+        const queryBitflags = this.calculateBitflags(queryLower);
         const processItem = (i: number) => {
             if (results.length >= maxResults) return;
+
+            // ⚡ Bolt: Fast Bitflag Short-Circuiting in Burst Search
+            // By utilizing the pre-calculated queryBitflags and itemBitflags,
+            // we can perform an O(1) bitwise evaluation to instantly skip items
+            // that don't contain the necessary characters, avoiding expensive string lowercasing and matching.
+            if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) {
+                return;
+            }
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
