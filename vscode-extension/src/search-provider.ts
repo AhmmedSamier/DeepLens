@@ -1461,9 +1461,12 @@ export class SearchProvider {
         }
 
         // Auto-select the best recovery action
-        // Prioritize switching scope, then native search
+        // Prioritize clearing query, then switching scope, then native search
         const bestAction = quickPick.items.find(
-            (i) => i.result.item.id === this.CMD_SWITCH_SCOPE || i.result.item.id === this.CMD_NATIVE_SEARCH,
+            (i) =>
+                i.result.item.id === this.CMD_CLEAR_QUERY ||
+                i.result.item.id === this.CMD_SWITCH_SCOPE ||
+                i.result.item.id === this.CMD_NATIVE_SEARCH,
         );
 
         if (bestAction) {
@@ -1649,27 +1652,6 @@ export class SearchProvider {
             },
         });
 
-        // 2. Switch Scope Action (if not already global)
-        if (this.currentScope !== SearchScope.EVERYTHING) {
-            items.push({
-                label: 'Switch to Global Search',
-                description: 'Search everywhere (/all)',
-                alwaysShow: true,
-                iconPath: new vscode.ThemeIcon('search'),
-                result: {
-                    item: {
-                        id: this.CMD_SWITCH_SCOPE,
-                        name: 'Switch to Global Search',
-                        type: SearchItemType.COMMAND,
-                        filePath: '',
-                        detail: '',
-                    },
-                    score: 0,
-                    scope: SearchScope.COMMANDS,
-                },
-            });
-        }
-
         // Helper method to create command items
         const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
             items.push({
@@ -1691,13 +1673,34 @@ export class SearchProvider {
             });
         };
 
-        // 3. Clear Search Action
+        // 2. Clear Query Action
         addCommandItem(
-            'Clear Search',
-            'Reset your search query',
+            'Clear Search Query',
+            'Start a new search',
             new vscode.ThemeIcon('clear-all'),
-            this.CMD_CLEAR_SEARCH,
+            this.CMD_CLEAR_QUERY,
         );
+
+        // 3. Switch Scope Action (if not already global)
+        if (this.currentScope !== SearchScope.EVERYTHING) {
+            items.push({
+                label: 'Switch to Global Search',
+                description: 'Search everywhere (/all)',
+                alwaysShow: true,
+                iconPath: new vscode.ThemeIcon('search'),
+                result: {
+                    item: {
+                        id: this.CMD_SWITCH_SCOPE,
+                        name: 'Switch to Global Search',
+                        type: SearchItemType.COMMAND,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: SearchScope.COMMANDS,
+                },
+            });
+        }
 
         // 4. Native Search Action
         addCommandItem(
@@ -1719,14 +1722,6 @@ export class SearchProvider {
             'Check exclusion rules',
             new vscode.ThemeIcon('settings-gear'),
             this.CMD_SETTINGS,
-        );
-
-        // 7. Clear Query Action
-        addCommandItem(
-            'Clear Search Query',
-            'Start a new search',
-            new vscode.ThemeIcon('clear-all'),
-            this.CMD_CLEAR_QUERY,
         );
 
         return { items, prompt: detail };
