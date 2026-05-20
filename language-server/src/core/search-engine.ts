@@ -2287,8 +2287,13 @@ export class SearchEngine implements ISearchProvider {
             }
         };
 
+        const queryBitflags = this.calculateBitflags(queryLower);
+
         const processItem = (i: number) => {
             if (results.length >= maxResults) return;
+
+            // Fast path: bitflag check to quickly eliminate candidates that don't have all characters
+            if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) return;
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
