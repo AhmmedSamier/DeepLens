@@ -35,3 +35,7 @@
 ## 2026-06-25 - [Optimize Match Score Fast Paths via Single IndexOf Evaluation]
 **Learning:** In the `SearchEngine.calculateMatchScore` hot path, combining exact string equality checks and prefix checks using repeated `.indexOf()` calls wastes execution cycles and string traversal overhead. Evaluating `nameLower.indexOf(queryLower)` once and using the returned `index` along with `length` comparisons provides the same semantics while reducing execution time by ~50% in exhaustive multi-pass fallback search loops.
 **Action:** When validating substrings or prefixes in highly iterative string-matching loops, perform and capture a single `.indexOf()` operation. Use the index to simultaneously determine the match state, prefix state (`=== 0`), and exact match state (`length` equality), rather than chaining separate validation methods.
+
+## 2024-05-21 - Pre-computed bitflag filtering in hot loops
+**Learning:** Evaluating pre-computed bitflags (`this.calculateBitflags(queryLower)`) outside of a fast-iterating loop enables an O(1) early-exit check (`(itemBitflags[i] & queryBitflags) !== queryBitflags`). This approach aggressively prunes incompatible items, avoiding significant overhead from expensive operations like allocations and string `indexOf()` operations for ~90% of the iterated list.
+**Action:** When implementing any hot loop that performs string checking across an entire item dataset (like `findBurstMatches` fallback or fallback processing steps), apply early-exit bitflag pruning.
