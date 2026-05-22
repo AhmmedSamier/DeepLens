@@ -42,3 +42,7 @@
 ## 2026-05-22 - [Fast Array Pushing to Prevent Call Stack Size Exceeded]
 **Learning:** Using the array spread operator (`array.push(...items)`) to merge large or potentially unbounded arrays can cause "Maximum Call Stack Size Exceeded" errors in V8 due to arguments limit. Furthermore, it introduces significant performance overhead (e.g., ~2x slower) compared to a simple manual `for` loop pushing elements one by one.
 **Action:** Always replace `array.push(...items)` with a manual `for` loop (`for (let i = 0; i < items.length; i++) array.push(items[i]);`) when dealing with aggregated arrays, parsing results, or task queues.
+
+## 2026-05-22 - [Optimize Sorting Complexity with Pre-computed Sets]
+**Learning:** Performing O(N) array membership checks (like `Array.includes`) inside an array sort comparator creates an overall complexity of O(M log M * N). In components like `SlashCommandService`, this approach leads to unnecessary execution overhead during sorting operations.
+**Action:** Before executing `.sort()`, convert arrays used for priority or membership checks into a `Set`. This replaces the O(N) lookup inside the sort loop with an O(1) `Set.has()` check, improving the overall sorting complexity to O(M log M + N).
