@@ -115,11 +115,16 @@ jobs:
               working-directory: language-server
               run: bun run build
 
+            - name: Get VS Code test version
+              id: vs-test-version
+              working-directory: vscode-extension
+              run: echo "version=$(node -e "const p=JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log(p.devDependencies['@vscode/test-electron'] || p.dependencies['@vscode/test-electron'])")" >> $GITHUB_OUTPUT
+
             - name: Cache VS Code Binary
               uses: actions/cache@v4
               with:
                   path: vscode-extension/.vscode-test
-                  key: ${{ runner.os }}-vscode-${{ hashFiles('vscode-extension/package.json') }}
+                  key: ${{ runner.os }}-vscode-${{ steps.vs-test-version.outputs.version }}
                   restore-keys: |
                       ${{ runner.os }}-vscode-
 
@@ -168,11 +173,16 @@ jobs:
                   cd language-server && bun install --frozen-lockfile
                   cd ../vscode-extension && bun install --frozen-lockfile
 
+            - name: Get VS Code test version
+              id: vs-test-version
+              working-directory: vscode-extension
+              run: echo "version=$(node -e "const p=JSON.parse(require('fs').readFileSync('package.json','utf8')); console.log(p.devDependencies['@vscode/test-electron'] || p.dependencies['@vscode/test-electron'])")" >> $GITHUB_OUTPUT
+
             - name: Cache VS Code Binary
               uses: actions/cache@v4
               with:
                   path: vscode-extension/.vscode-test
-                  key: ${{ runner.os }}-vscode-bench-${{ hashFiles('vscode-extension/package.json') }}
+                  key: ${{ runner.os }}-vscode-bench-${{ steps.vs-test-version.outputs.version }}
                   restore-keys: |
                       ${{ runner.os }}-vscode-bench-
 
