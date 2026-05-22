@@ -1461,9 +1461,12 @@ export class SearchProvider {
         }
 
         // Auto-select the best recovery action
-        // Prioritize switching scope, then native search
+        // Prioritize clearing query, then switching scope, then native search
         const bestAction = quickPick.items.find(
-            (i) => i.result.item.id === this.CMD_SWITCH_SCOPE || i.result.item.id === this.CMD_NATIVE_SEARCH,
+            (i) =>
+                i.result.item.id === this.CMD_CLEAR_QUERY ||
+                i.result.item.id === this.CMD_SWITCH_SCOPE ||
+                i.result.item.id === this.CMD_NATIVE_SEARCH,
         );
 
         if (bestAction) {
