@@ -158,12 +158,13 @@
         "compile": "bun run clean && bun run esbuild && cd ../language-server && bun run build && cd ../vscode-extension && bun run scripts/copy-artifacts.ts",
         "watch": "bun run esbuild-watch",
         "lint": "eslint src --cache",
+        "typecheck": "tsgo -p . --noEmit --rootDir .. --strict false",
         "format": "oxfmt --write --config ../.oxfmtrc.json -- \"src/**/*.ts\"",
         "package": "vsce package && bun run scripts/fix-vsix-permissions.ts",
         "vsix": "bun run compile && bun run package",
         "test": "bun run esbuild && bun run scripts/copy-artifacts.ts && bun run scripts/transpile-tests.ts && node ./out/vscode-extension/src/test/runTest.js",
-        "test:full": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
-        "test:coverage": "bun run compile && tsc -p . && nyc --reporter=lcov --report-dir=coverage node ./out/vscode-extension/src/test/runTest.js",
+        "test:full": "bun run compile && tsgo -p . --rootDir .. --strict false && node ./out/vscode-extension/src/test/runTest.js",
+        "test:coverage": "bun run compile && tsgo -p . --rootDir .. --strict false && nyc --reporter=lcov --report-dir=coverage node ./out/vscode-extension/src/test/runTest.js",
         "benchmark": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runBenchmark.js"
     },
     "devDependencies": {
@@ -176,6 +177,7 @@
         "@types/vscode": "^1.92.0",
         "@typescript-eslint/eslint-plugin": "^8.52.0",
         "@typescript-eslint/parser": "^8.52.0",
+        "@typescript/native-preview": "^7.0.0-dev.20260522.1",
         "@vscode/test-electron": "^2.5.2",
         "@vscode/vsce": "^3.7.1",
         "adm-zip": "^0.5.16",
@@ -185,8 +187,8 @@
         "glob": "^13.0.0",
         "globals": "^17.0.0",
         "mocha": "^11.7.5",
-        "typescript": "^5.9.3",
-        "nyc": "^15.1.0"
+        "nyc": "^15.1.0",
+        "typescript": "^5.9.3"
     },
     "dependencies": {
         "fuzzysort": "^3.1.0",

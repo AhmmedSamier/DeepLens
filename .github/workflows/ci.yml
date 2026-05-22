@@ -123,6 +123,10 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-vscode-
 
+            - name: Type Check
+              working-directory: vscode-extension
+              run: bun run typecheck
+
             - name: Run VS Code Extension Tests
               working-directory: vscode-extension
               run: |
