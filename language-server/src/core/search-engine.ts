@@ -2292,8 +2292,6 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): SearchResult[] {
         const results: SearchResult[] = [];
-        // ⚡ Bolt: Pre-compute query bitflags for fast Bloom filter check
-        const queryBitflags = this.calculateBitflags(queryLower);
 
         const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0) => {
             const result: SearchResult = {
@@ -2309,9 +2307,6 @@ export class SearchEngine implements ISearchProvider {
 
         const processItem = (i: number) => {
             if (results.length >= maxResults) return;
-            // ⚡ Bolt: O(1) early-exit check to instantly skip completely incompatible items.
-            // This skips redundant O(N) string processing for non-matching characters.
-            if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) return;
 
             // ⚡ Bolt: Fast bitflag early-exit
             // Skip items that don't even have the characters needed for the query
