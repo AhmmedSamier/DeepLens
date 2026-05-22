@@ -286,10 +286,10 @@ export class SlashCommandService {
     private sortResults(results: SlashCommand[], query: string): void {
         const lowerQuery = query.toLowerCase();
 
-        // ⚡ Bolt: Fast recency lookup
-        // Convert recently used commands to a Set before sorting to change O(N) array includes
-        // inside the O(M log M) sort into an O(1) check, improving overall complexity.
-        const recentSet = new Set(this.recentlyUsed);
+        // ⚡ Bolt: Fast sorting optimization
+        // Convert the recently used array to a Set before sorting to change O(N) lookup
+        // inside the O(M log M) sort comparator into O(1) lookup.
+        const recentlyUsedSet = new Set(this.recentlyUsed);
 
         results.sort((a, b) => {
             const aExact = a.name === lowerQuery;
@@ -298,8 +298,8 @@ export class SlashCommandService {
             if (aExact && !bExact) return -1;
             if (!aExact && bExact) return 1;
 
-            const aRecent = recentSet.has(a.name.toLowerCase());
-            const bRecent = recentSet.has(b.name.toLowerCase());
+            const aRecent = recentlyUsedSet.has(a.name.toLowerCase());
+            const bRecent = recentlyUsedSet.has(b.name.toLowerCase());
 
             if (aRecent && !bRecent) return -1;
             if (!aRecent && bRecent) return 1;
