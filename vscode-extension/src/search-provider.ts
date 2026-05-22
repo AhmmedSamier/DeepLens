@@ -69,7 +69,6 @@ export class SearchProvider {
     private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
     // Command IDs for empty state actions
-    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly CMD_NATIVE_SEARCH = 'command:native-search';
     private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
@@ -1540,20 +1539,6 @@ export class SearchProvider {
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
     ): Promise<boolean> {
-        if (selected.result.item.id === this.CMD_CLEAR_SEARCH) {
-            quickPick.value = '';
-            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
-            // We must manually trigger the query change logic to update the list
-            await this.handleQueryChange(
-                quickPick,
-                '',
-                () => {},
-                () => {},
-            );
-            this.showFeedback('Search query cleared');
-            return true;
-        }
-
         if (selected.result.item.id === this.CMD_NATIVE_SEARCH) {
             await vscode.commands.executeCommand('workbench.action.findInFiles', {
                 query: quickPick.value,
@@ -1607,7 +1592,8 @@ export class SearchProvider {
         if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
             quickPick.value = '';
 
-            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
+            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
+            // We must manually trigger the query change logic to update the list
             await this.handleQueryChange(
                 quickPick,
                 '',
