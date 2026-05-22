@@ -6,7 +6,9 @@ on:
     workflow_dispatch:
     push:
         branches: ['master']
-        paths: ['.github/docker/ci.Dockerfile']
+        paths:
+            - '.github/docker/ci.Dockerfile'
+            - '**/bun.lock'
 
 permissions:
     contents: read
