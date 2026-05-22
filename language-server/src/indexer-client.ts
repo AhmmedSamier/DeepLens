@@ -46,7 +46,12 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
                 nodir: true,
             });
 
-            results.push(...files);
+            // ⚡ Bolt: Fast Array Pushing
+            // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+            // when dealing with large unbounded arrays and to boost performance.
+            for (let i = 0; i < files.length; i++) {
+                results.push(files[i]);
+            }
         }
         return results;
     }
@@ -58,7 +63,12 @@ export class LspIndexerEnvironment implements IndexerEnvironment {
         for (const folder of this.workspaceFolders) {
             try {
                 const files = await this.execRgFiles(folder, excludes);
-                results.push(...files);
+                // ⚡ Bolt: Fast Array Pushing
+                // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+                // when dealing with large unbounded arrays and to boost performance.
+                for (let i = 0; i < files.length; i++) {
+                    results.push(files[i]);
+                }
             } catch {
                 return [];
             }

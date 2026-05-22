@@ -225,6 +225,19 @@ connection.onInitialize(async (params: InitializeParams) => {
 
     workspaceIndexer.onItemsAdded(async (items) => {
         try {
+            // Flush any pending removals synchronously before adding new items.
+            // This prevents a race where new items are added before old items from the
+            // same file are removed, which would cause duplicates and then data loss
+            // when the removal timer eventually fires and deletes the new items too.
+            if (pendingRemovedFilePaths.size > 0) {
+                if (removeBatchTimer) {
+                    clearTimeout(removeBatchTimer);
+                    removeBatchTimer = null;
+                }
+                const files = Array.from(pendingRemovedFilePaths);
+                pendingRemovedFilePaths = new Set();
+                searchEngine.removeItemsByFiles(files);
+            }
             await searchEngine.addItems(items);
         } catch (err) {
             connection.console.error(`Error adding items to search engine: ${err}`);
