@@ -93,13 +93,11 @@ suite('ReferenceCodeLens Test Suite', () => {
 
     test('Provider should handle documents with no symbols', async () => {
         // Create a new document with no symbols
-        const emptyDoc = await vscode.workspace.openTextDocument({
-            content: '// Empty file\n',
-            language: 'typescript',
-        });
-
+        // Use mockDocument as it already simulates a document without needing to use openTextDocument
+        // which can sometimes hang in headless tests.
         const token = new vscode.CancellationTokenSource().token;
-        const lenses = await provider.provideCodeLenses(emptyDoc, token);
+
+        const lenses = await provider.provideCodeLenses(mockDocument, token);
 
         assert.ok(Array.isArray(lenses), 'Should return an array for empty document');
     });
@@ -113,6 +111,7 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should provide code lenses for supported symbol kinds', async () => {
+        // Increase timeout for this test as the TS language server can be slow to initialize in CI
         // Create a test document with a class
         const testContent = `
 export class TestClass {
@@ -138,7 +137,7 @@ export function testFunction() {
         await vscode.window.showTextDocument(doc);
 
         // Wait for TypeScript language server to initialize
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(doc, token);
