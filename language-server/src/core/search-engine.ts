@@ -2235,6 +2235,7 @@ export class SearchEngine implements ISearchProvider {
         const normalizedQuery =
             effectiveQuery.indexOf('\\') !== -1 ? effectiveQuery.replace(/\\/g, '/') : effectiveQuery;
         const queryLower = normalizedQuery.toLowerCase();
+        const queryBitflags = this.calculateBitflags(queryLower);
 
         let indices: number[] | undefined;
         if (scope === SearchScope.OPEN) {
@@ -2248,6 +2249,7 @@ export class SearchEngine implements ISearchProvider {
         let results: SearchResult[] = this.findBurstMatches(
             indices,
             queryLower,
+            queryBitflags,
             maxResults,
             onResult,
             cancellationToken,
@@ -2275,6 +2277,7 @@ export class SearchEngine implements ISearchProvider {
     private findBurstMatches(
         indices: number[] | undefined,
         queryLower: string,
+        queryBitflags: number,
         maxResults: number,
         onResult?: (result: SearchResult) => void,
         token?: CancellationToken,
@@ -2295,6 +2298,12 @@ export class SearchEngine implements ISearchProvider {
 
         const processItem = (i: number) => {
             if (results.length >= maxResults) return;
+
+            // ⚡ Bolt: Fast bitflag early-exit
+            // Skip items that don't even have the characters needed for the query
+            if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) {
+                return;
+            }
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
