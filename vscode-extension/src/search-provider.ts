@@ -1544,12 +1544,13 @@ export class SearchProvider {
             quickPick.value = '';
             // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
             // We must manually trigger the query change logic to update the list
-            this.handleQueryChange(
+            await this.handleQueryChange(
                 quickPick,
                 '',
                 () => {},
                 () => {},
             );
+            this.showFeedback('Search query cleared');
             return true;
         }
 
