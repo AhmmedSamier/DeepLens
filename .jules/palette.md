@@ -23,3 +23,7 @@
 ## 2026-05-18 - Deduplicating Empty State Actions
 **Learning:** Displaying multiple identical or confusingly similar actions (like "Clear Search" and "Clear Search Query") in empty states increases cognitive load. Users hesitate to choose the correct recovery path.
 **Action:** When creating empty states, consolidate recovery actions and prioritize the primary recovery method (like `CMD_CLEAR_QUERY`) by placing it directly below the "No results" header, saving the user from scrolling.
+
+## 2026-05-20 - [Actionable Empty State Filter Reset]
+**Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" button should not just clear the text query; it must reset all applied filters to their default state to provide a true recovery path.
+**Action:** When implementing "Clear Search" functionality, always trace the filter state management and ensure all active filters (e.g., `FilterAll = true`) are reset alongside the text input.

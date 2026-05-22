@@ -425,6 +425,7 @@ namespace DeepLensVisualStudio.ToolWindows
 
         private void ClearSearchButton_Click(object sender, RoutedEventArgs e)
         {
+            FilterAll = true;
             SearchQuery = "";
             SearchTextBox.Focus();
         }
