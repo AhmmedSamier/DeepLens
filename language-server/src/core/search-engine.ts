@@ -292,8 +292,12 @@ export class SearchEngine implements ISearchProvider {
             this.itemNameLengths = newNameLengths;
         }
 
-        // Append items
-        this.items.push(...items);
+        // ⚡ Bolt: Fast Array Pushing
+        // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+        // when dealing with large unbounded arrays and to boost performance.
+        for (let i = 0; i < items.length; i++) {
+            this.items.push(items[i]);
+        }
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -591,8 +595,14 @@ export class SearchEngine implements ISearchProvider {
      */
     private updateFileCache(item: SearchableItem): void {
         if (item.type === SearchItemType.FILE) {
-            this.filePaths.push(item.filePath);
-            this.fileItemByNormalizedPath.set(this.normalizePath(item.filePath), item);
+            // ⚡ Bolt: Guard against duplicate paths — if this file is already tracked,
+            // skip the push. This is a defensive check against out-of-order incremental
+            // updates where addItems is called for a file that was not yet fully removed.
+            const normalized = this.normalizePath(item.filePath);
+            if (!this.fileItemByNormalizedPath.has(normalized)) {
+                this.filePaths.push(item.filePath);
+            }
+            this.fileItemByNormalizedPath.set(normalized, item);
         }
     }
 
@@ -990,7 +1000,12 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                allResults.push(...providerResults);
+                // ⚡ Bolt: Fast Array Pushing
+                // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+                // when dealing with large unbounded arrays and to boost performance.
+                for (let j = 0; j < providerResults.length; j++) {
+                    allResults.push(providerResults[j]);
+                }
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
@@ -2229,6 +2244,7 @@ export class SearchEngine implements ISearchProvider {
         const normalizedQuery =
             effectiveQuery.indexOf('\\') !== -1 ? effectiveQuery.replace(/\\/g, '/') : effectiveQuery;
         const queryLower = normalizedQuery.toLowerCase();
+        const queryBitflags = this.calculateBitflags(queryLower);
 
         let indices: number[] | undefined;
         if (scope === SearchScope.OPEN) {
@@ -2242,6 +2258,7 @@ export class SearchEngine implements ISearchProvider {
         let results: SearchResult[] = this.findBurstMatches(
             indices,
             queryLower,
+            queryBitflags,
             maxResults,
             onResult,
             cancellationToken,
@@ -2269,6 +2286,7 @@ export class SearchEngine implements ISearchProvider {
     private findBurstMatches(
         indices: number[] | undefined,
         queryLower: string,
+        queryBitflags: number,
         maxResults: number,
         onResult?: (result: SearchResult) => void,
         token?: CancellationToken,
@@ -2294,6 +2312,12 @@ export class SearchEngine implements ISearchProvider {
             // ⚡ Bolt: O(1) early-exit check to instantly skip completely incompatible items.
             // This skips redundant O(N) string processing for non-matching characters.
             if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) return;
+
+            // ⚡ Bolt: Fast bitflag early-exit
+            // Skip items that don't even have the characters needed for the query
+            if ((this.itemBitflags[i] & queryBitflags) !== queryBitflags) {
+                return;
+            }
 
             const prepared = this.preparedNames[i];
             const item = this.items[i];
