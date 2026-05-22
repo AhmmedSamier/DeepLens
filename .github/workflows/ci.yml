@@ -128,7 +128,7 @@ jobs:
               run: |
                   bun run esbuild
                   bun run scripts/copy-artifacts.ts
-                  tsc -p .
+                  bun run scripts/transpile-tests.ts
                   xvfb-run -a node ./out/vscode-extension/src/test/runTest.js
               env:
                   DBUS_SESSION_BUS_ADDRESS: /dev/null
