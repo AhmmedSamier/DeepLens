@@ -227,8 +227,9 @@ export class WorkspaceIndexer {
             if (this.cancellationToken.cancelled) throw new CancellationError();
 
             await this.indexFiles((items) => {
-                // ⚡ Bolt: Fast array insertion optimization
-                // Avoids maximum call stack limit and reduces array spread overhead for large numbers of file items.
+                // ⚡ Bolt: Fast Array Pushing
+                // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+                // when dealing with large unbounded arrays and to boost performance.
                 for (let i = 0; i < items.length; i++) {
                     fileItems.push(items[i]);
                 }

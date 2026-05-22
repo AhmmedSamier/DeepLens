@@ -749,7 +749,9 @@ export async function activate(context: vscode.ExtensionContext) {
             const docs = vscode.workspace.textDocuments
                 .filter((doc) => doc.uri.scheme === 'file')
                 .map((doc) => doc.uri.fsPath);
-            // ⚡ Bolt: Fast array insertion optimization
+            // ⚡ Bolt: Fast Array Pushing
+            // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+            // when dealing with large unbounded arrays and to boost performance.
             for (let i = 0; i < docs.length; i++) {
                 activeFiles.push(docs[i]);
             }
