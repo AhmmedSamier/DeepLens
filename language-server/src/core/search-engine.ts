@@ -2283,7 +2283,6 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): SearchResult[] {
         const results: SearchResult[] = [];
-        const itemBitflags = this.itemBitflags;
 
         const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0) => {
             const result: SearchResult = {
