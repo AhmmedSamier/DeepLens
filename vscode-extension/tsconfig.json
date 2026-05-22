@@ -9,8 +9,10 @@
         "resolveJsonModule": true,
         "skipLibCheck": true,
         "esModuleInterop": true,
+        "incremental": true,
+        "tsBuildInfoFile": "out/.tsbuildinfo",
         "types": ["node", "vscode", "mocha"]
     },
-    "include": ["src/**/*", "../language-server/src/**/*"],
-    "exclude": ["node_modules", ".vscode-test", "cognitive-lens", "../language-server/**/*.test.ts"]
+    "include": ["src/**/*", "../language-server/src/core/**/*"],
+    "exclude": ["node_modules", ".vscode-test", "cognitive-lens", "../language-server/src/core/**/*.test.ts"]
 }

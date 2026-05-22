@@ -161,7 +161,8 @@
         "format": "oxfmt --write --config ../.oxfmtrc.json -- \"src/**/*.ts\"",
         "package": "vsce package && bun run scripts/fix-vsix-permissions.ts",
         "vsix": "bun run compile && bun run package",
-        "test": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
+        "test": "bun run esbuild && bun run scripts/copy-artifacts.ts && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
+        "test:full": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runTest.js",
         "test:coverage": "bun run compile && tsc -p . && nyc --reporter=lcov --report-dir=coverage node ./out/vscode-extension/src/test/runTest.js",
         "benchmark": "bun run compile && tsc -p . && node ./out/vscode-extension/src/test/runBenchmark.js"
     },

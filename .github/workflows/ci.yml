@@ -88,7 +88,6 @@ jobs:
         runs-on: ubuntu-24.04
         container:
             image: ghcr.io/ahmmedsamier/deeplens-ci:latest
-        needs: test-language-server
         timeout-minutes: 15
         steps:
             - name: Checkout
@@ -112,11 +111,9 @@ jobs:
                   cd language-server && bun install --frozen-lockfile
                   cd ../vscode-extension && bun install --frozen-lockfile
 
-            - name: Download Language Server Artifact
-              uses: actions/download-artifact@v4
-              with:
-                  name: language-server-dist
-                  path: language-server/dist
+            - name: Build Language Server
+              working-directory: language-server
+              run: bun run build
 
             - name: Cache VS Code Binary
               uses: actions/cache@v4
@@ -131,7 +128,7 @@ jobs:
               run: |
                   bun run esbuild
                   bun run scripts/copy-artifacts.ts
-                  bun x tsc -p .
+                  tsc -p .
                   xvfb-run -a node ./out/vscode-extension/src/test/runTest.js
               env:
                   DBUS_SESSION_BUS_ADDRESS: /dev/null

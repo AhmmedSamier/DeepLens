@@ -70,13 +70,15 @@ bun test <file_path>   # Run a single test file (Recommended for focused work)
 
 ### vscode-extension (Integration Tests)
 
-VS Code tests run in a headless Electron instance.
+VS Code tests run in a headless Electron instance. The `test` script skips the full `compile` (clean + LS rebuild) for speed; run `test:full` for a clean-slate run.
 
 ```bash
 cd vscode-extension
-bun run compile        # Ensure latest build is available
-bun run test           # Run all integration tests
+bun run test           # Quick test (esbuild + tsc + test — assumes LS is already built)
+bun run test:full      # Full test (compile + tsc + test — clean rebuild from scratch)
 ```
+
+> **Performance**: `bun run test` saves ~1s vs `test:full` by skipping `clean` and language-server rebuild. In CI, the `test-vscode-extension` job runs in parallel with `test-language-server` (instead of sequentially), saving ~14s of pipeline wall-clock time.
 
 ## Code Style Guidelines
 
