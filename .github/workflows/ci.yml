@@ -93,11 +93,6 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v4
 
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: latest
-
             - name: Cache Bun dependencies
               uses: actions/cache@v4
               with:
@@ -146,7 +141,6 @@ jobs:
         runs-on: ubuntu-24.04
         container:
             image: ghcr.io/ahmmedsamier/deeplens-ci:latest
-        needs: test-language-server
         timeout-minutes: 20
         if: |
             (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
@@ -154,11 +148,6 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
-
-            - name: Setup Bun
-              uses: oven-sh/setup-bun@v2
-              with:
-                  bun-version: latest
 
             - name: Cache Bun dependencies
               uses: actions/cache@v4
