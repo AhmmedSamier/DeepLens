@@ -10,8 +10,8 @@ suite('ReferenceCodeLens Test Suite', () => {
         provider = new ReferenceCodeLensProvider();
         // Create a mock document for testing
         mockDocument = {
-            uri: vscode.Uri.file('/test/file.ts'),
-            fileName: '/test/file.ts',
+            uri: vscode.Uri.file('/test/file-mock.ts'),
+            fileName: '/test/file-mock.ts',
             isUntitled: false,
             languageId: 'typescript',
             version: 1,
