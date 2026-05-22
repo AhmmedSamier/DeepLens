@@ -1407,7 +1407,12 @@ export class SearchProvider {
         if (this.currentScope === SearchScope.EVERYTHING || this.currentScope === SearchScope.COMMANDS) {
             if (this.commandIndexer) {
                 const commandResults = this.commandIndexer.search(query);
-                results.push(...commandResults);
+                // ⚡ Bolt: Fast Array Pushing
+                // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+                // when dealing with large unbounded arrays and to boost performance.
+                for (let i = 0; i < commandResults.length; i++) {
+                    results.push(commandResults[i]);
+                }
             }
         }
 

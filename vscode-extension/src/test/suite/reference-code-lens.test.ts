@@ -92,9 +92,7 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should handle documents with no symbols', async () => {
-        // Create a new document with no symbols
-        // Use mockDocument as it already simulates a document without needing to use openTextDocument
-        // which can sometimes hang in headless tests.
+        // Use mockDocument to avoid openTextDocument which can hang in headless tests.
         const token = new vscode.CancellationTokenSource().token;
 
         const lenses = await provider.provideCodeLenses(mockDocument, token);
@@ -106,7 +104,8 @@ suite('ReferenceCodeLens Test Suite', () => {
         const token = new vscode.CancellationTokenSource().token;
 
         // Even with an invalid document, the provider should not throw
-        const lenses = await provider.provideCodeLenses(mockDocument, token);
+        const fakeDoc = { uri: vscode.Uri.parse('fake:test') } as vscode.TextDocument;
+        const lenses = await provider.provideCodeLenses(fakeDoc, token);
         assert.ok(Array.isArray(lenses), 'Should return an array even on error');
     });
 
