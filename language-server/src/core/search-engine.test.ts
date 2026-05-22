@@ -449,3 +449,66 @@ describe('SearchEngine scopes and providers', () => {
         expect(durationMs).toBeLessThan(75);
     });
 });
+
+describe('SearchEngine incremental update deduplication', () => {
+    it('should not add duplicate paths to filePaths when the same file item is added twice', async () => {
+        const engine = new SearchEngine();
+        const fileItem = createTestItem('file:src/Foo.ts', 'Foo.ts', SearchItemType.FILE, 'src/Foo.ts');
+
+        await engine.addItems([fileItem]);
+        await engine.addItems([fileItem]);
+
+        const filePaths: string[] = (engine as any).filePaths;
+        const uniquePaths = new Set(filePaths.map((p) => path.normalize(p)));
+        expect(uniquePaths.size).toBe(filePaths.length);
+        // Should only have one path for this file
+        const matchingPaths = filePaths.filter((p) => p === fileItem.filePath);
+        expect(matchingPaths.length).toBe(1);
+    });
+
+    it('should have correct filePaths after remove-then-add (simulating file change)', async () => {
+        const engine = new SearchEngine();
+        const fileItem = createTestItem('file:src/Bar.ts', 'Bar.ts', SearchItemType.FILE, 'src/Bar.ts');
+        const symbol = createTestItem('sym:src/Bar.ts:MyClass', 'MyClass', SearchItemType.CLASS, 'src/Bar.ts');
+
+        // Initial indexing
+        await engine.addItems([fileItem, symbol]);
+        expect(engine.getItemCount()).toBe(2);
+
+        // Simulate file change: remove old items, then add new items
+        engine.removeItemsByFile(fileItem.filePath);
+        expect(engine.getItemCount()).toBe(0);
+
+        const newFileItem = createTestItem('file:src/Bar.ts', 'Bar.ts', SearchItemType.FILE, 'src/Bar.ts');
+        const newSymbol = createTestItem('sym:src/Bar.ts:MyClass', 'MyClass', SearchItemType.CLASS, 'src/Bar.ts');
+        await engine.addItems([newFileItem, newSymbol]);
+
+        expect(engine.getItemCount()).toBe(2);
+
+        // filePaths should contain exactly one path for Bar.ts
+        const filePaths: string[] = (engine as any).filePaths;
+        expect(filePaths.filter((p) => p === newFileItem.filePath).length).toBe(1);
+    });
+
+    it('should produce no duplicate results after out-of-order add-then-remove (race condition simulation)', async () => {
+        const engine = new SearchEngine();
+        const fileItem = createTestItem('file:src/Race.ts', 'Race.ts', SearchItemType.FILE, 'src/Race.ts');
+        const symbol = createTestItem('sym:src/Race.ts:RaceClass', 'RaceClass', SearchItemType.CLASS, 'src/Race.ts');
+
+        // Initial indexing
+        await engine.addItems([fileItem, symbol]);
+
+        // Simulate race: add new items BEFORE removing old ones (this is the bug scenario)
+        const newFileItem = createTestItem('file:src/Race.ts', 'Race.ts', SearchItemType.FILE, 'src/Race.ts');
+        const newSymbol = createTestItem('sym:src/Race.ts:RaceClass', 'RaceClass', SearchItemType.CLASS, 'src/Race.ts');
+        await engine.addItems([newFileItem, newSymbol]);
+
+        // Now remove (the delayed removal fires)
+        engine.removeItemsByFile(fileItem.filePath);
+
+        // After everything settles, filePaths should NOT contain the file path
+        // because the removal should have cleaned up all traces
+        const filePaths: string[] = (engine as any).filePaths;
+        expect(filePaths.filter((p) => p === fileItem.filePath).length).toBe(0);
+    });
+});
