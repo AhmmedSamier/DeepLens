@@ -1653,7 +1653,13 @@ export class SearchProvider {
         });
 
         // Helper method to create command items
-        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
+        const addCommandItem = (
+            label: string,
+            description: string,
+            icon: vscode.ThemeIcon,
+            commandId: string,
+            name?: string,
+        ): void => {
             items.push({
                 label,
                 description,
@@ -1662,7 +1668,7 @@ export class SearchProvider {
                 result: {
                     item: {
                         id: commandId,
-                        name: label.replace(' (Native)', ''),
+                        name: name ?? label,
                         type: SearchItemType.COMMAND,
                         filePath: '',
                         detail: '',
@@ -1683,48 +1689,30 @@ export class SearchProvider {
 
         // 3. Switch Scope Action (if not already global)
         if (this.currentScope !== SearchScope.EVERYTHING) {
-            items.push({
-                label: 'Switch to Global Search',
-                description: 'Search everywhere (/all)',
-                alwaysShow: true,
-                iconPath: new vscode.ThemeIcon('search'),
-                result: {
-                    item: {
-                        id: this.CMD_SWITCH_SCOPE,
-                        name: 'Switch to Global Search',
-                        type: SearchItemType.COMMAND,
-                        filePath: '',
-                        detail: '',
-                    },
-                    score: 0,
-                    scope: SearchScope.COMMANDS,
-                },
-            });
+            addCommandItem(
+                'Switch to Global Search',
+                'Search everywhere (/all)',
+                new vscode.ThemeIcon('search'),
+                this.CMD_SWITCH_SCOPE,
+            );
         }
 
-        // 4. Clear Search Action
-        addCommandItem(
-            'Clear Search',
-            'Reset your search query',
-            new vscode.ThemeIcon('clear-all'),
-            this.CMD_CLEAR_SEARCH,
-        );
-
-        // 5. Native Search Action
+        // 4. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
             new vscode.ThemeIcon('search-fuzzy'),
             this.CMD_NATIVE_SEARCH,
+            'Search in Files',
         );
 
-        // 6. Rebuild Index Action
+        // 5. Rebuild Index Action
         addCommandItem('Rebuild Index', 'Fix missing files', new vscode.ThemeIcon('refresh'), this.CMD_REBUILD_INDEX);
 
-        // 7. Clear Cache Action
+        // 6. Clear Cache Action
         addCommandItem('Clear Index Cache', 'Fix corruption', new vscode.ThemeIcon('trash'), this.CMD_CLEAR_CACHE);
 
-        // 8. Settings Action
+        // 7. Settings Action
         addCommandItem(
             'Configure Settings',
             'Check exclusion rules',
