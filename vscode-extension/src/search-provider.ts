@@ -69,7 +69,6 @@ export class SearchProvider {
     private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
     // Command IDs for empty state actions
-    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly CMD_NATIVE_SEARCH = 'command:native-search';
     private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
@@ -1408,7 +1407,12 @@ export class SearchProvider {
         if (this.currentScope === SearchScope.EVERYTHING || this.currentScope === SearchScope.COMMANDS) {
             if (this.commandIndexer) {
                 const commandResults = this.commandIndexer.search(query);
-                results.push(...commandResults);
+                // ⚡ Bolt: Fast Array Pushing
+                // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+                // when dealing with large unbounded arrays and to boost performance.
+                for (let i = 0; i < commandResults.length; i++) {
+                    results.push(commandResults[i]);
+                }
             }
         }
 
@@ -1461,7 +1465,7 @@ export class SearchProvider {
         }
 
         // Auto-select the best recovery action
-        // Prioritize CMD_CLEAR_QUERY, then switching scope, then native search
+        // Prioritize clearing query, then switching scope, then native search
         const bestAction = quickPick.items.find(
             (i) =>
                 i.result.item.id === this.CMD_CLEAR_QUERY ||
@@ -1540,19 +1544,6 @@ export class SearchProvider {
         selected: SearchResultItem,
         quickPick: vscode.QuickPick<SearchResultItem>,
     ): Promise<boolean> {
-        if (selected.result.item.id === this.CMD_CLEAR_SEARCH) {
-            quickPick.value = '';
-            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
-            // We must manually trigger the query change logic to update the list
-            this.handleQueryChange(
-                quickPick,
-                '',
-                () => {},
-                () => {},
-            );
-            return true;
-        }
-
         if (selected.result.item.id === this.CMD_NATIVE_SEARCH) {
             await vscode.commands.executeCommand('workbench.action.findInFiles', {
                 query: quickPick.value,
@@ -1606,7 +1597,8 @@ export class SearchProvider {
         if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
             quickPick.value = '';
 
-            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
+            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
+            // We must manually trigger the query change logic to update the list
             await this.handleQueryChange(
                 quickPick,
                 '',
@@ -1653,7 +1645,13 @@ export class SearchProvider {
         });
 
         // Helper method to create command items
-        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
+        const addCommandItem = (
+            label: string,
+            description: string,
+            icon: vscode.ThemeIcon,
+            commandId: string,
+            name?: string,
+        ): void => {
             items.push({
                 label,
                 description,
@@ -1662,7 +1660,7 @@ export class SearchProvider {
                 result: {
                     item: {
                         id: commandId,
-                        name: label.replace(' (Native)', ''),
+                        name: name ?? label,
                         type: SearchItemType.COMMAND,
                         filePath: '',
                         detail: '',
@@ -1673,7 +1671,7 @@ export class SearchProvider {
             });
         };
 
-        // 2. Clear Query Action (Primary recovery action)
+        // 2. Clear Query Action (Immediate Recovery Path)
         addCommandItem(
             'Clear Search Query',
             'Start a new search',
@@ -1683,23 +1681,12 @@ export class SearchProvider {
 
         // 3. Switch Scope Action (if not already global)
         if (this.currentScope !== SearchScope.EVERYTHING) {
-            items.push({
-                label: 'Switch to Global Search',
-                description: 'Search everywhere (/all)',
-                alwaysShow: true,
-                iconPath: new vscode.ThemeIcon('search'),
-                result: {
-                    item: {
-                        id: this.CMD_SWITCH_SCOPE,
-                        name: 'Switch to Global Search',
-                        type: SearchItemType.COMMAND,
-                        filePath: '',
-                        detail: '',
-                    },
-                    score: 0,
-                    scope: SearchScope.COMMANDS,
-                },
-            });
+            addCommandItem(
+                'Switch to Global Search',
+                'Search everywhere (/all)',
+                new vscode.ThemeIcon('search'),
+                this.CMD_SWITCH_SCOPE,
+            );
         }
 
         // 4. Native Search Action
@@ -1708,6 +1695,7 @@ export class SearchProvider {
             "Use VS Code's native search",
             new vscode.ThemeIcon('search-fuzzy'),
             this.CMD_NATIVE_SEARCH,
+            'Search in Files',
         );
 
         // 5. Rebuild Index Action

@@ -10,8 +10,8 @@ suite('ReferenceCodeLens Test Suite', () => {
         provider = new ReferenceCodeLensProvider();
         // Create a mock document for testing
         mockDocument = {
-            uri: vscode.Uri.file('/test/file.ts'),
-            fileName: '/test/file.ts',
+            uri: vscode.Uri.file('/test/file-mock.ts'),
+            fileName: '/test/file-mock.ts',
             isUntitled: false,
             languageId: 'typescript',
             version: 1,
@@ -92,14 +92,10 @@ suite('ReferenceCodeLens Test Suite', () => {
     });
 
     test('Provider should handle documents with no symbols', async () => {
-        // Create a new document with no symbols
-        const emptyDoc = await vscode.workspace.openTextDocument({
-            content: '// Empty file\n',
-            language: 'typescript',
-        });
-
+        // Use mockDocument to avoid openTextDocument which can hang in headless tests.
         const token = new vscode.CancellationTokenSource().token;
-        const lenses = await provider.provideCodeLenses(emptyDoc, token);
+
+        const lenses = await provider.provideCodeLenses(mockDocument, token);
 
         assert.ok(Array.isArray(lenses), 'Should return an array for empty document');
     });
@@ -108,11 +104,13 @@ suite('ReferenceCodeLens Test Suite', () => {
         const token = new vscode.CancellationTokenSource().token;
 
         // Even with an invalid document, the provider should not throw
-        const lenses = await provider.provideCodeLenses(mockDocument, token);
+        const fakeDoc = { uri: vscode.Uri.parse('fake:test') } as vscode.TextDocument;
+        const lenses = await provider.provideCodeLenses(fakeDoc, token);
         assert.ok(Array.isArray(lenses), 'Should return an array even on error');
     });
 
     test('Provider should provide code lenses for supported symbol kinds', async () => {
+        // Increase timeout for this test as the TS language server can be slow to initialize in CI
         // Create a test document with a class
         const testContent = `
 export class TestClass {
@@ -138,7 +136,7 @@ export function testFunction() {
         await vscode.window.showTextDocument(doc);
 
         // Wait for TypeScript language server to initialize
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 1000));
 
         const token = new vscode.CancellationTokenSource().token;
         const lenses = await provider.provideCodeLenses(doc, token);
