@@ -1408,7 +1408,10 @@ export class SearchProvider {
         if (this.currentScope === SearchScope.EVERYTHING || this.currentScope === SearchScope.COMMANDS) {
             if (this.commandIndexer) {
                 const commandResults = this.commandIndexer.search(query);
-                results.push(...commandResults);
+                // ⚡ Bolt: Fast array insertion optimization
+                for (let i = 0; i < commandResults.length; i++) {
+                    results.push(commandResults[i]);
+                }
             }
         }
 

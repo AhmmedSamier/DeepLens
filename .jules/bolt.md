@@ -35,3 +35,7 @@
 ## 2026-06-25 - [Optimize Match Score Fast Paths via Single IndexOf Evaluation]
 **Learning:** In the `SearchEngine.calculateMatchScore` hot path, combining exact string equality checks and prefix checks using repeated `.indexOf()` calls wastes execution cycles and string traversal overhead. Evaluating `nameLower.indexOf(queryLower)` once and using the returned `index` along with `length` comparisons provides the same semantics while reducing execution time by ~50% in exhaustive multi-pass fallback search loops.
 **Action:** When validating substrings or prefixes in highly iterative string-matching loops, perform and capture a single `.indexOf()` operation. Use the index to simultaneously determine the match state, prefix state (`=== 0`), and exact match state (`length` equality), rather than chaining separate validation methods.
+
+## 2024-05-22 - Array Spread Push Optimization
+**Learning:** Using the array spread operator (`array.push(...items)`) for appending large numbers of items can cause "Maximum Call Stack Size Exceeded" errors and creates significant overhead in V8 engines due to spreading mechanics.
+**Action:** Always prefer a manual `for` loop over array spreads when aggregating potentially large or unbounded lists (like parsing results or task queues) to guarantee safety against call stack limits and to optimize array insertion performance.

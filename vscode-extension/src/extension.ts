@@ -749,7 +749,10 @@ export async function activate(context: vscode.ExtensionContext) {
             const docs = vscode.workspace.textDocuments
                 .filter((doc) => doc.uri.scheme === 'file')
                 .map((doc) => doc.uri.fsPath);
-            activeFiles.push(...docs);
+            // ⚡ Bolt: Fast array insertion optimization
+            for (let i = 0; i < docs.length; i++) {
+                activeFiles.push(docs[i]);
+            }
         }
 
         const activeEditorPath = vscode.window.activeTextEditor?.document.uri;

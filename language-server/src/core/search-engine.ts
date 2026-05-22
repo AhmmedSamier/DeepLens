@@ -292,8 +292,13 @@ export class SearchEngine implements ISearchProvider {
             this.itemNameLengths = newNameLengths;
         }
 
-        // Append items
-        this.items.push(...items);
+        // ⚡ Bolt: Fast array insertion optimization
+        // Replaced array spread push (...items) with a manual for-loop.
+        // This avoids "Maximum Call Stack Size Exceeded" errors for large arrays
+        // and improves execution speed by reducing spread overhead.
+        for (let i = 0; i < items.length; i++) {
+            this.items.push(items[i]);
+        }
 
         const CHUNK_SIZE = 500;
         for (let i = 0; i < items.length; i += CHUNK_SIZE) {
@@ -990,7 +995,12 @@ export class SearchEngine implements ISearchProvider {
                     return;
                 }
 
-                allResults.push(...providerResults);
+                // ⚡ Bolt: Fast array insertion optimization
+                // Avoids call stack limit and spread overhead
+                for (let i = 0; i < providerResults.length; i++) {
+                    allResults.push(providerResults[i]);
+                }
+
                 if (onResult) {
                     for (const result of providerResults) {
                         if (token?.isCancellationRequested) {
