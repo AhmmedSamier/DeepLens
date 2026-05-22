@@ -12,6 +12,10 @@
 **Learning:** CodeLens titles without icons can blend into the text, reducing scannability and discoverability.
 **Action:** Use standard VS Code Codicons (e.g., $(call-incoming), $(references)) in CodeLens titles and UI elements to improve visual hierarchy and micro-UX.
 
+## 2026-05-14 - Prioritize Clear Action in Empty State
+**Learning:** Having multiple, duplicate actions (like 'Clear Search' and 'Clear Search Query') in an empty state increases cognitive load, and burying the primary recovery action below secondary ones (like 'Switch Scope') increases interaction friction.
+**Action:** When designing empty state lists, ensure there is only one clear recovery action, and prioritize it as the very first actionable item directly below the informational header to provide the fastest path forward.
+
 ## 2026-05-17 - [Integrated Quick Pick Search Clear Action]
 **Learning:** For empty search states in a VS Code QuickPick dropdown, users encounter friction if they must manually select and delete text to retry. Adding a custom command bound to an icon (like `clear-all`) directly into the `getEmptyStateItems` provides an immediate, discoverable recovery path.
 **Action:** Always include an actionable "Clear Input/Search" recovery button within `QuickPick` empty state lists to reduce interaction friction and improve the search UX.

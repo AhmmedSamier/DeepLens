@@ -69,7 +69,6 @@ export class SearchProvider {
     private readonly TOOLTIP_REVEAL = 'Reveal in File Explorer';
 
     // Command IDs for empty state actions
-    private readonly CMD_CLEAR_SEARCH = 'command:clear-search';
     private readonly CMD_NATIVE_SEARCH = 'command:native-search';
     private readonly CMD_SWITCH_SCOPE = 'command:switch-scope-everything';
     private readonly CMD_REBUILD_INDEX = 'command:rebuild-index';
@@ -1461,11 +1460,11 @@ export class SearchProvider {
         }
 
         // Auto-select the best recovery action
-        // Prioritize switching scope, then clearing query, then native search
+        // Prioritize clearing query, then switching scope, then native search
         const bestAction = quickPick.items.find(
             (i) =>
-                i.result.item.id === this.CMD_SWITCH_SCOPE ||
                 i.result.item.id === this.CMD_CLEAR_QUERY ||
+                i.result.item.id === this.CMD_SWITCH_SCOPE ||
                 i.result.item.id === this.CMD_NATIVE_SEARCH,
         );
 
@@ -1593,7 +1592,8 @@ export class SearchProvider {
         if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
             quickPick.value = '';
 
-            // Re-eval query change (since setting .value doesn't always fire events correctly for all side effects)
+            // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
+            // We must manually trigger the query change logic to update the list
             await this.handleQueryChange(
                 quickPick,
                 '',
@@ -1640,7 +1640,13 @@ export class SearchProvider {
         });
 
         // Helper method to create command items
-        const addCommandItem = (label: string, description: string, icon: vscode.ThemeIcon, commandId: string) => {
+        const addCommandItem = (
+            label: string,
+            description: string,
+            icon: vscode.ThemeIcon,
+            commandId: string,
+            name?: string,
+        ): void => {
             items.push({
                 label,
                 description,
@@ -1649,7 +1655,7 @@ export class SearchProvider {
                 result: {
                     item: {
                         id: commandId,
-                        name: label.replace(' (Native)', ''),
+                        name: name ?? label,
                         type: SearchItemType.COMMAND,
                         filePath: '',
                         detail: '',
@@ -1660,28 +1666,7 @@ export class SearchProvider {
             });
         };
 
-        // 2. Switch Scope Action (if not already global)
-        if (this.currentScope !== SearchScope.EVERYTHING) {
-            items.push({
-                label: 'Switch to Global Search',
-                description: 'Search everywhere (/all)',
-                alwaysShow: true,
-                iconPath: new vscode.ThemeIcon('search'),
-                result: {
-                    item: {
-                        id: this.CMD_SWITCH_SCOPE,
-                        name: 'Switch to Global Search',
-                        type: SearchItemType.COMMAND,
-                        filePath: '',
-                        detail: '',
-                    },
-                    score: 0,
-                    scope: SearchScope.COMMANDS,
-                },
-            });
-        }
-
-        // 3. Clear Query Action
+        // 2. Clear Query Action (Immediate Recovery Path)
         addCommandItem(
             'Clear Search Query',
             'Start a new search',
@@ -1689,12 +1674,23 @@ export class SearchProvider {
             this.CMD_CLEAR_QUERY,
         );
 
+        // 3. Switch Scope Action (if not already global)
+        if (this.currentScope !== SearchScope.EVERYTHING) {
+            addCommandItem(
+                'Switch to Global Search',
+                'Search everywhere (/all)',
+                new vscode.ThemeIcon('search'),
+                this.CMD_SWITCH_SCOPE,
+            );
+        }
+
         // 4. Native Search Action
         addCommandItem(
             'Search in Files (Native)',
             "Use VS Code's native search",
             new vscode.ThemeIcon('search-fuzzy'),
             this.CMD_NATIVE_SEARCH,
+            'Search in Files',
         );
 
         // 5. Rebuild Index Action
