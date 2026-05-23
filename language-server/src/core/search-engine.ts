@@ -885,6 +885,16 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
+     * Dump the full index contents (items + file paths)
+     */
+    dumpIndex(): { items: SearchableItem[]; filePaths: string[] } {
+        return {
+            items: this.items,
+            filePaths: this.filePaths,
+        };
+    }
+
+    /**
      * Perform search
      */
     async search(
@@ -1827,6 +1837,7 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
+            fuzzyResults: new Array<number[][] | null>(this.items.length),
         };
     }
 
@@ -1941,7 +1952,11 @@ export class SearchEngine implements ISearchProvider {
         }
 
         const res = Fuzzysort.single(context.query, pName);
-        return res && res.score > context.MIN_SCORE ? res.score : -Infinity;
+        if (res && res.score > context.MIN_SCORE) {
+            context.fuzzyResults[i] = this.indexesToHighlights(res.indexes);
+            return res.score;
+        }
+        return -Infinity;
     }
 
     private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
@@ -2054,6 +2069,7 @@ export class SearchEngine implements ISearchProvider {
                 item,
                 score: score,
                 scope: resultScope,
+                highlights: context.fuzzyResults[i] ?? undefined,
             });
         }
     }
@@ -2169,6 +2185,27 @@ export class SearchEngine implements ISearchProvider {
             bitflags |= CHAR_TO_BITFLAG[code];
         }
         return bitflags;
+    }
+
+    private indexesToHighlights(indexes: ReadonlyArray<number>): number[][] {
+        if (indexes.length === 0) return [];
+
+        const highlights: number[][] = [];
+        let rangeStart = indexes[0];
+        let rangeEnd = indexes[0] + 1;
+
+        for (let i = 1; i < indexes.length; i++) {
+            if (indexes[i] === rangeEnd) {
+                rangeEnd = indexes[i] + 1;
+            } else {
+                highlights.push([rangeStart, rangeEnd]);
+                rangeStart = indexes[i];
+                rangeEnd = indexes[i] + 1;
+            }
+        }
+        highlights.push([rangeStart, rangeEnd]);
+
+        return highlights;
     }
 
     private normalizeFuzzysortScore(score: number): number {
@@ -2293,12 +2330,13 @@ export class SearchEngine implements ISearchProvider {
     ): SearchResult[] {
         const results: SearchResult[] = [];
 
-        const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0) => {
+        const addResult = (item: SearchableItem, typeId: number, baseScore: number = 1.0, highlights?: number[][]) => {
             const result: SearchResult = {
                 item,
                 score: this.applyItemTypeBoost(baseScore, typeId),
                 scope: ID_TO_SCOPE[typeId],
             };
+            if (highlights) result.highlights = highlights;
             results.push(result);
             if (onResult && !token?.isCancellationRequested) {
                 onResult(result);
@@ -2324,7 +2362,13 @@ export class SearchEngine implements ISearchProvider {
 
             const score = this.calculateMatchScore(nameLower, item.fullName, this.preparedFullNames[i], queryLower);
             if (score > 0) {
-                addResult(item, this.itemTypeIds[i], score);
+                // Compute highlights for substring match in the item name
+                let highlights: number[][] | undefined;
+                const nameIdx = nameLower.indexOf(queryLower);
+                if (nameIdx !== -1) {
+                    highlights = [[nameIdx, nameIdx + queryLower.length]];
+                }
+                addResult(item, this.itemTypeIds[i], score, highlights);
             }
         };
 

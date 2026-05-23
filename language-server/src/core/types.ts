@@ -144,6 +144,22 @@ export interface IndexStats {
     cacheSize: number;
 }
 
+/**
+ * Result of dumping the full index
+ */
+export interface DumpIndexResult {
+    /** All indexed items */
+    items: SearchableItem[];
+    /** Unique file paths in the index */
+    filePaths: string[];
+    /** Total number of indexed items */
+    totalItems: number;
+    /** Total number of unique files */
+    totalFiles: number;
+    /** Last update timestamp */
+    lastUpdate: number;
+}
+
 export type RipgrepUnavailableParams = object;
 
 export const RipgrepUnavailableNotification = new NotificationType<RipgrepUnavailableParams>(

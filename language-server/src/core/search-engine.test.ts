@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeAll } from 'bun:test';
 import * as path from 'node:path';
 import { SymbolProvider } from './providers/symbol-provider';
 import { SearchEngine, escapeRegExp } from './search-engine';
 import { ISearchProvider, SearchItemType, SearchScope, SearchableItem } from './types';
+import { mockIndex } from '../tests/mock-index';
 
 const createTestItem = (id: string, name: string, type: SearchItemType, relativePath: string): SearchableItem => ({
     id,
@@ -510,5 +511,232 @@ describe('SearchEngine incremental update deduplication', () => {
         // because the removal should have cleaned up all traces
         const filePaths: string[] = (engine as any).filePaths;
         expect(filePaths.filter((p) => p === fileItem.filePath).length).toBe(0);
+    });
+});
+
+describe('RealIndexSearch', () => {
+    it('should find 3 EmployeeService classes with lowercase query (backend, frontend, admin)', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.search({
+            query: 'employeeservice',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 50,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+
+        expect(esClasses.length).toBe(3);
+
+        const paths = esClasses.map((r) => r.item.filePath);
+        expect(paths.some((p) => p.includes('BackEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('FrontEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('admin'))).toBe(true);
+    });
+
+    it('should find 3 EmployeeService classes with title-case query (backend, frontend, admin)', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.search({
+            query: 'EmployeeService',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 50,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+
+        expect(esClasses.length).toBe(3);
+
+        const paths = esClasses.map((r) => r.item.filePath);
+        expect(paths.some((p) => p.includes('BackEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('FrontEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('admin'))).toBe(true);
+    });
+
+    it('search with maxResults=30 should still find all 3 EmployeeService classes', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.search({
+            query: 'employeeservice',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 30,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+        expect(esClasses.length).toBe(3);
+    });
+
+    it('burstSearch with maxResults=30 should still find all 3 EmployeeService classes', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.burstSearch({
+            query: 'employeeservice',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 30,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+        expect(esClasses.length).toBe(3);
+    });
+
+    it('burstSearch with maxResults=10 should still find all 3 EmployeeService classes', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.burstSearch({
+            query: 'employeeservice',
+            scope: SearchScope.EVERYTHING,
+            maxResults: 10,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+        expect(esClasses.length).toBe(3);
+    });
+
+    it('should find all 3 EmployeeService classes in TYPES scope', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.search({
+            query: 'employeeservice',
+            scope: SearchScope.TYPES,
+            maxResults: 50,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+        expect(esClasses.length).toBe(3);
+
+        const paths = esClasses.map((r) => r.item.filePath);
+        expect(paths.some((p) => p.includes('BackEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('FrontEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('admin'))).toBe(true);
+    });
+
+    it('should find all 3 EmployeeService classes in TYPES scope via burstSearch', async () => {
+        const engine = new SearchEngine();
+        await engine.setItems(mockIndex.items);
+
+        const results = await engine.burstSearch({
+            query: 'employeeservice',
+            scope: SearchScope.TYPES,
+            maxResults: 50,
+        });
+
+        const esClasses = results.filter(
+            (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+        );
+        expect(esClasses.length).toBe(3);
+
+        const paths = esClasses.map((r) => r.item.filePath);
+        expect(paths.some((p) => p.includes('BackEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('FrontEnd'))).toBe(true);
+        expect(paths.some((p) => p.includes('admin'))).toBe(true);
+    });
+
+    describe('VS Code extension integration simulation', () => {
+        // Simulates the exact search sequence the VS Code QuickPick uses:
+        //   1. Instant burst (maxResults=10) — aims to populate quickly
+        //   2. Scheduled burst (maxResults=30) — fills up with more results
+        //   3. Full search (maxResults=100) — final comprehensive pass
+        // This reproduces the flow that search-provider.ts runs.
+        it('should return all 3 EmployeeService classes in EVERYTHING scope through all phases', async () => {
+            const engine = new SearchEngine();
+            await engine.setItems(mockIndex.items);
+
+            // Phase 1: Instant burst (maxResults=10)
+            const burst10 = await engine.burstSearch({
+                query: 'employeeservice',
+                scope: SearchScope.EVERYTHING,
+                maxResults: 10,
+            });
+            expect(
+                burst10.filter((r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService').length,
+            ).toBe(3);
+
+            // Phase 2: Scheduled burst (maxResults=30)
+            const burst30 = await engine.burstSearch({
+                query: 'employeeservice',
+                scope: SearchScope.EVERYTHING,
+                maxResults: 30,
+            });
+            expect(
+                burst30.filter((r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService').length,
+            ).toBe(3);
+
+            // Phase 3: Full fuzzy search (maxResults=100)
+            const full = await engine.search({
+                query: 'employeeservice',
+                scope: SearchScope.EVERYTHING,
+                maxResults: 100,
+            });
+            expect(
+                full.filter((r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService').length,
+            ).toBe(3);
+        });
+
+        it('should return all 3 EmployeeService classes in TYPES scope through all phases', async () => {
+            const engine = new SearchEngine();
+            await engine.setItems(mockIndex.items);
+
+            // Phase 1: Instant burst (maxResults=10, TYPES scope)
+            const burst10 = await engine.burstSearch({
+                query: 'employeeservice',
+                scope: SearchScope.TYPES,
+                maxResults: 10,
+            });
+            const burst10Classes = burst10.filter(
+                (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+            );
+            expect(burst10Classes.length).toBe(3);
+
+            // Phase 2: Scheduled burst (maxResults=30, TYPES scope)
+            const burst30 = await engine.burstSearch({
+                query: 'employeeservice',
+                scope: SearchScope.TYPES,
+                maxResults: 30,
+            });
+            const burst30Classes = burst30.filter(
+                (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+            );
+            expect(burst30Classes.length).toBe(3);
+
+            // Phase 3: Full fuzzy search (maxResults=100, TYPES scope)
+            const full = await engine.search({
+                query: 'employeeservice',
+                scope: SearchScope.TYPES,
+                maxResults: 100,
+            });
+            const fullClasses = full.filter(
+                (r) => r.item.type === SearchItemType.CLASS && r.item.name === 'EmployeeService',
+            );
+            expect(fullClasses.length).toBe(3);
+
+            // Verify the exact 3 classes are correct across all phases
+            const backEndPath = (c: { item: { filePath: string } }) => c.item.filePath.includes('BackEnd');
+            const frontEndPath = (c: { item: { filePath: string } }) => c.item.filePath.includes('FrontEnd');
+            const adminPath = (c: { item: { filePath: string } }) => c.item.filePath.includes('admin');
+
+            for (const classes of [burst10Classes, burst30Classes, fullClasses]) {
+                expect(classes.some(backEndPath)).toBe(true);
+                expect(classes.some(frontEndPath)).toBe(true);
+                expect(classes.some(adminPath)).toBe(true);
+            }
+        });
     });
 });

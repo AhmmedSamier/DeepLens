@@ -82,6 +82,11 @@ export class SearchProvider {
         tooltip: 'Cancel search',
     };
 
+    private static readonly COPY_RESULTS_BUTTON: vscode.QuickInputButton = {
+        iconPath: new vscode.ThemeIcon('copy'),
+        tooltip: 'Copy results as JSON',
+    };
+
     private readonly matchDecorationType = vscode.window.createTextEditorDecorationType({
         backgroundColor: new vscode.ThemeColor('editor.findMatchHighlightBackground'),
         border: '1px solid',
@@ -323,6 +328,9 @@ export class SearchProvider {
         }
 
         quickPick.buttons = buttons;
+
+        // Add copy results button
+        quickPick.buttons = [...quickPick.buttons, SearchProvider.COPY_RESULTS_BUTTON];
 
         // T008: Add cancel button if busy
         if (quickPick.busy) {
@@ -910,7 +918,14 @@ export class SearchProvider {
             return;
         }
 
-        await this.performSearch(quickPick, text, queryId);
+        this.cancelSearch();
+        quickPick.busy = true;
+        this.updateFilterButtons(quickPick);
+
+        const burstToken = this.prepareBurstToken();
+        await this.runInstantBurstPhase(quickPick, text, queryId, burstToken);
+        this.scheduleBurstPhase(quickPick, text, queryId, () => {}, burstToken);
+        this.scheduleFuzzyPhase(quickPick, text, queryId, () => {});
     }
 
     /**
@@ -1288,6 +1303,16 @@ export class SearchProvider {
                     quickPick.placeholder = originalPlaceholder;
                 }
             }, 800);
+            return;
+        }
+
+        if (button === SearchProvider.COPY_RESULTS_BUTTON) {
+            const results = quickPick.items
+                .filter((item) => (item as SearchResultItem).result)
+                .map((item) => (item as SearchResultItem).result);
+            const json = JSON.stringify(results, null, 2);
+            await vscode.env.clipboard.writeText(json);
+            this.showFeedback('Results copied to clipboard');
             return;
         }
 
@@ -2183,7 +2208,12 @@ export class SearchProvider {
                 preserveFocus: preview,
             });
 
-            editor.setDecorations(this.matchDecorationType, [range]);
+            // Use fuzzysort highlights for more precise decoration when available
+            const decorationRanges =
+                item.type !== SearchItemType.TEXT && highlights
+                    ? this.getNonTextDecorationRanges(document, item, highlights)
+                    : undefined;
+            editor.setDecorations(this.matchDecorationType, decorationRanges ?? [range]);
         } catch (error) {
             if (!preview) {
                 vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
@@ -2237,6 +2267,22 @@ export class SearchProvider {
         if (item.line !== undefined) {
             const rangeFromLine = this.getSymbolRangeFromLine(document, item);
             if (rangeFromLine) {
+                // If we have fuzzysort-based highlights (relative to item.name),
+                // refine the selection to only the matched portion
+                if (highlights && highlights.length > 0 && item.name) {
+                    const textLine = document.lineAt(item.line);
+                    const lineText = textLine.text;
+                    const nameStartInLine = lineText.indexOf(item.name);
+                    if (nameStartInLine >= 0) {
+                        const firstHL = highlights[0];
+                        const startCol = Math.min(nameStartInLine + firstHL[0], lineText.length);
+                        const endCol = Math.min(nameStartInLine + firstHL[1], lineText.length);
+                        return new vscode.Range(
+                            new vscode.Position(item.line, startCol),
+                            new vscode.Position(item.line, endCol),
+                        );
+                    }
+                }
                 return rangeFromLine;
             }
         }
@@ -2257,6 +2303,35 @@ export class SearchProvider {
         }
 
         return new vscode.Range(position, position.translate(0, item.name.length));
+    }
+
+    private getNonTextDecorationRanges(
+        document: vscode.TextDocument,
+        item: SearchableItem,
+        highlights: number[][] | undefined,
+    ): vscode.Range[] {
+        if (!highlights || highlights.length === 0 || item.line === undefined || !item.name) {
+            return [];
+        }
+
+        const textLine = document.lineAt(item.line);
+        const lineText = textLine.text;
+        const nameStartInLine = lineText.indexOf(item.name);
+        if (nameStartInLine < 0) {
+            return [];
+        }
+
+        const ranges: vscode.Range[] = [];
+        for (const [hlStart, hlEnd] of highlights) {
+            const startCol = Math.min(nameStartInLine + hlStart, lineText.length);
+            const endCol = Math.min(nameStartInLine + hlEnd, lineText.length);
+            if (startCol < endCol) {
+                ranges.push(
+                    new vscode.Range(new vscode.Position(item.line, startCol), new vscode.Position(item.line, endCol)),
+                );
+            }
+        }
+        return ranges;
     }
 
     private getSymbolRangeFromLine(document: vscode.TextDocument, item: SearchableItem): vscode.Range | undefined {

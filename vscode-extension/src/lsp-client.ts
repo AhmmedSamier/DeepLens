@@ -10,6 +10,7 @@ import {
     TransportKind,
 } from 'vscode-languageclient/node';
 import {
+    DumpIndexResult,
     IndexStats,
     ISearchProvider,
     RipgrepUnavailableNotification,
@@ -275,6 +276,20 @@ export class DeepLensLspClient implements ISearchProvider {
         } catch (error) {
             if (!this.isStopping) {
                 console.error('DeepLens getIndexStats error:', error);
+            }
+            return undefined;
+        }
+    }
+
+    async dumpIndex(): Promise<DumpIndexResult | undefined> {
+        if (!this.isReady()) return undefined;
+        const client = this.client;
+        if (!client) return undefined;
+        try {
+            return await client.sendRequest<DumpIndexResult>('deeplens/dumpIndex');
+        } catch (error) {
+            if (!this.isStopping) {
+                console.error('DeepLens dumpIndex error:', error);
             }
             return undefined;
         }

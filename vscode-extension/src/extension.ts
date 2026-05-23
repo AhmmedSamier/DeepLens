@@ -853,7 +853,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
             interface IndexActionItem extends vscode.QuickPickItem {
                 // eslint-disable-next-line sonarjs/max-union-size
-                action?: 'copy' | 'rebuild' | 'clear' | 'settings';
+                action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
             }
 
             const items: IndexActionItem[] = [
@@ -881,6 +881,11 @@ export async function activate(context: vscode.ExtensionContext) {
                     description: 'Open DeepLens extension settings',
                     action: 'settings',
                 },
+                {
+                    label: '$(file) Dump Index',
+                    description: 'Save indexed items to a JSON file',
+                    action: 'dump',
+                },
             ];
 
             const selection = await vscode.window.showQuickPick(items, {
@@ -898,6 +903,21 @@ export async function activate(context: vscode.ExtensionContext) {
                     await vscode.commands.executeCommand('deeplens.clearIndexCache');
                 } else if (selection.action === 'settings') {
                     await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+                } else if (selection.action === 'dump') {
+                    const dump = await lspClient.dumpIndex();
+                    if (!dump) {
+                        vscode.window.showErrorMessage('DeepLens: Could not retrieve index data.');
+                        return;
+                    }
+                    const uri = await vscode.window.showSaveDialog({
+                        filters: { 'JSON files': ['json'] },
+                        defaultUri: vscode.Uri.file(`deeplens-index-${Date.now()}.json`),
+                    });
+                    if (uri) {
+                        const json = JSON.stringify(dump, null, 2);
+                        await vscode.workspace.fs.writeFile(uri, Buffer.from(json, 'utf-8'));
+                        vscode.window.showInformationMessage(`Index dumped to ${uri.fsPath}`);
+                    }
                 }
             }
         } catch (error) {

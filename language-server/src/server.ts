@@ -24,6 +24,7 @@ import { SymbolProvider } from './core/providers/symbol-provider';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
 import {
+    DumpIndexResult,
     IndexStats,
     RipgrepUnavailableNotification,
     SearchItemType,
@@ -73,6 +74,7 @@ export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, voi
 export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
 export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
 export const SetActiveFilesRequest = new RequestType<{ files: string[] }, void, void>('deeplens/setActiveFiles');
+export const DumpIndexRequest = new RequestType0<DumpIndexResult, void>('deeplens/dumpIndex');
 
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
@@ -591,6 +593,20 @@ connection.onRequest(IndexStatsRequest, async () => {
 connection.onRequest(SetActiveFilesRequest, (params) => {
     if (!isInitialized || isShuttingDown) return;
     searchEngine.setActiveFiles(params.files || []);
+});
+
+connection.onRequest(DumpIndexRequest, async () => {
+    if (!isInitialized || isShuttingDown)
+        return { items: [], filePaths: [], totalItems: 0, totalFiles: 0, lastUpdate: 0 };
+    const dumped = searchEngine.dumpIndex();
+    const lastUpdate = workspaceIndexer.getLastIndexTimestamp() ?? Date.now();
+    return {
+        items: dumped.items,
+        filePaths: dumped.filePaths,
+        totalItems: dumped.items.length,
+        totalFiles: dumped.filePaths.length,
+        lastUpdate,
+    };
 });
 
 // Handle shutdown gracefully
