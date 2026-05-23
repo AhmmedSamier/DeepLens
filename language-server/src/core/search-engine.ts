@@ -1146,8 +1146,7 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast array pre-allocation optimization
         // Pre-allocating the array and using a manual loop is significantly faster than .map()
         const len = results.length;
-        // eslint-disable-next-line sonarjs/array-constructor
-        const targetResults = new Array<SearchResult>(len);
+        const targetResults: SearchResult[] = [];
         for (let i = 0; i < len; i++) {
             const r = results[i];
             // ⚡ Bolt: Fast Object Creation Optimization
@@ -1155,9 +1154,11 @@ export class SearchEngine implements ISearchProvider {
             // with `Object.assign` to avoid iterating over all properties multiple times.
             // This is significantly faster for shallow cloning known structures
             // while preserving immutability for shared SearchableItem references.
-            targetResults[i] = Object.assign({}, r, {
-                item: Object.assign({}, r.item, { line: targetLine }),
-            });
+            targetResults.push(
+                Object.assign({}, r, {
+                    item: Object.assign({}, r.item, { line: targetLine }),
+                }),
+            );
         }
         return targetResults;
     }
@@ -1837,7 +1838,7 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
-            fuzzyResults: new Array<number[][] | null>(this.items.length),
+            fuzzyResults: [] as (number[][] | null)[],
         };
     }
 
