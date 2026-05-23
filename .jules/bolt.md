@@ -46,3 +46,6 @@
 ## 2026-05-22 - [Optimize Sorting Complexity with Pre-computed Sets]
 **Learning:** Performing O(N) array membership checks (like `Array.includes`) inside an array sort comparator creates an overall complexity of O(M log M * N). In components like `SlashCommandService`, this approach leads to unnecessary execution overhead during sorting operations.
 **Action:** Before executing `.sort()`, convert arrays used for priority or membership checks into a `Set`. This replaces the O(N) lookup inside the sort loop with an O(1) `Set.has()` check, improving the overall sorting complexity to O(M log M + N).
+## 2024-05-23 - Fast Tree-sitter Node Type Matching
+**Learning:** Replacing unanchored regex matchers (like `/class_declaration/`) with `===` causes critical regressions across different AST grammars, because Tree-sitter uses prefixes like `abstract_class_declaration` or `local_variable_declaration`.
+**Action:** When migrating away from regex in Tree-sitter node type checks, always use `.endsWith()` alongside strict equality (`===`) to preserve prefix compatibility while still benefiting from significant string-matching performance gains.
