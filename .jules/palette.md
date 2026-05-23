@@ -27,3 +27,6 @@
 ## 2026-05-20 - [Actionable Empty State Filter Reset]
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" button should not just clear the text query; it must reset all applied filters to their default state to provide a true recovery path.
 **Action:** When implementing "Clear Search" functionality, always trace the filter state management and ensure all active filters (e.g., `FilterAll = true`) are reset alongside the text input.
+## 2025-05-23 - Strict array `.find()` priority behavior
+**Learning:** When prioritizing items in an auto-selection array (like VS Code QuickPick items), using `Array.prototype.find` with internal `OR` conditions (`find(i => i.id === A || i.id === B)`) incorrectly returns the first matched item in the *array order*, completely ignoring the intended condition priority. This creates unpredictable UI behaviors where lower-priority but alphabetically earlier actions might be incorrectly auto-selected.
+**Action:** To enforce strict priority auto-selection, chain individual `.find()` calls using the logical OR operator: `find(i => i.id === A) || find(i => i.id === B)`. This ensures highest priority fallbacks are evaluated first regardless of array order.
