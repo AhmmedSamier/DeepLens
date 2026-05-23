@@ -1,3 +1,4 @@
+import * as crypto from 'node:crypto';
 import * as vscode from 'vscode';
 import { SearchScope, SearchResult } from '../../language-server/src/core/types';
 import { DeepLensLspClient } from './lsp-client';
@@ -186,8 +187,23 @@ export class SearchPanelProvider implements vscode.WebviewViewProvider {
         this.view?.webview.postMessage({ type: 'selection', selectedIndex: this.selectedIndex });
     }
 
+
+    private createNonce(): string {
+        if (typeof crypto.randomBytes === 'function') {
+            return crypto.randomBytes(16).toString('base64');
+        }
+
+        if (typeof globalThis.crypto !== 'undefined' && typeof globalThis.crypto.getRandomValues === 'function') {
+            const bytes = new Uint8Array(16);
+            globalThis.crypto.getRandomValues(bytes);
+            return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+        }
+
+        return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
     private getHtml(webview: vscode.Webview): string {
-        const nonce = Date.now().toString();
+        const nonce = this.createNonce();
         const csp = `default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';`;
         return `<!DOCTYPE html>
 <html lang="en">
