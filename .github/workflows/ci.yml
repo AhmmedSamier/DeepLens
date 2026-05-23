@@ -86,12 +86,31 @@ jobs:
 
     test-vscode-extension:
         runs-on: ubuntu-24.04
-        container:
-            image: ghcr.io/ahmmedsamier/deeplens-ci:latest
         timeout-minutes: 15
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+
+            - name: Cache apt packages
+              uses: actions/cache@v4
+              with:
+                  path: /var/cache/apt/archives
+                  key: ${{ runner.os }}-apt-vsce-${{ hashFiles('.github/docker/ci.Dockerfile') }}
+                  restore-keys: |
+                      ${{ runner.os }}-apt-vsce-
+
+            - name: Install system dependencies for VS Code headless
+              run: |
+                  sudo apt-get update -yq
+                  sudo apt-get install -yq --no-install-recommends \
+                      xvfb libasound2t64 libatk1.0-0t64 libgbm1 libgtk-3-0t64 \
+                      libnss3 libxkbfile1 libxss1 unzip
+                  sudo apt-get clean
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
 
             - name: Cache Bun dependencies
               uses: actions/cache@v4
@@ -134,13 +153,9 @@ jobs:
                   bun run scripts/copy-artifacts.ts
                   bun run scripts/transpile-tests.ts
                   xvfb-run -a node ./out/vscode-extension/src/test/runTest.js
-              env:
-                  DBUS_SESSION_BUS_ADDRESS: /dev/null
 
     benchmarks:
         runs-on: ubuntu-24.04
-        container:
-            image: ghcr.io/ahmmedsamier/deeplens-ci:latest
         timeout-minutes: 20
         if: |
             (github.event_name == 'push' && github.ref == 'refs/heads/master') ||
@@ -148,6 +163,27 @@ jobs:
         steps:
             - name: Checkout
               uses: actions/checkout@v4
+
+            - name: Cache apt packages
+              uses: actions/cache@v4
+              with:
+                  path: /var/cache/apt/archives
+                  key: ${{ runner.os }}-apt-bench-${{ hashFiles('.github/docker/ci.Dockerfile') }}
+                  restore-keys: |
+                      ${{ runner.os }}-apt-bench-
+
+            - name: Install system dependencies for VS Code headless
+              run: |
+                  sudo apt-get update -yq
+                  sudo apt-get install -yq --no-install-recommends \
+                      xvfb libasound2t64 libatk1.0-0t64 libgbm1 libgtk-3-0t64 \
+                      libnss3 libxkbfile1 libxss1 unzip
+                  sudo apt-get clean
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
 
             - name: Cache Bun dependencies
               uses: actions/cache@v4
@@ -179,8 +215,6 @@ jobs:
               run: |
                   chmod +x run_benchmarks.sh
                   ./run_benchmarks.sh
-              env:
-                  DBUS_SESSION_BUS_ADDRESS: /dev/null
 
             - name: Upload Benchmark Report
               if: always()
