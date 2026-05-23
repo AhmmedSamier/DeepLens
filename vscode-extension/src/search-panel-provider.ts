@@ -88,14 +88,21 @@ export class SearchPanelProvider implements vscode.WebviewViewProvider {
             return;
         }
 
+        const activeSearchTokenSource = this.searchTokenSource;
+        const activeSearchToken = activeSearchTokenSource.token;
+
         const results = await this.lspClient.burstSearch(
             {
                 query: trimmedQuery,
                 scope: this.state.scope,
                 maxResults: 200,
             },
-            this.searchTokenSource.token,
+            activeSearchToken,
         );
+
+        if (this.searchTokenSource !== activeSearchTokenSource || this.searchTokenSource.token !== activeSearchToken) {
+            return;
+        }
 
         this.currentResults = results;
         this.selectedIndex = -1;
@@ -233,7 +240,18 @@ function renderResults() {
     results.forEach((result, index) => {
         const li = document.createElement('li');
         li.className = index === selectedIndex ? 'active' : '';
-        li.innerHTML = '<div>' + result.title + '</div><div class="meta">' + result.type + ' • ' + result.detail + (result.line ? ':' + result.line : '') + '</div>';
+
+        const titleDiv = document.createElement('div');
+        titleDiv.textContent = result.title;
+
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'meta';
+        const lineSuffix = result.line ? ':' + result.line : '';
+        metaDiv.textContent = result.type + ' • ' + result.detail + lineSuffix;
+
+        li.appendChild(titleDiv);
+        li.appendChild(metaDiv);
+
         li.addEventListener('mouseenter', () => {
             vscode.postMessage({ type: 'preview', index });
         });

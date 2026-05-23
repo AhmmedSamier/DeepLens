@@ -7,17 +7,17 @@ class MockWebview {
     public html = '';
     public options: vscode.WebviewOptions | undefined;
     public readonly cspSource = 'vscode-resource:';
-    private messageHandler: ((msg: unknown) => void | Promise<void>) | undefined;
+    private messageHandler: ((msg: unknown) => void | Promise<void>) | null = null;
     public readonly posted: unknown[] = [];
 
     onDidReceiveMessage(handler: (e: unknown) => void | Promise<void>): vscode.Disposable {
         this.messageHandler = handler;
         return new vscode.Disposable(() => {
-            this.messageHandler = undefined;
+            this.messageHandler = null;
         });
     }
 
-    postMessage(message: unknown): Thenable<boolean> {
+    postMessage(message: unknown): Promise<boolean> {
         this.posted.push(message);
         return Promise.resolve(true);
     }
@@ -31,12 +31,12 @@ class MockWebview {
 
 class MockWebviewView {
     public readonly webview = new MockWebview() as unknown as vscode.Webview;
-    private disposeHandler: (() => void) | undefined;
+    private disposeHandler: (() => void) | null = null;
 
     onDidDispose(handler: () => void): vscode.Disposable {
         this.disposeHandler = handler;
         return new vscode.Disposable(() => {
-            this.disposeHandler = undefined;
+            this.disposeHandler = null;
         });
     }
 
@@ -54,7 +54,7 @@ suite('SearchPanelProvider Unit Test Suite', () => {
                     id: '1',
                     name: 'employee-service.ts',
                     type: SearchItemType.FILE,
-                    filePath: '/tmp/employee-service.ts',
+                    filePath: '/workspace/DeepLens/.test-fixtures/employee-service.ts',
                     relativeFilePath: 'src/employee-service.ts',
                     line: 10,
                     column: 5,
