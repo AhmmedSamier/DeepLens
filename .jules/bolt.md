@@ -49,7 +49,6 @@
 ## 2024-05-23 - Fast Tree-sitter Node Type Matching
 **Learning:** Replacing unanchored regex matchers (like `/class_declaration/`) with `===` causes critical regressions across different AST grammars, because Tree-sitter uses prefixes like `abstract_class_declaration` or `local_variable_declaration`.
 **Action:** When migrating away from regex in Tree-sitter node type checks, always use `.endsWith()` alongside strict equality (`===`) to preserve prefix compatibility while still benefiting from significant string-matching performance gains.
-
 ## 2024-05-24 - Prevent O(N) array allocation in hot path
 **Learning:** In the `SearchEngine.processItemForSearch` tight loop (e.g., iterating over 50,000+ items), allocating O(N) arrays on every search context preparation (`fuzzyResults: new Array<number[][] | null>(this.items.length)`) causes severe memory pressure, spikes memory growth during consecutive queries by 30+ MB, and impacts search latency.
 **Action:** Always replace per-item allocations in search/iteration context with a single tracking variable (e.g., `currentHighlights`) that is updated and reset per iteration within the hot loop. This brings memory growth per search to 0.00 MB and substantially improves latency.
