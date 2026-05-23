@@ -1837,8 +1837,12 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
+<<<<<<< HEAD
             // ⚡ Bolt: Prevent O(N) allocation per search by using a single tracking variable
             currentHighlights: null as number[][] | null,
+=======
+            fuzzyResults: Array.from({ length: this.items.length }),
+>>>>>>> 7887460 (Fix auto-selection priority in empty search state)
         };
     }
 
