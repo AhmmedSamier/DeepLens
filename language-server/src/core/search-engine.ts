@@ -1837,7 +1837,7 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
-            fuzzyResults: Array.from({ length: this.items.length }),
+            fuzzyResults: Array.from<number[][] | null>({ length: this.items.length }),
         };
     }
 
