@@ -5,6 +5,7 @@ import { ActivityTracker } from '../../language-server/src/core/activity-tracker
 import { Config } from '../../language-server/src/core/config';
 import { SearchItemType, SearchableItem } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
+import { DeepLensViewProvider } from './deeplens-view-provider';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
 import { SearchProvider } from './search-provider';
@@ -778,6 +779,20 @@ export async function activate(context: vscode.ExtensionContext) {
         context.subscriptions.push(vscode.window.tabGroups.onDidChangeTabs(updateActiveFiles));
     }
 
+    // Register search view provider
+    const viewProvider = new DeepLensViewProvider(context, lspClient, config, activityTracker);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(DeepLensViewProvider.viewType, viewProvider),
+        viewProvider,
+    );
+
+    // Register focus view command
+    context.subscriptions.push(
+        vscode.commands.registerCommand('deeplens.focusView', () => {
+            vscode.commands.executeCommand('deeplens.searchView.focus');
+        }),
+    );
+
     // Register search command
     const searchCommand = vscode.commands.registerCommand('deeplens.search', async () => {
         const editor = vscode.window.activeTextEditor;
@@ -841,6 +856,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusItem);
 
     // Register show index stats command
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         try {
             const stats = await lspClient.getIndexStats();
