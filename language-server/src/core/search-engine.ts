@@ -1837,7 +1837,10 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
+<<<<<<< HEAD
             // ⚡ Bolt: Prevent O(N) allocation per search by using a single tracking variable
+=======
+>>>>>>> 6088cbd (⚡ Bolt: Remove N-sized array allocation in search hot path)
             currentHighlights: null as number[][] | null,
         };
     }
