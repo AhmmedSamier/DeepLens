@@ -7,6 +7,7 @@ import { SearchItemType, SearchableItem } from '../../language-server/src/core/t
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { ReferenceCodeLensProvider } from './reference-code-lens';
+import { SearchPanelProvider } from './search-panel-provider';
 import { SearchProvider } from './search-provider';
 import { GitService } from './services/git-service';
 import { logger } from './services/logging-service';
@@ -17,6 +18,7 @@ let config: Config;
 let activityTracker: ActivityTracker;
 let commandIndexer: CommandIndexer;
 let gitService: GitService;
+let searchPanelProvider: SearchPanelProvider;
 
 const CALL_CHAIN_DEPTH = 4;
 
@@ -717,6 +719,10 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // UI remains local
     searchProvider = new SearchProvider(lspClient, config, activityTracker, commandIndexer);
+    searchPanelProvider = new SearchPanelProvider(context, lspClient);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider(SearchPanelProvider.viewType, searchPanelProvider),
+    );
 
     // T013: Listen for ripgrep unavailability
     context.subscriptions.push(
@@ -791,6 +797,10 @@ export async function activate(context: vscode.ExtensionContext) {
     });
 
     // Register rebuild index command
+    const openSearchPanelCommand = vscode.commands.registerCommand('deeplens.openSearchPanel', async () => {
+        await searchPanelProvider.showPanel();
+    });
+
     const rebuildCommand = vscode.commands.registerCommand('deeplens.rebuildIndex', async () => {
         vscode.window.showInformationMessage('Rebuilding DeepLens index...');
         await lspClient.rebuildIndex(true);
@@ -825,7 +835,13 @@ export async function activate(context: vscode.ExtensionContext) {
         },
     );
 
-    context.subscriptions.push(searchCommand, rebuildCommand, clearCacheCommand, showCallChainCommand);
+    context.subscriptions.push(
+        searchCommand,
+        openSearchPanelCommand,
+        rebuildCommand,
+        clearCacheCommand,
+        showCallChainCommand,
+    );
 
     // Status Bar Item
     const statusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);

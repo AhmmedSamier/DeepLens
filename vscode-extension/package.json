@@ -22,7 +22,9 @@
         "fuzzy"
     ],
     "activationEvents": [
-        "onStartupFinished"
+        "onStartupFinished",
+        "onCommand:deeplens.openSearchPanel",
+        "onView:deeplens.searchPanel"
     ],
     "main": "./dist/extension.js",
     "contributes": {
@@ -30,6 +32,11 @@
             {
                 "command": "deeplens.search",
                 "title": "DeepLens: Search Everywhere"
+            },
+            {
+                "command": "deeplens.openSearchPanel",
+                "title": "DeepLens: Open Search Panel",
+                "icon": "$(search)"
             },
             {
                 "command": "deeplens.rebuildIndex",
@@ -147,6 +154,33 @@
                     "description": "Show a Call Chain Visualizer code lens for methods and functions"
                 }
             }
+        },
+        "menus": {
+            "view/title": [
+                {
+                    "command": "deeplens.openSearchPanel",
+                    "when": "view == deeplens.searchPanel",
+                    "group": "navigation"
+                }
+            ]
+        },
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "deeplens",
+                    "title": "DeepLens",
+                    "icon": "icon.png"
+                }
+            ]
+        },
+        "views": {
+            "deeplens": [
+                {
+                    "id": "deeplens.searchPanel",
+                    "name": "Search Panel",
+                    "type": "webview"
+                }
+            ]
         }
     },
     "scripts": {

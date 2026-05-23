@@ -28,6 +28,7 @@ suite('Extension Test Suite', () => {
             'deeplens.clearIndexCache',
             'deeplens.showIndexStats',
             'deeplens.showCallChain',
+            'deeplens.openSearchPanel',
         ];
 
         for (const cmd of expectedCommands) {
@@ -69,6 +70,12 @@ suite('Extension Test Suite', () => {
 
         // If we got here without throwing, the command executed successfully
         assert.ok(true, 'Clear cache command executed without error');
+    });
+
+
+    test('Open search panel command should execute without error', async () => {
+        await vscode.commands.executeCommand('deeplens.openSearchPanel');
+        assert.ok(true, 'Open search panel command executed without error');
     });
 
     test('Show index stats command should execute without error', async () => {
