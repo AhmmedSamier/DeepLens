@@ -586,6 +586,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
             vscode.ViewColumn.Beside,
             {
                 enableScripts: true,
+                localResourceRoots: [], // Sentinel: Restrict loading of local resources
             },
         );
         const nonce = getNonce();
@@ -841,6 +842,7 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusItem);
 
     // Register show index stats command
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         try {
             const stats = await lspClient.getIndexStats();
