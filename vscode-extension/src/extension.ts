@@ -586,6 +586,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
             vscode.ViewColumn.Beside,
             {
                 enableScripts: true,
+                localResourceRoots: [], // Sentinel: Restrict loading of local resources
             },
         );
         const nonce = getNonce();
