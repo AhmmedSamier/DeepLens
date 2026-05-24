@@ -27,3 +27,7 @@
 ## 2026-05-20 - [Actionable Empty State Filter Reset]
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" button should not just clear the text query; it must reset all applied filters to their default state to provide a true recovery path.
 **Action:** When implementing "Clear Search" functionality, always trace the filter state management and ensure all active filters (e.g., `FilterAll = true`) are reset alongside the text input.
+
+## 2024-05-24 - Missing Loading State in Call Chain Visualizer
+**Learning:** Slow asynchronous UI operations in VS Code extensions, such as building a call hierarchy tree (`prepareCallHierarchy` and recursive fetches), can freeze the UI and leave users wondering if the action registered. Without visual feedback, users might trigger the action multiple times.
+**Action:** Always wrap potentially slow asynchronous commands and data-fetching operations in `vscode.window.withProgress` (e.g. using `vscode.ProgressLocation.Window`) to provide immediate and clear visual loading states.
