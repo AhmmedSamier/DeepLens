@@ -109,8 +109,9 @@ suite('ReferenceCodeLens Test Suite', () => {
         assert.ok(Array.isArray(lenses), 'Should return an array even on error');
     });
 
-    test('Provider should provide code lenses for supported symbol kinds', async () => {
+    test('Provider should provide code lenses for supported symbol kinds', async function () {
         // Increase timeout for this test as the TS language server can be slow to initialize in CI
+        this.timeout(10000);
         // Create a test document with a class
         const testContent = `
 export class TestClass {
