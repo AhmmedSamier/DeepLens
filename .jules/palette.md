@@ -27,3 +27,6 @@
 ## 2026-05-20 - [Actionable Empty State Filter Reset]
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" button should not just clear the text query; it must reset all applied filters to their default state to provide a true recovery path.
 **Action:** When implementing "Clear Search" functionality, always trace the filter state management and ensure all active filters (e.g., `FilterAll = true`) are reset alongside the text input.
+## 2026-05-26 - Add ARIA labels to search filter radio buttons
+**Learning:** The filter radio buttons in the Visual Studio extension SearchControl were missing `AutomationProperties.Name`, making them inaccessible to screen readers. Adding them improves accessibility.
+**Action:** Always verify that interactive elements like RadioButtons and buttons have `AutomationProperties.Name` in WPF/XAML files for proper a11y support.
