@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { describe, expect, it, beforeAll } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 import * as path from 'node:path';
 import { SymbolProvider } from './providers/symbol-provider';
 import { SearchEngine, escapeRegExp } from './search-engine';
