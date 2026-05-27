@@ -498,7 +498,10 @@ export class WorkspaceIndexer {
                 return false;
             }
 
-            const firstLine = content.split('\n')[0].trim();
+            // ⚡ Bolt: Fast first line extraction
+            // Replace .split('\n')[0] with .indexOf('\n') and .slice(0, index) to avoid O(N) array allocation.
+            const newlineIndex = content.indexOf('\n');
+            const firstLine = (newlineIndex === -1 ? content : content.slice(0, newlineIndex)).trim();
 
             // Check for common auto-generated markers in C#
             return (
