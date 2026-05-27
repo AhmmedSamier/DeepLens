@@ -498,7 +498,12 @@ export class WorkspaceIndexer {
                 return false;
             }
 
-            const firstLine = content.split('\n')[0].trim();
+            // ⚡ Bolt: Fast substring extraction optimization
+            // Replacing .split('\n')[0] with .indexOf('\n') and .slice() avoids
+            // allocating an array of strings representing every chunk in the buffer,
+            // heavily reducing memory overhead and garbage collection pauses in hot paths.
+            const newlineIndex = content.indexOf('\n');
+            const firstLine = (newlineIndex === -1 ? content : content.slice(0, newlineIndex)).trim();
 
             // Check for common auto-generated markers in C#
             return (
