@@ -1837,7 +1837,7 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
-            fuzzyResults: new Array<number[][] | null>(this.items.length),
+            currentHighlights: null as number[][] | null,
         };
     }
 
@@ -1888,6 +1888,7 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
+        context.currentHighlights = null;
         const typeId = context.itemTypeIds[i];
 
         // Calculate score using multiple strategies
@@ -1953,7 +1954,7 @@ export class SearchEngine implements ISearchProvider {
 
         const res = Fuzzysort.single(context.query, pName);
         if (res && res.score > context.MIN_SCORE) {
-            context.fuzzyResults[i] = this.indexesToHighlights(res.indexes);
+            context.currentHighlights = this.indexesToHighlights(res.indexes);
             return res.score;
         }
         return -Infinity;
@@ -2069,7 +2070,7 @@ export class SearchEngine implements ISearchProvider {
                 item,
                 score: score,
                 scope: resultScope,
-                highlights: context.fuzzyResults[i] ?? undefined,
+                highlights: context.currentHighlights ?? undefined,
             });
         }
     }
