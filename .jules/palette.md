@@ -27,3 +27,6 @@
 ## 2026-05-20 - [Actionable Empty State Filter Reset]
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" button should not just clear the text query; it must reset all applied filters to their default state to provide a true recovery path.
 **Action:** When implementing "Clear Search" functionality, always trace the filter state management and ensure all active filters (e.g., `FilterAll = true`) are reset alongside the text input.
+## 2026-05-28 - Added ToolTips and AutomationProperties to WPF RadioButton Tabs
+**Learning:** When using RadioButtons as styled tabs in WPF/XAML without explicitly visible text context (or when they need better screen reader support), adding `AutomationProperties.Name` provides crucial context for screen readers, and `ToolTip` improves visual discoverability for users navigating the UI.
+**Action:** Always verify that interactive elements like custom styled RadioButtons and buttons have `AutomationProperties.Name` configured for accessibility, and include a `ToolTip` when functioning as tabs or filters.
