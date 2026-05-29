@@ -27,6 +27,11 @@
 ## 2026-05-20 - [Actionable Empty State Filter Reset]
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" button should not just clear the text query; it must reset all applied filters to their default state to provide a true recovery path.
 **Action:** When implementing "Clear Search" functionality, always trace the filter state management and ensure all active filters (e.g., `FilterAll = true`) are reset alongside the text input.
+
 ## 2026-05-26 - Add ARIA labels to search filter radio buttons
 **Learning:** The filter radio buttons in the Visual Studio extension SearchControl were missing `AutomationProperties.Name`, making them inaccessible to screen readers. Adding them improves accessibility.
 **Action:** Always verify that interactive elements like RadioButtons and buttons have `AutomationProperties.Name` in WPF/XAML files for proper a11y support.
+
+## 2024-05-24 - Missing Loading State in Call Chain Visualizer
+**Learning:** Slow asynchronous UI operations in VS Code extensions, such as building a call hierarchy tree (`prepareCallHierarchy` and recursive fetches), can freeze the UI and leave users wondering if the action registered. Without visual feedback, users might trigger the action multiple times.
+**Action:** Always wrap potentially slow asynchronous commands and data-fetching operations in `vscode.window.withProgress` (e.g. using `vscode.ProgressLocation.Window`) to provide immediate and clear visual loading states.
