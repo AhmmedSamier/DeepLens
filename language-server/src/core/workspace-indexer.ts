@@ -498,11 +498,7 @@ export class WorkspaceIndexer {
                 return false;
             }
 
-            // ⚡ Bolt: Fast string processing optimization
-            // Replaces .split('\n')[0] with .indexOf('\n') and slice to extract the first line
-            // avoiding an unnecessary string array allocation for the rest of the 1KB buffer.
-            const newlineIndex = content.indexOf('\n');
-            const firstLine = (newlineIndex !== -1 ? content.slice(0, newlineIndex) : content).trim();
+            const firstLine = content.split('\n')[0].trim();
 
             // Check for common auto-generated markers in C#
             return (

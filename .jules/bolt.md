@@ -49,6 +49,3 @@
 ## 2024-05-23 - Fast Tree-sitter Node Type Matching
 **Learning:** Replacing unanchored regex matchers (like `/class_declaration/`) with `===` causes critical regressions across different AST grammars, because Tree-sitter uses prefixes like `abstract_class_declaration` or `local_variable_declaration`.
 **Action:** When migrating away from regex in Tree-sitter node type checks, always use `.endsWith()` alongside strict equality (`===`) to preserve prefix compatibility while still benefiting from significant string-matching performance gains.
-## 2024-05-26 - Fast Auto-generated File Checking
-**Learning:** Checking for auto-generated files by using `content.split('\n')[0].trim()` allocates an array of strings representing every line in the buffer just to check the first line, which degrades performance since `buffer` reads up to 1024 bytes.
-**Action:** Use `indexOf('\n')` to extract only the first line as a substring, eliminating unnecessary array allocation and reducing memory overhead during fast workspace indexing.
