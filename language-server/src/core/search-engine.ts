@@ -1193,6 +1193,7 @@ export class SearchEngine implements ISearchProvider {
         try {
             if (token?.isCancellationRequested) return [];
             // Pass cached file paths to ripgrep (No mapping/filtering needed)
+            if (!this.ripgrep) return null;
             const matches = await this.ripgrep.search(query, this.filePaths, maxResults, token);
 
             const results: SearchResult[] = [];
@@ -1957,7 +1958,7 @@ export class SearchEngine implements ISearchProvider {
 
         const res = Fuzzysort.single(context.query, pName);
         if (res && res.score > context.MIN_SCORE) {
-            context.fuzzyResults[i] = this.indexesToHighlights(res.indexes);
+            context.currentHighlights = this.indexesToHighlights(res.indexes);
             return res.score;
         }
         return -Infinity;
@@ -2073,7 +2074,7 @@ export class SearchEngine implements ISearchProvider {
                 item,
                 score: score,
                 scope: resultScope,
-                highlights: context.fuzzyResults[i] ?? undefined,
+                highlights: context.currentHighlights ?? undefined,
             });
         }
     }
