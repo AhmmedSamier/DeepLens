@@ -498,7 +498,6 @@ export class WorkspaceIndexer {
                 return false;
             }
 
-<<<<<<< HEAD
             // ⚡ Bolt: Fast first line extraction
             // Replace .split('\n')[0] with .indexOf('\n') and .slice(0, index) to avoid O(N) array allocation.
             const newlineIndex = content.indexOf('\n');
