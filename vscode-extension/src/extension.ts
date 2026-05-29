@@ -847,7 +847,6 @@ export async function activate(context: vscode.ExtensionContext) {
         action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
     }
 
-    // Register show index stats command
     // eslint-disable-next-line sonarjs/cognitive-complexity
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         try {
