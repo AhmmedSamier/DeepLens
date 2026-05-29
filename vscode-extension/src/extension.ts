@@ -842,6 +842,13 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusItem);
 
     // Register show index stats command
+    interface IndexActionItem extends vscode.QuickPickItem {
+        // eslint-disable-next-line sonarjs/max-union-size
+        action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
+    }
+
+    // Register show index stats command
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         try {
             const stats = await lspClient.getIndexStats();
@@ -851,53 +858,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
-
-            async function handleCopyStats(): Promise<void> {
-                const statsText = `DeepLens Stats: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`;
-                await vscode.env.clipboard.writeText(statsText);
-                vscode.window.showInformationMessage('Index statistics copied to clipboard');
-            }
-
-            async function handleRebuild(): Promise<void> {
-                await vscode.commands.executeCommand('deeplens.rebuildIndex');
-            }
-
-            async function handleClear(): Promise<void> {
-                await vscode.commands.executeCommand('deeplens.clearIndexCache');
-            }
-
-            async function handleOpenSettings(): Promise<void> {
-                await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
-            }
-
-            async function handleDumpIndex(): Promise<void> {
-                const dump = await lspClient.dumpIndex();
-                if (!dump) {
-                    vscode.window.showErrorMessage('DeepLens: Could not retrieve index data.');
-                    return;
-                }
-                const uri = await vscode.window.showSaveDialog({
-                    filters: { 'JSON files': ['json'] },
-                    defaultUri: vscode.Uri.file(`deeplens-index-${Date.now()}.json`),
-                });
-                if (uri) {
-                    const json = JSON.stringify(dump, null, 2);
-                    await vscode.workspace.fs.writeFile(uri, Buffer.from(json, 'utf-8'));
-                    vscode.window.showInformationMessage(`Index dumped to ${uri.fsPath}`);
-                }
-            }
-
-            const actionHandlers: Record<string, () => Promise<void>> = {
-                copy: handleCopyStats,
-                rebuild: handleRebuild,
-                clear: handleClear,
-                settings: handleOpenSettings,
-                dump: handleDumpIndex,
-            };
-
-            interface IndexActionItem extends vscode.QuickPickItem {
-                action?: keyof typeof actionHandlers;
-            }
 
             const items: IndexActionItem[] = [
                 {
@@ -936,7 +896,32 @@ export async function activate(context: vscode.ExtensionContext) {
             });
 
             if (selection && selection.action) {
-                await actionHandlers[selection.action]();
+                if (selection.action === 'copy') {
+                    const statsText = `DeepLens Stats: ${stats.totalItems} items (${stats.totalFiles} files, ${stats.totalSymbols} symbols) • ${sizeInMB} MB`;
+                    await vscode.env.clipboard.writeText(statsText);
+                    vscode.window.showInformationMessage('Index statistics copied to clipboard');
+                } else if (selection.action === 'rebuild') {
+                    await vscode.commands.executeCommand('deeplens.rebuildIndex');
+                } else if (selection.action === 'clear') {
+                    await vscode.commands.executeCommand('deeplens.clearIndexCache');
+                } else if (selection.action === 'settings') {
+                    await vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+                } else if (selection.action === 'dump') {
+                    const dump = await lspClient.dumpIndex();
+                    if (!dump) {
+                        vscode.window.showErrorMessage('DeepLens: Could not retrieve index data.');
+                        return;
+                    }
+                    const uri = await vscode.window.showSaveDialog({
+                        filters: { 'JSON files': ['json'] },
+                        defaultUri: vscode.Uri.file(`deeplens-index-${Date.now()}.json`),
+                    });
+                    if (uri) {
+                        const json = JSON.stringify(dump, null, 2);
+                        await vscode.workspace.fs.writeFile(uri, Buffer.from(json, 'utf-8'));
+                        vscode.window.showInformationMessage(`Index dumped to ${uri.fsPath}`);
+                    }
+                }
             }
         } catch (error) {
             logger.error('Failed to show index stats or execute action', error);
