@@ -30,3 +30,6 @@
 ## 2026-05-28 - Added ToolTips and AutomationProperties to WPF RadioButton Tabs
 **Learning:** When using RadioButtons as styled tabs in WPF/XAML without explicitly visible text context (or when they need better screen reader support), adding `AutomationProperties.Name` provides crucial context for screen readers, and `ToolTip` improves visual discoverability for users navigating the UI.
 **Action:** Always verify that interactive elements like custom-styled RadioButtons and buttons have `AutomationProperties.Name` configured for accessibility, and include a `ToolTip` when functioning as tabs or filters.
+## 2026-05-29 - Fix UI list auto-selection priority
+**Learning:** When auto-selecting an item from a list (e.g., QuickPick) based on priority, using a single `.find(condition A || condition B)` evaluates elements in their rendered array order, effectively ignoring intended fallback priority and simply returning the first matching element found. To enforce strict priority regardless of visual/array order, chained `.find(A) || .find(B)` calls must be used.
+**Action:** Always use explicit sequential `.find()` fallback chains when the goal is to prioritize specific actions (like "Clear" > "Switch Scope" > "Native Search") over their presentation order in the UI.
