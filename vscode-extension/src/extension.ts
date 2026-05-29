@@ -586,6 +586,7 @@ async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolN
             vscode.ViewColumn.Beside,
             {
                 enableScripts: true,
+                localResourceRoots: [], // Sentinel: Restrict loading of local resources
             },
         );
         const nonce = getNonce();
@@ -841,6 +842,11 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(statusItem);
 
     // Register show index stats command
+    interface IndexActionItem extends vscode.QuickPickItem {
+        // eslint-disable-next-line sonarjs/max-union-size
+        action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
+    }
+
     // eslint-disable-next-line sonarjs/cognitive-complexity
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         try {
@@ -851,11 +857,6 @@ export async function activate(context: vscode.ExtensionContext) {
             }
 
             const sizeInMB = (stats.cacheSize / (1024 * 1024)).toFixed(2);
-
-            interface IndexActionItem extends vscode.QuickPickItem {
-                // eslint-disable-next-line sonarjs/max-union-size
-                action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
-            }
 
             const items: IndexActionItem[] = [
                 {
