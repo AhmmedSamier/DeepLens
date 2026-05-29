@@ -1834,11 +1834,12 @@ export class SearchEngine implements ISearchProvider {
             preparedPaths: this.preparedPaths,
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
-            activityWeight: this.activityWeight,
-            invActivityWeight: 1 - this.activityWeight,
-            queryLower,
-            // eslint-disable-next-line sonarjs/array-constructor
-            fuzzyResults: new Array<number[][] | null>(this.items.length),
+              activityWeight: this.activityWeight,
+              invActivityWeight: 1 - this.activityWeight,
+              queryLower,
+              // ⚡ Bolt: Fast array allocation (ignore array-constructor rule for performance)
+              // eslint-disable-next-line sonarjs/array-constructor
+              fuzzyResults: new Array<number[][] | null>(this.items.length),
         };
     }
 

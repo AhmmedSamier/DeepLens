@@ -498,10 +498,9 @@ export class WorkspaceIndexer {
                 return false;
             }
 
-            // ⚡ Bolt: Fast substring extraction optimization
-            // Replacing .split('\n')[0] with .indexOf('\n') and .slice() avoids
-            // allocating an array of strings representing every chunk in the buffer,
-            // heavily reducing memory overhead and garbage collection pauses in hot paths.
+<<<<<<< HEAD
+            // ⚡ Bolt: Fast first line extraction
+            // Replace .split('\n')[0] with .indexOf('\n') and .slice(0, index) to avoid O(N) array allocation.
             const newlineIndex = content.indexOf('\n');
             const firstLine = (newlineIndex === -1 ? content : content.slice(0, newlineIndex)).trim();
 
