@@ -1837,7 +1837,9 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
-            fuzzyResults: Array.from<number[][] | null>({ length: this.items.length }).fill(null),
+            // ⚡ Bolt: Fast array allocation (ignore array-constructor rule for performance)
+            // eslint-disable-next-line sonarjs/array-constructor
+            fuzzyResults: new Array<number[][] | null>(this.items.length),
         };
     }
 
