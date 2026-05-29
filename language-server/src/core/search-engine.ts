@@ -1837,10 +1837,7 @@ export class SearchEngine implements ISearchProvider {
             activityWeight: this.activityWeight,
             invActivityWeight: 1 - this.activityWeight,
             queryLower,
-<<<<<<< HEAD
             // ⚡ Bolt: Prevent O(N) allocation per search by using a single tracking variable
-=======
->>>>>>> 6088cbd (⚡ Bolt: Remove N-sized array allocation in search hot path)
             currentHighlights: null as number[][] | null,
         };
     }
@@ -1960,7 +1957,7 @@ export class SearchEngine implements ISearchProvider {
 
         const res = Fuzzysort.single(context.query, pName);
         if (res && res.score > context.MIN_SCORE) {
-            context.currentHighlights = this.indexesToHighlights(res.indexes);
+            context.fuzzyResults[i] = this.indexesToHighlights(res.indexes);
             return res.score;
         }
         return -Infinity;
@@ -2076,7 +2073,7 @@ export class SearchEngine implements ISearchProvider {
                 item,
                 score: score,
                 scope: resultScope,
-                highlights: context.currentHighlights ?? undefined,
+                highlights: context.fuzzyResults[i] ?? undefined,
             });
         }
     }
