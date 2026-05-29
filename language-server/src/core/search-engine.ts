@@ -1835,12 +1835,12 @@ export class SearchEngine implements ISearchProvider {
             preparedPaths: this.preparedPaths,
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
-            activityWeight: this.activityWeight,
-            invActivityWeight: 1 - this.activityWeight,
-            queryLower,
-            // ⚡ Bolt: Prevent O(N) allocation per search by using a single tracking variable
-            currentHighlights: null as number[][] | null,
-        };
+              activityWeight: this.activityWeight,
+              invActivityWeight: 1 - this.activityWeight,
+              queryLower,
+              // ⚡ Bolt: Prevent O(N) allocation per search by using a single tracking variable
+              currentHighlights: null as number[][] | null,
+          };
     }
 
     private searchWithIndices(

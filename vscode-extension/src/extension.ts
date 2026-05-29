@@ -547,37 +547,50 @@ function renderRefCallTree(node: RefCallNode, level: number): string {
 
 async function showCallChain(uri: vscode.Uri, position: vscode.Position, symbolName?: string): Promise<void> {
     try {
-        const roots =
-            (await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>(
-                'vscode.prepareCallHierarchy',
-                uri,
-                position,
-            )) || [];
-
-        let treeMarkup: string;
-        let title: string;
+        let treeMarkup = '';
+        let title = '';
         let useRefFallback = false;
 
-        if (roots.length === 0) {
-            useRefFallback = true;
-        }
+        const success = await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Window,
+                title: 'DeepLens: Building call chain...',
+            },
+            async () => {
+                const roots =
+                    (await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>(
+                        'vscode.prepareCallHierarchy',
+                        uri,
+                        position,
+                    )) || [];
 
-        let refTree: RefCallNode | null = null;
-        if (useRefFallback) {
-            refTree = await buildCallTreeFromReferences(uri, position, CALL_CHAIN_DEPTH, new Set<string>());
-            if (!refTree) {
-                vscode.window.showInformationMessage(
-                    'DeepLens: No call hierarchy information is available for this symbol.',
-                );
-                return;
-            }
-            treeMarkup = `<ul class="tree">${renderRefCallTree(refTree, 0)}</ul>`;
-            title = symbolName || refTree.name || 'Call Chain';
-        } else {
-            const root = roots[0];
-            const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
-            treeMarkup = `<ul class="tree">${renderCallTree(tree, 0)}</ul>`;
-            title = symbolName || root.name;
+                if (roots.length === 0) {
+                    useRefFallback = true;
+                }
+
+                let refTree: RefCallNode | null = null;
+                if (useRefFallback) {
+                    refTree = await buildCallTreeFromReferences(uri, position, CALL_CHAIN_DEPTH, new Set<string>());
+                    if (!refTree) {
+                        vscode.window.showInformationMessage(
+                            'DeepLens: No call hierarchy information is available for this symbol.',
+                        );
+                        return false;
+                    }
+                    treeMarkup = `<ul class="tree">${renderRefCallTree(refTree, 0)}</ul>`;
+                    title = symbolName || refTree.name || 'Call Chain';
+                } else {
+                    const root = roots[0];
+                    const tree = await buildIncomingCallTree(root, CALL_CHAIN_DEPTH, new Set<string>());
+                    treeMarkup = `<ul class="tree">${renderCallTree(tree, 0)}</ul>`;
+                    title = symbolName || root.name;
+                }
+                return true;
+            },
+        );
+
+        if (!success) {
+            return;
         }
 
         const panel = vscode.window.createWebviewPanel(
@@ -841,13 +854,12 @@ export async function activate(context: vscode.ExtensionContext) {
     statusItem.show();
     context.subscriptions.push(statusItem);
 
-    // Register show index stats command
-    interface IndexActionItem extends vscode.QuickPickItem {
-        // eslint-disable-next-line sonarjs/max-union-size
-        action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
-    }
+      interface IndexActionItem extends vscode.QuickPickItem {
+          // eslint-disable-next-line sonarjs/max-union-size
+          action?: 'copy' | 'rebuild' | 'clear' | 'settings' | 'dump';
+      }
 
-    // eslint-disable-next-line sonarjs/cognitive-complexity
+      // eslint-disable-next-line sonarjs/cognitive-complexity
     const showStatsCommand = vscode.commands.registerCommand('deeplens.showIndexStats', async () => {
         try {
             const stats = await lspClient.getIndexStats();
