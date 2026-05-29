@@ -35,6 +35,10 @@ jobs:
               working-directory: language-server
 
             - name: Install vscode-extension dependencies
+            - name: Install ripgrep dependency fallback
+              working-directory: language-server
+              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
+
               run: bun install --frozen-lockfile
               working-directory: vscode-extension
 
