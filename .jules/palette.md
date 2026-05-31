@@ -30,3 +30,6 @@
 ## 2026-05-26 - Add ARIA labels to search filter radio buttons
 **Learning:** The filter radio buttons in the Visual Studio extension SearchControl were missing `AutomationProperties.Name`, making them inaccessible to screen readers. Adding them improves accessibility.
 **Action:** Always verify that interactive elements like RadioButtons and buttons have `AutomationProperties.Name` in WPF/XAML files for proper a11y support.
+## 2026-05-30 - Centralized Loading Feedback
+**Learning:** Relying solely on a small status bar text (like "Searching...") during async operations creates a poor UX, as users may miss the tiny indicator and assume the interface is frozen or broken when the main content area remains blank.
+**Action:** When implementing async search or data fetching, always provide clear, central visual feedback (such as a loading spinner or indeterminate progress bar) directly within the main content area.
