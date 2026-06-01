@@ -33,3 +33,6 @@
 ## 2026-05-29 - Fix UI list auto-selection priority
 **Learning:** When auto-selecting an item from a list (e.g., QuickPick) based on priority, using a single `.find(condition A || condition B)` evaluates elements in their rendered array order, effectively ignoring intended fallback priority and simply returning the first matching element found. To enforce strict priority regardless of visual/array order, chained `.find(A) || .find(B)` calls must be used.
 **Action:** Always use explicit sequential `.find()` fallback chains when the goal is to prioritize specific actions (like "Clear" > "Switch Scope" > "Native Search") over their presentation order in the UI.
+## 2026-05-30 - Added Loading Feedback to Empty State Actions
+**Learning:** Empty state actionable buttons (like Rebuild Index or Clear Cache) execute long-running commands silently, leaving users unsure if their click registered. This is a common pattern in VS Code QuickPick items that execute commands.
+**Action:** When executing async commands from a QuickPick, always use `this.showFeedback()` or `vscode.window.showInformationMessage()` *before* calling `quickPick.hide()` to provide immediate visual confirmation.

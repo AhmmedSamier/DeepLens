@@ -1601,12 +1601,14 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_REBUILD_INDEX) {
+            this.showFeedback('Rebuilding index...');
             vscode.commands.executeCommand('deeplens.rebuildIndex');
             quickPick.hide();
             return true;
         }
 
         if (selected.result.item.id === this.CMD_CLEAR_CACHE) {
+            this.showFeedback('Clearing index cache...');
             vscode.commands.executeCommand('deeplens.clearIndexCache');
             quickPick.hide();
             return true;
