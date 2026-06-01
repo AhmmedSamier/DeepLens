@@ -439,6 +439,9 @@ export class SearchEngine implements ISearchProvider {
             if (idx !== -1) {
                 indices.splice(idx, 1);
             }
+            if (indices.length === 0) {
+                this.fileToItemIndices.delete(normalized);
+            }
         }
     }
 
