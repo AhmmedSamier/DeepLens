@@ -223,8 +223,11 @@ namespace DeepLensVisualStudio.ToolWindows
                 _statusText = value;
                 OnPropertyChanged();
                 OnPropertyChanged(nameof(ShowEmptyState));
+                OnPropertyChanged(nameof(IsSearching));
             }
         }
+
+        public bool IsSearching => StatusText == "Searching...";
 
         public string IndexingStatusText
         {

@@ -49,3 +49,16 @@
 ## 2024-05-23 - Fast Tree-sitter Node Type Matching
 **Learning:** Replacing unanchored regex matchers (like `/class_declaration/`) with `===` causes critical regressions across different AST grammars, because Tree-sitter uses prefixes like `abstract_class_declaration` or `local_variable_declaration`.
 **Action:** When migrating away from regex in Tree-sitter node type checks, always use `.endsWith()` alongside strict equality (`===`) to preserve prefix compatibility while still benefiting from significant string-matching performance gains.
+
+## 2026-07-01 - [Fast Substring Extraction in Workspace Indexer]
+**Learning:** To improve performance when extracting a substring up to a delimiter (e.g., the first line of a file content buffer), using `content.split('\n')[0]` creates unnecessary memory overhead because it allocates an array of strings representing every chunk in the string.
+**Action:** Replace `content.split('\n')[0]` with `content.indexOf('\n')` combined with `content.slice(0, index)`. This avoids allocating an array of strings representing every chunk in the string, heavily reducing memory overhead and garbage collection during hot paths like workspace indexing.
+## 2026-06-01 - [Avoid O(n) early-exits inside helper functions in hot loops]
+**Learning:** [Insight] When applying early exits to O(N) hot loops, placing the early exit condition *inside* a helper function (like `calculateScore`) still incurs function call and variable assignment overhead for every item.
+**Action:** [How to apply next time] Move simple boolean or bitmask early-exit checks to the very top of the calling loop method (like `processItemForSearch`) to skip function calls entirely for non-matching items.
+## 2026-07-15 - [Fast Scalar Tracking in Sequential Hot Loops]
+**Learning:** In synchronous, single-threaded hot loops that process items sequentially (like `SearchEngine.processItemForSearch`), allocating an O(N) array on the parent context to track temporary per-item data (e.g., `new Array(this.items.length)` for fuzzy search highlights) creates massive and entirely unnecessary memory churn. Because items are evaluated and immediately pushed to a heap one by one, a single tracking variable is sufficient.
+**Action:** Replace `new Array(this.items.length)` with a simple scalar context variable (e.g., `currentHighlights`) and reset it to `null` at the start of each iteration. This eliminates a huge memory allocation per request, dropping GC pauses and overhead significantly during rapid typing scenarios.
+## 2026-07-28 - [O(1) Early-Exit Optimization in Item Processing]
+**Learning:** In the `SearchEngine.processItemForSearch` method, calling `calculateSearchScore` adds a function call overhead for every evaluated item, even if the item is instantly rejected by the subsequent bitmask check.
+**Action:** Moving the O(1) bitflag early-exit check (`(context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags)` to the very top of `processItemForSearch` avoids unnecessary function call overhead (`calculateSearchScore`) and `typeId` lookups for the vast majority of items that do not contain the required characters, yielding a measurable performance gain in the hot path.
