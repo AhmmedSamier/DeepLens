@@ -39,6 +39,10 @@ jobs:
                   restore-keys: |
                       ${{ runner.os }}-bun-${{ matrix.project }}-
 
+            - name: Install ripgrep dependency fallback
+              working-directory: language-server
+              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
+
             - name: Install Dependencies
               working-directory: ${{ matrix.project }}
               run: bun install --frozen-lockfile
@@ -66,6 +70,10 @@ jobs:
                   key: ${{ runner.os }}-bun-ls-${{ hashFiles('language-server/bun.lock') }}
                   restore-keys: |
                       ${{ runner.os }}-bun-ls-
+
+            - name: Install ripgrep dependency fallback
+              working-directory: language-server
+              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
 
             - name: Install Dependencies
               working-directory: language-server
@@ -119,6 +127,10 @@ jobs:
                   key: ${{ runner.os }}-bun-vscode-${{ hashFiles('vscode-extension/bun.lock', 'language-server/bun.lock') }}
                   restore-keys: |
                       ${{ runner.os }}-bun-vscode-
+
+            - name: Install ripgrep dependency fallback
+              working-directory: language-server
+              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
 
             - name: Install Dependencies
               run: |
@@ -192,6 +204,10 @@ jobs:
                   key: ${{ runner.os }}-bun-bench-${{ hashFiles('language-server/bun.lock', 'vscode-extension/bun.lock') }}
                   restore-keys: |
                       ${{ runner.os }}-bun-bench-
+
+            - name: Install ripgrep dependency fallback
+              working-directory: language-server
+              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
 
             - name: Install Dependencies
               run: |

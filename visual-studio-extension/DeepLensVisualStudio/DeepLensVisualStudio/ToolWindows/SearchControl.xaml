@@ -149,32 +149,44 @@
                         Content="All"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterAll, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        AutomationProperties.Name="Show all results"
+                        ToolTip="Show all results" />
                     <RadioButton
                         Content="Classes"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterClasses, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        AutomationProperties.Name="Filter by classes"
+                        ToolTip="Filter by classes" />
                     <RadioButton
                         Content="Symbols"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterSymbols, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        AutomationProperties.Name="Filter by symbols"
+                        ToolTip="Filter by symbols" />
                     <RadioButton
                         Content="Files"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterFiles, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        AutomationProperties.Name="Filter by files"
+                        ToolTip="Filter by files" />
                     <RadioButton
                         Content="Text"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterText, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        AutomationProperties.Name="Filter by text"
+                        ToolTip="Filter by text" />
                     <RadioButton
                         Content="Endpoints"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterEndpoints, Mode=TwoWay}"
-                        Style="{StaticResource TabButtonStyle}" />
+                        Style="{StaticResource TabButtonStyle}"
+                        AutomationProperties.Name="Filter by endpoints"
+                        ToolTip="Filter by endpoints" />
                 </StackPanel>
             </Border>
 
@@ -436,6 +448,28 @@
                     </DataTemplate>
                 </ListBox.ItemTemplate>
             </ListBox>
+
+            <!-- Loading State -->
+            <StackPanel
+                Grid.Row="2"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}">
+                <ProgressBar
+                    AutomationProperties.Name="Search in progress"
+                    IsIndeterminate="True"
+                    Width="150"
+                    Height="4"
+                    Margin="0,0,0,12"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}" />
+                <TextBlock
+                    AutomationProperties.Name="Search status"
+                    Text="Searching..."
+                    FontSize="16"
+                    FontWeight="SemiBold"
+                    Foreground="{DynamicResource {x:Static vsshell:VsBrushes.GrayTextKey}}"
+                    HorizontalAlignment="Center" />
+            </StackPanel>
 
             <!-- Empty State Message -->
             <StackPanel

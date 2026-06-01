@@ -179,7 +179,7 @@ export class SearchEngine implements ISearchProvider {
     private readonly scopedIndices: Map<SearchScope, number[]> = new Map();
 
     // Map Normalized File Path -> Set of Item Indices (Reverse Index for O(1) removal)
-    private readonly fileToItemIndices: Map<string, Set<number>> = new Map();
+    private readonly fileToItemIndices: Map<string, number[]> = new Map();
     private readonly itemIndexById: Map<string, number> = new Map();
 
     private modifiedIndicesCache: {
@@ -347,10 +347,10 @@ export class SearchEngine implements ISearchProvider {
         const normalizedFilePath = this.normalizePath(item.filePath);
         let fileIndices = this.fileToItemIndices.get(normalizedFilePath);
         if (!fileIndices) {
-            fileIndices = new Set<number>();
+            fileIndices = [];
             this.fileToItemIndices.set(normalizedFilePath, fileIndices);
         }
-        fileIndices.add(globalIndex);
+        fileIndices.push(globalIndex);
     }
 
     /**
@@ -404,11 +404,11 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of filePaths) {
             const normalized = this.normalizePath(filePath);
             const indices = this.fileToItemIndices.get(normalized);
-            if (indices && indices.size > 0) {
+            if (indices && indices.length > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    for (const index of indices) {
-                        indicesToRemove.push(index);
+                    for (let i = 0; i < indices.length; i++) {
+                        indicesToRemove.push(indices[i]);
                     }
                 }
             }
@@ -435,7 +435,13 @@ export class SearchEngine implements ISearchProvider {
         const normalized = this.normalizePath(item.filePath);
         const indices = this.fileToItemIndices.get(normalized);
         if (indices) {
-            indices.delete(index);
+            const idx = indices.indexOf(index);
+            if (idx !== -1) {
+                indices.splice(idx, 1);
+            }
+            if (indices.length === 0) {
+                this.fileToItemIndices.delete(normalized);
+            }
         }
     }
 
@@ -464,8 +470,12 @@ export class SearchEngine implements ISearchProvider {
             const normalized = this.normalizePath(item.filePath);
             const indices = this.fileToItemIndices.get(normalized);
             if (indices) {
-                indices.delete(src);
-                indices.add(dest);
+                const idx = indices.indexOf(src);
+                if (idx !== -1) {
+                    indices[idx] = dest;
+                } else {
+                    indices.push(dest);
+                }
             }
         }
     }
@@ -643,10 +653,10 @@ export class SearchEngine implements ISearchProvider {
             const filePath = this.normalizePath(this.items[i].filePath);
             let indices = this.fileToItemIndices.get(filePath);
             if (!indices) {
-                indices = new Set<number>();
+                indices = [];
                 this.fileToItemIndices.set(filePath, indices);
             }
-            indices.add(i);
+            indices.push(i);
         }
     }
 
@@ -1105,8 +1115,8 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of this.activeFiles) {
             const itemIndices = this.fileToItemIndices.get(filePath);
             if (itemIndices) {
-                for (const index of itemIndices) {
-                    indices.push(index);
+                for (let i = 0; i < itemIndices.length; i++) {
+                    indices.push(itemIndices[i]);
                 }
             }
         }
@@ -1128,11 +1138,14 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of modifiedFiles) {
             const itemIndices = this.fileToItemIndices.get(filePath);
             if (itemIndices) {
-                for (const index of itemIndices) {
-                    indices.push(index);
+                for (let i = 0; i < itemIndices.length; i++) {
+                    indices.push(itemIndices[i]);
                 }
             }
         }
+
+        // Ensure indices are sorted ascending to preserve search ranking assumptions
+        indices.sort((a, b) => a - b);
 
         this.modifiedIndicesCache = {
             indices,
@@ -1835,9 +1848,8 @@ export class SearchEngine implements ISearchProvider {
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
             activityWeight: this.activityWeight,
-            invActivityWeight: 1 - this.activityWeight,
             queryLower,
-            fuzzyResults: new Array<number[][] | null>(this.items.length),
+            currentHighlights: null as number[][] | null,
         };
     }
 
@@ -1888,7 +1900,20 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
+        context.currentHighlights = null;
         const typeId = context.itemTypeIds[i];
+        const shouldPreserveEndpointRouteMatch =
+            context.isPotentialUrl && typeId === TYPE_TO_ID[SearchItemType.ENDPOINT];
+
+        // Fast path: bitflag check to quickly eliminate candidates that don't have all characters.
+        // Skip this for endpoint route matching because RouteMatcher can match parameterized paths
+        // whose concrete query characters are not present in the literal template.
+        if (
+            !shouldPreserveEndpointRouteMatch &&
+            (context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags
+        ) {
+            return;
+        }
 
         // Calculate score using multiple strategies
         let score = this.calculateSearchScore(i, typeId, context);
@@ -1912,11 +1937,6 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
-        // Fast path: bitflag check to quickly eliminate candidates that don't have all characters
-        if ((context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         return this.calculateFuzzyScore(i, typeId, context);
     }
 
@@ -1953,7 +1973,7 @@ export class SearchEngine implements ISearchProvider {
 
         const res = Fuzzysort.single(context.query, pName);
         if (res && res.score > context.MIN_SCORE) {
-            context.fuzzyResults[i] = this.indexesToHighlights(res.indexes);
+            context.currentHighlights = this.indexesToHighlights(res.indexes);
             return res.score;
         }
         return -Infinity;
@@ -2069,7 +2089,7 @@ export class SearchEngine implements ISearchProvider {
                 item,
                 score: score,
                 scope: resultScope,
-                highlights: context.fuzzyResults[i] ?? undefined,
+                highlights: context.currentHighlights ?? undefined,
             });
         }
     }
