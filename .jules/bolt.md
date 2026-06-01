@@ -53,3 +53,7 @@
 ## 2026-07-01 - [Fast Substring Extraction in Workspace Indexer]
 **Learning:** To improve performance when extracting a substring up to a delimiter (e.g., the first line of a file content buffer), using `content.split('\n')[0]` creates unnecessary memory overhead because it allocates an array of strings representing every chunk in the string.
 **Action:** Replace `content.split('\n')[0]` with `content.indexOf('\n')` combined with `content.slice(0, index)`. This avoids allocating an array of strings representing every chunk in the string, heavily reducing memory overhead and garbage collection during hot paths like workspace indexing.
+
+## 2026-05-28 - [Fast Substring Extraction in Workspace Indexer]
+**Learning:** To improve performance when extracting a substring up to a delimiter (e.g., the first line of a file content buffer), using `content.split('\n')[0]` creates unnecessary memory overhead because it allocates an array of strings representing every chunk in the string.
+**Action:** Replace `content.split('\n')[0]` with `content.indexOf('\n')` combined with `content.slice(0, index)`. This avoids allocating an array of strings representing every chunk in the string, heavily reducing memory overhead and garbage collection during hot paths like workspace indexing.
