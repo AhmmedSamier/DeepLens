@@ -53,7 +53,6 @@
 ## 2026-07-01 - [Fast Substring Extraction in Workspace Indexer]
 **Learning:** To improve performance when extracting a substring up to a delimiter (e.g., the first line of a file content buffer), using `content.split('\n')[0]` creates unnecessary memory overhead because it allocates an array of strings representing every chunk in the string.
 **Action:** Replace `content.split('\n')[0]` with `content.indexOf('\n')` combined with `content.slice(0, index)`. This avoids allocating an array of strings representing every chunk in the string, heavily reducing memory overhead and garbage collection during hot paths like workspace indexing.
-
-## 2026-05-28 - [Fast Substring Extraction in Workspace Indexer]
-**Learning:** To improve performance when extracting a substring up to a delimiter (e.g., the first line of a file content buffer), using `content.split('\n')[0]` creates unnecessary memory overhead because it allocates an array of strings representing every chunk in the string.
-**Action:** Replace `content.split('\n')[0]` with `content.indexOf('\n')` combined with `content.slice(0, index)`. This avoids allocating an array of strings representing every chunk in the string, heavily reducing memory overhead and garbage collection during hot paths like workspace indexing.
+## 2026-07-28 - [O(1) Early-Exit Optimization in Item Processing]
+**Learning:** In the `SearchEngine.processItemForSearch` method, calling `calculateSearchScore` adds a function call overhead for every evaluated item, even if the item is instantly rejected by the subsequent bitmask check.
+**Action:** Moving the O(1) bitflag early-exit check (`(context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags`) to the very top of `processItemForSearch` avoids unnecessary function call overhead (`calculateSearchScore`) and `typeId` lookups for the vast majority of items that do not contain the required characters, yielding a measurable performance gain in the hot path.

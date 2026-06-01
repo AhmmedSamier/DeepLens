@@ -1901,7 +1901,20 @@ export class SearchEngine implements ISearchProvider {
         heap: MinHeap<SearchResult>,
     ): void {
         context.currentHighlights = null;
+
         const typeId = context.itemTypeIds[i];
+        const shouldPreserveEndpointRouteMatch =
+            context.isPotentialUrl && typeId === TYPE_TO_ID[SearchItemType.ENDPOINT];
+
+        // Fast path: bitflag check to quickly eliminate candidates that don't have all characters.
+        // Skip this for endpoint route matching because RouteMatcher can match parameterized paths
+        // whose concrete query characters are not present in the literal template.
+        if (
+            !shouldPreserveEndpointRouteMatch &&
+            (context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags
+        ) {
+            return;
+        }
 
         // Calculate score using multiple strategies
         let score = this.calculateSearchScore(i, typeId, context);
@@ -1925,11 +1938,6 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
-        // Fast path: bitflag check to quickly eliminate candidates that don't have all characters
-        if ((context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         return this.calculateFuzzyScore(i, typeId, context);
     }
 
