@@ -456,12 +456,14 @@
                 VerticalAlignment="Center"
                 Visibility="{Binding IsSearching, Converter={StaticResource BooleanToVisibilityConverter}}">
                 <ProgressBar
+                    AutomationProperties.Name="Search in progress"
                     IsIndeterminate="True"
                     Width="150"
                     Height="4"
                     Margin="0,0,0,12"
                     Foreground="{DynamicResource {x:Static vsshell:VsBrushes.HighlightKey}}" />
                 <TextBlock
+                    AutomationProperties.Name="Search status"
                     Text="Searching..."
                     FontSize="16"
                     FontWeight="SemiBold"
