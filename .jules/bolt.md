@@ -49,6 +49,10 @@
 ## 2024-05-23 - Fast Tree-sitter Node Type Matching
 **Learning:** Replacing unanchored regex matchers (like `/class_declaration/`) with `===` causes critical regressions across different AST grammars, because Tree-sitter uses prefixes like `abstract_class_declaration` or `local_variable_declaration`.
 **Action:** When migrating away from regex in Tree-sitter node type checks, always use `.endsWith()` alongside strict equality (`===`) to preserve prefix compatibility while still benefiting from significant string-matching performance gains.
+<<<<<<< HEAD
 ## 2026-05-28 - Remove O(N) array allocation in SearchEngine context
 **Learning:** In single-threaded item processing loops (like `SearchEngine.processItemForSearch`), pre-allocating an O(N) array (e.g., `new Array(this.items.length)`) for temporary per-item data causes massive memory churn and garbage collection overhead during hot paths.
 **Action:** Avoid allocating O(N) arrays for temporary tracking. Instead, use a single scalar tracking variable on the context object and explicitly reset it to `null` at the beginning of each iteration.
+## 2026-07-01 - [Fast Substring Extraction in Workspace Indexer]
+**Learning:** To improve performance when extracting a substring up to a delimiter (e.g., the first line of a file content buffer), using `content.split('\n')[0]` creates unnecessary memory overhead because it allocates an array of strings representing every chunk in the string.
+**Action:** Replace `content.split('\n')[0]` with `content.indexOf('\n')` combined with `content.slice(0, index)`. This avoids allocating an array of strings representing every chunk in the string, heavily reducing memory overhead and garbage collection during hot paths like workspace indexing.

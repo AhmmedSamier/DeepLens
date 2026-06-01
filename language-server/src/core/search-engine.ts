@@ -1835,7 +1835,6 @@ export class SearchEngine implements ISearchProvider {
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
             activityWeight: this.activityWeight,
-            invActivityWeight: 1 - this.activityWeight,
             queryLower,
             currentHighlights: null as number[][] | null,
         };
