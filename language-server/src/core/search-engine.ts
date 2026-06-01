@@ -1900,11 +1900,6 @@ export class SearchEngine implements ISearchProvider {
         context: ReturnType<typeof this.prepareSearchContext>,
         heap: MinHeap<SearchResult>,
     ): void {
-        // Fast path: bitflag check to quickly eliminate candidates that don't have all characters
-        // We do this BEFORE any function calls, variable assignments, or endpoint checks to save overhead
-        if ((context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return;
-        }
         context.currentHighlights = null;
         const typeId = context.itemTypeIds[i];
         const shouldPreserveEndpointRouteMatch =
