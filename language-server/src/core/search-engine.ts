@@ -1901,7 +1901,6 @@ export class SearchEngine implements ISearchProvider {
         heap: MinHeap<SearchResult>,
     ): void {
         context.currentHighlights = null;
-
         const typeId = context.itemTypeIds[i];
         const shouldPreserveEndpointRouteMatch =
             context.isPotentialUrl && typeId === TYPE_TO_ID[SearchItemType.ENDPOINT];
