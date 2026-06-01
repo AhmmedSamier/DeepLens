@@ -146,42 +146,42 @@
                 CornerRadius="8,8,0,0">
                 <StackPanel Margin="8,8,8,0" Orientation="Horizontal">
                     <RadioButton
-                        Content="All" AutomationProperties.Name="Filter All"
+                        Content="All"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterAll, Mode=TwoWay}"
                         Style="{StaticResource TabButtonStyle}"
                         AutomationProperties.Name="Filter by All"
                         ToolTip="Search everywhere (/all)" />
                     <RadioButton
-                        Content="Classes" AutomationProperties.Name="Filter Classes"
+                        Content="Classes"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterClasses, Mode=TwoWay}"
                         Style="{StaticResource TabButtonStyle}"
                         AutomationProperties.Name="Filter by Classes"
                         ToolTip="Search types &amp; interfaces (/t)" />
                     <RadioButton
-                        Content="Symbols" AutomationProperties.Name="Filter Symbols"
+                        Content="Symbols"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterSymbols, Mode=TwoWay}"
                         Style="{StaticResource TabButtonStyle}"
                         AutomationProperties.Name="Filter by Symbols"
                         ToolTip="Search methods &amp; variables (/s or #)" />
                     <RadioButton
-                        Content="Files" AutomationProperties.Name="Filter Files"
+                        Content="Files"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterFiles, Mode=TwoWay}"
                         Style="{StaticResource TabButtonStyle}"
                         AutomationProperties.Name="Filter by Files"
                         ToolTip="Search files by name (/f)" />
                     <RadioButton
-                        Content="Text" AutomationProperties.Name="Filter Text"
+                        Content="Text"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterText, Mode=TwoWay}"
                         Style="{StaticResource TabButtonStyle}"
                         AutomationProperties.Name="Filter by Text"
                         ToolTip="Search file content (/txt)" />
                     <RadioButton
-                        Content="Endpoints" AutomationProperties.Name="Filter Endpoints"
+                        Content="Endpoints"
                         GroupName="SearchTabs"
                         IsChecked="{Binding FilterEndpoints, Mode=TwoWay}"
                         Style="{StaticResource TabButtonStyle}"
