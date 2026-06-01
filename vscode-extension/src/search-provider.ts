@@ -1491,12 +1491,10 @@ export class SearchProvider {
 
         // Auto-select the best recovery action
         // Prioritize clearing query, then switching scope, then native search
-        const bestAction = quickPick.items.find(
-            (i) =>
-                i.result.item.id === this.CMD_CLEAR_QUERY ||
-                i.result.item.id === this.CMD_SWITCH_SCOPE ||
-                i.result.item.id === this.CMD_NATIVE_SEARCH,
-        );
+        const bestAction =
+            quickPick.items.find((i) => i.result.item.id === this.CMD_CLEAR_QUERY) ||
+            quickPick.items.find((i) => i.result.item.id === this.CMD_SWITCH_SCOPE) ||
+            quickPick.items.find((i) => i.result.item.id === this.CMD_NATIVE_SEARCH);
 
         if (bestAction) {
             quickPick.activeItems = [bestAction];
@@ -1603,12 +1601,14 @@ export class SearchProvider {
         }
 
         if (selected.result.item.id === this.CMD_REBUILD_INDEX) {
+            this.showFeedback('Rebuilding index...');
             vscode.commands.executeCommand('deeplens.rebuildIndex');
             quickPick.hide();
             return true;
         }
 
         if (selected.result.item.id === this.CMD_CLEAR_CACHE) {
+            this.showFeedback('Clearing index cache...');
             vscode.commands.executeCommand('deeplens.clearIndexCache');
             quickPick.hide();
             return true;
