@@ -1845,7 +1845,6 @@ export class SearchEngine implements ISearchProvider {
             preparedPatterns: this.preparedPatterns,
             getActivityScore: this.getActivityScore,
             activityWeight: this.activityWeight,
-            invActivityWeight: 1 - this.activityWeight,
             queryLower,
             // eslint-disable-next-line sonarjs/array-constructor
             fuzzyResults: new Array<number[][] | null>(this.items.length),
