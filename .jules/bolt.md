@@ -62,3 +62,6 @@
 ## 2026-07-28 - [O(1) Early-Exit Optimization in Item Processing]
 **Learning:** In the `SearchEngine.processItemForSearch` method, calling `calculateSearchScore` adds a function call overhead for every evaluated item, even if the item is instantly rejected by the subsequent bitmask check.
 **Action:** Moving the O(1) bitflag early-exit check (`(context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags)` to the very top of `processItemForSearch` avoids unnecessary function call overhead (`calculateSearchScore`) and `typeId` lookups for the vast majority of items that do not contain the required characters, yielding a measurable performance gain in the hot path.
+## 2025-05-25 - [Fast Route Matcher Endpoint Fallback Bypass]
+**Learning:** Found an inefficiency where `calculateSearchScore` was called unconditionally for endpoint items even if they did not pass the bitflag characters match. The bitflag check was skipped to allow for parameterized `RouteMatcher` evaluations, but `calculateSearchScore` was still evaluated and returning -Infinity when fuzzy scoring failed.
+**Action:** Used the `passesBitflag` boolean to conditionally bypass `calculateSearchScore` when evaluating items that failed the characters check but were preserved for route matching, avoiding wasted cycles.

@@ -1908,15 +1908,17 @@ export class SearchEngine implements ISearchProvider {
         // Fast path: bitflag check to quickly eliminate candidates that don't have all characters.
         // Skip this for endpoint route matching because RouteMatcher can match parameterized paths
         // whose concrete query characters are not present in the literal template.
-        if (
-            !shouldPreserveEndpointRouteMatch &&
-            (context.itemBitflags[i] & context.queryBitflags) !== context.queryBitflags
-        ) {
+        const passesBitflag = (context.itemBitflags[i] & context.queryBitflags) === context.queryBitflags;
+
+        if (!passesBitflag && !shouldPreserveEndpointRouteMatch) {
             return;
         }
 
-        // Calculate score using multiple strategies
-        let score = this.calculateSearchScore(i, typeId, context);
+        // ⚡ Bolt: Fast fuzzy search skip
+        // If the item doesn't pass the bitflag check, any fuzzy search will inherently fail.
+        // We only bypassed the return above to allow RouteMatcher to evaluate parameterized endpoints.
+        // Skip the expensive calculateSearchScore (fuzzy matching) if we know the characters are missing.
+        let score = passesBitflag ? this.calculateSearchScore(i, typeId, context) : -Infinity;
         let resultScope: SearchScope | undefined;
 
         // Check for URL/Endpoint match
