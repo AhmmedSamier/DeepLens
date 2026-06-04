@@ -1621,6 +1621,10 @@ export class SearchProvider {
 
         if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
             quickPick.value = '';
+            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = SearchScope.EVERYTHING;
+            this.updateFilterButtons(quickPick);
+            quickPick.placeholder = this.getPlaceholder();
 
             // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
             // We must manually trigger the query change logic to update the list
@@ -1631,7 +1635,7 @@ export class SearchProvider {
                 () => {},
             );
 
-            this.showFeedback('Search query cleared');
+            this.showFeedback('Search and filters cleared');
             return true;
         }
 
@@ -1698,8 +1702,8 @@ export class SearchProvider {
 
         // 2. Clear Query Action (Immediate Recovery Path)
         addCommandItem(
-            'Clear Search Query',
-            'Start a new search',
+            'Clear Search',
+            'Start a new search and reset filters',
             new vscode.ThemeIcon('clear-all'),
             this.CMD_CLEAR_QUERY,
         );
