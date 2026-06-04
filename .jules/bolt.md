@@ -65,3 +65,7 @@
 ## 2025-05-25 - [Fast Route Matcher Endpoint Fallback Bypass]
 **Learning:** Found an inefficiency where `calculateSearchScore` was called unconditionally for endpoint items even if they did not pass the bitflag characters match. The bitflag check was skipped to allow for parameterized `RouteMatcher` evaluations, but `calculateSearchScore` was still evaluated and returning -Infinity when fuzzy scoring failed.
 **Action:** Used the `passesBitflag` boolean to conditionally bypass `calculateSearchScore` when evaluating items that failed the characters check but were preserved for route matching, avoiding wasted cycles.
+
+## 2026-06-04 - [Defer Property Array Reads in Hot Paths]
+**Learning:** In hot loops, evaluating boolean expressions and reading from parallel arrays (like `itemTypeIds`) before an early-exit check incurs unnecessary memory access and condition evaluation overhead for items that are immediately rejected.
+**Action:** Defer reading from property arrays and complex conditional logic until *after* cheap O(1) early-exit checks (like bitflags) have passed. This prevents wasted cycles and memory access.

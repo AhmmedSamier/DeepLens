@@ -1901,17 +1901,27 @@ export class SearchEngine implements ISearchProvider {
         heap: MinHeap<SearchResult>,
     ): void {
         context.currentHighlights = null;
-        const typeId = context.itemTypeIds[i];
-        const shouldPreserveEndpointRouteMatch =
-            context.isPotentialUrl && typeId === TYPE_TO_ID[SearchItemType.ENDPOINT];
 
         // Fast path: bitflag check to quickly eliminate candidates that don't have all characters.
-        // Skip this for endpoint route matching because RouteMatcher can match parameterized paths
-        // whose concrete query characters are not present in the literal template.
         const passesBitflag = (context.itemBitflags[i] & context.queryBitflags) === context.queryBitflags;
 
-        if (!passesBitflag && !shouldPreserveEndpointRouteMatch) {
-            return;
+        // ⚡ Bolt: Defer reading from property arrays until after the cheap bitflag check
+        // This avoids memory accesses and unnecessary boolean condition evaluations for items
+        // that are immediately rejected.
+        let typeId = 0;
+        let shouldPreserveEndpointRouteMatch = false;
+
+        if (!passesBitflag) {
+            // Even if the bitflag fails, we might still need to evaluate parameterized endpoints
+            if (context.isPotentialUrl) {
+                typeId = context.itemTypeIds[i];
+                shouldPreserveEndpointRouteMatch = typeId === TYPE_TO_ID[SearchItemType.ENDPOINT];
+            }
+            if (!shouldPreserveEndpointRouteMatch) {
+                return;
+            }
+        } else {
+            typeId = context.itemTypeIds[i];
         }
 
         // ⚡ Bolt: Fast fuzzy search skip
