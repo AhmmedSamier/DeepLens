@@ -615,13 +615,21 @@ export class TreeSitterParser {
         if (nodeType.endsWith('class_declaration') || nodeType.endsWith('class_definition') || nodeType === 'class') {
             return SearchItemType.CLASS;
         }
-        if (nodeType.endsWith('interface_declaration') || nodeType.endsWith('interface_definition') || nodeType === 'interface') {
+        if (
+            nodeType.endsWith('interface_declaration') ||
+            nodeType.endsWith('interface_definition') ||
+            nodeType === 'interface'
+        ) {
             return SearchItemType.INTERFACE;
         }
         if (nodeType.endsWith('enum_declaration') || nodeType.endsWith('enum_definition') || nodeType === 'enum') {
             return SearchItemType.ENUM;
         }
-        if (nodeType.endsWith('struct_declaration') || nodeType.endsWith('struct_definition') || nodeType === 'struct') {
+        if (
+            nodeType.endsWith('struct_declaration') ||
+            nodeType.endsWith('struct_definition') ||
+            nodeType === 'struct'
+        ) {
             return SearchItemType.CLASS;
         }
         if (nodeType.endsWith('trait_declaration') || nodeType.endsWith('trait_definition') || nodeType === 'trait') {
@@ -629,10 +637,18 @@ export class TreeSitterParser {
         }
 
         // Functions & Methods
-        if (nodeType.endsWith('method_declaration') || nodeType.endsWith('method_definition') || nodeType === 'method') {
+        if (
+            nodeType.endsWith('method_declaration') ||
+            nodeType.endsWith('method_definition') ||
+            nodeType === 'method'
+        ) {
             return SearchItemType.METHOD;
         }
-        if (nodeType.endsWith('function_declaration') || nodeType.endsWith('function_definition') || nodeType === 'function') {
+        if (
+            nodeType.endsWith('function_declaration') ||
+            nodeType.endsWith('function_definition') ||
+            nodeType === 'function'
+        ) {
             return SearchItemType.FUNCTION;
         }
 
