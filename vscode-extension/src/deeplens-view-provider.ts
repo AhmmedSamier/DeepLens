@@ -1,12 +1,9 @@
 import * as vscode from 'vscode';
 import { Config } from '../../language-server/src/core/config';
-import {
-    SearchOptions,
-    SearchResult,
-    SearchScope,
-} from '../../language-server/src/core/types';
+import { SearchOptions, SearchResult, SearchScope } from '../../language-server/src/core/types';
 import { DeepLensLspClient } from './lsp-client';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
+import { logger } from './services/logging-service';
 
 export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
     public static readonly viewType = 'deeplens.searchView';
@@ -91,7 +88,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                     this._view?.webview.postMessage({ type: 'results', results, requestId });
                 }
             } catch (error) {
-                console.error('Search failed:', error);
+                logger.error('DeepLens search view search failed', error);
                 if (requestId === this.lastRequestId) {
                     this._view?.webview.postMessage({ type: 'results', results: [], requestId });
                 }
@@ -115,7 +112,8 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             if (!preview) {
                 this.recordActivity(result);
             }
-        } catch {
+        } catch (error) {
+            logger.error(`Failed to open file from DeepLens search view: ${item.filePath}`, error);
             vscode.window.showErrorMessage(`Failed to open file: ${item.filePath}`);
         }
     }
