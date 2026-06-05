@@ -854,14 +854,14 @@ export class SearchProvider {
         }
 
         if (tooltip === this.TOOLTIP_REBUILD_INDEX) {
-            this.showFeedback('Rebuilding index...');
+            this.showFeedback('Rebuilding DeepLens index...');
             vscode.commands.executeCommand('deeplens.rebuildIndex');
             quickPick.hide();
             return;
         }
 
         if (tooltip === this.TOOLTIP_CLEAR_CACHE) {
-            this.showFeedback('Clearing index cache...');
+            this.showFeedback('DeepLens: Clearing index cache...');
             vscode.commands.executeCommand('deeplens.clearIndexCache');
             quickPick.hide();
             return;
