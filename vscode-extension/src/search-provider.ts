@@ -854,12 +854,14 @@ export class SearchProvider {
         }
 
         if (tooltip === this.TOOLTIP_REBUILD_INDEX) {
+            this.showFeedback('Rebuilding DeepLens index...');
             vscode.commands.executeCommand('deeplens.rebuildIndex');
             quickPick.hide();
             return;
         }
 
         if (tooltip === this.TOOLTIP_CLEAR_CACHE) {
+            this.showFeedback('DeepLens: Clearing index cache...');
             vscode.commands.executeCommand('deeplens.clearIndexCache');
             quickPick.hide();
             return;
@@ -1621,6 +1623,10 @@ export class SearchProvider {
 
         if (selected.result.item.id === this.CMD_CLEAR_QUERY) {
             quickPick.value = '';
+            this.userSelectedScope = SearchScope.EVERYTHING;
+            this.currentScope = SearchScope.EVERYTHING;
+            this.updateFilterButtons(quickPick);
+            quickPick.placeholder = this.getPlaceholder();
 
             // Programmatically changing QuickPick.value does not fire onDidChangeValue in VS Code
             // We must manually trigger the query change logic to update the list
@@ -1631,7 +1637,7 @@ export class SearchProvider {
                 () => {},
             );
 
-            this.showFeedback('Search query cleared');
+            this.showFeedback('Search and filters cleared');
             return true;
         }
 
@@ -1698,8 +1704,8 @@ export class SearchProvider {
 
         // 2. Clear Query Action (Immediate Recovery Path)
         addCommandItem(
-            'Clear Search Query',
-            'Start a new search',
+            'Clear Search',
+            'Start a new search and reset filters',
             new vscode.ThemeIcon('clear-all'),
             this.CMD_CLEAR_QUERY,
         );
