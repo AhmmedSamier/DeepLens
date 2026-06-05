@@ -47,6 +47,11 @@
 ## 2026-05-30 - Added Loading Feedback to Empty State Actions
 **Learning:** Empty state actionable buttons (like Rebuild Index or Clear Cache) execute long-running commands silently, leaving users unsure if their click registered. This is a common pattern in VS Code QuickPick items that execute commands.
 **Action:** When executing async commands from a QuickPick, always use `this.showFeedback()` or `vscode.window.showInformationMessage()` *before* calling `quickPick.hide()` to provide immediate visual confirmation.
+
+## 2026-06-01 - Inline QuickPick Button Feedback
+**Learning:** Inline QuickPick item buttons (like Rebuild Index or Clear Cache) execute async commands silently, leaving users unsure if their click registered, similar to empty state actions.
+**Action:** When executing async commands from inline QuickPick item buttons, always use `this.showFeedback()` or `vscode.window.showInformationMessage()` *before* calling `quickPick.hide()` to provide immediate visual confirmation.
+
 ## 2026-06-04 - Reset Filters on Clear Search in VS Code QuickPick
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" action that only clears the text query leaves users stuck in a filtered state they might not realize they're in. This increases cognitive load and friction.
 **Action:** When implementing "Clear Search" functionality, always ensure all active filters and scopes are reset alongside the text input, and update the UI feedback to clearly communicate the complete reset.
