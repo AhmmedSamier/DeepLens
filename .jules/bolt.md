@@ -65,3 +65,6 @@
 ## 2025-05-25 - [Fast Route Matcher Endpoint Fallback Bypass]
 **Learning:** Found an inefficiency where `calculateSearchScore` was called unconditionally for endpoint items even if they did not pass the bitflag characters match. The bitflag check was skipped to allow for parameterized `RouteMatcher` evaluations, but `calculateSearchScore` was still evaluated and returning -Infinity when fuzzy scoring failed.
 **Action:** Used the `passesBitflag` boolean to conditionally bypass `calculateSearchScore` when evaluating items that failed the characters check but were preserved for route matching, avoiding wasted cycles.
+## 2026-08-01 - [Deferred Array Lookup in Hot Loops]
+**Learning:** In hot loops like `SearchEngine.processItemForSearch`, reading from property arrays (e.g., `itemTypeIds[i]`) and evaluating multiple boolean conditions before the primary early-exit check (the O(1) bitflag filter) incurs measurable overhead. Because the vast majority of items are instantly rejected by the bitflag check, these array reads and conditional evaluations are entirely wasted cycles.
+**Action:** When applying multiple filters in a hot loop, always evaluate the fastest, most restrictive early-exit condition (like bitflags) first. Defer array lookups and complex boolean evaluations until *after* the fast check has passed to avoid unnecessary memory access overhead.
