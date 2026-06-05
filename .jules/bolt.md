@@ -68,3 +68,7 @@
 ## 2026-08-01 - [Deferred Array Lookup in Hot Loops]
 **Learning:** In hot loops like `SearchEngine.processItemForSearch`, reading from property arrays (e.g., `itemTypeIds[i]`) and evaluating multiple boolean conditions before the primary early-exit check (the O(1) bitflag filter) incurs measurable overhead. Because the vast majority of items are instantly rejected by the bitflag check, these array reads and conditional evaluations are entirely wasted cycles.
 **Action:** When applying multiple filters in a hot loop, always evaluate the fastest, most restrictive early-exit condition (like bitflags) first. Defer array lookups and complex boolean evaluations until *after* the fast check has passed to avoid unnecessary memory access overhead.
+
+## 2026-08-01 - [O(1) Bitflag Deferral in processItemForSearch]
+**Learning:** Evaluated that the O(1) bitflag early-exit check is significantly faster when it happens before accessing array values from `itemTypeIds` or evaluating endpoint constraints. Fetching from `itemTypeIds[i]` on every loop iteration incurs an unnecessary memory access overhead that can be safely avoided for items immediately filtered.
+**Action:** Defer memory access (e.g. `context.itemTypeIds[i]`) and URL potential evaluations until *after* the `passesBitflag` check. This prevents unnecessary property retrieval and CPU evaluation cycles, decreasing execution time for instantly rejected items.
