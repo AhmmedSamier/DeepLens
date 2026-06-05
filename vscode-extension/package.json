@@ -32,6 +32,10 @@
                 "title": "DeepLens: Search Everywhere"
             },
             {
+                "command": "deeplens.focusView",
+                "title": "DeepLens: Focus Search View"
+            },
+            {
                 "command": "deeplens.rebuildIndex",
                 "title": "DeepLens: Rebuild Index"
             },
@@ -65,6 +69,25 @@
                 "when": "editorTextFocus"
             }
         ],
+        "viewsContainers": {
+            "activitybar": [
+                {
+                    "id": "deeplens-view",
+                    "title": "DeepLens",
+                    "icon": "icon.png"
+                }
+            ]
+        },
+        "views": {
+            "deeplens-view": [
+                {
+                    "type": "webview",
+                    "id": "deeplens.searchView",
+                    "name": "Search",
+                    "visibility": "visible"
+                }
+            ]
+        },
         "configuration": {
             "title": "DeepLens",
             "properties": {
