@@ -282,18 +282,28 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         });
 
         function renderResults() {
-            resultsContainer.innerHTML = '';
+            resultsContainer.textContent = '';
             selectedIndex = -1;
 
             results.forEach((result, index) => {
                 const item = result.item;
                 const div = document.createElement('div');
                 div.className = 'result-item';
-                div.innerHTML = \`
-                    <div class="result-name">\${escapeHtml(item.name)}</div>
-                    <div class="result-detail">\${escapeHtml(item.detail || '')}</div>
-                    <div class="result-path">\${escapeHtml(item.filePath)}</div>
-                \`;
+
+                const nameDiv = document.createElement('div');
+                nameDiv.className = 'result-name';
+                nameDiv.textContent = item.name;
+                div.appendChild(nameDiv);
+
+                const detailDiv = document.createElement('div');
+                detailDiv.className = 'result-detail';
+                detailDiv.textContent = item.detail || '';
+                div.appendChild(detailDiv);
+
+                const pathDiv = document.createElement('div');
+                pathDiv.className = 'result-path';
+                pathDiv.textContent = item.filePath;
+                div.appendChild(pathDiv);
 
                 div.addEventListener('click', () => {
                     selectItem(index);
@@ -337,15 +347,6 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                 }
             }
         });
-
-        function escapeHtml(unsafe) {
-            return unsafe
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
     </script>
 </body>
 </html>`;
