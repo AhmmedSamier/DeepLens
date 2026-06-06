@@ -69,3 +69,6 @@
 ## 2026-06-04 - [Defer Property Array Reads in Hot Paths]
 **Learning:** In hot loops, evaluating boolean expressions and reading from parallel arrays (like `itemTypeIds`) before an early-exit check incurs unnecessary memory access and condition evaluation overhead for items that are immediately rejected.
 **Action:** Defer reading from property arrays and complex conditional logic until *after* cheap O(1) early-exit checks (like bitflags) have passed. This prevents wasted cycles and memory access.
+## 2026-08-01 - [O(1) Set Removals for Reverse Indexing]
+**Learning:** Arrays (`number[]`) used as reverse index mapping structures (like `fileToItemIndices`) introduce severe O(N) performance regressions when item removals or updates are common because elements must be located using `.indexOf` and then removed via `.splice()`. This cascades into huge performance overhead as the workspace index grows and changes rapidly.
+**Action:** Always use a `Set<number>` for collections that map paths to items when those items need to be frequently removed, relocated, or modified. `Set.add()`, `Set.delete()`, and `Set.has()` operate in true O(1) time, avoiding algorithmic scaling issues during large-scale reindexing operations.

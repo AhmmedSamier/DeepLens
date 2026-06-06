@@ -179,7 +179,7 @@ export class SearchEngine implements ISearchProvider {
     private readonly scopedIndices: Map<SearchScope, number[]> = new Map();
 
     // Map Normalized File Path -> Set of Item Indices (Reverse Index for O(1) removal)
-    private readonly fileToItemIndices: Map<string, number[]> = new Map();
+    private readonly fileToItemIndices: Map<string, Set<number>> = new Map();
     private readonly itemIndexById: Map<string, number> = new Map();
 
     private modifiedIndicesCache: {
@@ -347,10 +347,10 @@ export class SearchEngine implements ISearchProvider {
         const normalizedFilePath = this.normalizePath(item.filePath);
         let fileIndices = this.fileToItemIndices.get(normalizedFilePath);
         if (!fileIndices) {
-            fileIndices = [];
+            fileIndices = new Set();
             this.fileToItemIndices.set(normalizedFilePath, fileIndices);
         }
-        fileIndices.push(globalIndex);
+        fileIndices.add(globalIndex);
     }
 
     /**
@@ -404,11 +404,11 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of filePaths) {
             const normalized = this.normalizePath(filePath);
             const indices = this.fileToItemIndices.get(normalized);
-            if (indices && indices.length > 0) {
+            if (indices && indices.size > 0) {
                 if (!normalizedRemovedPaths.has(normalized)) {
                     normalizedRemovedPaths.add(normalized);
-                    for (let i = 0; i < indices.length; i++) {
-                        indicesToRemove.push(indices[i]);
+                    for (const idx of indices) {
+                        indicesToRemove.push(idx);
                     }
                 }
             }
@@ -435,11 +435,8 @@ export class SearchEngine implements ISearchProvider {
         const normalized = this.normalizePath(item.filePath);
         const indices = this.fileToItemIndices.get(normalized);
         if (indices) {
-            const idx = indices.indexOf(index);
-            if (idx !== -1) {
-                indices.splice(idx, 1);
-            }
-            if (indices.length === 0) {
+            indices.delete(index);
+            if (indices.size === 0) {
                 this.fileToItemIndices.delete(normalized);
             }
         }
@@ -470,12 +467,8 @@ export class SearchEngine implements ISearchProvider {
             const normalized = this.normalizePath(item.filePath);
             const indices = this.fileToItemIndices.get(normalized);
             if (indices) {
-                const idx = indices.indexOf(src);
-                if (idx !== -1) {
-                    indices[idx] = dest;
-                } else {
-                    indices.push(dest);
-                }
+                indices.delete(src);
+                indices.add(dest);
             }
         }
     }
@@ -653,10 +646,10 @@ export class SearchEngine implements ISearchProvider {
             const filePath = this.normalizePath(this.items[i].filePath);
             let indices = this.fileToItemIndices.get(filePath);
             if (!indices) {
-                indices = [];
+                indices = new Set();
                 this.fileToItemIndices.set(filePath, indices);
             }
-            indices.push(i);
+            indices.add(i);
         }
     }
 
@@ -1115,8 +1108,8 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of this.activeFiles) {
             const itemIndices = this.fileToItemIndices.get(filePath);
             if (itemIndices) {
-                for (let i = 0; i < itemIndices.length; i++) {
-                    indices.push(itemIndices[i]);
+                for (const idx of itemIndices) {
+                    indices.push(idx);
                 }
             }
         }
@@ -1138,8 +1131,8 @@ export class SearchEngine implements ISearchProvider {
         for (const filePath of modifiedFiles) {
             const itemIndices = this.fileToItemIndices.get(filePath);
             if (itemIndices) {
-                for (let i = 0; i < itemIndices.length; i++) {
-                    indices.push(itemIndices[i]);
+                for (const idx of itemIndices) {
+                    indices.push(idx);
                 }
             }
         }

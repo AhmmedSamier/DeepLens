@@ -1,22 +1,54 @@
-1.  **Analyze the Issue & Identify UX Enhancements**:
-    -   We need to find and implement ONE micro-UX improvement that adds small touches of delight or accessibility to the UI.
-    -   As "Palette", I look for things like ARIA labels, missing focus states, loading feedback for async operations, empty states clarity, etc.
-    -   Looking at `.jules/palette.md` and the `vscode-extension/src/search-provider.ts` codebase, there's a memory rule: "When executing async commands from a QuickPick, always use `this.showFeedback()` or `vscode.window.showInformationMessage()` *before* calling `quickPick.hide()` to provide immediate visual confirmation."
-    -   In `handleItemButtonClick`, there are two buttons that execute long-running commands silently, leaving users unsure if their click registered before hiding:
-        -   `TOOLTIP_REBUILD_INDEX`: currently does `vscode.commands.executeCommand('deeplens.rebuildIndex'); quickPick.hide();`
-        -   `TOOLTIP_CLEAR_CACHE`: currently does `vscode.commands.executeCommand('deeplens.clearIndexCache'); quickPick.hide();`
-    -   These buttons should provide feedback to the user before hiding the QuickPick, similar to what is done in `handleEmptyStateAction` for the equivalent command items.
+1. **Analyze Problem:**
+   - The memory context says: "Do not replace `Set<number>` with arrays (`number[]`) in reverse indices (like `fileToItemIndices`) that require item removals. While arrays offer faster insertion, using `Array.indexOf` and `Array.splice` for removals introduces a severe O(N) algorithmic performance regression compared to O(1) `Set.delete()`."
+   - The field `fileToItemIndices` in `language-server/src/core/search-engine.ts` currently uses `number[]` (`Map<string, number[]>`), and item removal uses `.indexOf` and `.splice`, which is `O(N)`.
 
-2.  **Implementation Steps**:
-    -   Modify `vscode-extension/src/search-provider.ts`.
-    -   In `handleItemButtonClick`:
-        -   For `this.TOOLTIP_REBUILD_INDEX`, add `this.showFeedback('Rebuilding index...');` before `vscode.commands.executeCommand`.
-        -   For `this.TOOLTIP_CLEAR_CACHE`, add `this.showFeedback('Clearing index cache...');` before `vscode.commands.executeCommand`.
+2. **Change Field Type:**
+   - Update `private readonly fileToItemIndices: Map<string, number[]> = new Map();` to `Map<string, Set<number>>`.
 
-3.  **Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done**.
-    -   Run format, lint, and tests in `vscode-extension`.
+3. **Update Additions:**
+   - Instead of initializing as `[]`, initialize as `new Set()`.
+   - Instead of `.push(index)`, use `.add(index)`.
 
-4.  **Submit the PR**:
-    -   Create a PR with title "🎨 Palette: Add loading feedback to index management buttons"
-    -   Include `💡 What`, `🎯 Why`, and `📸 Before/After` or `♿ Accessibility` in the description.
-    -   Append journal entry to `.jules/palette.md` regarding adding feedback to action buttons in QuickPick (already exists but verify it's the right pattern).
+4. **Update Removals:**
+   - Instead of:
+     ```typescript
+     const idx = indices.indexOf(index);
+     if (idx !== -1) {
+         indices.splice(idx, 1);
+     }
+     if (indices.length === 0) { ... }
+     ```
+     Use:
+     ```typescript
+     indices.delete(index);
+     if (indices.size === 0) { ... }
+     ```
+
+5. **Update Updates (moveFillersToGaps):**
+   - Instead of:
+     ```typescript
+     const idx = indices.indexOf(src);
+     if (idx !== -1) {
+         indices[idx] = dest;
+     } else {
+         indices.push(dest);
+     }
+     ```
+     Use:
+     ```typescript
+     indices.delete(src);
+     indices.add(dest);
+     ```
+
+6. **Update Reads (Iterations):**
+   - In `getIndicesForOpenFiles` and `getIndicesForModifiedFiles`, change `for (let i = 0; i < itemIndices.length; i++)` to `for (const idx of itemIndices) { indices.push(idx); }`.
+
+7. **Verify & Format:**
+   - Run `bun run lint` and `bun run test`.
+   - Add the required PR title and description format.
+
+8. **Complete pre-commit steps:**
+   - Complete pre-commit steps to ensure proper testing, verification, review, and reflection are done.
+
+9. **Submit:**
+   - Use title '⚡ Bolt: Change fileToItemIndices to Map<string, Set<number>> for O(1) removals'.
