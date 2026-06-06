@@ -184,6 +184,10 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         .scope-button.active:hover {
             background: var(--vscode-button-hoverBackground);
         }
+        .scope-button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: -1px;
+        }
         .results-container {
             display: flex;
             flex-direction: column;
@@ -222,16 +226,16 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
 </head>
 <body>
     <div class="search-container">
-        <div class="scope-buttons">
-            <button class="scope-button active" data-scope="everything" title="Search Everything">All</button>
-            <button class="scope-button" data-scope="files" title="Search Files">Files</button>
-            <button class="scope-button" data-scope="types" title="Search Classes & Interfaces">Classes</button>
-            <button class="scope-button" data-scope="symbols" title="Search Methods & Functions">Symbols</button>
-            <button class="scope-button" data-scope="text" title="Search Text Content">Text</button>
-            <button class="scope-button" data-scope="open" title="Search Open Files">Open</button>
-            <button class="scope-button" data-scope="modified" title="Search Modified Files">Modified</button>
+        <div class="scope-buttons" role="group" aria-label="Search Filters">
+            <button class="scope-button active" data-scope="everything" title="Search Everything" aria-pressed="true">All</button>
+            <button class="scope-button" data-scope="files" title="Search Files" aria-pressed="false">Files</button>
+            <button class="scope-button" data-scope="types" title="Search Classes & Interfaces" aria-pressed="false">Classes</button>
+            <button class="scope-button" data-scope="symbols" title="Search Methods & Functions" aria-pressed="false">Symbols</button>
+            <button class="scope-button" data-scope="text" title="Search Text Content" aria-pressed="false">Text</button>
+            <button class="scope-button" data-scope="open" title="Search Open Files" aria-pressed="false">Open</button>
+            <button class="scope-button" data-scope="modified" title="Search Modified Files" aria-pressed="false">Modified</button>
         </div>
-        <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off">
+        <input type="text" id="search-input" aria-label="Search everywhere..." placeholder="Search everywhere..." autocomplete="off">
     </div>
     <div id="results" class="results-container"></div>
 
@@ -255,8 +259,12 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
 
         scopeButtons.forEach(button => {
             button.addEventListener('click', () => {
-                scopeButtons.forEach(b => b.classList.remove('active'));
+                scopeButtons.forEach(b => {
+                    b.classList.remove('active');
+                    b.setAttribute('aria-pressed', 'false');
+                });
                 button.classList.add('active');
+                button.setAttribute('aria-pressed', 'true');
                 currentScope = button.getAttribute('data-scope');
                 vscode.postMessage({
                     type: 'search',
