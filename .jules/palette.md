@@ -55,3 +55,6 @@
 ## 2026-06-04 - Reset Filters on Clear Search in VS Code QuickPick
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" action that only clears the text query leaves users stuck in a filtered state they might not realize they're in. This increases cognitive load and friction.
 **Action:** When implementing "Clear Search" functionality, always ensure all active filters and scopes are reset alongside the text input, and update the UI feedback to clearly communicate the complete reset.
+## 2026-06-07 - Webview Empty State Clear Action
+**Learning:** Empty search states in webviews (like DeepLens Search) without actionable elements increase friction. Users shouldn't have to manually clear filters and text inputs when no results are found.
+**Action:** Always provide an actionable recovery path (like a 'Clear Search' button) directly within the empty state container that resets both the text query and the active filters (scopes) to default settings.

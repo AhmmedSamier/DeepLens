@@ -218,6 +218,31 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             font-size: 11px;
             opacity: 0.5;
         }
+        .empty-state {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px 10px;
+            text-align: center;
+            color: var(--vscode-descriptionForeground);
+            gap: 12px;
+        }
+        .empty-state-message {
+            font-size: 13px;
+        }
+        .empty-state-btn {
+            background: var(--vscode-button-background);
+            color: var(--vscode-button-foreground);
+            border: none;
+            padding: 6px 12px;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .empty-state-btn:hover {
+            background: var(--vscode-button-hoverBackground);
+        }
     </style>
 </head>
 <body>
@@ -284,6 +309,42 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         function renderResults() {
             resultsContainer.innerHTML = '';
             selectedIndex = -1;
+
+            if (results.length === 0 && searchInput.value.trim() !== '') {
+                const emptyState = document.createElement('div');
+                emptyState.className = 'empty-state';
+
+                const message = document.createElement('div');
+                message.className = 'empty-state-message';
+                message.textContent = 'No results found.';
+                emptyState.appendChild(message);
+
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'empty-state-btn';
+                clearBtn.textContent = 'Clear Search';
+                clearBtn.addEventListener('click', () => {
+                    searchInput.value = '';
+                    currentScope = 'everything';
+
+                    scopeButtons.forEach(b => {
+                        if (b.getAttribute('data-scope') === 'everything') {
+                            b.classList.add('active');
+                        } else {
+                            b.classList.remove('active');
+                        }
+                    });
+
+                    vscode.postMessage({
+                        type: 'search',
+                        query: '',
+                        scope: 'everything'
+                    });
+                });
+                emptyState.appendChild(clearBtn);
+
+                resultsContainer.appendChild(emptyState);
+                return;
+            }
 
             results.forEach((result, index) => {
                 const item = result.item;
