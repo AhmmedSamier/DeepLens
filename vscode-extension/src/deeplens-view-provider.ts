@@ -540,8 +540,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             padding: 1px 8px 1px 4px;
             cursor: pointer;
             display: flex;
-            flex-direction: row;
-            align-items: center;
+            flex-direction: column;
             position: relative;
             min-height: 22px;
             box-sizing: border-box;
@@ -934,30 +933,36 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                 const div = document.createElement('div');
                 div.className = 'result-item';
 
+                // Row 1: icon + label + description
+                const row1 = document.createElement('div');
+                row1.className = 'result-row';
+
                 // Get icon for item type
                 const iconClass = getIconForItemType(item.type);
                 if (iconClass) {
                     const icon = document.createElement('i');
                     icon.className = \`codicon codicon-\${iconClass} result-icon\`;
-                    div.appendChild(icon);
+                    row1.appendChild(icon);
                 } else {
                     const iconPlaceholder = document.createElement('span');
                     iconPlaceholder.className = 'result-icon';
-                    div.appendChild(iconPlaceholder);
+                    row1.appendChild(iconPlaceholder);
                 }
 
                 // Highlighted label using match positions
                 const labelSpan = renderHighlightedLabel(item.name, result.highlights);
                 labelSpan.className = 'result-label';
-                div.appendChild(labelSpan);
+                row1.appendChild(labelSpan);
 
                 // Description (container name) shown to the right of label on same row
                 if (item.containerName) {
                     const descSpan = document.createElement('span');
                     descSpan.className = 'result-desc';
                     descSpan.textContent = item.containerName;
-                    div.appendChild(descSpan);
+                    row1.appendChild(descSpan);
                 }
+
+                div.appendChild(row1);
 
                 // Detail: split into dir (truncate-left) + basename:line (stable right)
                 if (item.type !== 'command' && item.filePath) {
@@ -1026,27 +1031,33 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                 const div = document.createElement('div');
                 div.className = 'result-item';
 
+                // Row 1: icon + label + description
+                const row1 = document.createElement('div');
+                row1.className = 'result-row';
+
                 // Icon
                 const iconClass = command.icon || 'run';
                 const icon = document.createElement('i');
                 icon.className = \`codicon codicon-\${iconClass} result-icon\`;
-                div.appendChild(icon);
+                row1.appendChild(icon);
 
                 // Label
                 const labelSpan = document.createElement('span');
                 labelSpan.className = 'result-label';
                 labelSpan.textContent = command.name || command.id || '/command';
-                div.appendChild(labelSpan);
+                row1.appendChild(labelSpan);
 
                 // Description
                 if (command.description) {
                     const descSpan = document.createElement('span');
                     descSpan.className = 'result-desc';
                     descSpan.textContent = command.description;
-                    div.appendChild(descSpan);
+                    row1.appendChild(descSpan);
                 }
 
-                // Recent badge
+                div.appendChild(row1);
+
+                // Recent badge (shown on same line as detail if no detail)
                 if (command.recent) {
                     const badge = document.createElement('span');
                     badge.className = 'recent-badge';
