@@ -946,39 +946,60 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
 
                 // Get icon for item type
                 const iconClass = getIconForItemType(item.type);
-                const iconHtml = iconClass ? \`<i class="codicon codicon-\${iconClass} result-icon"></i>\` : '<span class="result-icon"></span>';
+                if (iconClass) {
+                    const icon = document.createElement('i');
+                    icon.className = \`codicon codicon-\${iconClass} result-icon\`;
+                    div.appendChild(icon);
+                } else {
+                    const iconPlaceholder = document.createElement('span');
+                    iconPlaceholder.className = 'result-icon';
+                    div.appendChild(iconPlaceholder);
+                }
 
                 // Highlighted label using match positions
-                const labelHtml = renderHighlightedLabel(item.name, result.highlights);
+                const labelSpan = renderHighlightedLabel(item.name, result.highlights);
+                labelSpan.className = 'result-label';
+                div.appendChild(labelSpan);
 
                 // Description (container name) shown to the right of label on same row
-                const descHtml = item.containerName
-                    ? \`<span class="result-desc">\${escapeHtml(item.containerName)}</span>\`
-                    : '';
+                if (item.containerName) {
+                    const descSpan = document.createElement('span');
+                    descSpan.className = 'result-desc';
+                    descSpan.textContent = item.containerName;
+                    div.appendChild(descSpan);
+                }
 
                 // Detail: split into dir (truncate-left) + basename:line (stable right)
-                let detailHtml = '';
                 if (item.type !== 'command' && item.filePath) {
                     const relativePath = getRelativePath(item.filePath);
                     const slashIdx = Math.max(relativePath.lastIndexOf('/'), relativePath.lastIndexOf('\\\\'));
                     const dir = slashIdx >= 0 ? relativePath.slice(0, slashIdx + 1) : '';
                     const base = slashIdx >= 0 ? relativePath.slice(slashIdx + 1) : relativePath;
                     const lineInfo = item.line !== undefined ? \`:\${item.line + 1}\` : '';
-                    const dirHtml = dir ? \`<span class="result-detail-dir">\${escapeHtml(dir)}</span>\` : '';
-                    detailHtml = \`<div class="result-detail">\${dirHtml}<span class="result-detail-file">\${escapeHtml(base + lineInfo)}</span></div>\`;
+                    
+                    const detailDiv = document.createElement('div');
+                    detailDiv.className = 'result-detail';
+                    
+                    if (dir) {
+                        const dirSpan = document.createElement('span');
+                        dirSpan.className = 'result-detail-dir';
+                        dirSpan.textContent = dir;
+                        detailDiv.appendChild(dirSpan);
+                    }
+                    
+                    const fileSpan = document.createElement('span');
+                    fileSpan.className = 'result-detail-file';
+                    fileSpan.textContent = base + lineInfo;
+                    detailDiv.appendChild(fileSpan);
+                    
+                    div.appendChild(detailDiv);
                 }
 
-                const actionsHtml = renderResultActions(item);
-
-                div.innerHTML = \`
-                    <div class="result-row">
-                        \${iconHtml}
-                        <span class="result-label">\${labelHtml}</span>
-                        \${descHtml}
-                        \${actionsHtml}
-                    </div>
-                    \${detailHtml}
-                \`;
+                // Add result actions
+                const actionsContainer = document.createElement('div');
+                actionsContainer.className = 'result-actions';
+                renderResultActions(item, actionsContainer);
+                div.appendChild(actionsContainer);
 
                 div.addEventListener('click', () => {
                     selectItem(index);
@@ -1015,23 +1036,44 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                 const div = document.createElement('div');
                 div.className = 'result-item';
 
-                const icon = command.icon || 'run';
-                const label = escapeHtml(command.name || command.id || '/command');
-                const description = command.description ? \`<span class="result-desc">\${escapeHtml(command.description)}</span>\` : '';
-                const detail = command.example
-                    ? \`<div class="result-detail"><span class="result-detail-file">Try: \${escapeHtml(command.example)}</span></div>\`
-                    : '';
-                const recentBadge = command.recent ? '<span class="recent-badge">Recent</span>' : '';
+                // Icon
+                const iconClass = command.icon || 'run';
+                const icon = document.createElement('i');
+                icon.className = \`codicon codicon-\${iconClass} result-icon\`;
+                div.appendChild(icon);
 
-                div.innerHTML = \`
-                    <div class="result-row">
-                        <i class="codicon codicon-\${icon} result-icon"></i>
-                        <span class="result-label">\${label}</span>
-                        \${description}
-                        \${recentBadge}
-                    </div>
-                    \${detail}
-                \`;
+                // Label
+                const labelSpan = document.createElement('span');
+                labelSpan.className = 'result-label';
+                labelSpan.textContent = command.name || command.id || '/command';
+                div.appendChild(labelSpan);
+
+                // Description
+                if (command.description) {
+                    const descSpan = document.createElement('span');
+                    descSpan.className = 'result-desc';
+                    descSpan.textContent = command.description;
+                    div.appendChild(descSpan);
+                }
+
+                // Recent badge
+                if (command.recent) {
+                    const badge = document.createElement('span');
+                    badge.className = 'recent-badge';
+                    badge.textContent = 'Recent';
+                    div.appendChild(badge);
+                }
+
+                // Detail (example)
+                if (command.example) {
+                    const detailDiv = document.createElement('div');
+                    detailDiv.className = 'result-detail';
+                    const detailSpan = document.createElement('span');
+                    detailSpan.className = 'result-detail-file';
+                    detailSpan.textContent = 'Try: ' + command.example;
+                    detailDiv.appendChild(detailSpan);
+                    div.appendChild(detailDiv);
+                }
 
                 div.addEventListener('click', () => {
                     selectItem(index);
@@ -1049,23 +1091,68 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         }
 
         function renderEmptyState() {
-            const escaped = escapeHtml(searchInput.value);
-            const switchScope = currentScope !== 'everything'
-                ? '<button class="empty-state-btn" data-empty-action="global"><i class="codicon codicon-search"></i> Switch to Global Search</button>'
-                : '';
+            resultsContainer.textContent = '';
+            
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'empty-state';
+            messageDiv.textContent = 'No results found for \'' + searchInput.value + '\'.';
+            resultsContainer.appendChild(messageDiv);
 
-            resultsContainer.innerHTML = \`
-                <div class="empty-state">No results found for '\${escaped}'.</div>
-                <div class="empty-state-actions">
-                    <button class="empty-state-btn" data-empty-action="clear"><i class="codicon codicon-clear-all"></i> Clear Search</button>
-                    <button class="empty-state-btn" data-empty-action="recent"><i class="codicon codicon-history"></i> Show Recent History</button>
-                    \${switchScope}
-                    <button class="empty-state-btn" data-empty-action="native"><i class="codicon codicon-search-fuzzy"></i> Search in Files (Native)</button>
-                    <button class="empty-state-btn" data-empty-action="rebuild"><i class="codicon codicon-refresh"></i> Rebuild Index</button>
-                    <button class="empty-state-btn" data-empty-action="clear-cache"><i class="codicon codicon-trash"></i> Clear Index Cache</button>
-                    <button class="empty-state-btn" data-empty-action="settings"><i class="codicon codicon-settings-gear"></i> Configure Settings</button>
-                </div>
-            \`;
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'empty-state-actions';
+
+            // Clear Search button
+            const clearBtn = document.createElement('button');
+            clearBtn.className = 'empty-state-btn';
+            clearBtn.setAttribute('data-empty-action', 'clear');
+            clearBtn.innerHTML = '<i class="codicon codicon-clear-all"></i> Clear Search';
+            actionsDiv.appendChild(clearBtn);
+
+            // Show Recent History button
+            const recentBtn = document.createElement('button');
+            recentBtn.className = 'empty-state-btn';
+            recentBtn.setAttribute('data-empty-action', 'recent');
+            recentBtn.innerHTML = '<i class="codicon codicon-history"></i> Show Recent History';
+            actionsDiv.appendChild(recentBtn);
+
+            // Switch to Global Search button (if not already global)
+            if (currentScope !== 'everything') {
+                const globalBtn = document.createElement('button');
+                globalBtn.className = 'empty-state-btn';
+                globalBtn.setAttribute('data-empty-action', 'global');
+                globalBtn.innerHTML = '<i class="codicon codicon-search"></i> Switch to Global Search';
+                actionsDiv.appendChild(globalBtn);
+            }
+
+            // Search in Files (Native) button
+            const nativeBtn = document.createElement('button');
+            nativeBtn.className = 'empty-state-btn';
+            nativeBtn.setAttribute('data-empty-action', 'native');
+            nativeBtn.innerHTML = '<i class="codicon codicon-search-fuzzy"></i> Search in Files (Native)';
+            actionsDiv.appendChild(nativeBtn);
+
+            // Rebuild Index button
+            const rebuildBtn = document.createElement('button');
+            rebuildBtn.className = 'empty-state-btn';
+            rebuildBtn.setAttribute('data-empty-action', 'rebuild');
+            rebuildBtn.innerHTML = '<i class="codicon codicon-refresh"></i> Rebuild Index';
+            actionsDiv.appendChild(rebuildBtn);
+
+            // Clear Index Cache button
+            const clearCacheBtn = document.createElement('button');
+            clearCacheBtn.className = 'empty-state-btn';
+            clearCacheBtn.setAttribute('data-empty-action', 'clear-cache');
+            clearCacheBtn.innerHTML = '<i class="codicon codicon-trash"></i> Clear Index Cache';
+            actionsDiv.appendChild(clearCacheBtn);
+
+            // Configure Settings button
+            const settingsBtn = document.createElement('button');
+            settingsBtn.className = 'empty-state-btn';
+            settingsBtn.setAttribute('data-empty-action', 'settings');
+            settingsBtn.innerHTML = '<i class="codicon codicon-settings-gear"></i> Configure Settings';
+            actionsDiv.appendChild(settingsBtn);
+
+            resultsContainer.appendChild(actionsDiv);
 
             resultsContainer.querySelectorAll('[data-empty-action]').forEach((button) => {
                 button.addEventListener('click', () => {
@@ -1143,51 +1230,88 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             updateSummary();
         }
 
-        function renderResultActions(item) {
+        function renderResultActions(item, container) {
             if (item.type === 'command') {
-                return '';
+                return;
             }
 
             const symbolTypes = new Set(['class', 'interface', 'enum', 'function', 'method', 'property', 'variable']);
             const fileTypes = new Set(['file', 'text']);
-            let buttons = '';
 
-            buttons += '<button class="result-action-btn" data-action="copyPath" title="Copy Path"><i class="codicon codicon-copy"></i></button>';
+            const copyPathBtn = document.createElement('button');
+            copyPathBtn.className = 'result-action-btn';
+            copyPathBtn.setAttribute('data-action', 'copyPath');
+            copyPathBtn.title = 'Copy Path';
+            copyPathBtn.innerHTML = '<i class="codicon codicon-copy"></i>';
+            container.appendChild(copyPathBtn);
 
             if (symbolTypes.has(item.type)) {
-                buttons += '<button class="result-action-btn" data-action="copyReference" title="Copy Reference"><i class="codicon codicon-references"></i></button>';
+                const copyRefBtn = document.createElement('button');
+                copyRefBtn.className = 'result-action-btn';
+                copyRefBtn.setAttribute('data-action', 'copyReference');
+                copyRefBtn.title = 'Copy Reference';
+                copyRefBtn.innerHTML = '<i class="codicon codicon-references"></i>';
+                container.appendChild(copyRefBtn);
             }
 
             if (fileTypes.has(item.type)) {
-                buttons += '<button class="result-action-btn" data-action="copyRelativePath" title="Copy Relative Path"><i class="codicon codicon-file-submodule"></i></button>';
+                const copyRelPathBtn = document.createElement('button');
+                copyRelPathBtn.className = 'result-action-btn';
+                copyRelPathBtn.setAttribute('data-action', 'copyRelativePath');
+                copyRelPathBtn.title = 'Copy Relative Path';
+                copyRelPathBtn.innerHTML = '<i class="codicon codicon-file-submodule"></i>';
+                container.appendChild(copyRelPathBtn);
             }
 
-            buttons += '<button class="result-action-btn" data-action="openSide" title="Open to the Side"><i class="codicon codicon-split-horizontal"></i></button>';
+            const openSideBtn = document.createElement('button');
+            openSideBtn.className = 'result-action-btn';
+            openSideBtn.setAttribute('data-action', 'openSide');
+            openSideBtn.title = 'Open to the Side';
+            openSideBtn.innerHTML = '<i class="codicon codicon-split-horizontal"></i>';
+            container.appendChild(openSideBtn);
 
             if (fileTypes.has(item.type)) {
-                buttons += '<button class="result-action-btn" data-action="reveal" title="Reveal in Explorer"><i class="codicon codicon-folder-opened"></i></button>';
+                const revealBtn = document.createElement('button');
+                revealBtn.className = 'result-action-btn';
+                revealBtn.setAttribute('data-action', 'reveal');
+                revealBtn.title = 'Reveal in Explorer';
+                revealBtn.innerHTML = '<i class="codicon codicon-folder-opened"></i>';
+                container.appendChild(revealBtn);
             }
 
             if (recentHistoryMode) {
-                buttons += '<button class="result-action-btn" data-action="removeHistory" title="Remove from History"><i class="codicon codicon-trash"></i></button>';
+                const removeHistoryBtn = document.createElement('button');
+                removeHistoryBtn.className = 'result-action-btn';
+                removeHistoryBtn.setAttribute('data-action', 'removeHistory');
+                removeHistoryBtn.title = 'Remove from History';
+                removeHistoryBtn.innerHTML = '<i class="codicon codicon-trash"></i>';
+                container.appendChild(removeHistoryBtn);
             }
-
-            return \`<div class="result-actions">\${buttons}</div>\`;
         }
 
         function renderHighlightedLabel(name, highlights) {
-            if (!highlights || highlights.length === 0) return escapeHtml(name);
+            const span = document.createElement('span');
+            if (!highlights || highlights.length === 0) {
+                span.textContent = name;
+                return span;
+            }
             // highlights is array of [start, end] pairs (end exclusive)
             const ranges = highlights.slice().sort((a, b) => a[0] - b[0]);
-            let result = '';
             let pos = 0;
             for (const [start, end] of ranges) {
-                if (start > pos) result += escapeHtml(name.slice(pos, start));
-                result += '<b class="result-match">' + escapeHtml(name.slice(start, end)) + '</b>';
+                if (start > pos) {
+                    span.appendChild(document.createTextNode(name.slice(pos, start)));
+                }
+                const matchSpan = document.createElement('b');
+                matchSpan.className = 'result-match';
+                matchSpan.textContent = name.slice(start, end);
+                span.appendChild(matchSpan);
                 pos = end;
             }
-            if (pos < name.length) result += escapeHtml(name.slice(pos));
-            return result;
+            if (pos < name.length) {
+                span.appendChild(document.createTextNode(name.slice(pos)));
+            }
+            return span;
         }
 
         function getIconForItemType(type) {
@@ -1263,15 +1387,6 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                 }
             }
         });
-
-        function escapeHtml(unsafe) {
-            return unsafe
-                .replace(/&/g, "&amp;")
-                .replace(/</g, "&lt;")
-                .replace(/>/g, "&gt;")
-                .replace(/"/g, "&quot;")
-                .replace(/'/g, "&#039;");
-        }
 
         function tryTip() {
             const tips = [
