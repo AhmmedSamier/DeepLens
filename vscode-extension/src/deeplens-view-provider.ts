@@ -540,8 +540,8 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             padding: 1px 8px 1px 4px;
             cursor: pointer;
             display: flex;
-            flex-direction: column;
-            justify-content: center;
+            flex-direction: row;
+            align-items: center;
             position: relative;
             min-height: 22px;
             box-sizing: border-box;
