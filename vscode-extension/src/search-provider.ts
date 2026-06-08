@@ -4,13 +4,14 @@ import { Config } from '../../language-server/src/core/config';
 import {
     ISearchProvider,
     SearchItemType,
+    SearchOptions,
     SearchResult,
     SearchScope,
     SearchableItem,
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
+import { DeepLensLspClient } from './lsp-client';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
-import { SearchResultItem as SharedSearchResultItem, SearchService } from './services/search-service';
 
 /**
  * Search provider with enhanced UI (filter buttons, icons, counts)
@@ -20,14 +21,13 @@ export class SearchProvider {
     private readonly config: Config;
     private readonly activityTracker: ActivityTracker | undefined;
     private readonly commandIndexer: CommandIndexer | undefined;
-    private readonly searchService: SearchService;
     private readonly slashCommandService: SlashCommandService;
     private currentScope: SearchScope = SearchScope.EVERYTHING;
     private userSelectedScope: SearchScope = SearchScope.EVERYTHING;
     private readonly filterButtons: Map<SearchScope, vscode.QuickInputButton> = new Map();
     private lastQueryId = 0;
     private lastAutoRebuildTime = 0;
-    private currentQuickPick: vscode.QuickPick<SharedSearchResultItem> | null = null;
+    private currentQuickPick: vscode.QuickPick<SearchResultItem> | null = null;
     private searchCts: vscode.CancellationTokenSource | null = null;
     private burstSearchCts: vscode.CancellationTokenSource | null = null;
     private lastTitle = '';
@@ -136,7 +136,6 @@ export class SearchProvider {
         this.config = config;
         this.activityTracker = activityTracker;
         this.commandIndexer = commandIndexer;
-        this.searchService = new SearchService(searchEngine, config, activityTracker, commandIndexer);
         this.slashCommandService = new SlashCommandService();
         this.createFilterButtons();
 
@@ -564,8 +563,10 @@ export class SearchProvider {
     /**
      * Clear recent history
      */
-    private async performClearHistory(quickPick: vscode.QuickPick<SharedSearchResultItem>): Promise<void> {
-        await this.searchService.clearHistory();
+    private async performClearHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
+        if (this.searchEngine instanceof DeepLensLspClient) {
+            await this.searchEngine.clearHistory();
+        }
         if (this.activityTracker) {
             await this.activityTracker.clearAll();
         }
@@ -576,10 +577,10 @@ export class SearchProvider {
     /**
      * Show recent history items
      */
-    private async showRecentHistory(quickPick: vscode.QuickPick<SharedSearchResultItem>): Promise<void> {
+    private async showRecentHistory(quickPick: vscode.QuickPick<SearchResultItem>): Promise<void> {
         quickPick.busy = true;
         try {
-            const results = await this.searchService.getRecentItems(20);
+            const results = await this.searchEngine.getRecentItems(20);
 
             if (!results || results.length === 0) {
                 quickPick.items = this.getWelcomeItems();
@@ -606,7 +607,7 @@ export class SearchProvider {
                         scope: SearchScope.COMMANDS,
                     },
                 },
-                ...results.map((r) => this.searchService.createSearchResultItem(r)),
+                ...results.map((r) => this.resultToQuickPickItem(r)),
             ];
 
             // Add remove button to history items
@@ -877,10 +878,12 @@ export class SearchProvider {
     }
 
     private async handleRemoveHistoryItemClick(
-        quickPick: vscode.QuickPick<SharedSearchResultItem>,
+        quickPick: vscode.QuickPick<SearchResultItem>,
         result: SearchResult,
     ): Promise<void> {
-        await this.searchService.removeHistoryItem(result.item.id);
+        if (this.searchEngine instanceof DeepLensLspClient) {
+            await this.searchEngine.removeHistoryItem(result.item.id);
+        }
         if (this.activityTracker) {
             await this.activityTracker.removeItem(result.item.id);
         }
@@ -1192,10 +1195,13 @@ export class SearchProvider {
         }
 
         try {
-            const instantResults = await this.searchService.burstSearchWithCancellationToken(
-                trimmedQuery,
-                this.currentScope,
-                10,
+            const instantResults = await this.searchEngine.burstSearch(
+                {
+                    query: trimmedQuery,
+                    scope: this.currentScope,
+                    maxResults: 10,
+                    requestId: queryId,
+                },
                 burstToken,
             );
 
@@ -1204,7 +1210,7 @@ export class SearchProvider {
             }
 
             if (instantResults.length > 0) {
-                quickPick.items = instantResults.map((r) => this.searchService.createSearchResultItem(r));
+                quickPick.items = instantResults.map((r) => this.resultToQuickPickItem(r));
                 this.updateTitle(quickPick, instantResults.length);
             }
         } catch (error) {
@@ -1230,10 +1236,13 @@ export class SearchProvider {
                 }
 
                 try {
-                    const burstResults = await this.searchService.burstSearchWithCancellationToken(
-                        trimmedQuery,
-                        this.currentScope,
-                        30,
+                    const burstResults = await this.searchEngine.burstSearch(
+                        {
+                            query: trimmedQuery,
+                            scope: this.currentScope,
+                            maxResults: 30,
+                            requestId: queryId,
+                        },
                         burstToken,
                     );
 
@@ -1242,7 +1251,7 @@ export class SearchProvider {
                     }
 
                     if (burstResults.length > 0) {
-                        quickPick.items = burstResults.map((r) => this.searchService.createSearchResultItem(r));
+                        quickPick.items = burstResults.map((r) => this.resultToQuickPickItem(r));
                         this.updateTitle(quickPick, burstResults.length);
                     }
                 } catch (error) {
@@ -1380,13 +1389,20 @@ export class SearchProvider {
 
         const trimmedQuery = query.trim();
 
+        const options: SearchOptions = {
+            query: trimmedQuery,
+            scope: this.currentScope,
+            maxResults: this.config.getMaxResults(),
+            requestId: queryId,
+        };
+
         const startTime = Date.now();
         let results: SearchResult[] = [];
 
         try {
             // Optimization: Skip LSP search for commands (handled purely by local indexer)
             if (this.currentScope !== SearchScope.COMMANDS) {
-                results = await this.searchService.search(trimmedQuery, this.currentScope, this.config.getMaxResults());
+                results = await this.searchEngine.search(options, this.searchCts.token);
             }
         } catch (error) {
             if (error instanceof vscode.CancellationError) {
@@ -1449,7 +1465,7 @@ export class SearchProvider {
                     this.handleEmptyStateDisplay(quickPick, query, duration);
                 }
             } else {
-                quickPick.items = results.map((result) => this.searchService.createSearchResultItem(result));
+                quickPick.items = results.map((result) => this.resultToQuickPickItem(result));
                 this.updateTitle(quickPick, results.length, duration);
             }
         }
@@ -1494,14 +1510,14 @@ export class SearchProvider {
         // Only run for EVERYTHING scope and if searchEngine supports getIndexStats
         if (
             this.currentScope !== SearchScope.EVERYTHING ||
-            !this.searchService.getIndexStats ||
+            !this.searchEngine.getIndexStats ||
             queryId !== this.lastQueryId
         ) {
             return;
         }
 
         try {
-            const stats = await this.searchService.getIndexStats();
+            const stats = await this.searchEngine.getIndexStats();
             // Verify queryId is still valid after await
             if (queryId !== this.lastQueryId || !stats) {
                 return;
@@ -1793,7 +1809,17 @@ export class SearchProvider {
             const label = this.getWelcomeLabel(cmd);
 
             // Create base item
-            const item = this.createSlashCommandQuickPickItem(cmd);
+            const item = this.resultToQuickPickItem({
+                item: {
+                    id: `slash-cmd:${cmd.id}`,
+                    name: label,
+                    type: SearchItemType.COMMAND,
+                    filePath: '',
+                    detail: '', // Keep empty so resultToQuickPickItem doesn't mess with it
+                },
+                score: 1,
+                scope: cmd.scope,
+            });
 
             // Palette: Move primary interaction trigger to description, explanation to detail
             item.label = label;
@@ -1921,35 +1947,6 @@ export class SearchProvider {
 
     private isInlineButtonAllowed(type: SearchItemType): boolean {
         return this.ALLOWED_INLINE_BUTTON_TYPES.has(type);
-    }
-
-    /**
-     * Create QuickPick item for slash commands (special formatting)
-     */
-    private createSlashCommandQuickPickItem(cmd: SlashCommand): SearchResultItem {
-        const label = this.getWelcomeLabel(cmd);
-        const description = cmd.name || '';
-        const explanation = cmd.description;
-        const detail = cmd.keyboardShortcut ? `${explanation} • ${cmd.keyboardShortcut}` : explanation;
-
-        return {
-            label,
-            description,
-            detail,
-            iconPath: new vscode.ThemeIcon(cmd.icon, new vscode.ThemeColor('textLink.foreground')),
-            alwaysShow: true,
-            result: {
-                item: {
-                    id: `slash-cmd:${cmd.id}`,
-                    name: label,
-                    type: SearchItemType.COMMAND,
-                    filePath: '',
-                    detail: '',
-                },
-                score: 1,
-                scope: cmd.scope,
-            },
-        };
     }
 
     /**
@@ -2172,7 +2169,7 @@ export class SearchProvider {
     private recordItemActivity(item: SearchableItem, preview: boolean): void {
         // Don't record activity for previews
         if (!preview && this.config.isActivityTrackingEnabled()) {
-            this.searchService.recordActivity(item, preview);
+            this.searchEngine.recordActivity(item.id);
             if (this.activityTracker) {
                 this.activityTracker.recordAccess(item);
             }

@@ -55,6 +55,3 @@
 ## 2026-06-04 - Reset Filters on Clear Search in VS Code QuickPick
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" action that only clears the text query leaves users stuck in a filtered state they might not realize they're in. This increases cognitive load and friction.
 **Action:** When implementing "Clear Search" functionality, always ensure all active filters and scopes are reset alongside the text input, and update the UI feedback to clearly communicate the complete reset.
-## 2026-06-05 - Actionable Empty State with .textContent
-**Learning:** When generating actionable empty states dynamically in webviews (e.g., "No results for X"), using `.innerHTML` with a custom escape function risks `ReferenceError` crashes if the escape function isn't perfectly bundled. It also exposes a theoretical XSS vector.
-**Action:** Always use native DOM methods like `document.createElement` and `.textContent` when injecting user input into webviews to ensure robust, built-in XSS protection and zero dependency on custom escape utilities.

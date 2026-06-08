@@ -87,30 +87,8 @@ function copyWasmFiles() {
     }
 }
 
-/**
- * Copy codicon assets to dist/codicons
- */
-function copyCodicons() {
-    const codiconsDir = path.join(__dirname, 'dist', 'codicons');
-    if (!fs.existsSync(codiconsDir)) {
-        fs.mkdirSync(codiconsDir, { recursive: true });
-    }
-
-    const codiconFiles = ['codicon.css', 'codicon.ttf', 'codicon.svg'];
-    const codiconsRoot = path.join(__dirname, 'node_modules', '@vscode', 'codicons', 'dist');
-
-    for (const file of codiconFiles) {
-        const srcPath = path.join(codiconsRoot, file);
-        if (fs.existsSync(srcPath)) {
-            fs.copyFileSync(srcPath, path.join(codiconsDir, file));
-            console.log(`Copied ${file}`);
-        }
-    }
-}
-
 async function main() {
     copyWasmFiles();
-    copyCodicons();
 
     const ctx = await esbuild.context({
         entryPoints: {

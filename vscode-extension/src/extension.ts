@@ -14,7 +14,6 @@ import { logger } from './services/logging-service';
 
 let lspClient: DeepLensLspClient;
 let searchProvider: SearchProvider;
-let viewProvider: DeepLensViewProvider;
 let config: Config;
 let activityTracker: ActivityTracker;
 let commandIndexer: CommandIndexer;
@@ -724,9 +723,6 @@ export async function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         lspClient.onRipgrepUnavailable.event(() => {
             searchProvider.disableTextSearch();
-            if (viewProvider) {
-                viewProvider.disableTextSearch();
-            }
             vscode.window
                 .showWarningMessage('DeepLens: Ripgrep is unavailable. Text search is disabled.', 'Open Settings')
                 .then((val) => {
@@ -784,7 +780,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     // Register search view provider
-    viewProvider = new DeepLensViewProvider(context, lspClient, config, activityTracker, commandIndexer);
+    const viewProvider = new DeepLensViewProvider(context, lspClient, config, activityTracker);
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(DeepLensViewProvider.viewType, viewProvider),
         viewProvider,

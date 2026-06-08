@@ -122,6 +122,8 @@ export interface ISearchProvider {
     getRecentItems?(count: number): Promise<SearchResult[]> | SearchResult[];
     recordActivity?(itemId: string): Promise<void> | void;
     getIndexStats?(): Promise<IndexStats | undefined>;
+    clearHistory?(): Promise<void>;
+    removeHistoryItem?(itemId: string): Promise<void>;
 }
 
 /**
