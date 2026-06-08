@@ -123,8 +123,7 @@ export class SearchService {
 
     async getRecentItems(limit: number = 20): Promise<SearchResult[]> {
         try {
-            const results = await this.searchEngine.getRecentItems(limit);
-            return results;
+            return await this.searchEngine.getRecentItems(limit);
         } catch (error) {
             console.error('Failed to get recent items:', error);
             return [];
@@ -189,48 +188,7 @@ export class SearchService {
             detail = item.detail || '';
         }
 
-        const buttons: vscode.QuickInputButton[] = [];
-
-        if (this.isInlineButtonAllowed(item.type)) {
-            buttons.push({
-                iconPath: new vscode.ThemeIcon('copy'),
-                tooltip: 'Copy Path',
-            });
-
-            if (this.isInlineButtonAllowed(item.type)) {
-                if (
-                    item.type === SearchItemType.CLASS ||
-                    item.type === SearchItemType.INTERFACE ||
-                    item.type === SearchItemType.ENUM ||
-                    item.type === SearchItemType.FUNCTION ||
-                    item.type === SearchItemType.METHOD ||
-                    item.type === SearchItemType.PROPERTY ||
-                    item.type === SearchItemType.VARIABLE
-                ) {
-                    buttons.push({
-                        iconPath: new vscode.ThemeIcon('references'),
-                        tooltip: 'Copy Reference',
-                    });
-                } else if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
-                    buttons.push({
-                        iconPath: new vscode.ThemeIcon('file-submodule'),
-                        tooltip: 'Copy Relative Path',
-                    });
-                }
-
-                buttons.push({
-                    iconPath: new vscode.ThemeIcon('split-horizontal'),
-                    tooltip: 'Open to the Side',
-                });
-
-                if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
-                    buttons.push({
-                        iconPath: new vscode.ThemeIcon('folder-opened'),
-                        tooltip: 'Reveal in File Explorer',
-                    });
-                }
-            }
-        }
+        const buttons = this.getButtonsForItem(item);
 
         return {
             label,
@@ -242,6 +200,53 @@ export class SearchService {
             result,
             buttons,
         };
+    }
+
+    private getButtonsForItem(item: SearchableItem): vscode.QuickInputButton[] {
+        const buttons: vscode.QuickInputButton[] = [];
+
+        if (!this.isInlineButtonAllowed(item.type)) {
+            return buttons;
+        }
+
+        buttons.push({
+            iconPath: new vscode.ThemeIcon('copy'),
+            tooltip: 'Copy Path',
+        });
+
+        if (
+            item.type === SearchItemType.CLASS ||
+            item.type === SearchItemType.INTERFACE ||
+            item.type === SearchItemType.ENUM ||
+            item.type === SearchItemType.FUNCTION ||
+            item.type === SearchItemType.METHOD ||
+            item.type === SearchItemType.PROPERTY ||
+            item.type === SearchItemType.VARIABLE
+        ) {
+            buttons.push({
+                iconPath: new vscode.ThemeIcon('references'),
+                tooltip: 'Copy Reference',
+            });
+        } else if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
+            buttons.push({
+                iconPath: new vscode.ThemeIcon('file-submodule'),
+                tooltip: 'Copy Relative Path',
+            });
+        }
+
+        buttons.push({
+            iconPath: new vscode.ThemeIcon('split-horizontal'),
+            tooltip: 'Open to the Side',
+        });
+
+        if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
+            buttons.push({
+                iconPath: new vscode.ThemeIcon('folder-opened'),
+                tooltip: 'Reveal in File Explorer',
+            });
+        }
+
+        return buttons;
     }
 
     private isFileDirty(filePath: string): boolean {
@@ -258,7 +263,7 @@ export class SearchService {
         const color = this.getIconColorForItemType(item.type);
         const iconPath = new vscode.ThemeIcon(iconId, color);
 
-        let resourceUri: vscode.Uri | undefined = undefined;
+        let resourceUri: vscode.Uri | undefined = null;
         if (item.type === SearchItemType.FILE || item.type === SearchItemType.TEXT) {
             resourceUri = vscode.Uri.file(item.filePath);
         }

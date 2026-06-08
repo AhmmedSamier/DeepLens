@@ -4,13 +4,11 @@ import { Config } from '../../language-server/src/core/config';
 import {
     ISearchProvider,
     SearchItemType,
-    SearchOptions,
     SearchResult,
     SearchScope,
     SearchableItem,
 } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
-import { DeepLensLspClient } from './lsp-client';
 import { SlashCommand, SlashCommandService } from './slash-command-service';
 import { SearchResultItem as SharedSearchResultItem, SearchService } from './services/search-service';
 
@@ -1382,13 +1380,6 @@ export class SearchProvider {
 
         const trimmedQuery = query.trim();
 
-        const options: SearchOptions = {
-            query: trimmedQuery,
-            scope: this.currentScope,
-            maxResults: this.config.getMaxResults(),
-            requestId: queryId,
-        };
-
         const startTime = Date.now();
         let results: SearchResult[] = [];
 
@@ -1938,12 +1929,13 @@ export class SearchProvider {
     private createSlashCommandQuickPickItem(cmd: SlashCommand): SearchResultItem {
         const label = this.getWelcomeLabel(cmd);
         const description = cmd.name || '';
-        const explanation = `${cmd.description}${cmd.keyboardShortcut ? ` • ${cmd.keyboardShortcut}` : ''}`;
+        const explanation = cmd.description;
+        const detail = cmd.keyboardShortcut ? `${explanation} • ${cmd.keyboardShortcut}` : explanation;
 
         return {
             label,
             description,
-            detail: explanation,
+            detail,
             iconPath: new vscode.ThemeIcon(cmd.icon, new vscode.ThemeColor('textLink.foreground')),
             alwaysShow: true,
             result: {

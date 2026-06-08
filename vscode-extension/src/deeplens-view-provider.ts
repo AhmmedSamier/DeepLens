@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import { Config } from '../../language-server/src/core/config';
-import { SearchOptions, SearchResult, SearchScope } from '../../language-server/src/core/types';
+import { SearchResult, SearchScope } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
 import { DeepLensLspClient } from './lsp-client';
 import { ActivityTracker } from '../../language-server/src/core/activity-tracker';
 import { logger } from './services/logging-service';
-import { SlashCommand, SlashCommandCategory, SlashCommandService } from './slash-command-service';
+import { SlashCommand, SlashCommandService } from './slash-command-service';
 import { SearchService } from './services/search-service';
 
 export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.Disposable {
@@ -78,11 +78,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         }
     }
 
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        _context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
+    public resolveWebviewView(webviewView: vscode.WebviewView) {
         this._view = webviewView;
 
         webviewView.webview.options = {
@@ -175,12 +171,6 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         }
 
         this.searchTimeout = setTimeout(async () => {
-            const options: SearchOptions = {
-                query: query.trim(),
-                scope: scope,
-                maxResults: this.config.getMaxResults(),
-            };
-
             try {
                 const results = await this.searchService.search(query, scope);
                 if (requestId === this.lastRequestId) {
@@ -1095,9 +1085,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             
             const messageDiv = document.createElement('div');
             messageDiv.className = 'empty-state';
-            messageDiv.textContent = 'No results found for \'' + searchInput.value + '\'.';
-            resultsContainer.appendChild(messageDiv);
-
+            messageDiv.textContent = "No results found for '" + searchInput.value + "'.";
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'empty-state-actions';
 
@@ -1448,6 +1436,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         let text = '';
         const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
         for (let i = 0; i < 32; i++) {
+            // eslint-disable-next-line sonarjs/pseudo-random
             text += possible.charAt(Math.floor(Math.random() * possible.length));
         }
         return text;
