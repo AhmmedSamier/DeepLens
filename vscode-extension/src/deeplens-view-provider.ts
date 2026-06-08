@@ -928,6 +928,45 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                 renderHistoryToolbar();
             }
 
+            if (results.length === 0 && searchInput.value.trim() !== '') {
+                const emptyDiv = document.createElement('div');
+                emptyDiv.style.padding = '20px 10px';
+                emptyDiv.style.textAlign = 'center';
+                emptyDiv.style.color = 'var(--vscode-descriptionForeground)';
+
+                const messageDiv = document.createElement('div');
+                messageDiv.style.marginBottom = '12px';
+                messageDiv.textContent = \`No results found for '\${searchInput.value}'\`;
+
+                const clearBtn = document.createElement('button');
+                clearBtn.className = 'scope-button';
+                clearBtn.style.padding = '4px 12px';
+                clearBtn.style.fontSize = '12px';
+                clearBtn.textContent = 'Clear Search';
+
+                emptyDiv.appendChild(messageDiv);
+                emptyDiv.appendChild(clearBtn);
+
+                resultsContainer.appendChild(emptyDiv);
+
+                clearBtn.addEventListener('click', () => {
+                    searchInput.value = '';
+                    currentScope = 'everything';
+                    scopeButtons.forEach(b => {
+                        b.classList.remove('active');
+                        if (b.getAttribute('data-scope') === 'everything') {
+                            b.classList.add('active');
+                        }
+                    });
+                    vscode.postMessage({
+                        type: 'search',
+                        query: '',
+                        scope: 'everything'
+                    });
+                });
+                return;
+            }
+
             results.forEach((result, index) => {
                 const item = result.item;
                 const div = document.createElement('div');
