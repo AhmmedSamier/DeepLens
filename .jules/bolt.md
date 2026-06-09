@@ -69,3 +69,6 @@
 ## 2026-06-04 - [Defer Property Array Reads in Hot Paths]
 **Learning:** In hot loops, evaluating boolean expressions and reading from parallel arrays (like `itemTypeIds`) before an early-exit check incurs unnecessary memory access and condition evaluation overhead for items that are immediately rejected.
 **Action:** Defer reading from property arrays and complex conditional logic until *after* cheap O(1) early-exit checks (like bitflags) have passed. This prevents wasted cycles and memory access.
+## 2026-08-01 - [Fast Name Property Early-Exit]
+**Learning:** Even if an item passes the aggregate bitflag check (`itemBitflags`) which considers the `name`, `fullName`, and `relativeFilePath`, we shouldn't immediately assume the `name` property itself contains all the characters. The fallback path runs `tryFuzzyMatchName` for all items passing the aggregate bitmask, resulting in wasted `Fuzzysort.single` evaluations.
+**Action:** Since we already maintain `itemNameBitflags` specific to the `name` property, we can add a second O(1) early-exit check inside `tryFuzzyMatchName` (`(context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags`). This immediately skips expensive name evaluation when the query characters are actually spread across the full name or file path.

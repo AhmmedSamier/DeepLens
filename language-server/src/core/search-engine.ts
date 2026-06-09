@@ -1983,6 +1983,13 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
+        // ⚡ Bolt: Fast early-exit for name property fuzzy matching
+        // Even if the item passes the aggregate bitflag check, we can skip expensive
+        // fuzzy sorting on the name property if it doesn't contain the required characters.
+        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const pName = context.preparedNames[i];
         if (!pName) {
             return -Infinity;
