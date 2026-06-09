@@ -56,7 +56,7 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         this._onDidChangeCodeLenses.fire();
 
         const editors = vscode.window.visibleTextEditors;
-        editors.forEach((editor) => {
+        editors.forEach(() => {
             vscode.commands.executeCommand('editor.action.triggerCodeLens');
         });
     }

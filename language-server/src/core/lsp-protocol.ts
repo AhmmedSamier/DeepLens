@@ -1,5 +1,5 @@
 import { NotificationType, RequestType, RequestType0 } from 'vscode-languageserver';
-import { SearchOptions, SearchResult, SearchScope } from './types';
+import { SearchOptions, SearchResult } from './types';
 import { DumpIndexResult, IndexStats } from './types';
 import { SymbolInformation } from 'vscode-languageserver';
 
