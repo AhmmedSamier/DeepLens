@@ -173,7 +173,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
     private textSearchEnabled = true;
 
     private generateRequestId(): string {
-        return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+        return `${Date.now()}-${crypto.randomBytes(16).toString('base64url')}`;
     }
 
     private async handleSearch(query: string, scope: SearchScope) {

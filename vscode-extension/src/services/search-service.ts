@@ -368,6 +368,7 @@ export class SearchService {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     calculateSelectionRange(
         document: vscode.TextDocument,
         item: SearchableItem,
