@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ActivityTracker } from '../../../language-server/src/core/activity-tracker';
 import { Config } from '../../../language-server/src/core/config';
 import {
+    IndexStats,
     ISearchProvider,
     SearchItemType,
     SearchOptions,
@@ -536,9 +537,9 @@ export class SearchService {
         }
     }
 
-    async getIndexStats(): Promise<unknown | undefined> {
+    async getIndexStats(): Promise<IndexStats | undefined> {
         try {
-            return await this.searchEngine.getIndexStats();
+            return await this.searchEngine.getIndexStats?.();
         } catch (error) {
             console.error('Failed to get index stats:', error);
             return undefined;
