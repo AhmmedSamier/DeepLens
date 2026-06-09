@@ -74,7 +74,7 @@
                 {
                     "id": "deeplens-view",
                     "title": "DeepLens",
-                    "icon": "icon.png"
+                    "icon": "sidepanel-icon.svg"
                 }
             ]
         },

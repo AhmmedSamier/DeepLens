@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="100%" height="100%">
+  <defs>
+    <path id="blade" d="M 140 0 L 216.13 78.66 A 230 230 0 0 1 39.94 226.51 L 70 121.24 A 140 140 0 0 0 140 0 Z" stroke-linejoin="round" />
+    
+    <mask id="icon-mask">
+      <!-- Base mask: Everything black is hidden, everything white is shown -->
+      <g transform="translate(250, 250)">
+        <!-- Blades: thickened black stroke for wider, clearer gaps -->
+        <use href="#blade" fill="white" stroke="black" stroke-width="24" transform="rotate(0)" />
+        <use href="#blade" fill="white" stroke="black" stroke-width="24" transform="rotate(60)" />
+        <use href="#blade" fill="white" stroke="black" stroke-width="24" transform="rotate(120)" />
+        <use href="#blade" fill="white" stroke="black" stroke-width="24" transform="rotate(180)" />
+        <use href="#blade" fill="white" stroke="black" stroke-width="24" transform="rotate(240)" />
+        <use href="#blade" fill="white" stroke="black" stroke-width="24" transform="rotate(300)" />
+
+        <!-- Outer ring: thicker for clarity -->
+        <circle r="230" fill="none" stroke="white" stroke-width="20" />
+        
+        <!-- Inner ring area (background color cut out) -->
+        <circle r="140" fill="black" stroke="white" stroke-width="20" />
+
+        <!-- Center Eye structure: simplified and thickened for small sizes -->
+        <g transform="rotate(35)">
+          <path d="M -25 45 L 25 45 L 45 136 A 136 136 0 0 1 -45 136 Z" fill="white" />
+          
+          <!-- Inner arcs: merged into one thicker arc -->
+          <path d="M -32 90 Q 0 100 32 90" fill="none" stroke="white" stroke-width="12" />
+
+          <!-- Eye main body -->
+          <path d="M -75 0 A 75 60 0 0 1 75 0 A 75 25 0 0 1 -75 0 Z" fill="white" />
+          
+          <!-- Eye cutout (dark inside): removed the white stroke to make the opening larger -->
+          <ellipse cx="0" cy="0" rx="75" ry="25" fill="black" />
+
+          <!-- Center pupil/beam: thicker for better visibility -->
+          <path d="M -10 0 L 10 0 L 8 -65 L -8 -65 Z" fill="white" />
+          <circle cx="0" cy="-68" r="20" fill="white" />
+
+          <!-- Wifi arcs: Reduced from 4 to 3, spaced further apart and thicker -->
+          <path d="M -20 -90 A 30 30 0 0 1 20 -90" fill="none" stroke="white" stroke-width="12" stroke-linecap="round" />
+          <path d="M -35 -110 A 55 55 0 0 1 35 -110" fill="none" stroke="white" stroke-width="12" stroke-linecap="round" />
+          <path d="M -50 -130 A 80 80 0 0 1 50 -130" fill="none" stroke="white" stroke-width="12" stroke-linecap="round" />
+        </g>
+      </g>
+    </mask>
+  </defs>
+
+  <rect width="100%" height="100%" fill="currentColor" mask="url(#icon-mask)" />
+</svg>

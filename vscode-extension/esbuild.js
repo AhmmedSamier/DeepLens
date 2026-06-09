@@ -108,9 +108,26 @@ function copyCodicons() {
     }
 }
 
+/**
+ * Copy webview HTML files to dist/webviews
+ */
+function copyWebviewHtml() {
+    const webviewsDir = path.join(__dirname, 'dist', 'webviews');
+    if (!fs.existsSync(webviewsDir)) {
+        fs.mkdirSync(webviewsDir, { recursive: true });
+    }
+
+    const htmlFile = path.join(__dirname, 'src', 'webviews', 'search-view.html');
+    if (fs.existsSync(htmlFile)) {
+        fs.copyFileSync(htmlFile, path.join(webviewsDir, 'search-view.html'));
+        console.log(`Copied search-view.html`);
+    }
+}
+
 async function main() {
     copyWasmFiles();
     copyCodicons();
+    copyWebviewHtml();
 
     const ctx = await esbuild.context({
         entryPoints: {
