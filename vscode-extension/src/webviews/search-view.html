@@ -295,6 +295,12 @@
             background: var(--vscode-toolbar-hoverBackground);
             color: var(--vscode-foreground);
         }
+        .result-action-btn:focus-visible,
+        .empty-state-btn:focus-visible,
+        .scope-button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: -1px;
+        }
         .codicon {
             display: inline-block;
             margin-right: 3px;
@@ -916,6 +922,7 @@
             const copyPathBtn = document.createElement('button');
             copyPathBtn.className = 'result-action-btn';
             copyPathBtn.setAttribute('data-action', 'copyPath');
+            copyPathBtn.setAttribute('aria-label', 'Copy Path');
             copyPathBtn.title = 'Copy Path';
             copyPathBtn.innerHTML = '<i class="codicon codicon-copy"></i>';
             container.appendChild(copyPathBtn);
@@ -924,6 +931,7 @@
                 const copyRefBtn = document.createElement('button');
                 copyRefBtn.className = 'result-action-btn';
                 copyRefBtn.setAttribute('data-action', 'copyReference');
+                copyRefBtn.setAttribute('aria-label', 'Copy Reference');
                 copyRefBtn.title = 'Copy Reference';
                 copyRefBtn.innerHTML = '<i class="codicon codicon-references"></i>';
                 container.appendChild(copyRefBtn);
@@ -933,6 +941,7 @@
                 const copyRelPathBtn = document.createElement('button');
                 copyRelPathBtn.className = 'result-action-btn';
                 copyRelPathBtn.setAttribute('data-action', 'copyRelativePath');
+                copyRelPathBtn.setAttribute('aria-label', 'Copy Relative Path');
                 copyRelPathBtn.title = 'Copy Relative Path';
                 copyRelPathBtn.innerHTML = '<i class="codicon codicon-file-submodule"></i>';
                 container.appendChild(copyRelPathBtn);
@@ -941,6 +950,7 @@
             const openSideBtn = document.createElement('button');
             openSideBtn.className = 'result-action-btn';
             openSideBtn.setAttribute('data-action', 'openSide');
+            openSideBtn.setAttribute('aria-label', 'Open to the Side');
             openSideBtn.title = 'Open to the Side';
             openSideBtn.innerHTML = '<i class="codicon codicon-split-horizontal"></i>';
             container.appendChild(openSideBtn);
@@ -949,6 +959,7 @@
                 const revealBtn = document.createElement('button');
                 revealBtn.className = 'result-action-btn';
                 revealBtn.setAttribute('data-action', 'reveal');
+                revealBtn.setAttribute('aria-label', 'Reveal in Explorer');
                 revealBtn.title = 'Reveal in Explorer';
                 revealBtn.innerHTML = '<i class="codicon codicon-folder-opened"></i>';
                 container.appendChild(revealBtn);
@@ -958,6 +969,7 @@
                 const removeHistoryBtn = document.createElement('button');
                 removeHistoryBtn.className = 'result-action-btn';
                 removeHistoryBtn.setAttribute('data-action', 'removeHistory');
+                removeHistoryBtn.setAttribute('aria-label', 'Remove from History');
                 removeHistoryBtn.title = 'Remove from History';
                 removeHistoryBtn.innerHTML = '<i class="codicon codicon-trash"></i>';
                 container.appendChild(removeHistoryBtn);
