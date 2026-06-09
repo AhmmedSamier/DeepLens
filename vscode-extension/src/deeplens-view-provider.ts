@@ -1,6 +1,6 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as crypto from 'node:crypto';
+import * as vscode from 'vscode';
 import { Config } from '../../language-server/src/core/config';
 import { SearchResult, SearchScope } from '../../language-server/src/core/types';
 import { CommandIndexer } from './command-indexer';
