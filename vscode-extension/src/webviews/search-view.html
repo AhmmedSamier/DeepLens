@@ -809,8 +809,12 @@
                     const action = button.getAttribute('data-empty-action');
                     if (action === 'clear') {
                         searchInput.value = '';
+                        currentScope = 'everything';
+                        userScope = 'everything';
+                        updateScopeButtons();
                         triggerSearchFromInput('');
                         searchInput.focus();
+                        showStatus('Search and filters cleared');
                         return;
                     }
                     if (action === 'recent') {
