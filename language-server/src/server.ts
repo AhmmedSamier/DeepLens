@@ -5,11 +5,10 @@ import {
     InitializeParams,
     InitializeResult,
     ProposedFeatures,
-    RequestType,
-    RequestType0,
     SymbolKind,
     TextDocuments,
     TextDocumentSyncKind,
+    uriToPath,
 } from 'vscode-languageserver/node';
 
 import * as fs from 'node:fs';
@@ -19,62 +18,27 @@ import { pathToFileURL } from 'node:url';
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
 import { FileProvider } from './core/providers/file-provider';
+import { LspIndexerEnvironment } from './indexer-client';
 import { RecentProvider } from './core/providers/recent-provider';
 import { SymbolProvider } from './core/providers/symbol-provider';
 import { SearchEngine } from './core/search-engine';
 import { TreeSitterParser } from './core/tree-sitter-parser';
-import {
-    DumpIndexResult,
-    IndexStats,
-    RipgrepUnavailableNotification,
-    SearchItemType,
-    SearchOptions,
-    SearchResult,
-    SearchScope,
-} from './core/types';
 import { CancellationError, WorkspaceIndexer } from './core/workspace-indexer';
-import { LspIndexerEnvironment } from './indexer-client';
-
-/**
- * Robustly convert URI to file path handling Windows drive letters and UNC paths
- */
-function uriToPath(uri: string): string {
-    if (uri.startsWith('file:///')) {
-        const decoded = decodeURIComponent(uri);
-        const afterSlash = decoded.slice(7); // /c:/foo or /usr/bin
-
-        // Windows drive letter check (e.g., /c: or /C:)
-        if (/^\/[a-zA-Z]:/.test(afterSlash)) {
-            // Strip leading slash for Windows path: c:/foo
-            return path.normalize(afterSlash.slice(1));
-        }
-        // Unix-like absolute path
-        return path.normalize(afterSlash);
-    }
-
-    if (uri.startsWith('file://')) {
-        return path.normalize(decodeURIComponent(uri.slice(7)));
-    }
-
-    return uri;
-}
-
-// Custom requests
-export const BurstSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/burstSearch');
-export const ResolveItemsRequest = new RequestType<{ itemIds: string[] }, SearchResult[], void>(
-    'deeplens/resolveItems',
-);
-export const GetRecentItemsRequest = new RequestType<{ count: number }, SearchResult[], void>(
-    'deeplens/getRecentItems',
-);
-export const RecordActivityRequest = new RequestType<{ itemId: string }, void, void>('deeplens/recordActivity');
-export const ClearHistoryRequest = new RequestType0<void, void>('deeplens/clearHistory');
-export const RemoveHistoryItemRequest = new RequestType<{ itemId: string }, void, void>('deeplens/removeHistoryItem');
-export const RebuildIndexRequest = new RequestType<{ force: boolean }, void, void>('deeplens/rebuildIndex');
-export const ClearCacheRequest = new RequestType0<void, void>('deeplens/clearCache');
-export const IndexStatsRequest = new RequestType0<IndexStats, void>('deeplens/indexStats');
-export const SetActiveFilesRequest = new RequestType<{ files: string[] }, void, void>('deeplens/setActiveFiles');
-export const DumpIndexRequest = new RequestType0<DumpIndexResult, void>('deeplens/dumpIndex');
+import { RipgrepUnavailableNotification, SearchItemType, SearchScope } from './core/types';
+import {
+    BurstSearchRequest,
+    ClearCacheRequest,
+    ClearHistoryRequest,
+    DeepLensSearchRequest,
+    DumpIndexRequest,
+    GetRecentItemsRequest,
+    IndexStatsRequest,
+    RecordActivityRequest,
+    RemoveHistoryItemRequest,
+    RebuildIndexRequest,
+    ResolveItemsRequest,
+    SetActiveFilesRequest,
+} from './core/lsp-protocol';
 
 // Create a connection for the server, using Node's stdin/stdout
 const connection = createConnection(ProposedFeatures.all);
@@ -518,8 +482,7 @@ connection.onRequest(GetRecentItemsRequest, (params) => {
     return activityTracker.getRecentItems(params.count);
 });
 
-// We can also override the main search with a custom request that supports Scopes
-export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
+// Custom handler for standard LSP search
 connection.onRequest(DeepLensSearchRequest, async (options, token) => {
     if (!isInitialized || isShuttingDown) return [];
     fileLogger(`Search Request: "${options.query}" in scope ${options.scope}`);

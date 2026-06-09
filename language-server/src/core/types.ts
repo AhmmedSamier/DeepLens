@@ -1,4 +1,4 @@
-import { CancellationToken, NotificationType } from 'vscode-languageserver-protocol';
+import { CancellationToken, NotificationType, RequestType } from 'vscode-languageserver-protocol';
 
 /**
  * Core type definitions for the search engine
@@ -167,3 +167,7 @@ export type RipgrepUnavailableParams = object;
 export const RipgrepUnavailableNotification = new NotificationType<RipgrepUnavailableParams>(
     'deeplens/ripgrepUnavailable',
 );
+
+export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
+export type DeepLensSearchRequestParams = SearchOptions;
+export type DeepLensSearchRequestResult = SearchResult[];

@@ -32,8 +32,7 @@ parentPort.on('message', async (message: { filePaths: string[]; chunkSize?: numb
         // ⚡ Bolt: Remove head-of-line blocking by using a concurrency task pool
         // instead of chunked Promise.all
         const limit = pLimit(CONCURRENCY);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        let batchItems: any[] = [];
+        let batchItems: import('./types').SearchableItem[] = [];
         let batchProcessedFiles = 0;
         let totalCompleted = 0;
 

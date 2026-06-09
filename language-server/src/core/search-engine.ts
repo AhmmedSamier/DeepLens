@@ -769,7 +769,8 @@ export class SearchEngine implements ISearchProvider {
     setActiveFiles(files: string[]): void {
         this.activeFiles = new Set(
             files.map((f) => {
-                const normalized = path.normalize(f);
+                // Normalize path first (handles \\ -> / on Windows), then convert remaining \
+                const normalized = path.normalize(f).replace(/\\/g, '/');
                 return this.isWindows ? normalized.toLowerCase() : normalized;
             }),
         );
@@ -1096,7 +1097,8 @@ export class SearchEngine implements ISearchProvider {
         if (filePath === this.lastNormalizedInput) {
             return this.lastNormalizedOutput as string;
         }
-        const normalized = path.normalize(filePath);
+        // Normalize path first, then convert to forward slashes for consistency
+        const normalized = path.normalize(filePath).replace(/\\/g, '/');
         const result = this.isWindows ? normalized.toLowerCase() : normalized;
         this.lastNormalizedInput = filePath;
         this.lastNormalizedOutput = result;
@@ -1113,7 +1115,8 @@ export class SearchEngine implements ISearchProvider {
         // Replaces an O(N) iteration over all items with an O(K) lookup
         // using the reverse index (where K is the number of active files).
         for (const filePath of this.activeFiles) {
-            const itemIndices = this.fileToItemIndices.get(filePath);
+            const normalizedFilePath = this.normalizePath(filePath);
+            const itemIndices = this.fileToItemIndices.get(normalizedFilePath);
             if (itemIndices) {
                 for (let i = 0; i < itemIndices.length; i++) {
                     indices.push(itemIndices[i]);
@@ -1136,7 +1139,8 @@ export class SearchEngine implements ISearchProvider {
         const indices: number[] = [];
 
         for (const filePath of modifiedFiles) {
-            const itemIndices = this.fileToItemIndices.get(filePath);
+            const normalizedFilePath = this.normalizePath(filePath);
+            const itemIndices = this.fileToItemIndices.get(normalizedFilePath);
             if (itemIndices) {
                 for (let i = 0; i < itemIndices.length; i++) {
                     indices.push(itemIndices[i]);

@@ -161,7 +161,7 @@ export class Config {
      */
     getSearchConcurrency(): number {
         const value = this.get('searchConcurrency', 60);
-        return this.validateNumber(value, 1, 200, 60);
+        return this.validateNumber(value, 1, 100, 60);
     }
 
     getIndexWorkerCount(): number {
