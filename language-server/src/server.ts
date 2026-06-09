@@ -29,7 +29,6 @@ import {
     BurstSearchRequest,
     ClearCacheRequest,
     ClearHistoryRequest,
-    DeepLensSearchRequest,
     DumpIndexRequest,
     GetRecentItemsRequest,
     IndexStatsRequest,
@@ -37,6 +36,7 @@ import {
     RemoveHistoryItemRequest,
     RebuildIndexRequest,
     ResolveItemsRequest,
+    SearchRequest,
     SetActiveFilesRequest,
 } from './core/lsp-protocol';
 
@@ -483,7 +483,7 @@ connection.onRequest(GetRecentItemsRequest, (params) => {
 });
 
 // Custom handler for standard LSP search
-connection.onRequest(DeepLensSearchRequest, async (options, token) => {
+connection.onRequest(SearchRequest, async (options, token) => {
     if (!isInitialized || isShuttingDown) return [];
     fileLogger(`Search Request: "${options.query}" in scope ${options.scope}`);
     try {

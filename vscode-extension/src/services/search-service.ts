@@ -337,12 +337,7 @@ export class SearchService {
             const position =
                 item.line === undefined ? new vscode.Position(0, 0) : new vscode.Position(item.line, item.column || 0);
 
-            let range: vscode.Range;
-            if (item.type === SearchItemType.TEXT) {
-                range = this.getTextSelectionRange(document, item, highlights, position);
-            } else {
-                range = this.getNonTextSelectionRange(document, item, highlights, position);
-            }
+            const range = this.calculateSelectionRange(document, item, highlights, position);
 
             const editor = await vscode.window.showTextDocument(document, {
                 selection: range,
@@ -353,7 +348,7 @@ export class SearchService {
 
             const decorationRanges =
                 item.type !== SearchItemType.TEXT && highlights
-                    ? this.getNonTextDecorationRanges(document, item, highlights)
+                    ? this.calculateDecorationRanges(document, item, highlights)
                     : undefined;
             editor.setDecorations(this.matchDecorationType, decorationRanges ?? [range]);
         } catch (error) {
@@ -373,87 +368,63 @@ export class SearchService {
         }
     }
 
-    private getTextSelectionRange(
+    calculateSelectionRange(
         document: vscode.TextDocument,
         item: SearchableItem,
         highlights: number[][] | undefined,
         position: vscode.Position,
     ): vscode.Range {
-        if (item.line !== undefined && highlights && highlights.length > 0) {
-            const textLine = document.lineAt(item.line);
-            const lineText = textLine.text;
-            const leadingWhitespace = lineText.length - lineText.trimStart().length;
+        const textLine = item.line !== undefined ? document.lineAt(item.line) : undefined;
+        const lineText = textLine?.text;
+
+        if (highlights && highlights.length > 0) {
             const firstHighlight = highlights[0];
             const highlightStart = firstHighlight[0];
             const highlightEnd = firstHighlight[1];
-            const startColumn = Math.max(0, leadingWhitespace + highlightStart);
-            const endColumn = Math.max(startColumn, leadingWhitespace + highlightEnd);
-            const clampedStart = Math.min(startColumn, lineText.length);
-            const clampedEnd = Math.min(endColumn, lineText.length);
+
+            if (item.type === SearchItemType.TEXT && textLine && lineText) {
+                const leadingWhitespace = lineText.length - lineText.trimStart().length;
+                const startColumn = Math.max(0, leadingWhitespace + highlightStart);
+                const endColumn = Math.max(startColumn, leadingWhitespace + highlightEnd);
+                const clampedStart = Math.min(startColumn, lineText.length);
+                const clampedEnd = Math.min(endColumn, lineText.length);
+
+                return new vscode.Range(
+                    new vscode.Position(item.line, clampedStart),
+                    new vscode.Position(item.line, clampedEnd),
+                );
+            }
+
+            if (item.name && textLine && lineText) {
+                const nameStartInLine = lineText.indexOf(item.name);
+                if (nameStartInLine >= 0) {
+                    const startCol = Math.min(nameStartInLine + highlightStart, lineText.length);
+                    const endCol = Math.min(nameStartInLine + highlightEnd, lineText.length);
+                    return new vscode.Range(
+                        new vscode.Position(item.line, startCol),
+                        new vscode.Position(item.line, endCol),
+                    );
+                }
+            }
 
             return new vscode.Range(
-                new vscode.Position(item.line, clampedStart),
-                new vscode.Position(item.line, clampedEnd),
+                new vscode.Position(item.line || 0, highlightStart),
+                new vscode.Position(item.line || 0, highlightEnd),
             );
         }
 
         if (item.column !== undefined) {
-            const length = highlights && highlights.length > 0 ? highlights[0][1] - highlights[0][0] : item.name.length;
+            const length = item.name ? item.name.length : 10;
             return new vscode.Range(
                 new vscode.Position(item.line || 0, item.column),
                 new vscode.Position(item.line || 0, item.column + length),
             );
         }
 
-        return new vscode.Range(position, position.translate(0, item.name.length));
+        return new vscode.Range(position, position.translate(0, item.name ? item.name.length : 10));
     }
 
-    private getNonTextSelectionRange(
-        document: vscode.TextDocument,
-        item: SearchableItem,
-        highlights: number[][] | undefined,
-        position: vscode.Position,
-    ): vscode.Range {
-        if (item.line !== undefined) {
-            const rangeFromLine = this.getSymbolRangeFromLine(document, item);
-            if (rangeFromLine) {
-                if (highlights && highlights.length > 0 && item.name) {
-                    const textLine = document.lineAt(item.line);
-                    const lineText = textLine.text;
-                    const nameStartInLine = lineText.indexOf(item.name);
-                    if (nameStartInLine >= 0) {
-                        const firstHL = highlights[0];
-                        const startCol = Math.min(nameStartInLine + firstHL[0], lineText.length);
-                        const endCol = Math.min(nameStartInLine + firstHL[1], lineText.length);
-                        return new vscode.Range(
-                            new vscode.Position(item.line, startCol),
-                            new vscode.Position(item.line, endCol),
-                        );
-                    }
-                }
-                return rangeFromLine;
-            }
-        }
-
-        if (item.line !== undefined && item.column !== undefined) {
-            return new vscode.Range(
-                new vscode.Position(item.line, item.column),
-                new vscode.Position(item.line, item.column + item.name.length),
-            );
-        }
-
-        if (highlights && highlights.length > 0) {
-            const firstHighlight = highlights[0];
-            return new vscode.Range(
-                new vscode.Position(item.line || 0, firstHighlight[0]),
-                new vscode.Position(item.line || 0, firstHighlight[1]),
-            );
-        }
-
-        return new vscode.Range(position, position.translate(0, item.name.length));
-    }
-
-    private getNonTextDecorationRanges(
+    calculateDecorationRanges(
         document: vscode.TextDocument,
         item: SearchableItem,
         highlights: number[][] | undefined,
@@ -482,7 +453,7 @@ export class SearchService {
         return ranges;
     }
 
-    private getSymbolRangeFromLine(document: vscode.TextDocument, item: SearchableItem): vscode.Range | undefined {
+    getSymbolRangeFromLine(document: vscode.TextDocument, item: SearchableItem): vscode.Range | undefined {
         if (item.line === undefined) {
             return undefined;
         }

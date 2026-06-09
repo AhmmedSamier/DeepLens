@@ -1,6 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <!-- DeepLens Search View -->
+    <!-- This HTML file is loaded as aVS Code Webview in the DeepLens extension -->
+    <!-- It provides a rich search interface with fuzzy matching, filters, and result preview -->
+    <!-- 
+        CSP Policy:
+        - Scripts must use nonce-based security
+        - Styles loaded from codicon font
+        - All other resources blocked by default
+        
+        Message Protocol:
+        - events: { type: 'search', query: string, scope: string }
+        - events: { type: 'open', result: SearchResult, preview: boolean }
+        - events: { type: 'copyPath', result: SearchResult }
+        - events: { type: 'recentHistory' }
+        - events: { type: 'clearHistory' }
+        
+        Response messages:
+        - { type: 'results', results: SearchResult[], requestId: string, isRecentHistory: boolean }
+        - { type: 'status', message: string }
+        - { type: 'capabilities', textSearchEnabled: boolean }
+    -->
     <meta charset="UTF-8">
     <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}' ${webview.cspSource}; font-src 'self' ${webview.cspSource}; script-src 'nonce-${nonce}';">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">

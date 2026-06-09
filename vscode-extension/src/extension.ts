@@ -727,13 +727,6 @@ export async function activate(context: vscode.ExtensionContext) {
             if (viewProvider) {
                 viewProvider.disableTextSearch();
             }
-            vscode.window
-                .showWarningMessage('DeepLens: Ripgrep is unavailable. Text search is disabled.', 'Open Settings')
-                .then((val) => {
-                    if (val === 'Open Settings') {
-                        vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens.ripgrep');
-                    }
-                });
         }),
     );
 

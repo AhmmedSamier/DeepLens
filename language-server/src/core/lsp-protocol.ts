@@ -9,21 +9,9 @@ import { SymbolInformation } from 'vscode-languageserver';
 
 // ==================== Search Requests ====================
 
-export interface SearchRequestParams {
-    query: string;
-    scope: SearchScope;
-    maxResults?: number;
-    excludePatterns?: string[];
-    requestId?: number;
-}
-
-export type SearchRequestResult = SearchResult[];
-
-export const SearchRequest = new RequestType<SearchRequestParams, SearchRequestResult, void>('deeplens/search');
-
 // ==================== Burst Search Request ====================
 
-export type BurstSearchRequestParams = SearchRequestParams;
+export type BurstSearchRequestParams = SearchOptions;
 
 export type BurstSearchRequestResult = SearchResult[];
 
@@ -110,11 +98,9 @@ export type DumpIndexRequestResult = DumpIndexResult;
 
 export const DumpIndexRequest = new RequestType0<DumpIndexRequestResult, void>('deeplens/dumpIndex');
 
-// ==================== Standard LSP Search Request ====================
+// ==================== Search Requests ====================
 
-export const DeepLensSearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
-export type DeepLensSearchRequestParams = SearchOptions;
-export type DeepLensSearchRequestResult = SearchResult[];
+export const SearchRequest = new RequestType<SearchOptions, SearchResult[], void>('deeplens/search');
 
 // ==================== Progress Notifications ====================
 
@@ -136,7 +122,7 @@ export const RipgrepUnavailableNotification = new NotificationType<unknown>('dee
  */
 export type RequestTypeMap = {
     'deeplens/search': {
-        params: SearchRequestParams;
+        params: SearchOptions;
         result: SearchResult[];
     };
     'deeplens/burstSearch': {
@@ -182,10 +168,6 @@ export type RequestTypeMap = {
     'deeplens/dumpIndex': {
         params: void;
         result: DumpIndexResult;
-    };
-    'deeplens/search': {
-        params: DeepLensSearchRequestParams;
-        result: DeepLensSearchRequestResult;
     };
     'workspace/symbol': {
         params: WorkspaceSymbolRequestParams;

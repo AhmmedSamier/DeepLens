@@ -54,6 +54,11 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
         this.showCallChain = config.get<boolean>('codeLens.showCallChain', true);
         this.minRefsToShow = config.get<number>('codeLens.minRefsToShow', 0);
         this._onDidChangeCodeLenses.fire();
+
+        const editors = vscode.window.visibleTextEditors;
+        editors.forEach((editor) => {
+            vscode.commands.executeCommand('editor.action.triggerCodeLens');
+        });
     }
 
     /**
@@ -209,6 +214,10 @@ export class ReferenceCodeLensProvider implements vscode.CodeLensProvider {
      * Resolve a code lens by fetching count
      */
     async resolveCodeLens(codeLens: vscode.CodeLens, token: vscode.CancellationToken): Promise<vscode.CodeLens | null> {
+        if (!codeLens) {
+            return null;
+        }
+
         const lens = codeLens as CodeLensWithSymbol;
         const { documentUri, symbolPosition, type } = lens;
 

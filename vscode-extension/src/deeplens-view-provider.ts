@@ -15,8 +15,6 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
     private _view?: vscode.WebviewView;
     private currentScope: SearchScope = SearchScope.EVERYTHING;
     private lastQuery = '';
-    private lastRequestId = 0;
-    private textSearchEnabled = true;
 
     private readonly scopeConfig = [
         { scope: SearchScope.EVERYTHING, icon: 'search', label: 'All', shortcut: '/all', desc: 'Search everywhere' },
@@ -93,61 +91,73 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
         this.messageDisposable = webviewView.webview.onDidReceiveMessage(async (data) => {
-            switch (data.type) {
-                case 'search':
-                    this.handleSearch(data.query, data.scope);
-                    break;
-                case 'open':
-                    this.handleOpen(data.result, false);
-                    break;
-                case 'preview':
-                    this.handleOpen(data.result, true);
-                    break;
-                case 'recordActivity':
-                    this.recordActivity(data.result);
-                    break;
-                case 'copyPath':
-                    this.handleCopyPath(data.result);
-                    break;
-                case 'copyReference':
-                    this.handleCopyReference(data.result);
-                    break;
-                case 'copyRelativePath':
-                    this.handleCopyRelativePath(data.result);
-                    break;
-                case 'openSide':
-                    this.handleOpenSide(data.result);
-                    break;
-                case 'reveal':
-                    this.handleReveal(data.result);
-                    break;
-                case 'clearHistory':
-                    await this.handleClearHistory();
-                    break;
-                case 'removeHistoryItem':
-                    await this.handleRemoveHistoryItem(data.itemId);
-                    break;
-                case 'getSlashCommands':
-                    this.handleGetSlashCommands(data.query);
-                    break;
-                case 'runCommand':
-                    this.handleRunCommand(data.commandName);
-                    break;
-                case 'nativeSearch':
-                    await vscode.commands.executeCommand('workbench.action.findInFiles', {
-                        query: data.query ?? '',
-                        triggerSearch: true,
-                    });
-                    break;
-                case 'rebuildIndex':
-                    vscode.commands.executeCommand('deeplens.rebuildIndex');
-                    break;
-                case 'clearCache':
-                    vscode.commands.executeCommand('deeplens.clearIndexCache');
-                    break;
-                case 'openSettings':
-                    vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
-                    break;
+            try {
+                if (!data || typeof data !== 'object' || !data.type) {
+                    logger.error('Invalid message format:', data);
+                    return;
+                }
+
+                switch (data.type) {
+                    case 'search':
+                        this.handleSearch(data.query, data.scope);
+                        break;
+                    case 'open':
+                        this.handleOpen(data.result, false);
+                        break;
+                    case 'preview':
+                        this.handleOpen(data.result, true);
+                        break;
+                    case 'recordActivity':
+                        this.recordActivity(data.result);
+                        break;
+                    case 'copyPath':
+                        this.handleCopyPath(data.result);
+                        break;
+                    case 'copyReference':
+                        this.handleCopyReference(data.result);
+                        break;
+                    case 'copyRelativePath':
+                        this.handleCopyRelativePath(data.result);
+                        break;
+                    case 'openSide':
+                        this.handleOpenSide(data.result);
+                        break;
+                    case 'reveal':
+                        this.handleReveal(data.result);
+                        break;
+                    case 'clearHistory':
+                        await this.handleClearHistory();
+                        break;
+                    case 'removeHistoryItem':
+                        await this.handleRemoveHistoryItem(data.itemId);
+                        break;
+                    case 'getSlashCommands':
+                        this.handleGetSlashCommands(data.query);
+                        break;
+                    case 'runCommand':
+                        this.handleRunCommand(data.commandName);
+                        break;
+                    case 'nativeSearch':
+                        await vscode.commands.executeCommand('workbench.action.findInFiles', {
+                            query: data.query ?? '',
+                            triggerSearch: true,
+                        });
+                        break;
+                    case 'rebuildIndex':
+                        vscode.commands.executeCommand('deeplens.rebuildIndex');
+                        break;
+                    case 'clearCache':
+                        vscode.commands.executeCommand('deeplens.clearIndexCache');
+                        break;
+                    case 'openSettings':
+                        vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens');
+                        break;
+                    default:
+                        logger.warn(`Unknown message type: ${data.type}`);
+                }
+            } catch (error) {
+                logger.error('Error handling webview message:', error);
+                this._view?.webview.postMessage({ type: 'error', message: 'Internal error' });
             }
         });
 
@@ -159,12 +169,17 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
 
     private searchTimeout?: NodeJS.Timeout;
     private searchService: SearchService;
-    private lastProcessedRequestId = 0;
+    private lastProcessedRequestId = '0';
+    private textSearchEnabled = true;
+
+    private generateRequestId(): string {
+        return `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
+    }
 
     private async handleSearch(query: string, scope: SearchScope) {
         this.currentScope = scope;
         this.lastQuery = query;
-        const requestId = ++this.lastRequestId;
+        const requestId = this.generateRequestId();
 
         if (this.searchTimeout) {
             clearTimeout(this.searchTimeout);
@@ -267,7 +282,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             this._view?.webview.postMessage({
                 type: 'results',
                 results,
-                requestId: ++this.lastRequestId,
+                requestId: this.generateRequestId(),
                 isRecentHistory: true,
             });
         } catch (error) {
@@ -359,6 +374,14 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             type: 'capabilities',
             textSearchEnabled: false,
         });
+
+        vscode.window
+            .showWarningMessage('Text search is disabled. Ripgrep is missing.', 'Open Settings', 'Learn More')
+            .then((result) => {
+                if (result === 'Open Settings') {
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens.ripgrep');
+                }
+            });
     }
 
     private recordActivity(result: SearchResult) {

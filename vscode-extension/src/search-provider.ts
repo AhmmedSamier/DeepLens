@@ -442,9 +442,6 @@ export class SearchProvider {
         }
     }
 
-    /**
-     * T012: Disable text search (ripgrep unavailable)
-     */
     public disableTextSearch(): void {
         // Remove text scope from buttons list indirectly by filtering it out in the next update list
         // Actually we need to make createFilterButtons or the orderedScopes list dynamic
@@ -454,6 +451,14 @@ export class SearchProvider {
         if (this.currentQuickPick) {
             this.updateFilterButtons(this.currentQuickPick);
         }
+
+        vscode.window
+            .showWarningMessage('Text search is disabled. Ripgrep is missing.', 'Open Settings', 'Learn More')
+            .then((result) => {
+                if (result === 'Open Settings') {
+                    vscode.commands.executeCommand('workbench.action.openSettings', 'deeplens.ripgrep');
+                }
+            });
     }
 
     /**
