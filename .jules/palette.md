@@ -58,3 +58,6 @@
 ## 2026-06-05 - Actionable Empty State with .textContent
 **Learning:** When generating actionable empty states dynamically in webviews (e.g., "No results for X"), using `.innerHTML` with a custom escape function risks `ReferenceError` crashes if the escape function isn't perfectly bundled. It also exposes a theoretical XSS vector.
 **Action:** Always use native DOM methods like `document.createElement` and `.textContent` when injecting user input into webviews to ensure robust, built-in XSS protection and zero dependency on custom escape utilities.
+## 2026-06-11 - Add ARIA labels to search input and icon-only buttons
+**Learning:** Icon-only buttons (like those dynamically generated for result actions) and input fields lack context for screen readers if not explicitly labeled, reducing accessibility for keyboard and screen reader users.
+**Action:** When implementing or refactoring UI components containing form inputs or buttons without visible text, always use `aria-label` or `AutomationProperties.Name` to provide a descriptive name for assistive technologies.

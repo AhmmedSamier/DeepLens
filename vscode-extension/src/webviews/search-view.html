@@ -283,18 +283,18 @@
 <body>
     <div class="search-container">
         <div class="scope-buttons" id="scope-buttons">
-            <button class="scope-button active" data-scope="everything" title="Search Everything"><i class="codicon codicon-search"></i> All</button>
-            <button class="scope-button" data-scope="files" title="Search Files"><i class="codicon codicon-file"></i> Files</button>
-            <button class="scope-button" data-scope="types" title="Search Classes &amp; Interfaces"><i class="codicon codicon-symbol-class"></i> Classes</button>
-            <button class="scope-button" data-scope="symbols" title="Search Methods &amp; Functions"><i class="codicon codicon-symbol-method"></i> Symbols</button>
-            <button class="scope-button" data-scope="text" title="Search Text Content"><i class="codicon codicon-whole-word"></i> Text</button>
-            <button class="scope-button" data-scope="open" title="Search Open Files"><i class="codicon codicon-book"></i> Open</button>
-            <button class="scope-button" data-scope="modified" title="Search Modified Files"><i class="codicon codicon-git-merge"></i> Modified</button>
-            <button class="scope-button" data-scope="commands" title="Run VS Code Commands"><i class="codicon codicon-run"></i> Commands</button>
-            <button class="scope-button" data-scope="properties" title="Search Properties"><i class="codicon codicon-symbol-property"></i> Properties</button>
-            <button class="scope-button" data-scope="endpoints" title="Search API Endpoints"><i class="codicon codicon-globe"></i> Endpoints</button>
+            <button class="scope-button active" data-scope="everything" title="Search Everything" aria-label="Search Everything"><i class="codicon codicon-search"></i> All</button>
+            <button class="scope-button" data-scope="files" title="Search Files" aria-label="Search Files"><i class="codicon codicon-file"></i> Files</button>
+            <button class="scope-button" data-scope="types" title="Search Classes &amp; Interfaces" aria-label="Search Classes &amp; Interfaces"><i class="codicon codicon-symbol-class"></i> Classes</button>
+            <button class="scope-button" data-scope="symbols" title="Search Methods &amp; Functions" aria-label="Search Methods &amp; Functions"><i class="codicon codicon-symbol-method"></i> Symbols</button>
+            <button class="scope-button" data-scope="text" title="Search Text Content" aria-label="Search Text Content"><i class="codicon codicon-whole-word"></i> Text</button>
+            <button class="scope-button" data-scope="open" title="Search Open Files" aria-label="Search Open Files"><i class="codicon codicon-book"></i> Open</button>
+            <button class="scope-button" data-scope="modified" title="Search Modified Files" aria-label="Search Modified Files"><i class="codicon codicon-git-merge"></i> Modified</button>
+            <button class="scope-button" data-scope="commands" title="Run VS Code Commands" aria-label="Run VS Code Commands"><i class="codicon codicon-run"></i> Commands</button>
+            <button class="scope-button" data-scope="properties" title="Search Properties" aria-label="Search Properties"><i class="codicon codicon-symbol-property"></i> Properties</button>
+            <button class="scope-button" data-scope="endpoints" title="Search API Endpoints" aria-label="Search API Endpoints"><i class="codicon codicon-globe"></i> Endpoints</button>
         </div>
-        <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off">
+        <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" aria-label="Search Input">
 
         <div id="search-summary" class="search-summary"></div>
     </div>
@@ -896,6 +896,7 @@
             copyPathBtn.className = 'result-action-btn';
             copyPathBtn.setAttribute('data-action', 'copyPath');
             copyPathBtn.title = 'Copy Path';
+            copyPathBtn.setAttribute('aria-label', 'Copy Path');
             copyPathBtn.innerHTML = '<i class="codicon codicon-copy"></i>';
             container.appendChild(copyPathBtn);
 
@@ -904,6 +905,7 @@
                 copyRefBtn.className = 'result-action-btn';
                 copyRefBtn.setAttribute('data-action', 'copyReference');
                 copyRefBtn.title = 'Copy Reference';
+                copyRefBtn.setAttribute('aria-label', 'Copy Reference');
                 copyRefBtn.innerHTML = '<i class="codicon codicon-references"></i>';
                 container.appendChild(copyRefBtn);
             }
@@ -913,6 +915,7 @@
                 copyRelPathBtn.className = 'result-action-btn';
                 copyRelPathBtn.setAttribute('data-action', 'copyRelativePath');
                 copyRelPathBtn.title = 'Copy Relative Path';
+                copyRelPathBtn.setAttribute('aria-label', 'Copy Relative Path');
                 copyRelPathBtn.innerHTML = '<i class="codicon codicon-file-submodule"></i>';
                 container.appendChild(copyRelPathBtn);
             }
@@ -921,6 +924,7 @@
             openSideBtn.className = 'result-action-btn';
             openSideBtn.setAttribute('data-action', 'openSide');
             openSideBtn.title = 'Open to the Side';
+            openSideBtn.setAttribute('aria-label', 'Open to the Side');
             openSideBtn.innerHTML = '<i class="codicon codicon-split-horizontal"></i>';
             container.appendChild(openSideBtn);
 
@@ -929,6 +933,7 @@
                 revealBtn.className = 'result-action-btn';
                 revealBtn.setAttribute('data-action', 'reveal');
                 revealBtn.title = 'Reveal in Explorer';
+                revealBtn.setAttribute('aria-label', 'Reveal in Explorer');
                 revealBtn.innerHTML = '<i class="codicon codicon-folder-opened"></i>';
                 container.appendChild(revealBtn);
             }
@@ -938,6 +943,7 @@
                 removeHistoryBtn.className = 'result-action-btn';
                 removeHistoryBtn.setAttribute('data-action', 'removeHistory');
                 removeHistoryBtn.title = 'Remove from History';
+                removeHistoryBtn.setAttribute('aria-label', 'Remove from History');
                 removeHistoryBtn.innerHTML = '<i class="codicon codicon-trash"></i>';
                 container.appendChild(removeHistoryBtn);
             }
