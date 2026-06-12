@@ -437,7 +437,12 @@ export class SearchEngine implements ISearchProvider {
         if (indices) {
             const idx = indices.indexOf(index);
             if (idx !== -1) {
-                indices.splice(idx, 1);
+                // ⚡ Bolt: O(1) Array Removal
+                // Using splice for array removal is O(N) because it shifts all subsequent elements.
+                // Since order does not matter in fileToItemIndices, replacing the element to remove
+                // with the last element and popping is O(1), preventing a severe performance regression.
+                indices[idx] = indices[indices.length - 1];
+                indices.pop();
             }
             if (indices.length === 0) {
                 this.fileToItemIndices.delete(normalized);
