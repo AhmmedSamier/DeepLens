@@ -94,7 +94,7 @@ export interface SearchOptions {
     /** File patterns to exclude */
     excludePatterns?: string[];
     /** Request ID for streaming correlation */
-    requestId?: number;
+    requestId?: string;
 }
 
 /**
