@@ -8,13 +8,37 @@ import {
     SymbolKind,
     TextDocuments,
     TextDocumentSyncKind,
-    uriToPath,
 } from 'vscode-languageserver/node';
 
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { pathToFileURL } from 'node:url';
+
+/**
+ * Robustly convert URI to file path handling Windows drive letters and UNC paths
+ */
+function uriToPath(uri: string): string {
+    if (uri.startsWith('file:///')) {
+        const decoded = decodeURIComponent(uri);
+        const afterSlash = decoded.slice(7); // /c:/foo or /usr/bin
+
+        // Windows drive letter check (e.g., /c: or /C:)
+        if (/^\/[a-zA-Z]:/.test(afterSlash)) {
+            // Strip leading slash for Windows path: c:/foo
+            return path.normalize(afterSlash.slice(1));
+        }
+        // Unix-like absolute path
+        return path.normalize(afterSlash);
+    }
+
+    if (uri.startsWith('file://')) {
+        return path.normalize(decodeURIComponent(uri.slice(7)));
+    }
+
+    return uri;
+}
+
 import { ActivityTracker } from './core/activity-tracker';
 import { Config } from './core/config';
 import { FileProvider } from './core/providers/file-provider';

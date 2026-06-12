@@ -20,7 +20,7 @@ export const BurstSearchRequest = new RequestType<BurstSearchRequestParams, Burs
 );
 
 export interface StreamResultNotificationParams {
-    requestId: number;
+    requestId: string;
     result: SearchResult;
 }
 
