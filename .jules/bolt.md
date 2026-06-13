@@ -77,6 +77,3 @@
 **Learning:** When removing elements from unordered arrays (like reverse indices `fileToItemIndices`), using `Array.splice(index, 1)` causes a severe O(N) performance regression due to element shifting.
 **Action:** Use a fast O(1) swap-and-pop technique (`array[index] = array[array.length - 1]; array.pop();`) to remove items from unordered arrays.
 
-## 2026-06-14 - [Fast O(1) Array Removal for Unordered Reverse Indices]
-**Learning:** When removing elements from unordered arrays (like reverse indices `fileToItemIndices`), using `Array.splice(index, 1)` causes a severe O(N) performance regression due to element shifting.
-**Action:** Replaced `indices.splice(idx, 1)` with a fast O(1) swap-and-pop technique (`array[index] = array[array.length - 1]; array.pop();`). This optimization should be used for removing elements from any unordered list to avoid O(N) penalties.
