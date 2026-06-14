@@ -61,3 +61,6 @@
 ## 2026-06-12 - Add ARIA pressed state to search scope buttons
 **Learning:** Toggle buttons that visually indicate active state (like filter scope buttons) must communicate this state programmatically to screen readers. Relying solely on a visual class like '.active' leaves screen reader users unaware of which filter is currently selected.
 **Action:** Always add `aria-pressed="true/false"` to toggleable filter buttons and update this attribute dynamically alongside any visual class changes to ensure proper keyboard and screen reader accessibility.
+## 2024-06-14 - Empty States Should Not Present Recovery Actions for Empty Inputs
+**Learning:** Presenting recovery actions (like "Clear Search" or "Switch Scope") when a user simply hasn't typed anything yet is confusing. The empty state when an input is completely blank should simply guide the user to begin (e.g. "Enter a search query to get started."), and only show actionable recovery paths when an actual search yielded zero results.
+**Action:** When creating empty states, always check if the input query is empty. If it is, display a welcoming or instructional message and hide recovery actions.
