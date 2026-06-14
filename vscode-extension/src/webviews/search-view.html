@@ -586,8 +586,10 @@
                     currentScope = 'everything';
                     scopeButtons.forEach(b => {
                         b.classList.remove('active');
+                        b.setAttribute('aria-pressed', 'false');
                         if (b.getAttribute('data-scope') === 'everything') {
                             b.classList.add('active');
+                            b.setAttribute('aria-pressed', 'true');
                         }
                     });
                     vscode.postMessage({
