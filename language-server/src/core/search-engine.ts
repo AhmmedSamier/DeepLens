@@ -437,7 +437,10 @@ export class SearchEngine implements ISearchProvider {
         if (indices) {
             const idx = indices.indexOf(index);
             if (idx !== -1) {
-                indices.splice(idx, 1);
+                // ⚡ Bolt: Fast Array Removal
+                // Swap-and-pop technique instead of .splice() to avoid O(N) element shifting.
+                indices[idx] = indices[indices.length - 1];
+                indices.pop();
             }
             if (indices.length === 0) {
                 this.fileToItemIndices.delete(normalized);
