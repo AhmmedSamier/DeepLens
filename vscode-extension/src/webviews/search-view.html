@@ -303,17 +303,17 @@
 </head>
 <body>
     <div class="search-container">
-        <div class="scope-buttons" id="scope-buttons">
-            <button class="scope-button active" data-scope="everything" title="Search Everything"><i class="codicon codicon-search"></i> All</button>
-            <button class="scope-button" data-scope="files" title="Search Files"><i class="codicon codicon-file"></i> Files</button>
-            <button class="scope-button" data-scope="types" title="Search Classes &amp; Interfaces"><i class="codicon codicon-symbol-class"></i> Classes</button>
-            <button class="scope-button" data-scope="symbols" title="Search Methods &amp; Functions"><i class="codicon codicon-symbol-method"></i> Symbols</button>
-            <button class="scope-button" data-scope="text" title="Search Text Content"><i class="codicon codicon-whole-word"></i> Text</button>
-            <button class="scope-button" data-scope="open" title="Search Open Files"><i class="codicon codicon-book"></i> Open</button>
-            <button class="scope-button" data-scope="modified" title="Search Modified Files"><i class="codicon codicon-git-merge"></i> Modified</button>
-            <button class="scope-button" data-scope="commands" title="Run VS Code Commands"><i class="codicon codicon-run"></i> Commands</button>
-            <button class="scope-button" data-scope="properties" title="Search Properties"><i class="codicon codicon-symbol-property"></i> Properties</button>
-            <button class="scope-button" data-scope="endpoints" title="Search API Endpoints"><i class="codicon codicon-globe"></i> Endpoints</button>
+        <div class="scope-buttons" id="scope-buttons" role="group" aria-label="Search Scopes">
+            <button class="scope-button active" data-scope="everything" title="Search Everything" aria-pressed="true"><i class="codicon codicon-search"></i> All</button>
+            <button class="scope-button" data-scope="files" title="Search Files" aria-pressed="false"><i class="codicon codicon-file"></i> Files</button>
+            <button class="scope-button" data-scope="types" title="Search Classes &amp; Interfaces" aria-pressed="false"><i class="codicon codicon-symbol-class"></i> Classes</button>
+            <button class="scope-button" data-scope="symbols" title="Search Methods &amp; Functions" aria-pressed="false"><i class="codicon codicon-symbol-method"></i> Symbols</button>
+            <button class="scope-button" data-scope="text" title="Search Text Content" aria-pressed="false"><i class="codicon codicon-whole-word"></i> Text</button>
+            <button class="scope-button" data-scope="open" title="Search Open Files" aria-pressed="false"><i class="codicon codicon-book"></i> Open</button>
+            <button class="scope-button" data-scope="modified" title="Search Modified Files" aria-pressed="false"><i class="codicon codicon-git-merge"></i> Modified</button>
+            <button class="scope-button" data-scope="commands" title="Run VS Code Commands" aria-pressed="false"><i class="codicon codicon-run"></i> Commands</button>
+            <button class="scope-button" data-scope="properties" title="Search Properties" aria-pressed="false"><i class="codicon codicon-symbol-property"></i> Properties</button>
+            <button class="scope-button" data-scope="endpoints" title="Search API Endpoints" aria-pressed="false"><i class="codicon codicon-globe"></i> Endpoints</button>
         </div>
         <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" spellcheck="false" aria-label="Search everywhere">
 
@@ -387,7 +387,9 @@
 
         function setActiveScopeButton(scope) {
             scopeButtons.forEach(b => {
-                b.classList.toggle('active', b.getAttribute('data-scope') === scope);
+                const isActive = b.getAttribute('data-scope') === scope;
+                b.classList.toggle('active', isActive);
+                b.setAttribute('aria-pressed', isActive ? 'true' : 'false');
             });
         }
 
