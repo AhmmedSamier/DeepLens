@@ -97,6 +97,10 @@
             display: flex;
             gap: 4px;
         }
+        button:focus-visible {
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: -1px;
+        }
         .search-summary {
             margin-top: 4px;
             font-size: 11px;
@@ -560,46 +564,6 @@
                 renderHistoryToolbar();
             }
 
-            if (results.length === 0 && searchInput.value.trim() !== '') {
-                const emptyDiv = document.createElement('div');
-                emptyDiv.style.padding = '20px 10px';
-                emptyDiv.style.textAlign = 'center';
-                emptyDiv.style.color = 'var(--vscode-descriptionForeground)';
-
-                const messageDiv = document.createElement('div');
-                messageDiv.style.marginBottom = '12px';
-                messageDiv.textContent = `No results found for '${searchInput.value}'`;
-
-                const clearBtn = document.createElement('button');
-                clearBtn.className = 'scope-button';
-                clearBtn.style.padding = '4px 12px';
-                clearBtn.style.fontSize = '12px';
-                clearBtn.textContent = 'Clear Search';
-
-                emptyDiv.appendChild(messageDiv);
-                emptyDiv.appendChild(clearBtn);
-
-                resultsContainer.appendChild(emptyDiv);
-
-                clearBtn.addEventListener('click', () => {
-                    searchInput.value = '';
-                    currentScope = 'everything';
-                    scopeButtons.forEach(b => {
-                        b.classList.remove('active');
-                        b.setAttribute('aria-pressed', 'false');
-                        if (b.getAttribute('data-scope') === 'everything') {
-                            b.classList.add('active');
-                            b.setAttribute('aria-pressed', 'true');
-                        }
-                    });
-                    vscode.postMessage({
-                        type: 'search',
-                        query: '',
-                        scope: 'everything'
-                    });
-                });
-                return;
-            }
 
             results.forEach((result, index) => {
                 const item = result.item;
@@ -772,7 +736,16 @@
             
             const messageDiv = document.createElement('div');
             messageDiv.className = 'empty-state';
+
+            if (searchInput.value.trim() === '') {
+                messageDiv.textContent = "Enter a search query to get started.";
+                resultsContainer.appendChild(messageDiv);
+                return;
+            }
+
             messageDiv.textContent = "No results found for '" + searchInput.value + "'.";
+            resultsContainer.appendChild(messageDiv);
+
             const actionsDiv = document.createElement('div');
             actionsDiv.className = 'empty-state-actions';
 
