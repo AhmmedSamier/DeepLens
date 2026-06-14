@@ -537,7 +537,7 @@
         }
 
         function renderResults() {
-            resultsContainer.innerHTML = '';
+            resultsContainer.textContent = '';
             selectedIndex = -1;
             visibleEntries = [];
 
@@ -776,14 +776,20 @@
             const clearBtn = document.createElement('button');
             clearBtn.className = 'empty-state-btn';
             clearBtn.setAttribute('data-empty-action', 'clear');
-            clearBtn.innerHTML = '<i class="codicon codicon-clear-all"></i> Clear Search';
+            const clearIcon = document.createElement('i');
+            clearIcon.className = 'codicon codicon-clear-all';
+            clearBtn.appendChild(clearIcon);
+            clearBtn.appendChild(document.createTextNode(' Clear Search'));
             actionsDiv.appendChild(clearBtn);
 
             // Show Recent History button
             const recentBtn = document.createElement('button');
             recentBtn.className = 'empty-state-btn';
             recentBtn.setAttribute('data-empty-action', 'recent');
-            recentBtn.innerHTML = '<i class="codicon codicon-history"></i> Show Recent History';
+            const recentIcon = document.createElement('i');
+            recentIcon.className = 'codicon codicon-history';
+            recentBtn.appendChild(recentIcon);
+            recentBtn.appendChild(document.createTextNode(' Show Recent History'));
             actionsDiv.appendChild(recentBtn);
 
             // Switch to Global Search button (if not already global)
@@ -791,7 +797,10 @@
                 const globalBtn = document.createElement('button');
                 globalBtn.className = 'empty-state-btn';
                 globalBtn.setAttribute('data-empty-action', 'global');
-                globalBtn.innerHTML = '<i class="codicon codicon-search"></i> Switch to Global Search';
+                const globalIcon = document.createElement('i');
+                globalIcon.className = 'codicon codicon-search';
+                globalBtn.appendChild(globalIcon);
+                globalBtn.appendChild(document.createTextNode(' Switch to Global Search'));
                 actionsDiv.appendChild(globalBtn);
             }
 
@@ -799,28 +808,40 @@
             const nativeBtn = document.createElement('button');
             nativeBtn.className = 'empty-state-btn';
             nativeBtn.setAttribute('data-empty-action', 'native');
-            nativeBtn.innerHTML = '<i class="codicon codicon-search-fuzzy"></i> Search in Files (Native)';
+            const nativeIcon = document.createElement('i');
+            nativeIcon.className = 'codicon codicon-search-fuzzy';
+            nativeBtn.appendChild(nativeIcon);
+            nativeBtn.appendChild(document.createTextNode(' Search in Files (Native)'));
             actionsDiv.appendChild(nativeBtn);
 
             // Rebuild Index button
             const rebuildBtn = document.createElement('button');
             rebuildBtn.className = 'empty-state-btn';
             rebuildBtn.setAttribute('data-empty-action', 'rebuild');
-            rebuildBtn.innerHTML = '<i class="codicon codicon-refresh"></i> Rebuild Index';
+            const rebuildIcon = document.createElement('i');
+            rebuildIcon.className = 'codicon codicon-refresh';
+            rebuildBtn.appendChild(rebuildIcon);
+            rebuildBtn.appendChild(document.createTextNode(' Rebuild Index'));
             actionsDiv.appendChild(rebuildBtn);
 
             // Clear Index Cache button
             const clearCacheBtn = document.createElement('button');
             clearCacheBtn.className = 'empty-state-btn';
             clearCacheBtn.setAttribute('data-empty-action', 'clear-cache');
-            clearCacheBtn.innerHTML = '<i class="codicon codicon-trash"></i> Clear Index Cache';
+            const clearCacheIcon = document.createElement('i');
+            clearCacheIcon.className = 'codicon codicon-trash';
+            clearCacheBtn.appendChild(clearCacheIcon);
+            clearCacheBtn.appendChild(document.createTextNode(' Clear Index Cache'));
             actionsDiv.appendChild(clearCacheBtn);
 
             // Configure Settings button
             const settingsBtn = document.createElement('button');
             settingsBtn.className = 'empty-state-btn';
             settingsBtn.setAttribute('data-empty-action', 'settings');
-            settingsBtn.innerHTML = '<i class="codicon codicon-settings-gear"></i> Configure Settings';
+            const settingsIcon = document.createElement('i');
+            settingsIcon.className = 'codicon codicon-settings-gear';
+            settingsBtn.appendChild(settingsIcon);
+            settingsBtn.appendChild(document.createTextNode(' Configure Settings'));
             actionsDiv.appendChild(settingsBtn);
 
             resultsContainer.appendChild(actionsDiv);
@@ -871,14 +892,32 @@
             toolbar.className = 'empty-state-actions';
 
             if (confirmClearHistory) {
-                toolbar.innerHTML = '\
-                    <button class="empty-state-btn" data-history-action="confirm-clear"><i class="codicon codicon-trash"></i> Confirm Clear History</button>\
-                    <button class="empty-state-btn" data-history-action="cancel-clear"><i class="codicon codicon-clear-all"></i> Cancel</button>\
-                ';
+                const confirmClearBtn = document.createElement('button');
+                confirmClearBtn.className = 'empty-state-btn';
+                confirmClearBtn.setAttribute('data-history-action', 'confirm-clear');
+                const confirmClearIcon = document.createElement('i');
+                confirmClearIcon.className = 'codicon codicon-trash';
+                confirmClearBtn.appendChild(confirmClearIcon);
+                confirmClearBtn.appendChild(document.createTextNode(' Confirm Clear History'));
+                toolbar.appendChild(confirmClearBtn);
+
+                const cancelClearBtn = document.createElement('button');
+                cancelClearBtn.className = 'empty-state-btn';
+                cancelClearBtn.setAttribute('data-history-action', 'cancel-clear');
+                const cancelClearIcon = document.createElement('i');
+                cancelClearIcon.className = 'codicon codicon-clear-all';
+                cancelClearBtn.appendChild(cancelClearIcon);
+                cancelClearBtn.appendChild(document.createTextNode(' Cancel'));
+                toolbar.appendChild(cancelClearBtn);
             } else {
-                toolbar.innerHTML = '\
-                    <button class="empty-state-btn" data-history-action="clear"><i class="codicon codicon-trash"></i> Clear Recent History</button>\
-                ';
+                const clearRecentBtn = document.createElement('button');
+                clearRecentBtn.className = 'empty-state-btn';
+                clearRecentBtn.setAttribute('data-history-action', 'clear');
+                const clearRecentIcon = document.createElement('i');
+                clearRecentIcon.className = 'codicon codicon-trash';
+                clearRecentBtn.appendChild(clearRecentIcon);
+                clearRecentBtn.appendChild(document.createTextNode(' Clear Recent History'));
+                toolbar.appendChild(clearRecentBtn);
             }
 
             toolbar.querySelectorAll('[data-history-action]').forEach((button) => {
@@ -918,7 +957,9 @@
             copyPathBtn.setAttribute('data-action', 'copyPath');
             copyPathBtn.title = 'Copy Path';
             copyPathBtn.setAttribute('aria-label', 'Copy Path');
-            copyPathBtn.innerHTML = '<i class="codicon codicon-copy"></i>';
+            const copyPathIcon = document.createElement('i');
+            copyPathIcon.className = 'codicon codicon-copy';
+            copyPathBtn.appendChild(copyPathIcon);
             container.appendChild(copyPathBtn);
 
             if (symbolTypes.has(item.type)) {
@@ -927,7 +968,9 @@
                 copyRefBtn.setAttribute('data-action', 'copyReference');
                 copyRefBtn.title = 'Copy Reference';
                 copyRefBtn.setAttribute('aria-label', 'Copy Reference');
-                copyRefBtn.innerHTML = '<i class="codicon codicon-references"></i>';
+                const copyRefIcon = document.createElement('i');
+                copyRefIcon.className = 'codicon codicon-references';
+                copyRefBtn.appendChild(copyRefIcon);
                 container.appendChild(copyRefBtn);
             }
 
@@ -937,7 +980,9 @@
                 copyRelPathBtn.setAttribute('data-action', 'copyRelativePath');
                 copyRelPathBtn.title = 'Copy Relative Path';
                 copyRelPathBtn.setAttribute('aria-label', 'Copy Relative Path');
-                copyRelPathBtn.innerHTML = '<i class="codicon codicon-file-submodule"></i>';
+                const copyRelPathIcon = document.createElement('i');
+                copyRelPathIcon.className = 'codicon codicon-file-submodule';
+                copyRelPathBtn.appendChild(copyRelPathIcon);
                 container.appendChild(copyRelPathBtn);
             }
 
@@ -946,7 +991,9 @@
             openSideBtn.setAttribute('data-action', 'openSide');
             openSideBtn.title = 'Open to the Side';
             openSideBtn.setAttribute('aria-label', 'Open to the Side');
-            openSideBtn.innerHTML = '<i class="codicon codicon-split-horizontal"></i>';
+            const openSideIcon = document.createElement('i');
+            openSideIcon.className = 'codicon codicon-split-horizontal';
+            openSideBtn.appendChild(openSideIcon);
             container.appendChild(openSideBtn);
 
             if (fileTypes.has(item.type)) {
@@ -955,7 +1002,9 @@
                 revealBtn.setAttribute('data-action', 'reveal');
                 revealBtn.title = 'Reveal in Explorer';
                 revealBtn.setAttribute('aria-label', 'Reveal in Explorer');
-                revealBtn.innerHTML = '<i class="codicon codicon-folder-opened"></i>';
+                const revealIcon = document.createElement('i');
+                revealIcon.className = 'codicon codicon-folder-opened';
+                revealBtn.appendChild(revealIcon);
                 container.appendChild(revealBtn);
             }
 
@@ -965,7 +1014,9 @@
                 removeHistoryBtn.setAttribute('data-action', 'removeHistory');
                 removeHistoryBtn.title = 'Remove from History';
                 removeHistoryBtn.setAttribute('aria-label', 'Remove from History');
-                removeHistoryBtn.innerHTML = '<i class="codicon codicon-trash"></i>';
+                const removeHistoryIcon = document.createElement('i');
+                removeHistoryIcon.className = 'codicon codicon-trash';
+                removeHistoryBtn.appendChild(removeHistoryIcon);
                 container.appendChild(removeHistoryBtn);
             }
         }
