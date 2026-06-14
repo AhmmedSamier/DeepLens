@@ -68,6 +68,3 @@
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
 
-## 2026-06-12 - Add ARIA pressed state to search scope buttons
-**Learning:** Toggle buttons that visually indicate active state (like filter scope buttons) must communicate this state programmatically to screen readers. Relying solely on a visual class like '.active' leaves screen reader users unaware of which filter is currently selected.
-**Action:** Always add `aria-pressed="true/false"` to toggleable filter buttons and update this attribute dynamically alongside any visual class changes to ensure proper keyboard and screen reader accessibility.

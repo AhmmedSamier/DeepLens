@@ -437,8 +437,10 @@ export class SearchEngine implements ISearchProvider {
         if (indices) {
             const idx = indices.indexOf(index);
             if (idx !== -1) {
-                // ⚡ Bolt: Fast Array Removal
-                // Swap-and-pop technique instead of .splice() to avoid O(N) element shifting.
+                // ⚡ Bolt: Fast O(1) unordered array element removal
+                // Replaces indices.splice(idx, 1) which causes an O(N) shift operation.
+                // Since this reverse index is unordered, we can simply swap the removed
+                // element with the last element and pop, changing complexity to O(1).
                 indices[idx] = indices[indices.length - 1];
                 indices.pop();
             }
