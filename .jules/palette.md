@@ -55,10 +55,10 @@
 ## 2026-06-04 - Reset Filters on Clear Search in VS Code QuickPick
 **Learning:** In complex search UIs with multiple filters, an empty state "Clear Search" action that only clears the text query leaves users stuck in a filtered state they might not realize they're in. This increases cognitive load and friction.
 **Action:** When implementing "Clear Search" functionality, always ensure all active filters and scopes are reset alongside the text input, and update the UI feedback to clearly communicate the complete reset.
+
 ## 2026-06-05 - Actionable Empty State with .textContent
 **Learning:** When generating actionable empty states dynamically in webviews (e.g., "No results for X"), using `.innerHTML` with a custom escape function risks `ReferenceError` crashes if the escape function isn't perfectly bundled. It also exposes a theoretical XSS vector.
 **Action:** Always use native DOM methods like `document.createElement` and `.textContent` when injecting user input into webviews to ensure robust, built-in XSS protection and zero dependency on custom escape utilities.
-
 
 ## 2026-06-12 - Add ARIA pressed state to search scope buttons
 **Learning:** Toggle buttons that visually indicate active state (like filter scope buttons) must communicate this state programmatically to screen readers. Relying solely on a visual class like '.active' leaves screen reader users unaware of which filter is currently selected.
@@ -67,3 +67,4 @@
 ## 2026-06-13 - Added proper ARIA attributes to group filter toggles
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
+
