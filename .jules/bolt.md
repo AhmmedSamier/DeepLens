@@ -72,3 +72,7 @@
 ## 2026-08-01 - [Fast Name Property Early-Exit]
 **Learning:** Even if an item passes the aggregate bitflag check (`itemBitflags`) which considers the `name`, `fullName`, and `relativeFilePath`, we shouldn't immediately assume the `name` property itself contains all the characters. The fallback path runs `tryFuzzyMatchName` for all items passing the aggregate bitmask, resulting in wasted `Fuzzysort.single` evaluations.
 **Action:** Since we already maintain `itemNameBitflags` specific to the `name` property, we can add a second O(1) early-exit check inside `tryFuzzyMatchName` (`(context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags`). This immediately skips expensive name evaluation when the query characters are actually spread across the full name or file path.
+
+## 2026-06-14 - [Fast O(1) Array Removal for Unordered Reverse Indices]
+**Learning:** When removing elements from unordered arrays (like reverse indices `fileToItemIndices`), using `Array.splice(index, 1)` causes a severe O(N) performance regression due to element shifting.
+**Action:** Replaced `indices.splice(idx, 1)` with a fast O(1) swap-and-pop technique (`array[index] = array[array.length - 1]; array.pop();`). This optimization should be used for removing elements from any unordered list to avoid O(N) penalties.

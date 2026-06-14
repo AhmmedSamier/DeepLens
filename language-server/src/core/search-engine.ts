@@ -437,7 +437,12 @@ export class SearchEngine implements ISearchProvider {
         if (indices) {
             const idx = indices.indexOf(index);
             if (idx !== -1) {
-                indices.splice(idx, 1);
+                // ⚡ Bolt: Fast O(1) unordered array element removal
+                // Replaces indices.splice(idx, 1) which causes an O(N) shift operation.
+                // Since this reverse index is unordered, we can simply swap the removed
+                // element with the last element and pop, changing complexity to O(1).
+                indices[idx] = indices[indices.length - 1];
+                indices.pop();
             }
             if (indices.length === 0) {
                 this.fileToItemIndices.delete(normalized);
