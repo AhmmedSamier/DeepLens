@@ -72,11 +72,25 @@ export class RouteMatcher {
             cleanPath = cleanPath.slice(start, end);
         }
 
-        // If cleanPath is empty, split returns [""] which is length 1. We want empty array.
-        // ⚡ Bolt: Fast segment lowercasing optimization
+        // ⚡ Bolt: Fast string splitting optimization
+        // Avoid allocating empty arrays for single segments.
+        // If there's no slash, return early with single-element arrays.
+        if (cleanPath.length === 0) {
+            return { cleanPath, segments: [], segmentsLower: [], method };
+        }
+
+        if (cleanPath.indexOf('/') === -1) {
+            return {
+                cleanPath,
+                segments: [cleanPath],
+                segmentsLower: [cleanPath.toLowerCase()],
+                method,
+            };
+        }
+
         // Avoiding double splitting (str.toLowerCase().split('/')) or .map() by splitting once
         // and using a pre-allocated array with a manual for loop is ~35% faster.
-        const segments = cleanPath.length > 0 ? cleanPath.split('/') : [];
+        const segments = cleanPath.split('/');
         const segmentsLength = segments.length;
         // eslint-disable-next-line sonarjs/array-constructor
         const segmentsLower = new Array<string>(segmentsLength);
@@ -276,22 +290,38 @@ export class RouteMatcher {
 
         try {
             const exactRegex = new RegExp(`^${pattern}$`, 'i');
-            const templateSegments = cleanTemplate.length > 0 ? cleanTemplate.split('/') : [];
-            const segmentsLength = templateSegments.length;
 
-            // eslint-disable-next-line sonarjs/array-constructor
-            const templateSegmentsLower = new Array<string>(segmentsLength);
-            // eslint-disable-next-line sonarjs/array-constructor
-            const isParameter = new Array<boolean>(segmentsLength);
+            let templateSegments: string[];
+            let templateSegmentsLower: string[];
+            let isParameter: boolean[];
 
-            for (let j = 0; j < segmentsLength; j++) {
-                templateSegmentsLower[j] = templateSegments[j].toLowerCase();
-                const s = templateSegments[j];
-                // ⚡ Bolt: Fast parameter detection optimization
-                // Explicitly check length to avoid NaN comparisons on charCodeAt.
-                // A parameter segment must have at least 2 characters (e.g. "{}").
-                isParameter[j] = s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
-            } // 123 is '{', 125 is '}'
+            if (cleanTemplate.length === 0) {
+                templateSegments = [];
+                templateSegmentsLower = [];
+                isParameter = [];
+            } else if (cleanTemplate.indexOf('/') === -1) {
+                const s = cleanTemplate;
+                templateSegments = [s];
+                templateSegmentsLower = [s.toLowerCase()];
+                isParameter = [s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125];
+            } else {
+                templateSegments = cleanTemplate.split('/');
+                const segmentsLength = templateSegments.length;
+
+                // eslint-disable-next-line sonarjs/array-constructor
+                templateSegmentsLower = new Array<string>(segmentsLength);
+                // eslint-disable-next-line sonarjs/array-constructor
+                isParameter = new Array<boolean>(segmentsLength);
+
+                for (let j = 0; j < segmentsLength; j++) {
+                    const s = templateSegments[j];
+                    templateSegmentsLower[j] = s.toLowerCase();
+                    // ⚡ Bolt: Fast parameter detection optimization
+                    // Explicitly check length to avoid NaN comparisons on charCodeAt.
+                    // A parameter segment must have at least 2 characters (e.g. "{}").
+                    isParameter[j] = s.length >= 2 && s.charCodeAt(0) === 123 && s.charCodeAt(s.length - 1) === 125;
+                } // 123 is '{', 125 is '}'
+            }
 
             cached = {
                 regex: exactRegex,
