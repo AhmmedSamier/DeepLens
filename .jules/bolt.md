@@ -77,3 +77,6 @@
 **Learning:** When removing elements from unordered arrays (like reverse indices `fileToItemIndices`), using `Array.splice(index, 1)` causes a severe O(N) performance regression due to element shifting.
 **Action:** Use a fast O(1) swap-and-pop technique (`array[index] = array[array.length - 1]; array.pop();`) to remove items from unordered arrays.
 
+## 2024-05-27 - Fast String Splitting in Hot Paths
+**Learning:** In string parsing hot paths (like RouteMatcher's path evaluation), relying on `String.prototype.split('/')` incurs significant memory allocation overhead for single-segment strings because it instantiates an array and performs internal string operations regardless of whether a delimiter is present.
+**Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
