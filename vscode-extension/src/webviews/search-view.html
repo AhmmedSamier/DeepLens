@@ -303,6 +303,24 @@
             display: inline-block;
             margin-right: 3px;
         }
+        .progress-bar-container {
+            width: 100%;
+            height: 2px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            background: transparent;
+            visibility: hidden;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 30%;
+            background: var(--vscode-progressBar-background);
+            animation: progress 1s infinite linear;
+        }
+        @keyframes progress {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(333%); }
+        }
     </style>
 </head>
 <body>
@@ -322,6 +340,9 @@
         <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" spellcheck="false" aria-label="Search everywhere">
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
+    </div>
+    <div id="loading-progress" class="progress-bar-container" aria-hidden="true">
+        <div class="progress-bar"></div>
     </div>
     <div id="results" class="results-container"></div>
 
@@ -343,6 +364,16 @@
         let confirmClearHistory = false;
 
         const slashCommandScopes = ${SLASH_COMMAND_SCOPES};
+
+        function showLoading() {
+            document.getElementById('loading-progress').style.visibility = 'visible';
+            document.getElementById('loading-progress').setAttribute('aria-hidden', 'false');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-progress').style.visibility = 'hidden';
+            document.getElementById('loading-progress').setAttribute('aria-hidden', 'true');
+        }
 
         function isSlashTriggerQuery(rawQuery) {
             const trimmed = rawQuery.trimStart();
@@ -467,6 +498,7 @@
                 slashCommands = [];
             }
 
+            showLoading();
             vscode.postMessage({ type: 'search', query: effectiveQuery, scope: currentScope });
         }
 
@@ -505,6 +537,7 @@
             const message = event.data;
             switch (message.type) {
                 case 'results':
+                    hideLoading();
                     if (message.requestId >= lastRenderedRequestId) {
                         lastRenderedRequestId = message.requestId;
                         results = message.results;
@@ -520,11 +553,16 @@
                     updateSummary(message.message);
                     break;
                 case 'slashCommands':
+                    hideLoading();
                     slashCommands = message.commands || [];
                     renderResults();
                     break;
                 case 'capabilities':
                     setTextSearchEnabled(message.textSearchEnabled !== false);
+                    break;
+                case 'error':
+                    hideLoading();
+                    showStatus(message.message || 'An error occurred');
                     break;
             }
         });
@@ -648,6 +686,7 @@
                         const action = button.getAttribute('data-action');
                         if (action) {
                             if (action === 'removeHistory') {
+                                showLoading();
                                 vscode.postMessage({ type: 'removeHistoryItem', itemId: result.item.id });
                                 return;
                             }
@@ -837,6 +876,7 @@
                         return;
                     }
                     if (action === 'recent') {
+                        showLoading();
                         vscode.postMessage({ type: 'showRecentHistory' });
                         return;
                     }
@@ -912,6 +952,7 @@
                     }
                     if (action === 'confirm-clear') {
                         confirmClearHistory = false;
+                        showLoading();
                         vscode.postMessage({ type: 'clearHistory' });
                     }
                 });
@@ -1129,6 +1170,7 @@
             currentScope = 'everything';
             userScope = 'everything';
             updateScopeButtons();
+            showLoading();
             vscode.postMessage({
                 type: 'search',
                 query: searchInput.value,
