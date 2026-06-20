@@ -71,3 +71,6 @@
 ## 2026-06-13 - Added proper ARIA attributes to group filter toggles
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
+## 2026-06-20 - Webview Indeterminate Progress Bar
+**Learning:** Implementing visual feedback (like a progress bar) in webviews across asynchronous IPC boundaries is necessary for smooth UX. By tying it to the start of a user action (e.g., input event, button click) and hiding it upon receiving a response message, the interface stays responsive. However, doing so dynamically using CSS variables `--vscode-progressBar-background` and `visibility: hidden` rather than `display: none` guarantees consistent native VSCode styling while eliminating layout shift during loading.
+**Action:** When implementing indeterminate loading indicators in VS Code webviews, apply `--vscode-progressBar-background` for native theming, and use `visibility: hidden`/`visible` instead of `display` or DOM insertion/removal to prevent visual jitter.
