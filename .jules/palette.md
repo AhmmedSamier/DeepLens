@@ -71,3 +71,7 @@
 ## 2026-06-13 - Added proper ARIA attributes to group filter toggles
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
+
+## 2026-06-21 - Visual Loading Indicators for Async Search UIs
+**Learning:** In UIs that heavily rely on async data fetching (like a fuzzy search engine), relying only on small textual status messages (like "0 results" temporarily or a tiny loading spinner in a corner) leaves users unsure if their input was registered or if the UI is hanging. This creates a "dead zone" of feedback during the most critical interaction. Adding a native-looking indeterminate progress bar directly into the flow (e.g., right under the search input) provides immediate, unmistakable feedback that an operation is underway.
+**Action:** Always implement centralized, highly visible loading indicators (like a progress bar) for core async interactions. Use `visibility: hidden` instead of `display: none` to reserve space and prevent layout shifts when the indicator toggles on and off.
