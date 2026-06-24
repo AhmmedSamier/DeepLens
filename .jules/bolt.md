@@ -80,3 +80,6 @@
 ## 2024-05-27 - Fast String Splitting in Hot Paths
 **Learning:** In string parsing hot paths (like RouteMatcher's path evaluation), relying on `String.prototype.split('/')` incurs significant memory allocation overhead for single-segment strings because it instantiates an array and performs internal string operations regardless of whether a delimiter is present.
 **Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
+## 2024-06-24 - String checking performance
+**Learning:** To improve performance when checking for substring presence in hot paths or large strings, use `.indexOf('target') !== -1` instead of `.includes('target')`. `indexOf` is significantly faster in V8 as it avoids the abstraction overhead.
+**Action:** Use `.indexOf` over `.includes` in performance critical sections.
