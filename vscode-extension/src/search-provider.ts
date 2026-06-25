@@ -1637,6 +1637,21 @@ export class SearchProvider {
      * Get empty state items when no results are found
      */
     private getEmptyStateItems(query: string): { items: SearchResultItem[]; prompt?: string } {
+        if (!query.trim()) {
+            return {
+                items: [{
+                    label: 'Enter a search query to get started.',
+                    alwaysShow: true,
+                    kind: vscode.QuickPickItemKind.Separator,
+                    result: {
+                        item: { id: 'empty-start', name: '', type: SearchItemType.TEXT, filePath: '', detail: '' },
+                        score: 0,
+                        scope: SearchScope.EVERYTHING,
+                    },
+                }],
+            };
+        }
+
         const isGlobalScope = this.currentScope === SearchScope.EVERYTHING;
         // Palette: Use scope-specific message
         const scopeName = this.getScopeName(this.currentScope);
