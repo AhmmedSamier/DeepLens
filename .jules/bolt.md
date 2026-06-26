@@ -80,3 +80,6 @@
 ## 2024-05-27 - Fast String Splitting in Hot Paths
 **Learning:** In string parsing hot paths (like RouteMatcher's path evaluation), relying on `String.prototype.split('/')` incurs significant memory allocation overhead for single-segment strings because it instantiates an array and performs internal string operations regardless of whether a delimiter is present.
 **Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
+## 2024-05-18 - Early exit in fuzzy match fallback
+**Learning:** In string parsing hot paths for fuzzy matching, aggregate bitflags are useful for general early exits, but individual bitflags for specific properties (fullName, path) can prevent expensive fallback fuzzy sorting if those properties lack the required characters.
+**Action:** Add property-specific bitflag arrays (like itemFullNameBitflags) to perform O(1) early-exit checks before executing expensive property-specific fuzzy matching algorithms (like Fuzzysort.single()).
