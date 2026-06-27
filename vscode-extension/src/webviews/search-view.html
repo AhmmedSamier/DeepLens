@@ -97,7 +97,7 @@
             display: flex;
             gap: 4px;
         }
-        button:focus-visible {
+        button:focus-visible, [role="button"]:focus-visible {
             outline: 1px solid var(--vscode-focusBorder);
             outline-offset: -1px;
         }
@@ -115,6 +115,10 @@
             display: flex;
             align-items: center;
             gap: 8px;
+            cursor: pointer;
+        }
+        .pro-tip:hover {
+            background: var(--vscode-list-hoverBackground);
         }
         .pro-tip-icon {
             color: var(--vscode-textLink-foreground);
@@ -740,6 +744,51 @@
             if (searchInput.value.trim() === '') {
                 messageDiv.textContent = "Enter a search query to get started.";
                 resultsContainer.appendChild(messageDiv);
+
+                // Add Pro Tip
+                const proTipDiv = document.createElement('div');
+                proTipDiv.className = 'pro-tip';
+                proTipDiv.setAttribute('role', 'button');
+                proTipDiv.setAttribute('tabindex', '0');
+
+                const tips = [
+                    { label: 'Search Symbols', action: '# ', desc: 'Find methods & variables', icon: 'symbol-method' },
+                    { label: 'Run Commands', action: '> ', desc: 'Execute VS Code commands', icon: 'run' },
+                    { label: 'Find Modified Files', action: '/m ', desc: 'See changed files', icon: 'git-merge' },
+                    { label: 'Search Open Files', action: '/o ', desc: 'Search open tabs', icon: 'book' },
+                    { label: 'Search Types', action: '/t ', desc: 'Find classes & interfaces', icon: 'symbol-class' },
+                    { label: 'Search Text', action: '/txt ', desc: 'Search file content', icon: 'whole-word' },
+                    { label: 'Find Endpoints', action: '/e ', desc: 'Search API routes', icon: 'globe' },
+                ];
+                const tip = tips[Math.floor(Math.random() * tips.length)];
+
+                const tipIcon = document.createElement('i');
+                tipIcon.className = `codicon codicon-${tip.icon} pro-tip-icon`;
+
+                const tipText = document.createElement('span');
+                const strongLabel = document.createElement('strong');
+                strongLabel.textContent = tip.label + ': ';
+                tipText.appendChild(strongLabel);
+                tipText.appendChild(document.createTextNode(tip.desc));
+
+                proTipDiv.appendChild(tipIcon);
+                proTipDiv.appendChild(tipText);
+
+                const triggerTip = () => {
+                    searchInput.value = tip.action;
+                    searchInput.focus();
+                    triggerSearchFromInput(searchInput.value);
+                };
+
+                proTipDiv.addEventListener('click', triggerTip);
+                proTipDiv.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        triggerTip();
+                    }
+                });
+
+                resultsContainer.appendChild(proTipDiv);
                 return;
             }
 
@@ -1114,6 +1163,7 @@
             const tip = tips[Math.floor(Math.random() * tips.length)];
             searchInput.value = tip.action;
             searchInput.focus();
+            triggerSearchFromInput(searchInput.value);
             showStatus('Pro tip loaded: ' + tip.label + ' (' + tip.desc + ')');
         }
 
