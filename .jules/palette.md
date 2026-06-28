@@ -72,5 +72,5 @@
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
 ## 2026-06-16 - Empty States Should Not Present Recovery Actions for Empty Inputs
-**Learning:** Presenting recovery actions (like "Clear Search" or "Switch Scope") when a user simply hasn't typed anything yet is confusing. The empty state when an input is completely blank should simply guide the user to begin (e.g. "Enter a search query to get started."), and only show actionable recovery paths when an actual search yielded zero results.
-**Action:** When creating empty states, always check if the input query is empty. If it is, display a welcoming or instructional message and hide recovery actions.
+**Learning:** Reinforced existing rule from 2024-06-14 after QuickPick implementation updates.
+**Action:** Keep the existing canonical rule and reference it instead of duplicating full text.
