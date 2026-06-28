@@ -80,3 +80,7 @@
 ## 2024-05-27 - Fast String Splitting in Hot Paths
 **Learning:** In string parsing hot paths (like RouteMatcher's path evaluation), relying on `String.prototype.split('/')` incurs significant memory allocation overhead for single-segment strings because it instantiates an array and performs internal string operations regardless of whether a delimiter is present.
 **Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
+
+## 2026-10-27 - [Fast Endpoint Matching Bypass]
+**Learning:** In the `SearchEngine.processItemForSearch` method, `tryUrlEndpointMatch` was previously called for all items that passed the bitflag check or were preserved for URL evaluation, regardless of whether the item was actually an endpoint. This added unnecessary function call overhead and duplicate condition evaluations for non-endpoint items.
+**Action:** Add an explicit O(1) `typeId === 11 /* ENDPOINT */` check alongside `context.isPotentialUrl` directly inside `processItemForSearch` to completely bypass the `tryUrlEndpointMatch` function call for all non-endpoint items. This eliminates redundant evaluations and speeds up the fallback search path.
