@@ -586,7 +586,7 @@ export class SearchEngine implements ISearchProvider {
     }
 
     /**
-     * Compute bitflags for an item (name flags and aggregate flags)
+     * Compute bitflags for an item (name flags, fullName flags, and aggregate flags)
      */
     private computeItemBitflags(item: SearchableItem): {
         nameFlags: number;
@@ -594,8 +594,8 @@ export class SearchEngine implements ISearchProvider {
         aggregateFlags: number;
     } {
         const nameFlags = this.calculateBitflags(item.name);
+        let fullNameFlags = 0;
         let aggregateFlags = nameFlags;
-        let fullNameFlags = nameFlags;
 
         if (this.shouldProcessFullName(item) && item.fullName) {
             fullNameFlags = this.calculateBitflags(item.fullName);

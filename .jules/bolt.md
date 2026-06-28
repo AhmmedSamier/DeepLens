@@ -80,13 +80,17 @@
 ## 2024-05-27 - Fast String Splitting in Hot Paths
 **Learning:** In string parsing hot paths (like RouteMatcher's path evaluation), relying on `String.prototype.split('/')` incurs significant memory allocation overhead for single-segment strings because it instantiates an array and performs internal string operations regardless of whether a delimiter is present.
 **Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
-<<<<<<< HEAD
+
+## 2024-06-20 - [Fast FullName Property Early-Exit]
+**Learning:** Similar to the name property early-exit, even if an item passes the aggregate bitflag check (`itemBitflags`) which considers the `name`, `fullName`, and `relativeFilePath`, we shouldn't immediately assume the `fullName` property itself contains all the characters. The fallback path runs `tryFuzzyMatchFullName` for items, resulting in wasted `Fuzzysort.single` evaluations if the query characters matched due to other fields.
+**Action:** Added `itemFullNameBitflags` to track bitflags specifically for the `fullName` property, enabling a second O(1) early-exit check inside `tryFuzzyMatchFullName` (`(context.itemFullNameBitflags[i] & context.queryBitflags) !== context.queryBitflags`). This immediately skips expensive evaluation when the query characters are actually spread across the name or file path.
+
 ## 2026-08-05 - [O(1) FullName Property Early-Exit in Fuzzy Match]
 **Learning:** Checking `itemNameBitflags` is an effective early exit for `name` matches, but when falling back to `tryFuzzyMatchFullName`, the evaluation proceeds directly to expensive `Fuzzysort.single()` string operations. Since `fullName` can differ from `name`, and characters might be spread purely across the `relativeFilePath` (passing the `itemBitflags` aggregate check but not existing in `fullName`), missing an explicit `fullName` bitflag check results in wasted fuzzy search cycles.
 **Action:** Isolate and maintain an `itemFullNameBitflags` array in hot paths, parallel to `itemNameBitflags` and `itemBitflags`. Use this specific bitmask to implement an O(1) early-exit check inside `tryFuzzyMatchFullName` before executing expensive string evaluations.
-=======
 
 ## 2026-10-27 - [Fast Endpoint Matching Bypass]
 **Learning:** In the `SearchEngine.processItemForSearch` method, `tryUrlEndpointMatch` was previously called for all items that passed the bitflag check or were preserved for URL evaluation, regardless of whether the item was actually an endpoint. This added unnecessary function call overhead and duplicate condition evaluations for non-endpoint items.
 **Action:** Add an explicit O(1) `typeId === 11 /* ENDPOINT */` check alongside `context.isPotentialUrl` directly inside `processItemForSearch` to completely bypass the `tryUrlEndpointMatch` function call for all non-endpoint items. This eliminates redundant evaluations and speeds up the fallback search path.
+>>>>>>> origin/master
 >>>>>>> origin/master
