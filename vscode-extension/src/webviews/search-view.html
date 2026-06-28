@@ -303,6 +303,7 @@
             display: inline-block;
             margin-right: 3px;
         }
+<<<<<<< HEAD
         .progress-bar-container {
             width: 100%;
             height: 2px;
@@ -310,16 +311,36 @@
             overflow: hidden;
             background: transparent;
             visibility: hidden;
+=======
+        .progress-container {
+            height: 2px;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+            background: transparent;
+            margin-top: -6px;
+            margin-bottom: 4px;
+>>>>>>> origin/master
         }
         .progress-bar {
             height: 100%;
             width: 30%;
             background: var(--vscode-progressBar-background);
+<<<<<<< HEAD
             animation: progress 1s infinite linear;
         }
         @keyframes progress {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(333%); }
+=======
+            position: absolute;
+            left: -30%;
+            animation: indeterminate 1s linear infinite;
+        }
+        @keyframes indeterminate {
+            0% { left: -30%; }
+            100% { left: 100%; }
+>>>>>>> origin/master
         }
     </style>
 </head>
@@ -341,7 +362,11 @@
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
     </div>
+<<<<<<< HEAD
     <div id="loading-progress" class="progress-bar-container" aria-hidden="true">
+=======
+    <div id="progress-container" class="progress-container" style="visibility: hidden;">
+>>>>>>> origin/master
         <div class="progress-bar"></div>
     </div>
     <div id="results" class="results-container"></div>
@@ -352,6 +377,7 @@
         const resultsContainer = document.getElementById('results');
         const scopeButtons = document.querySelectorAll('.scope-button');
         const summaryEl = document.getElementById('search-summary');
+        const progressContainer = document.getElementById('progress-container');
 
         let currentScope = 'everything';
         let userScope = 'everything';
@@ -502,6 +528,18 @@
             vscode.postMessage({ type: 'search', query: effectiveQuery, scope: currentScope });
         }
 
+        function showLoading() {
+            if (progressContainer) {
+                progressContainer.style.visibility = 'visible';
+            }
+        }
+
+        function hideLoading() {
+            if (progressContainer) {
+                progressContainer.style.visibility = 'hidden';
+            }
+        }
+
         searchInput.addEventListener('input', (e) => {
             triggerSearchFromInput(e.target.value);
         });
@@ -539,12 +577,14 @@
                 case 'results':
                     hideLoading();
                     if (message.requestId >= lastRenderedRequestId) {
+                        hideLoading();
                         lastRenderedRequestId = message.requestId;
                         results = message.results;
                         recentHistoryMode = message.isRecentHistory === true;
                         if (!recentHistoryMode) {
                             confirmClearHistory = false;
                         }
+                        hideLoading();
                         renderResults();
                     }
                     break;

@@ -149,6 +149,7 @@ export class SearchEngine implements ISearchProvider {
     private itemTypeIds: Uint8Array = new Uint8Array(0);
     private itemBitflags: Uint32Array = new Uint32Array(0);
     private itemNameBitflags: Uint32Array = new Uint32Array(0);
+    private itemFullNameBitflags: Uint32Array = new Uint32Array(0);
     private itemNameLengths: Uint16Array = new Uint16Array(0);
     private preparedNames: (Fuzzysort.Prepared | null)[] = [];
     private preparedFullNames: (Fuzzysort.Prepared | null)[] = [];
@@ -244,6 +245,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds = new Uint8Array(items.length);
         this.itemBitflags = new Uint32Array(items.length);
         this.itemNameBitflags = new Uint32Array(items.length);
+        this.itemFullNameBitflags = new Uint32Array(items.length);
         this.itemNameLengths = new Uint16Array(items.length);
         this.itemsMap.clear();
         this.fileItemByNormalizedPath.clear();
@@ -286,6 +288,10 @@ export class SearchEngine implements ISearchProvider {
             const newNameBitflags = new Uint32Array(newCapacity);
             newNameBitflags.set(this.itemNameBitflags);
             this.itemNameBitflags = newNameBitflags;
+
+            const newFullNameBitflags = new Uint32Array(newCapacity);
+            newFullNameBitflags.set(this.itemFullNameBitflags);
+            this.itemFullNameBitflags = newFullNameBitflags;
 
             const newNameLengths = new Uint16Array(newCapacity);
             newNameLengths.set(this.itemNameLengths);
@@ -491,6 +497,7 @@ export class SearchEngine implements ISearchProvider {
             this.itemTypeIds = this.itemTypeIds.slice(0, newCount);
             this.itemBitflags = this.itemBitflags.slice(0, newCount);
             this.itemNameBitflags = this.itemNameBitflags.slice(0, newCount);
+            this.itemFullNameBitflags = this.itemFullNameBitflags.slice(0, newCount);
             this.preparedNames.length = newCount;
             this.preparedFullNames.length = newCount;
             this.preparedPaths.length = newCount;
@@ -509,6 +516,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds[write] = this.itemTypeIds[read];
         this.itemBitflags[write] = this.itemBitflags[read];
         this.itemNameBitflags[write] = this.itemNameBitflags[read];
+        this.itemFullNameBitflags[write] = this.itemFullNameBitflags[read];
         this.itemNameLengths[write] = this.itemNameLengths[read];
         this.preparedNames[write] = this.preparedNames[read];
         this.preparedFullNames[write] = this.preparedFullNames[read];
@@ -567,8 +575,9 @@ export class SearchEngine implements ISearchProvider {
     private prepareItemAtIndex(item: SearchableItem, index: number): void {
         this.itemTypeIds[index] = TYPE_TO_ID[item.type];
 
-        const { nameFlags, aggregateFlags } = this.computeItemBitflags(item);
+        const { nameFlags, fullNameFlags, aggregateFlags } = this.computeItemBitflags(item);
         this.itemNameBitflags[index] = nameFlags;
+        this.itemFullNameBitflags[index] = fullNameFlags;
         this.itemBitflags[index] = aggregateFlags;
         this.itemNameLengths[index] = item.name.length;
 
@@ -581,13 +590,16 @@ export class SearchEngine implements ISearchProvider {
      */
     private computeItemBitflags(item: SearchableItem): {
         nameFlags: number;
+        fullNameFlags: number;
         aggregateFlags: number;
     } {
         const nameFlags = this.calculateBitflags(item.name);
         let aggregateFlags = nameFlags;
+        let fullNameFlags = nameFlags;
 
         if (this.shouldProcessFullName(item) && item.fullName) {
-            aggregateFlags |= this.calculateBitflags(item.fullName);
+            fullNameFlags = this.calculateBitflags(item.fullName);
+            aggregateFlags |= fullNameFlags;
         }
 
         if (item.relativeFilePath) {
@@ -595,7 +607,7 @@ export class SearchEngine implements ISearchProvider {
             aggregateFlags |= this.calculateBitflags(item.relativeFilePath);
         }
 
-        return { nameFlags, aggregateFlags };
+        return { nameFlags, fullNameFlags, aggregateFlags };
     }
 
     /**
@@ -790,6 +802,7 @@ export class SearchEngine implements ISearchProvider {
         this.itemTypeIds = new Uint8Array(0);
         this.itemBitflags = new Uint32Array(0);
         this.itemNameBitflags = new Uint32Array(0);
+        this.itemFullNameBitflags = new Uint32Array(0);
         this.itemNameLengths = new Uint16Array(0);
         this.preparedNames = [];
         this.preparedFullNames = [];
@@ -850,6 +863,7 @@ export class SearchEngine implements ISearchProvider {
         size += this.itemTypeIds.byteLength;
         size += this.itemBitflags.byteLength;
         size += this.itemNameBitflags.byteLength;
+        size += this.itemFullNameBitflags.byteLength;
         size += this.itemNameLengths.byteLength;
         size += this.preparedNames.length * 8;
         size += this.preparedFullNames.length * 8;
@@ -1851,6 +1865,7 @@ export class SearchEngine implements ISearchProvider {
             itemTypeIds: this.itemTypeIds,
             itemBitflags: this.itemBitflags,
             itemNameBitflags: this.itemNameBitflags,
+            itemFullNameBitflags: this.itemFullNameBitflags,
             itemLengths: this.itemNameLengths,
             preparedNames: this.preparedNames,
             preparedFullNames: this.preparedFullNames,
@@ -1941,11 +1956,17 @@ export class SearchEngine implements ISearchProvider {
         let score = passesBitflag ? this.calculateSearchScore(i, typeId, context) : -Infinity;
         let resultScope: SearchScope | undefined;
 
+        // ⚡ Bolt: Fast URL matching early-exit
+        // Skipping function call overhead (tryUrlEndpointMatch) entirely if the item
+        // is not an endpoint or the query is not a potential URL. This avoids unnecessary
+        // O(1) checks and parameter evaluations in the hot loop.
         // Check for URL/Endpoint match
-        const urlResult = this.tryUrlEndpointMatch(i, typeId, context, score);
-        if (urlResult) {
-            score = urlResult.score;
-            resultScope = urlResult.scope;
+        if (context.isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+            const urlResult = this.tryUrlEndpointMatch(i, typeId, context, score);
+            if (urlResult) {
+                score = urlResult.score;
+                resultScope = urlResult.scope;
+            }
         }
 
         // Apply activity boost and add to heap if score is sufficient
@@ -2009,6 +2030,12 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
+        // ⚡ Bolt: Fast early-exit for fullName property fuzzy matching
+        // Skip expensive fuzzy sorting on the fullName property if it doesn't contain the required characters.
+        if ((context.itemFullNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
+            return -Infinity;
+        }
+
         const pFull = context.preparedFullNames[i];
         if (!pFull) {
             return -Infinity;
