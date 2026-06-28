@@ -72,6 +72,23 @@
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
 
-## 2026-06-21 - Visual Loading Indicators for Async Search UIs
-**Learning:** In UIs that heavily rely on async data fetching (like a fuzzy search engine), relying only on small textual status messages (like "0 results" temporarily or a tiny loading spinner in a corner) leaves users unsure if their input was registered or if the UI is hanging. This creates a "dead zone" of feedback during the most critical interaction. Adding a native-looking indeterminate progress bar directly into the flow (e.g., right under the search input) provides immediate, unmistakable feedback that an operation is underway.
-**Action:** Always implement centralized, highly visible loading indicators (like a progress bar) for core async interactions. Use `visibility: hidden` instead of `display: none` to reserve space and prevent layout shifts when the indicator toggles on and off.
+## 2026-06-19 - Loading Indication for Webview Async Ops
+**Learning:** Relying purely on top-bar notification status messages is insufficient for async operations inside of Webviews. A central progress bar enhances UX by reassuring users that background activity (e.g., searches, clearing history) is occurring.
+**Action:** Use native VS Code CSS variables like `--vscode-progressBar-background` and `visibility: hidden` for central loading bars in Webviews to maintain layout consistency without visual jank.
+
+## 2026-06-16 - Empty States Should Not Present Recovery Actions for Empty Inputs
+**Learning:** Reinforced existing rule from 2024-06-14 after QuickPick implementation updates.
+**Action:** Keep the existing canonical rule and reference it instead of duplicating full text.
+
+## 2026-06-16 - Centralized Progress Bar Loading Feedback
+**Learning:** Relying solely on small status bar updates or having no loading indicator during debounced search operations creates an unresponsive UX, as users assume the interface is frozen while waiting for the debounced search to finish.
+**Action:** When adding loading indicators (e.g., progress bars) to VS Code Webviews, apply the built-in `--vscode-progressBar-background` CSS variable for native styling, and use `visibility: hidden` rather than `display: none` to reserve the element's layout space and prevent visual jank when toggling states.
+
+## 2026-06-20 - Webview Indeterminate Progress Bar
+**Learning:** Implementing visual feedback (like a progress bar) in webviews across asynchronous IPC boundaries is necessary for smooth UX. By tying it to the start of a user action (e.g., input event, button click) and hiding it upon receiving a response message, the interface stays responsive. However, doing so dynamically using CSS variables `--vscode-progressBar-background` and `visibility: hidden` rather than `display: none` guarantees consistent native VSCode styling while eliminating layout shift during loading.
+**Action:** When implementing indeterminate loading indicators in VS Code webviews, apply `--vscode-progressBar-background` for native theming, and use `visibility: hidden`/`visible` instead of `display` or DOM insertion/removal to prevent visual jitter.
+
+## 2026-06-25 - Progress Bar Loader in VS Code Webviews
+**Learning:** Progress bar loaders in VS Code Webviews should use `visibility: hidden` instead of `display: none` to reserve layout space and prevent visual jank, and should be paired with `aria-hidden="true"` when an `aria-live` region announces the actual state.
+**Action:** Use native CSS variables for styling and ensure accessibility support for loading indicators.
+>>>>>>> origin/master
