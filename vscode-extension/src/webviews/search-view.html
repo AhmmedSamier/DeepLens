@@ -324,6 +324,45 @@
             display: inline-block;
             margin-right: 3px;
         }
+<<<<<<< HEAD
+        .progress-bar-container {
+            width: 100%;
+            height: 2px;
+            margin-bottom: 8px;
+            overflow: hidden;
+            background: transparent;
+            visibility: hidden;
+=======
+        .progress-container {
+            height: 2px;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+            background: transparent;
+            margin-top: -6px;
+            margin-bottom: 4px;
+>>>>>>> origin/master
+        }
+        .progress-bar {
+            height: 100%;
+            width: 30%;
+            background: var(--vscode-progressBar-background);
+<<<<<<< HEAD
+            animation: progress 1s infinite linear;
+        }
+        @keyframes progress {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(333%); }
+=======
+            position: absolute;
+            left: -30%;
+            animation: indeterminate 1s linear infinite;
+        }
+        @keyframes indeterminate {
+            0% { left: -30%; }
+            100% { left: 100%; }
+>>>>>>> origin/master
+        }
     </style>
 </head>
 <body>
@@ -345,6 +384,13 @@
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
     </div>
+<<<<<<< HEAD
+    <div id="loading-progress" class="progress-bar-container" aria-hidden="true">
+=======
+    <div id="progress-container" class="progress-container" style="visibility: hidden;">
+>>>>>>> origin/master
+        <div class="progress-bar"></div>
+    </div>
     <div id="results" class="results-container"></div>
 
     <script nonce="${nonce}">
@@ -353,7 +399,11 @@
         const resultsContainer = document.getElementById('results');
         const scopeButtons = document.querySelectorAll('.scope-button');
         const summaryEl = document.getElementById('search-summary');
+<<<<<<< HEAD
         const loadingIndicator = document.getElementById('loading-indicator');
+=======
+        const progressContainer = document.getElementById('progress-container');
+>>>>>>> origin/master
 
         let currentScope = 'everything';
         let userScope = 'everything';
@@ -366,6 +416,16 @@
         let confirmClearHistory = false;
 
         const slashCommandScopes = ${SLASH_COMMAND_SCOPES};
+
+        function showLoading() {
+            document.getElementById('loading-progress').style.visibility = 'visible';
+            document.getElementById('loading-progress').setAttribute('aria-hidden', 'false');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading-progress').style.visibility = 'hidden';
+            document.getElementById('loading-progress').setAttribute('aria-hidden', 'true');
+        }
 
         function isSlashTriggerQuery(rawQuery) {
             const trimmed = rawQuery.trimStart();
@@ -491,7 +551,20 @@
                 slashCommands = [];
             }
 
+            showLoading();
             vscode.postMessage({ type: 'search', query: effectiveQuery, scope: currentScope });
+        }
+
+        function showLoading() {
+            if (progressContainer) {
+                progressContainer.style.visibility = 'visible';
+            }
+        }
+
+        function hideLoading() {
+            if (progressContainer) {
+                progressContainer.style.visibility = 'hidden';
+            }
         }
 
         searchInput.addEventListener('input', (e) => {
@@ -530,14 +603,16 @@
             const message = event.data;
             switch (message.type) {
                 case 'results':
-                    if (loadingIndicator) loadingIndicator.style.visibility = 'hidden';
                     if (message.requestId >= lastRenderedRequestId) {
+                        hideLoading();
+                        if (loadingIndicator) loadingIndicator.style.visibility = 'hidden';
                         lastRenderedRequestId = message.requestId;
                         results = message.results;
                         recentHistoryMode = message.isRecentHistory === true;
                         if (!recentHistoryMode) {
                             confirmClearHistory = false;
                         }
+                        hideLoading();
                         renderResults();
                     }
                     break;
@@ -553,6 +628,10 @@
                     break;
                 case 'capabilities':
                     setTextSearchEnabled(message.textSearchEnabled !== false);
+                    break;
+                case 'error':
+                    hideLoading();
+                    showStatus(message.message || 'An error occurred');
                     break;
             }
         });
@@ -676,6 +755,7 @@
                         const action = button.getAttribute('data-action');
                         if (action) {
                             if (action === 'removeHistory') {
+                                showLoading();
                                 vscode.postMessage({ type: 'removeHistoryItem', itemId: result.item.id });
                                 return;
                             }
@@ -865,6 +945,7 @@
                         return;
                     }
                     if (action === 'recent') {
+                        showLoading();
                         vscode.postMessage({ type: 'showRecentHistory' });
                         return;
                     }
@@ -940,6 +1021,7 @@
                     }
                     if (action === 'confirm-clear') {
                         confirmClearHistory = false;
+                        showLoading();
                         vscode.postMessage({ type: 'clearHistory' });
                     }
                 });
@@ -1158,6 +1240,7 @@
             currentScope = 'everything';
             userScope = 'everything';
             updateScopeButtons();
+            showLoading();
             vscode.postMessage({
                 type: 'search',
                 query: searchInput.value,

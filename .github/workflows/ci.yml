@@ -41,7 +41,7 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
+              run: bun install --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               working-directory: ${{ matrix.project }}
@@ -73,7 +73,7 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
+              run: bun install --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               working-directory: language-server
@@ -130,7 +130,7 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
+              run: bun install --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               run: |
@@ -207,7 +207,7 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: mkdir -p node_modules/@vscode/ripgrep/bin && touch node_modules/@vscode/ripgrep/bin/rg && chmod +x node_modules/@vscode/ripgrep/bin/rg
+              run: bun install --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               run: |
