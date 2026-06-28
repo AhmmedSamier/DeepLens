@@ -1956,11 +1956,17 @@ export class SearchEngine implements ISearchProvider {
         let score = passesBitflag ? this.calculateSearchScore(i, typeId, context) : -Infinity;
         let resultScope: SearchScope | undefined;
 
+        // ⚡ Bolt: Fast URL matching early-exit
+        // Skipping function call overhead (tryUrlEndpointMatch) entirely if the item
+        // is not an endpoint or the query is not a potential URL. This avoids unnecessary
+        // O(1) checks and parameter evaluations in the hot loop.
         // Check for URL/Endpoint match
-        const urlResult = this.tryUrlEndpointMatch(i, typeId, context, score);
-        if (urlResult) {
-            score = urlResult.score;
-            resultScope = urlResult.scope;
+        if (context.isPotentialUrl && typeId === 11 /* ENDPOINT */) {
+            const urlResult = this.tryUrlEndpointMatch(i, typeId, context, score);
+            if (urlResult) {
+                score = urlResult.score;
+                resultScope = urlResult.scope;
+            }
         }
 
         // Apply activity boost and add to heap if score is sufficient
@@ -2025,6 +2031,7 @@ export class SearchEngine implements ISearchProvider {
 
     private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
         // ⚡ Bolt: Fast early-exit for fullName property fuzzy matching
+        // Skip expensive fuzzy sorting on the fullName property if it doesn't contain the required characters.
         if ((context.itemFullNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
             return -Infinity;
         }
