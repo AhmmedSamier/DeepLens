@@ -1640,11 +1640,32 @@ export class SearchProvider {
         const isGlobalScope = this.currentScope === SearchScope.EVERYTHING;
         // Palette: Use scope-specific message
         const scopeName = this.getScopeName(this.currentScope);
+
+        const items: SearchResultItem[] = [];
+
+        if (query.trim() === '') {
+            items.push({
+                label: `Enter a search query to get started.`,
+                alwaysShow: true,
+                kind: vscode.QuickPickItemKind.Separator,
+                result: {
+                    item: {
+                        id: this.ID_EMPTY_STATE,
+                        name: 'Enter search query',
+                        type: SearchItemType.TEXT,
+                        filePath: '',
+                        detail: '',
+                    },
+                    score: 0,
+                    scope: this.currentScope,
+                },
+            });
+            return { items };
+        }
+
         const detail = isGlobalScope
             ? `We couldn't find '${query}'. Check for typos, excluded files, or try rebuilding the index.`
             : `Try switching to Global search to find items outside of ${scopeName}.`;
-
-        const items: SearchResultItem[] = [];
 
         // 1. Header Item (Informational)
         items.push({

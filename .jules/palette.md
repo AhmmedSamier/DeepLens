@@ -71,3 +71,15 @@
 ## 2026-06-13 - Added proper ARIA attributes to group filter toggles
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
+
+## 2026-06-16 - Empty States Should Not Present Recovery Actions for Empty Inputs
+**Learning:** Reinforced existing rule from 2024-06-14 after QuickPick implementation updates.
+**Action:** Keep the existing canonical rule and reference it instead of duplicating full text.
+
+## 2026-06-16 - Centralized Progress Bar Loading Feedback
+**Learning:** Relying solely on small status bar updates or having no loading indicator during debounced search operations creates an unresponsive UX, as users assume the interface is frozen while waiting for the debounced search to finish.
+**Action:** When adding loading indicators (e.g., progress bars) to VS Code Webviews, apply the built-in `--vscode-progressBar-background` CSS variable for native styling, and use `visibility: hidden` rather than `display: none` to reserve the element's layout space and prevent visual jank when toggling states.
+
+## 2026-06-25 - Progress Bar Loader in VS Code Webviews
+**Learning:** Progress bar loaders in VS Code Webviews should use `visibility: hidden` instead of `display: none` to reserve layout space and prevent visual jank, and should be paired with `aria-hidden="true"` when an `aria-live` region announces the actual state.
+**Action:** Use native CSS variables for styling and ensure accessibility support for loading indicators.

@@ -303,6 +303,27 @@
             display: inline-block;
             margin-right: 3px;
         }
+        .progress-container {
+            height: 2px;
+            width: 100%;
+            overflow: hidden;
+            position: relative;
+            background: transparent;
+            margin-top: -6px;
+            margin-bottom: 4px;
+        }
+        .progress-bar {
+            height: 100%;
+            width: 30%;
+            background: var(--vscode-progressBar-background);
+            position: absolute;
+            left: -30%;
+            animation: indeterminate 1s linear infinite;
+        }
+        @keyframes indeterminate {
+            0% { left: -30%; }
+            100% { left: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -323,6 +344,9 @@
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
     </div>
+    <div id="progress-container" class="progress-container" style="visibility: hidden;">
+        <div class="progress-bar"></div>
+    </div>
     <div id="results" class="results-container"></div>
 
     <script nonce="${nonce}">
@@ -331,6 +355,7 @@
         const resultsContainer = document.getElementById('results');
         const scopeButtons = document.querySelectorAll('.scope-button');
         const summaryEl = document.getElementById('search-summary');
+        const progressContainer = document.getElementById('progress-container');
 
         let currentScope = 'everything';
         let userScope = 'everything';
@@ -467,7 +492,20 @@
                 slashCommands = [];
             }
 
+            showLoading();
             vscode.postMessage({ type: 'search', query: effectiveQuery, scope: currentScope });
+        }
+
+        function showLoading() {
+            if (progressContainer) {
+                progressContainer.style.visibility = 'visible';
+            }
+        }
+
+        function hideLoading() {
+            if (progressContainer) {
+                progressContainer.style.visibility = 'hidden';
+            }
         }
 
         searchInput.addEventListener('input', (e) => {
@@ -506,12 +544,14 @@
             switch (message.type) {
                 case 'results':
                     if (message.requestId >= lastRenderedRequestId) {
+                        hideLoading();
                         lastRenderedRequestId = message.requestId;
                         results = message.results;
                         recentHistoryMode = message.isRecentHistory === true;
                         if (!recentHistoryMode) {
                             confirmClearHistory = false;
                         }
+                        hideLoading();
                         renderResults();
                     }
                     break;
