@@ -72,6 +72,10 @@
 **Learning:** Found that custom filter buttons acting as a radio-group/toggles lacked accessibility support for screen readers. Using just class names for visual toggling isn't enough; we need `role="group"` to define the collection and `aria-pressed` to communicate state changes to assistive technologies.
 **Action:** Always pair visual active classes with dynamic `aria-pressed` updates on custom toggleable elements, and group them correctly.
 
+## 2026-06-27 - Educational Empty States
+**Learning:** Empty states for complex search interfaces are valuable opportunities to educate users on advanced query syntax (like slash commands) through interactive pro tips, rather than just displaying static 'Enter a query' text.
+**Action:** When designing search or command inputs, leverage the initial empty state to provide clickable examples that instantly demonstrate platform capabilities.
+
 ## 2026-06-19 - Loading Indication for Webview Async Ops
 **Learning:** Relying purely on top-bar notification status messages is insufficient for async operations inside of Webviews. A central progress bar enhances UX by reassuring users that background activity (e.g., searches, clearing history) is occurring.
 **Action:** Use native VS Code CSS variables like `--vscode-progressBar-background` and `visibility: hidden` for central loading bars in Webviews to maintain layout consistency without visual jank.
