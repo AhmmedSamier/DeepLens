@@ -131,6 +131,9 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
                     case 'removeHistoryItem':
                         await this.handleRemoveHistoryItem(data.itemId);
                         break;
+                    case 'showRecentHistory':
+                        await this.handleShowRecentHistory();
+                        break;
                     case 'getSlashCommands':
                         this.handleGetSlashCommands(data.query);
                         break;
@@ -287,6 +290,12 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             });
         } catch (error) {
             logger.error('Failed to fetch recent items', error);
+            this._view?.webview.postMessage({
+                type: 'results',
+                results: [],
+                requestId: this.generateRequestId(),
+                isRecentHistory: true,
+            });
         }
     }
 
@@ -300,6 +309,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             await this.handleShowRecentHistory();
         } catch (error) {
             logger.error('Failed to clear history', error);
+            await this.handleShowRecentHistory();
         }
     }
 
@@ -313,6 +323,7 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             await this.handleShowRecentHistory();
         } catch (error) {
             logger.error('Failed to remove history item', error);
+            await this.handleShowRecentHistory();
         }
     }
 
