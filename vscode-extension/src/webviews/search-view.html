@@ -120,6 +120,27 @@
             color: var(--vscode-textLink-foreground);
             font-size: 14px;
         }
+        .progress-bar-container {
+            height: 2px;
+            width: 100%;
+            background-color: transparent;
+            overflow: hidden;
+            position: relative;
+            visibility: hidden; /* Reserve space to prevent layout shift */
+        }
+        .progress-bar {
+            width: 100%;
+            height: 100%;
+            background-color: var(--vscode-progressBar-background);
+            position: absolute;
+            animation: indeterminate 1.5s infinite linear;
+            transform-origin: 0% 50%;
+        }
+        @keyframes indeterminate {
+            0% { transform: translateX(0) scaleX(0); }
+            40% { transform: translateX(0) scaleX(0.4); }
+            100% { transform: translateX(100%) scaleX(0.5); }
+        }
         .empty-state {
             padding: 10px;
             color: var(--vscode-descriptionForeground);
@@ -359,6 +380,7 @@
             <button class="scope-button" data-scope="endpoints" title="Search API Endpoints" aria-pressed="false"><i class="codicon codicon-globe"></i> Endpoints</button>
         </div>
         <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" spellcheck="false" aria-label="Search everywhere">
+        <div class="progress-bar-container" id="loading-indicator" aria-hidden="true"><div class="progress-bar"></div></div>
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
     </div>
@@ -377,7 +399,11 @@
         const resultsContainer = document.getElementById('results');
         const scopeButtons = document.querySelectorAll('.scope-button');
         const summaryEl = document.getElementById('search-summary');
+<<<<<<< HEAD
+        const loadingIndicator = document.getElementById('loading-indicator');
+=======
         const progressContainer = document.getElementById('progress-container');
+>>>>>>> origin/master
 
         let currentScope = 'everything';
         let userScope = 'everything';
@@ -502,6 +528,7 @@
         }
 
         function triggerSearchFromInput(raw) {
+            if (loadingIndicator) loadingIndicator.style.visibility = 'visible';
             const { scope, detectedScope } = resolveQueryAndScope(raw);
             let effectiveQuery = raw;
 
@@ -551,6 +578,7 @@
                     return;
                 }
                 if (currentScope !== newScope) {
+                    if (loadingIndicator) loadingIndicator.style.visibility = 'visible';
                     currentScope = newScope;
                     userScope = newScope;
                     const strippedQuery = stripLeadingScopeToken(searchInput.value);
@@ -575,9 +603,9 @@
             const message = event.data;
             switch (message.type) {
                 case 'results':
-                    hideLoading();
                     if (message.requestId >= lastRenderedRequestId) {
                         hideLoading();
+                        if (loadingIndicator) loadingIndicator.style.visibility = 'hidden';
                         lastRenderedRequestId = message.requestId;
                         results = message.results;
                         recentHistoryMode = message.isRecentHistory === true;
@@ -589,11 +617,12 @@
                     }
                     break;
                 case 'status':
+                    if (loadingIndicator) loadingIndicator.style.visibility = 'hidden';
                     showStatus(message.message);
                     updateSummary(message.message);
                     break;
                 case 'slashCommands':
-                    hideLoading();
+                    if (loadingIndicator) loadingIndicator.style.visibility = 'hidden';
                     slashCommands = message.commands || [];
                     renderResults();
                     break;
@@ -1199,6 +1228,7 @@
         }
 
         function switchToGlobal() {
+            if (loadingIndicator) loadingIndicator.style.visibility = 'visible';
             const text = searchInput.value;
             let stripLen = 0;
             if (text.length > 0 && text[0] === '/') {
