@@ -82,8 +82,8 @@
 **Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
 
 ## 2024-06-24 - String checking performance
-**Learning:** To improve performance when checking for substring presence in hot paths or large strings, use `.indexOf('target') !== -1` instead of `.includes('target')`. `indexOf` is significantly faster in V8 as it avoids the abstraction overhead.
-**Action:** Use `.indexOf` over `.includes` in performance critical sections.
+**Learning:** To improve performance when checking for substring presence in hot paths or large strings, use `.indexOf('target') !== -1` instead of `.includes('target')`. `indexOf` avoids the abstraction overhead of `.includes`.
+**Action:** Use `.indexOf` over `.includes` in performance-critical sections.
 
 ## 2024-06-20 - [Fast FullName Property Early-Exit]
 **Learning:** Similar to the name property early-exit, even if an item passes the aggregate bitflag check (`itemBitflags`) which considers the `name`, `fullName`, and `relativeFilePath`, we shouldn't immediately assume the `fullName` property itself contains all the characters. The fallback path runs `tryFuzzyMatchFullName` for items, resulting in wasted `Fuzzysort.single` evaluations if the query characters matched due to other fields.
