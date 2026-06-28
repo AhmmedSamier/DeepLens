@@ -544,6 +544,7 @@
             switch (message.type) {
                 case 'results':
                     if (message.requestId >= lastRenderedRequestId) {
+                        hideLoading();
                         lastRenderedRequestId = message.requestId;
                         results = message.results;
                         recentHistoryMode = message.isRecentHistory === true;
