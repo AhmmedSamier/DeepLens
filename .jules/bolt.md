@@ -81,6 +81,10 @@
 **Learning:** In string parsing hot paths (like RouteMatcher's path evaluation), relying on `String.prototype.split('/')` incurs significant memory allocation overhead for single-segment strings because it instantiates an array and performs internal string operations regardless of whether a delimiter is present.
 **Action:** Implement an early return using `String.prototype.indexOf('/') === -1` combined with an explicit string length check. If true, manually allocate and return the required single-element arrays. This avoids the overhead of `.split()` and dynamically sized arrays entirely for simpler inputs, providing a measurable performance boost.
 
+## 2024-06-24 - String checking performance
+**Learning:** To improve performance when checking for substring presence in hot paths or large strings, use `.indexOf('target') !== -1` instead of `.includes('target')`. `indexOf` avoids the abstraction overhead of `.includes` in V8 and other engines.
+**Action:** Use `.indexOf` over `.includes` in performance-critical sections.
+
 ## 2026-06-26 - [Property-Specific Early-Exits Degrade Performance]
 **Learning:** Adding `itemFullNameBitflags` and `itemPathBitflags` as `Uint32Array` buffers and performing early bitmask checks in `tryFuzzyMatchFullName` and `tryFuzzyMatchPath` increased the memory footprint and caused a significant performance regression across all search iterations due to worsened cache locality and array tracking overhead during item initialization and memory expansion/trimming phases.
 **Action:** When considering early-exit logic, avoid adding additional large parallel arrays to objects processed in hot paths unless you can mathematically prove the skipped evaluations consistently save more CPU cycles than the memory and cache penalty incurred by iterating over additional massive arrays.
