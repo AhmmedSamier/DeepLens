@@ -96,3 +96,6 @@
 ## 2026-10-27 - [Fast Endpoint Matching Bypass]
 **Learning:** In the `SearchEngine.processItemForSearch` method, `tryUrlEndpointMatch` was previously called for all items that passed the bitflag check or were preserved for URL evaluation, regardless of whether the item was actually an endpoint. This added unnecessary function call overhead and duplicate condition evaluations for non-endpoint items.
 **Action:** Add an explicit O(1) `typeId === 11 /* ENDPOINT */` check alongside `context.isPotentialUrl` directly inside `processItemForSearch` to completely bypass the `tryUrlEndpointMatch` function call for all non-endpoint items. This eliminates redundant evaluations and speeds up the fallback search path.
+## 2026-06-29 - Path fuzzy match early-exit
+**Learning:** Path properties were missing early-exit bitflag checks.
+**Action:** Always verify all fuzzy matched properties have O(1) bitflag early-exits.
