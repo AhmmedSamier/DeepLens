@@ -517,6 +517,11 @@
         });
 
         scopeButtons.forEach(button => {
+            // Prevent focus loss so users can click a filter and immediately continue typing
+            button.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+            });
+
             button.addEventListener('click', () => {
                 const newScope = button.getAttribute('data-scope');
                 if (!textSearchEnabled && newScope === 'text') {
@@ -685,6 +690,11 @@
                 renderResultActions(item, actionsContainer);
                 div.appendChild(actionsContainer);
 
+                // Prevent focus loss so users can click a result and immediately use arrow keys
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                });
+
                 div.addEventListener('click', () => {
                     selectItem(index);
                     vscode.postMessage({ type: 'preview', result });
@@ -765,6 +775,11 @@
                     detailDiv.appendChild(detailSpan);
                     div.appendChild(detailDiv);
                 }
+
+                // Prevent focus loss so users can click a result and immediately use arrow keys
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                });
 
                 div.addEventListener('click', () => {
                     selectItem(index);
