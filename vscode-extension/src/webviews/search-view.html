@@ -952,6 +952,7 @@
                         return;
                     }
                     if (action === 'clear-cache') {
+                        showLoading();
                         vscode.postMessage({ type: 'clearCache' });
                         showStatus('Clearing index cache...');
                         return;
@@ -1244,6 +1245,7 @@
         }
 
         function rebuildIndex() {
+            showLoading();
             vscode.postMessage({ type: 'rebuildIndex' });
             showStatus('Rebuilding index...');
         }
