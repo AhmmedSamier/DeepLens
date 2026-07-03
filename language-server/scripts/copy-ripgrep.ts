@@ -86,7 +86,7 @@ async function downloadBinary(label: string, binName: string, url: string, extra
 }
 
 // Make executable
-if (process.platform !== 'win32') {
+if (process.platform !== 'win32' && fs.existsSync(destPath)) {
     fs.chmodSync(destPath, 0o755);
 }
 // chmod for linux binary if we are on linux (not needed on windows build host, but good practice)
