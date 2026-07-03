@@ -14,7 +14,11 @@ if (!fs.existsSync(distDir)) {
 // 1. Copy local binary (Windows/Current Platform)
 const destPath = path.join(distDir, path.basename(rgPath));
 console.log(`Copying local ripgrep binary from ${rgPath} to ${destPath}`);
-fs.copyFileSync(rgPath, destPath);
+if (fs.existsSync(rgPath)) {
+    fs.copyFileSync(rgPath, destPath);
+} else {
+    console.warn(`Local ripgrep binary not found at ${rgPath}. Skipping local copy...`);
+}
 
 // 2. Download Linux Binary (for Ubuntu support in single VSIX)
 const RG_VERSION = '15.0.0';
