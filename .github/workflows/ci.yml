@@ -41,11 +41,11 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: bun install --no-save @vscode/ripgrep
+              run: bun install --ignore-scripts --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               working-directory: ${{ matrix.project }}
-              run: bun install --frozen-lockfile
+              run: bun install --ignore-scripts --frozen-lockfile
 
             - name: Lint
               working-directory: ${{ matrix.project }}
@@ -73,11 +73,11 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: bun install --no-save @vscode/ripgrep
+              run: bun install --ignore-scripts --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               working-directory: language-server
-              run: bun install --frozen-lockfile
+              run: bun install --ignore-scripts --frozen-lockfile
 
             - name: Run Language Server Tests
               working-directory: language-server
@@ -130,12 +130,12 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: bun install --no-save @vscode/ripgrep
+              run: bun install --ignore-scripts --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               run: |
-                  cd language-server && bun install --frozen-lockfile
-                  cd ../vscode-extension && bun install --frozen-lockfile
+                  cd language-server && bun install --ignore-scripts --frozen-lockfile
+                  cd ../vscode-extension && bun install --ignore-scripts --frozen-lockfile
 
             - name: Build Language Server
               working-directory: language-server
@@ -207,12 +207,12 @@ jobs:
 
             - name: Install ripgrep dependency fallback
               working-directory: language-server
-              run: bun install --no-save @vscode/ripgrep
+              run: bun install --ignore-scripts --no-save @vscode/ripgrep
 
             - name: Install Dependencies
               run: |
-                  cd language-server && bun install --frozen-lockfile
-                  cd ../vscode-extension && bun install --frozen-lockfile
+                  cd language-server && bun install --ignore-scripts --frozen-lockfile
+                  cd ../vscode-extension && bun install --ignore-scripts --frozen-lockfile
 
             - name: Get VS Code test version
               id: vs-test-version
