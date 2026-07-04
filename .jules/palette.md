@@ -95,3 +95,7 @@
 ## 2026-06-25 - Progress Bar Loader in VS Code Webviews
 **Learning:** Progress bar loaders in VS Code Webviews should use `visibility: hidden` instead of `display: none` to reserve layout space and prevent visual jank, and should be paired with `aria-hidden="true"` when an `aria-live` region announces the actual state.
 **Action:** Use native CSS variables for styling and ensure accessibility support for loading indicators.
+
+## 2026-07-04 - Prevent Filter Buttons from Stealing Input Focus
+**Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), interactive elements like filter buttons can unintentionally steal DOM focus from the primary search input when clicked, forcing the user to click back into the input to continue typing.
+**Action:** When implementing clickable filters or action buttons alongside a primary text input, call `e.preventDefault()` on their `mousedown` event to prevent them from stealing focus, ensuring a seamless typing and filtering experience.
