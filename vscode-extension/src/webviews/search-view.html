@@ -512,6 +512,13 @@
             vscode.postMessage({ type: 'search', query: effectiveQuery, scope: currentScope });
         }
 
+        document.addEventListener('mousedown', (e) => {
+            const target = e.target.closest('button, .result-item, .pro-tip');
+            if (target && document.activeElement === searchInput) {
+                e.preventDefault();
+            }
+        });
+
         searchInput.addEventListener('input', (e) => {
             triggerSearchFromInput(e.target.value);
         });
@@ -589,6 +596,8 @@
             const statusEl = document.createElement('div');
             statusEl.className = 'status-message';
             statusEl.textContent = message;
+            statusEl.setAttribute('role', 'status');
+            statusEl.setAttribute('aria-live', 'polite');
             statusEl.style.cssText = 'padding: 8px; background: var(--vscode-banner-background); color: var(--vscode-banner-foreground); border-radius: 3px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;';
             resultsContainer.parentNode.insertBefore(statusEl, resultsContainer);
             setTimeout(() => statusEl.remove(), 2000);
