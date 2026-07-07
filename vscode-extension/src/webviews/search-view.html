@@ -517,6 +517,9 @@
         });
 
         scopeButtons.forEach(button => {
+            button.addEventListener('mousedown', (e) => {
+                e.preventDefault(); // Prevent focus loss from search input
+            });
             button.addEventListener('click', () => {
                 const newScope = button.getAttribute('data-scope');
                 if (!textSearchEnabled && newScope === 'text') {
@@ -684,6 +687,10 @@
                 actionsContainer.className = 'result-actions';
                 renderResultActions(item, actionsContainer);
                 div.appendChild(actionsContainer);
+
+                div.addEventListener('mousedown', (e) => {
+                    e.preventDefault(); // Prevent focus loss from search input
+                });
 
                 div.addEventListener('click', () => {
                     selectItem(index);
