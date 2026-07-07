@@ -482,10 +482,13 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         html = html.replace(/\${codiconTtfUri}/g, webview.asWebviewUri(codiconTtfPath).toString());
         // Embed codicon CSS
         html = html.replace('</style>', `  ${codiconCss}</style>`);
-        // Escape backslashes in JSON strings to prevent regex interpretation
-        const escapedSlashCommandScopes = slashCommandScopesJson.replace(/\\/g, '\\\\');
-        html = html.replace(/\${SLASH_COMMAND_SCOPES}/g, escapedSlashCommandScopes);
-        html = html.replace(/\${WORKSPACE_FOLDERS}/g, workspaceFoldersJson);
+        // Use replacement functions to avoid regex token interpretation (e.g. $&, $1)
+        // Escape < characters in JSON strings to prevent XSS breakout from script tags
+        const safeSlashCommandScopes = slashCommandScopesJson.replace(/</g, '\\u003c');
+        const safeWorkspaceFolders = workspaceFoldersJson.replace(/</g, '\\u003c');
+
+        html = html.replace(/\${SLASH_COMMAND_SCOPES}/g, () => safeSlashCommandScopes);
+        html = html.replace(/\${WORKSPACE_FOLDERS}/g, () => safeWorkspaceFolders);
 
         return html;
     }
