@@ -517,6 +517,11 @@
         });
 
         scopeButtons.forEach(button => {
+            // Prevent scope buttons from stealing focus from the search input
+            button.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+            });
+
             button.addEventListener('click', () => {
                 const newScope = button.getAttribute('data-scope');
                 if (!textSearchEnabled && newScope === 'text') {
