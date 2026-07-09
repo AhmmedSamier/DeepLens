@@ -517,6 +517,7 @@
         });
 
         scopeButtons.forEach(button => {
+            button.addEventListener('mousedown', e => e.preventDefault());
             button.addEventListener('click', () => {
                 const newScope = button.getAttribute('data-scope');
                 if (!textSearchEnabled && newScope === 'text') {
@@ -685,6 +686,7 @@
                 renderResultActions(item, actionsContainer);
                 div.appendChild(actionsContainer);
 
+                div.addEventListener('mousedown', e => e.preventDefault());
                 div.addEventListener('click', () => {
                     selectItem(index);
                     vscode.postMessage({ type: 'preview', result });
@@ -695,6 +697,10 @@
                 });
 
                 div.querySelectorAll('.result-action-btn').forEach((button) => {
+                    button.addEventListener('mousedown', e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    });
                     button.addEventListener('click', (event) => {
                         event.stopPropagation();
                         const action = button.getAttribute('data-action');
@@ -766,6 +772,7 @@
                     div.appendChild(detailDiv);
                 }
 
+                div.addEventListener('mousedown', e => e.preventDefault());
                 div.addEventListener('click', () => {
                     selectItem(index);
                 });
@@ -829,6 +836,7 @@
                     triggerSearchFromInput(searchInput.value);
                 };
 
+                proTipDiv.addEventListener('mousedown', e => e.preventDefault());
                 proTipDiv.addEventListener('click', triggerTip);
                 proTipDiv.addEventListener('keydown', (e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
@@ -922,6 +930,7 @@
             resultsContainer.appendChild(actionsDiv);
 
             resultsContainer.querySelectorAll('[data-empty-action]').forEach((button) => {
+                button.addEventListener('mousedown', e => e.preventDefault());
                 button.addEventListener('click', () => {
                     const action = button.getAttribute('data-empty-action');
                     if (action === 'clear') {
@@ -997,6 +1006,7 @@
             }
 
             toolbar.querySelectorAll('[data-history-action]').forEach((button) => {
+                button.addEventListener('mousedown', e => e.preventDefault());
                 button.addEventListener('click', () => {
                     const action = button.getAttribute('data-history-action');
                     if (action === 'clear') {
