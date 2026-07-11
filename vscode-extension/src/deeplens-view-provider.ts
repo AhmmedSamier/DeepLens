@@ -465,9 +465,11 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
             }
         }
 
+        const sanitizeJsonForHtml = (json: string) => json.replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+
         const workspaceFolders = (vscode.workspace.workspaceFolders ?? []).map((f) => f.uri.fsPath.replace(/\\/g, '/'));
-        const workspaceFoldersJson = JSON.stringify(workspaceFolders);
-        const slashCommandScopesJson = this.getSlashCommandScopesJson();
+        const workspaceFoldersJson = sanitizeJsonForHtml(JSON.stringify(workspaceFolders));
+        const slashCommandScopesJson = sanitizeJsonForHtml(this.getSlashCommandScopesJson());
 
         // Read HTML file from source directory during development, dist for production
         let htmlPath = vscode.Uri.joinPath(this.context.extensionUri, 'src', 'webviews', 'search-view.html');
@@ -482,10 +484,9 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         html = html.replace(/\${codiconTtfUri}/g, webview.asWebviewUri(codiconTtfPath).toString());
         // Embed codicon CSS
         html = html.replace('</style>', `  ${codiconCss}</style>`);
-        // Escape backslashes in JSON strings to prevent regex interpretation
-        const escapedSlashCommandScopes = slashCommandScopesJson.replace(/\\/g, '\\\\');
-        html = html.replace(/\${SLASH_COMMAND_SCOPES}/g, escapedSlashCommandScopes);
-        html = html.replace(/\${WORKSPACE_FOLDERS}/g, workspaceFoldersJson);
+
+        html = html.replace(/\${SLASH_COMMAND_SCOPES}/g, () => slashCommandScopesJson);
+        html = html.replace(/\${WORKSPACE_FOLDERS}/g, () => workspaceFoldersJson);
 
         return html;
     }
