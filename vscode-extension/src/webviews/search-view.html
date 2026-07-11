@@ -359,6 +359,11 @@
         const summaryEl = document.getElementById('search-summary');
         const loadingIndicator = document.getElementById('loading-indicator');
 
+        // Prevent focus stealing when clicking scope buttons or results
+        document.getElementById('scope-buttons').addEventListener('mousedown', (e) => {
+            e.preventDefault();
+        });
+
         let currentScope = 'everything';
         let userScope = 'everything';
         let results = [];
