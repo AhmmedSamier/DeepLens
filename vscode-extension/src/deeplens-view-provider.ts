@@ -477,15 +477,18 @@ export class DeepLensViewProvider implements vscode.WebviewViewProvider, vscode.
         let html = fs.readFileSync(htmlPath.fsPath, 'utf-8');
 
         // Replace placeholders
-        html = html.replace(/\${webview.cspSource}/g, webview.cspSource);
-        html = html.replace(/\${nonce}/g, nonce);
-        html = html.replace(/\${codiconTtfUri}/g, webview.asWebviewUri(codiconTtfPath).toString());
+        html = html.replace(/\${webview.cspSource}/g, () => webview.cspSource);
+        html = html.replace(/\${nonce}/g, () => nonce);
+        const codiconUri = webview.asWebviewUri(codiconTtfPath).toString();
+        html = html.replace(/\${codiconTtfUri}/g, () => codiconUri);
         // Embed codicon CSS
-        html = html.replace('</style>', `  ${codiconCss}</style>`);
-        // Escape backslashes in JSON strings to prevent regex interpretation
-        const escapedSlashCommandScopes = slashCommandScopesJson.replace(/\\/g, '\\\\');
-        html = html.replace(/\${SLASH_COMMAND_SCOPES}/g, escapedSlashCommandScopes);
-        html = html.replace(/\${WORKSPACE_FOLDERS}/g, workspaceFoldersJson);
+        html = html.replace('</style>', () => `  ${codiconCss}</style>`);
+
+        // Escape backslashes in JSON strings to prevent regex interpretation and sanitize < to prevent XSS
+        const escapedSlashCommandScopes = slashCommandScopesJson.replace(/\\/g, '\\\\').replace(/</g, '\\u003c');
+        const sanitizedWorkspaceFolders = workspaceFoldersJson.replace(/</g, '\\u003c');
+        html = html.replace(/\${SLASH_COMMAND_SCOPES}/g, () => escapedSlashCommandScopes);
+        html = html.replace(/\${WORKSPACE_FOLDERS}/g, () => sanitizedWorkspaceFolders);
 
         return html;
     }
