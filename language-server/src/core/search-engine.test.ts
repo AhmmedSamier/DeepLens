@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/max-lines-per-function */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, expect, it } from "bun:test";
 import * as path from "node:path";
