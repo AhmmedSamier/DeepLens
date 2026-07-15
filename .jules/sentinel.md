@@ -6,3 +6,7 @@
 **Vulnerability:** Constructing DOM elements by setting `.innerHTML` with concatenated strings or raw HTML templates.
 **Learning:** Even if the strings are statically defined, using `.innerHTML` violates strict Content Security Policies (CSP) and creates a theoretical XSS vector if future updates introduce dynamic variables.
 **Prevention:** Always use native DOM methods like `document.createElement`, `classList.add`, and `.textContent` when injecting structure or data into webviews to ensure robust, built-in XSS protection.
+## 2025-02-14 - Fix Webview XSS and JSON Corruption in Template Injection
+**Vulnerability:** XSS and JSON corruption via `String.prototype.replace()` when injecting JSON into HTML templates.
+**Learning:** If user-controlled data is stringified to JSON and injected directly into HTML scripts without escaping `<` to `\u003c`, it allows `<script>` tag breakouts. Using `replace(regex, string)` rather than a callback evaluates regex substitution tokens (e.g., `$&`), corrupting JSON format.
+**Prevention:** Always sanitize JSON by escaping `<` to `\u003c` and use a replacement callback function `() => data` instead of passing the string directly to `replace()`.
