@@ -1,295 +1,305 @@
-import * as cp from 'node:child_process';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { CancellationToken } from 'vscode-languageserver';
+import * as cp from "node:child_process";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { CancellationToken } from "vscode-languageserver";
 
 export interface RgMatch {
-    path: string;
-    line: number;
-    column: number;
-    text: string;
-    match: string;
-    submatches: { match: { text: string }; start: number; end: number }[];
+  path: string;
+  line: number;
+  column: number;
+  text: string;
+  match: string;
+  submatches: { match: { text: string }; start: number; end: number }[];
 }
 
 export class RipgrepService {
-    private readonly rgPath: string;
-    private ripgrepHealthy = true;
-    private onUnavailableCallback: (() => void) | null = null;
+  private readonly rgPath: string;
+  private ripgrepHealthy = true;
+  private onUnavailableCallback: (() => void) | null = null;
 
-    constructor(extensionPath: string) {
-        this.rgPath = this.findRgPath(extensionPath);
+  constructor(extensionPath: string) {
+    this.rgPath = this.findRgPath(extensionPath);
+  }
+
+  public setUnavailableCallback(cb: () => void): void {
+    this.onUnavailableCallback = cb;
+  }
+
+  private findRgPath(extensionPath: string): string {
+    let binPatterns: string[] = [];
+
+    // Determine target binary names based on platform/arch
+    if (process.platform === "win32") {
+      binPatterns = ["rg.exe"];
+    } else if (process.platform === "linux") {
+      binPatterns = ["rg-linux-x64", "rg-linux", "rg"];
+    } else if (process.platform === "darwin") {
+      binPatterns = ["rg-darwin-arm64", "rg-darwin-x64", "rg-darwin", "rg"];
+    } else {
+      binPatterns = ["rg"];
     }
 
-    public setUnavailableCallback(cb: () => void): void {
-        this.onUnavailableCallback = cb;
+    // Potential search locations
+    const searchDirs = [
+      path.join(extensionPath, "dist", "bin"),
+      path.join(extensionPath, "bin"),
+      path.join(__dirname, "..", "..", "dist", "bin"),
+    ];
+
+    // Find the first matching binary
+    for (const dir of searchDirs) {
+      for (const name of binPatterns) {
+        const candidate = path.join(dir, name);
+        if (fs.existsSync(candidate)) {
+          return candidate;
+        }
+      }
+    }
+    this.onUnavailableCallback?.();
+    return "";
+  }
+
+  isAvailable(): boolean {
+    return !!this.rgPath;
+  }
+
+  async search(
+    query: string,
+    files: string[],
+    maxResults: number = 100,
+    token?: CancellationToken,
+  ): Promise<RgMatch[]> {
+    if (!this.isAvailable()) {
+      throw new Error("Ripgrep binary not found");
     }
 
-    private findRgPath(extensionPath: string): string {
-        let binPatterns: string[] = [];
+    const baseArgs = [
+      "--json",
+      "-i",
+      "-F", // Fixed strings (no regex)
+      "--max-count", // Per-file limit. Increased to ensure we don't miss matches in a single file
+      Math.max(500, maxResults).toString(),
+      "--",
+      query,
+    ];
 
-        // Determine target binary names based on platform/arch
-        if (process.platform === 'win32') {
-            binPatterns = ['rg.exe'];
-        } else if (process.platform === 'linux') {
-            binPatterns = ['rg-linux-x64', 'rg-linux', 'rg'];
-        } else if (process.platform === 'darwin') {
-            binPatterns = ['rg-darwin-arm64', 'rg-darwin-x64', 'rg-darwin', 'rg'];
+    // Calculate rough base length (ignoring escaping overhead for now, safe margin handles it)
+    const baseArgsLen = baseArgs.reduce((acc, arg) => acc + arg.length + 1, 0);
+
+    // Windows command line limit is ~32k. We'll use 20k to be safe.
+    const MAX_CMD_LENGTH = 20000;
+
+    const batches: string[][] = [];
+    let currentBatch: string[] = [];
+    let currentBatchLen = baseArgsLen;
+
+    for (const file of files) {
+      // +1 for space/quote overhead
+      if (currentBatchLen + file.length + 1 > MAX_CMD_LENGTH) {
+        batches.push(currentBatch);
+        currentBatch = [];
+        currentBatchLen = baseArgsLen;
+      }
+      currentBatch.push(file);
+      currentBatchLen += file.length + 1;
+    }
+    if (currentBatch.length > 0) {
+      batches.push(currentBatch);
+    }
+
+    const allResults: RgMatch[] = [];
+
+    const maxWorkers = Math.min(4, Math.max(2, batches.length >= 4 ? 4 : 2));
+    let nextBatch = 0;
+
+    const runWorker = async (): Promise<void> => {
+      while (nextBatch < batches.length) {
+        if (allResults.length >= maxResults || token?.isCancellationRequested) {
+          return;
+        }
+
+        const batchIndex = nextBatch;
+        nextBatch++;
+
+        const remaining = maxResults - allResults.length;
+        if (remaining <= 0) {
+          return;
+        }
+
+        try {
+          const batchResults = await this.runRgBatch(
+            baseArgs,
+            batches[batchIndex],
+            remaining,
+            token,
+          );
+          if (batchResults.length > 0) {
+            // ⚡ Bolt: Fast Array Pushing
+            // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
+            // when dealing with large unbounded arrays and to boost performance.
+            for (let i = 0; i < batchResults.length; i++) {
+              allResults.push(batchResults[i]);
+            }
+          }
+        } catch {
+          // Ignore batch failure
+        }
+      }
+    };
+
+    const workers: Promise<void>[] = [];
+    const workerCount = Math.min(maxWorkers, batches.length);
+    for (let i = 0; i < workerCount; i++) {
+      workers.push(runWorker());
+    }
+
+    await Promise.all(workers);
+
+    if (allResults.length > maxResults) {
+      return allResults.slice(0, maxResults);
+    }
+
+    return allResults;
+  }
+
+  private runRgBatch(
+    baseArgs: string[],
+    files: string[],
+    limit: number,
+    token?: CancellationToken,
+  ): Promise<RgMatch[]> {
+    return new Promise((resolve, reject) => {
+      if (token?.isCancellationRequested) {
+        resolve([]);
+        return;
+      }
+
+      // Append files to args
+      const args = [...baseArgs, ...files];
+
+      const child = cp.spawn(this.rgPath, args, {
+        stdio: ["ignore", "pipe", "pipe"], // No stdin needed
+      });
+
+      // Handle immediate cancellation
+      const cancellationListener = token?.onCancellationRequested(() => {
+        child.kill();
+        resolve(results);
+      });
+
+      const results: RgMatch[] = [];
+      let buffer = "";
+      let errorBuffer = "";
+      let hitLimit = false;
+
+      // eslint-disable-next-line sonarjs/cognitive-complexity
+      child.stdout.on("data", (chunk: Buffer) => {
+        if (hitLimit || token?.isCancellationRequested) return;
+
+        buffer += chunk.toString();
+
+        // ⚡ Bolt: Fast string splitting optimization
+        // Replaces regex-based split and manual trim with a single-pass manual loop
+        // using indexOf('\n') and charCodeAt, significantly reducing intermediate array
+        // allocations for large search result streams.
+        let lastIndex = 0;
+        const len = buffer.length;
+
+        while (lastIndex < len) {
+          let newlineIndex = buffer.indexOf("\n", lastIndex);
+          if (newlineIndex === -1) {
+            break; // Incomplete line, keep in buffer
+          }
+
+          let start = lastIndex;
+          while (start < newlineIndex && buffer.charCodeAt(start) <= 32) {
+            start++;
+          }
+
+          let end = newlineIndex;
+          while (end > start && buffer.charCodeAt(end - 1) <= 32) {
+            end--;
+          }
+
+          if (start < end) {
+            const line = buffer.slice(start, end);
+            try {
+              const msg = JSON.parse(line);
+              if (msg.type === "match") {
+                const data = msg.data;
+                // Ripgrep returns byte offsets into the original UTF-8 string.
+                const rawText = data.lines.text;
+
+                // Calculate leading whitespace (bytes)
+                // We need to match leading whitespace and count its *bytes* because rg offsets are bytes.
+                const leadingMatch = rawText.match(/^\s*/);
+                const leadingStr = leadingMatch ? leadingMatch[0] : "";
+                const leadingBytes = Buffer.byteLength(leadingStr);
+
+                // Trim text for display
+                const trimmedText = rawText.trimStart().trimEnd(); // Matches behaviors of .trim()
+
+                // Adjust submatches
+                const adjustedSubmatches = data.submatches.map(
+                  (sm: { start: number; end: number }) => ({
+                    ...sm,
+                    start: Math.max(0, sm.start - leadingBytes),
+                    end: Math.max(0, sm.end - leadingBytes),
+                  }),
+                );
+
+                results.push({
+                  path: data.path.text,
+                  line: data.line_number - 1,
+                  column: data.submatches[0]?.start || 0, // Original Column
+                  text: trimmedText,
+                  match: data.submatches[0]?.match?.text || "",
+                  submatches: adjustedSubmatches,
+                });
+
+                if (results.length >= limit) {
+                  hitLimit = true;
+                  child.kill();
+                  break;
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          lastIndex = newlineIndex + 1;
+        }
+
+        buffer = buffer.slice(lastIndex);
+      });
+
+      child.stderr.on("data", (chunk) => {
+        errorBuffer += chunk.toString();
+      });
+
+      child.on("close", (code) => {
+        if (cancellationListener) cancellationListener.dispose();
+        if (
+          hitLimit ||
+          token?.isCancellationRequested ||
+          code === 0 ||
+          code === 1
+        ) {
+          resolve(results);
         } else {
-            binPatterns = ['rg'];
+          reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
         }
+      });
 
-        // Potential search locations
-        const searchDirs = [
-            path.join(extensionPath, 'dist', 'bin'),
-            path.join(extensionPath, 'bin'),
-            path.join(__dirname, '..', '..', 'dist', 'bin'),
-        ];
-
-        // Find the first matching binary
-        for (const dir of searchDirs) {
-            for (const name of binPatterns) {
-                const candidate = path.join(dir, name);
-                if (fs.existsSync(candidate)) {
-                    return candidate;
-                }
-            }
+      child.on("error", (err) => {
+        if (this.ripgrepHealthy) {
+          this.ripgrepHealthy = false;
+          this.onUnavailableCallback?.();
         }
-        this.onUnavailableCallback?.();
-        return '';
-    }
-
-    isAvailable(): boolean {
-        return !!this.rgPath;
-    }
-
-    async search(
-        query: string,
-        files: string[],
-        maxResults: number = 100,
-        token?: CancellationToken,
-    ): Promise<RgMatch[]> {
-        if (!this.isAvailable()) {
-            throw new Error('Ripgrep binary not found');
-        }
-
-        const baseArgs = [
-            '--json',
-            '-i',
-            '-F', // Fixed strings (no regex)
-            '--max-count', // Per-file limit. Increased to ensure we don't miss matches in a single file
-            Math.max(500, maxResults).toString(),
-            '--',
-            query,
-        ];
-
-        // Calculate rough base length (ignoring escaping overhead for now, safe margin handles it)
-        const baseArgsLen = baseArgs.reduce((acc, arg) => acc + arg.length + 1, 0);
-
-        // Windows command line limit is ~32k. We'll use 20k to be safe.
-        const MAX_CMD_LENGTH = 20000;
-
-        const batches: string[][] = [];
-        let currentBatch: string[] = [];
-        let currentBatchLen = baseArgsLen;
-
-        for (const file of files) {
-            // +1 for space/quote overhead
-            if (currentBatchLen + file.length + 1 > MAX_CMD_LENGTH) {
-                batches.push(currentBatch);
-                currentBatch = [];
-                currentBatchLen = baseArgsLen;
-            }
-            currentBatch.push(file);
-            currentBatchLen += file.length + 1;
-        }
-        if (currentBatch.length > 0) {
-            batches.push(currentBatch);
-        }
-
-        const allResults: RgMatch[] = [];
-
-        const maxWorkers = Math.min(4, Math.max(2, batches.length >= 4 ? 4 : 2));
-        let nextBatch = 0;
-
-        const runWorker = async (): Promise<void> => {
-            while (nextBatch < batches.length) {
-                if (allResults.length >= maxResults || token?.isCancellationRequested) {
-                    return;
-                }
-
-                const batchIndex = nextBatch;
-                nextBatch++;
-
-                const remaining = maxResults - allResults.length;
-                if (remaining <= 0) {
-                    return;
-                }
-
-                try {
-                    const batchResults = await this.runRgBatch(baseArgs, batches[batchIndex], remaining, token);
-                    if (batchResults.length > 0) {
-                        // ⚡ Bolt: Fast Array Pushing
-                        // Replaced array.push(...items) with a manual for-loop to prevent "Maximum Call Stack Size Exceeded"
-                        // when dealing with large unbounded arrays and to boost performance.
-                        for (let i = 0; i < batchResults.length; i++) {
-                            allResults.push(batchResults[i]);
-                        }
-                    }
-                } catch {
-                    // Ignore batch failure
-                }
-            }
-        };
-
-        const workers: Promise<void>[] = [];
-        const workerCount = Math.min(maxWorkers, batches.length);
-        for (let i = 0; i < workerCount; i++) {
-            workers.push(runWorker());
-        }
-
-        await Promise.all(workers);
-
-        if (allResults.length > maxResults) {
-            return allResults.slice(0, maxResults);
-        }
-
-        return allResults;
-    }
-
-    private runRgBatch(
-        baseArgs: string[],
-        files: string[],
-        limit: number,
-        token?: CancellationToken,
-    ): Promise<RgMatch[]> {
-        return new Promise((resolve, reject) => {
-            if (token?.isCancellationRequested) {
-                resolve([]);
-                return;
-            }
-
-            // Append files to args
-            const args = [...baseArgs, ...files];
-
-            const child = cp.spawn(this.rgPath, args, {
-                stdio: ['ignore', 'pipe', 'pipe'], // No stdin needed
-            });
-
-            // Handle immediate cancellation
-            const cancellationListener = token?.onCancellationRequested(() => {
-                child.kill();
-                resolve(results);
-            });
-
-            const results: RgMatch[] = [];
-            let buffer = '';
-            let errorBuffer = '';
-            let hitLimit = false;
-
-            // eslint-disable-next-line sonarjs/cognitive-complexity
-            child.stdout.on('data', (chunk: Buffer) => {
-                if (hitLimit || token?.isCancellationRequested) return;
-
-                buffer += chunk.toString();
-
-                // ⚡ Bolt: Fast string splitting optimization
-                // Replaces regex-based split and manual trim with a single-pass manual loop
-                // using indexOf('\n') and charCodeAt, significantly reducing intermediate array
-                // allocations for large search result streams.
-                let lastIndex = 0;
-                const len = buffer.length;
-
-                while (lastIndex < len) {
-                    let newlineIndex = buffer.indexOf('\n', lastIndex);
-                    if (newlineIndex === -1) {
-                        break; // Incomplete line, keep in buffer
-                    }
-
-                    let start = lastIndex;
-                    while (start < newlineIndex && buffer.charCodeAt(start) <= 32) {
-                        start++;
-                    }
-
-                    let end = newlineIndex;
-                    while (end > start && buffer.charCodeAt(end - 1) <= 32) {
-                        end--;
-                    }
-
-                    if (start < end) {
-                        const line = buffer.slice(start, end);
-                        try {
-                            const msg = JSON.parse(line);
-                            if (msg.type === 'match') {
-                                const data = msg.data;
-                                // Ripgrep returns byte offsets into the original UTF-8 string.
-                                const rawText = data.lines.text;
-
-                                // Calculate leading whitespace (bytes)
-                                // We need to match leading whitespace and count its *bytes* because rg offsets are bytes.
-                                const leadingMatch = rawText.match(/^\s*/);
-                                const leadingStr = leadingMatch ? leadingMatch[0] : '';
-                                const leadingBytes = Buffer.byteLength(leadingStr);
-
-                                // Trim text for display
-                                const trimmedText = rawText.trimStart().trimEnd(); // Matches behaviors of .trim()
-
-                                // Adjust submatches
-                                const adjustedSubmatches = data.submatches.map(
-                                    (sm: { start: number; end: number }) => ({
-                                        ...sm,
-                                        start: Math.max(0, sm.start - leadingBytes),
-                                        end: Math.max(0, sm.end - leadingBytes),
-                                    }),
-                                );
-
-                                results.push({
-                                    path: data.path.text,
-                                    line: data.line_number - 1,
-                                    column: data.submatches[0]?.start || 0, // Original Column
-                                    text: trimmedText,
-                                    match: data.submatches[0]?.match?.text || '',
-                                    submatches: adjustedSubmatches,
-                                });
-
-                                if (results.length >= limit) {
-                                    hitLimit = true;
-                                    child.kill();
-                                    break;
-                                }
-                            }
-                        } catch {
-                            // ignore
-                        }
-                    }
-
-                    lastIndex = newlineIndex + 1;
-                }
-
-                buffer = buffer.slice(lastIndex);
-            });
-
-            child.stderr.on('data', (chunk) => {
-                errorBuffer += chunk.toString();
-            });
-
-            child.on('close', (code) => {
-                if (cancellationListener) cancellationListener.dispose();
-                if (hitLimit || token?.isCancellationRequested || code === 0 || code === 1) {
-                    resolve(results);
-                } else {
-                    reject(new Error(`Ripgrep failed with code ${code}: ${errorBuffer}`));
-                }
-            });
-
-            child.on('error', (err) => {
-                if (this.ripgrepHealthy) {
-                    this.ripgrepHealthy = false;
-                    this.onUnavailableCallback?.();
-                }
-                if (cancellationListener) cancellationListener.dispose();
-                reject(err);
-            });
-        });
-    }
+        if (cancellationListener) cancellationListener.dispose();
+        reject(err);
+      });
+    });
+  }
 }

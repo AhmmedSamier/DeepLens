@@ -1,720 +1,820 @@
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { SearchItemType, SearchableItem } from './types';
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { SearchItemType, SearchableItem } from "./types";
 
-const CLASS_TYPES = new Set(['class_declaration', 'class_definition', 'class']);
+const CLASS_TYPES = new Set(["class_declaration", "class_definition", "class"]);
 
 export interface Logger {
-    appendLine(message: string): void;
+  appendLine(message: string): void;
 }
 
 interface TreeSitterNode {
-    type: string;
-    text: string;
-    startPosition: { row: number; column: number };
-    childCount: number;
-    child: (i: number) => TreeSitterNode | null;
-    childForFieldName: (name: string) => TreeSitterNode | null;
-    children: TreeSitterNode[];
-    parent: TreeSitterNode | null;
+  type: string;
+  text: string;
+  startPosition: { row: number; column: number };
+  childCount: number;
+  child: (i: number) => TreeSitterNode | null;
+  childForFieldName: (name: string) => TreeSitterNode | null;
+  children: TreeSitterNode[];
+  parent: TreeSitterNode | null;
 }
 
 interface Parser {
-    setLanguage: (language: unknown) => void;
-    parse: (content: string) => { rootNode: unknown; delete: () => void };
+  setLanguage: (language: unknown) => void;
+  parse: (content: string) => { rootNode: unknown; delete: () => void };
 }
 
 interface ParserConstructor {
-    new (): Parser;
-    init: (options?: { locateFile?: () => string }) => Promise<void>;
+  new (): Parser;
+  init: (options?: { locateFile?: () => string }) => Promise<void>;
 }
 
 interface TreeSitterLib {
-    init: (options?: { locateFile?: () => string }) => Promise<void>;
-    Language: {
-        load: (path: string) => Promise<unknown>;
-    };
-    Parser?: ParserConstructor;
+  init: (options?: { locateFile?: () => string }) => Promise<void>;
+  Language: {
+    load: (path: string) => Promise<unknown>;
+  };
+  Parser?: ParserConstructor;
 }
 
 export class TreeSitterParser {
-    private isInitialized: boolean = false;
-    private readonly languages: Map<string, unknown> = new Map();
-    private ParserClass: ParserConstructor | undefined = undefined;
-    private lib: TreeSitterLib | undefined = undefined;
-    private parserCache: Map<string, Parser> = new Map();
-    private readonly extensionPath: string = '';
-    private readonly logger: Logger | undefined = undefined;
+  private isInitialized: boolean = false;
+  private readonly languages: Map<string, unknown> = new Map();
+  private ParserClass: ParserConstructor | undefined = undefined;
+  private lib: TreeSitterLib | undefined = undefined;
+  private parserCache: Map<string, Parser> = new Map();
+  private readonly extensionPath: string = "";
+  private readonly logger: Logger | undefined = undefined;
 
-    constructor(extensionPath: string, logger?: Logger) {
-        this.extensionPath = extensionPath;
-        this.logger = logger;
+  constructor(extensionPath: string, logger?: Logger) {
+    this.extensionPath = extensionPath;
+    this.logger = logger;
+  }
+
+  private log(message: string): void {
+    this.logger?.appendLine(`[TreeSitter] ${message}`);
+  }
+
+  /**
+   * Initialize the parser and load languages
+   */
+  async init(): Promise<void> {
+    if (this.isInitialized) {
+      return;
     }
 
-    private log(message: string): void {
-        this.logger?.appendLine(`[TreeSitter] ${message}`);
+    // Load using require to stay as close to Node.js defaults as possible for this external module
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const libraryModule = require("web-tree-sitter");
+      this.lib = libraryModule as TreeSitterLib;
+      // The library export might be the Parser constructor itself (older versions/types)
+      this.ParserClass = this.lib as unknown as ParserConstructor;
+
+      if (this.lib.Parser) {
+        this.ParserClass = this.lib.Parser;
+      }
+
+      this.log("Initializing web-tree-sitter WASM...");
+      const wasmPath = path.normalize(
+        path.resolve(
+          this.extensionPath,
+          "dist",
+          "parsers",
+          "web-tree-sitter.wasm",
+        ),
+      );
+
+      if (!(await this.fileExists(wasmPath))) {
+        this.log(`ERROR: WASM file MISSING at: ${wasmPath}`);
+      }
+
+      // Standard initialization for web-tree-sitter in Node context
+      await this.ParserClass.init({
+        locateFile: () => wasmPath,
+      });
+
+      this.log("Web-tree-sitter WASM initialized.");
+    } catch (e) {
+      this.log(`ERROR: TreeSitter initialization failed: ${e}`);
+      throw e;
     }
 
-    /**
-     * Initialize the parser and load languages
-     */
-    async init(): Promise<void> {
-        if (this.isInitialized) {
-            return;
-        }
-
-        // Load using require to stay as close to Node.js defaults as possible for this external module
-        try {
-            // eslint-disable-next-line @typescript-eslint/no-require-imports
-            const libraryModule = require('web-tree-sitter');
-            this.lib = libraryModule as TreeSitterLib;
-            // The library export might be the Parser constructor itself (older versions/types)
-            this.ParserClass = this.lib as unknown as ParserConstructor;
-
-            if (this.lib.Parser) {
-                this.ParserClass = this.lib.Parser;
-            }
-
-            this.log('Initializing web-tree-sitter WASM...');
-            const wasmPath = path.normalize(
-                path.resolve(this.extensionPath, 'dist', 'parsers', 'web-tree-sitter.wasm'),
-            );
-
-            if (!(await this.fileExists(wasmPath))) {
-                this.log(`ERROR: WASM file MISSING at: ${wasmPath}`);
-            }
-
-            // Standard initialization for web-tree-sitter in Node context
-            await this.ParserClass.init({
-                locateFile: () => wasmPath,
-            });
-
-            this.log('Web-tree-sitter WASM initialized.');
-        } catch (e) {
-            this.log(`ERROR: TreeSitter initialization failed: ${e}`);
-            throw e;
-        }
-
-        if (!this.ParserClass || typeof this.ParserClass !== 'function') {
-            this.log('ERROR: Parser class not found or invalid.');
-            throw new Error('Parser class not found');
-        }
-
-        this.isInitialized = true;
+    if (!this.ParserClass || typeof this.ParserClass !== "function") {
+      this.log("ERROR: Parser class not found or invalid.");
+      throw new Error("Parser class not found");
     }
 
-    private static readonly LANGUAGE_MAP: Record<string, string> = {
-        typescript: 'tree-sitter-typescript.wasm',
-        typescriptreact: 'tree-sitter-tsx.wasm',
-        javascript: 'tree-sitter-javascript.wasm',
-        javascriptreact: 'tree-sitter-tsx.wasm',
-        csharp: 'tree-sitter-c_sharp.wasm',
-        python: 'tree-sitter-python.wasm',
-        java: 'tree-sitter-java.wasm',
-        go: 'tree-sitter-go.wasm',
-        cpp: 'tree-sitter-cpp.wasm',
-        c: 'tree-sitter-c.wasm',
-        ruby: 'tree-sitter-ruby.wasm',
-        php: 'tree-sitter-php.wasm',
+    this.isInitialized = true;
+  }
+
+  private static readonly LANGUAGE_MAP: Record<string, string> = {
+    typescript: "tree-sitter-typescript.wasm",
+    typescriptreact: "tree-sitter-tsx.wasm",
+    javascript: "tree-sitter-javascript.wasm",
+    javascriptreact: "tree-sitter-tsx.wasm",
+    csharp: "tree-sitter-c_sharp.wasm",
+    python: "tree-sitter-python.wasm",
+    java: "tree-sitter-java.wasm",
+    go: "tree-sitter-go.wasm",
+    cpp: "tree-sitter-cpp.wasm",
+    c: "tree-sitter-c.wasm",
+    ruby: "tree-sitter-ruby.wasm",
+    php: "tree-sitter-php.wasm",
+  };
+
+  private async loadLanguage(
+    langId: string,
+    wasmFile: string,
+  ): Promise<boolean> {
+    try {
+      const wasmPath = path.join(
+        this.extensionPath,
+        "dist",
+        "parsers",
+        wasmFile,
+      );
+
+      if (await this.fileExists(wasmPath)) {
+        this.log(`Loading language ${langId} from ${wasmFile}...`);
+        // Ensure this.lib is not null before using it
+        if (!this.lib) {
+          this.log(
+            `ERROR: TreeSitter library not initialized when trying to load ${langId}`,
+          );
+          return false;
+        }
+        // Use plain absolute path string - do NOT use file:// URLs on Windows for this library
+        const absoluteWasmPath = path.normalize(wasmPath);
+        const lang = await this.lib.Language.load(absoluteWasmPath);
+        this.languages.set(langId, lang);
+        this.log(`Successfully loaded ${langId}`);
+        return true;
+      } else {
+        this.log(`WARNING: WASM file not found for ${langId} at ${wasmPath}`);
+        return false;
+      }
+    } catch (error) {
+      this.log(`ERROR: Failed to load ${langId}: ${error}`);
+      return false;
+    }
+  }
+
+  /**
+   * Parse a file and extract symbols
+   */
+  async parseFile(filePath: string): Promise<SearchableItem[]> {
+    if (!this.isInitialized || !this.ParserClass) {
+      return [];
+    }
+
+    const langId = this.getLanguageId(filePath);
+    const lang = await this.ensureLanguageLoaded(langId);
+
+    if (!lang) {
+      return [];
+    }
+
+    try {
+      this.logDebugStart(langId, filePath);
+
+      const parser = this.getOrCreateParser(langId, lang);
+      const content = await fs.promises.readFile(filePath, "utf8");
+      const tree = parser.parse(content);
+      const items: SearchableItem[] = [];
+
+      this.extractSymbols(
+        tree.rootNode as unknown as TreeSitterNode,
+        filePath,
+        items,
+        langId,
+      );
+
+      this.logDebugEnd(langId, filePath, items, tree);
+
+      tree.delete();
+      return items;
+    } catch (error) {
+      this.log(`Error tree-sitter parsing ${filePath}: ${error}`);
+      return [];
+    }
+  }
+
+  private getOrCreateParser(langId: string, lang: unknown): Parser {
+    const cached = this.parserCache.get(langId);
+    if (cached) {
+      return cached;
+    }
+
+    if (!this.ParserClass) {
+      throw new Error(
+        "TreeSitterParser not initialized. Call init() before parsing.",
+      );
+    }
+
+    const parser = new this.ParserClass();
+    parser.setLanguage(lang);
+    this.parserCache.set(langId, parser);
+    return parser;
+  }
+
+  private async ensureLanguageLoaded(langId: string): Promise<unknown> {
+    let lang = this.languages.get(langId);
+    if (!lang) {
+      // Lazy load language
+      const wasmFile = TreeSitterParser.LANGUAGE_MAP[langId];
+      if (wasmFile) {
+        const loaded = await this.loadLanguage(langId, wasmFile);
+        if (loaded) {
+          lang = this.languages.get(langId);
+        }
+      }
+    }
+    return lang;
+  }
+
+  private logDebugStart(langId: string, filePath: string) {
+    if (langId === "csharp") {
+      this.log(`Starting C# parse: ${filePath}`);
+    }
+  }
+
+  private logDebugEnd(
+    langId: string,
+    filePath: string,
+    items: SearchableItem[],
+    tree: { rootNode: unknown },
+  ) {
+    if (langId === "csharp") {
+      const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
+      this.log(
+        `Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`,
+      );
+      if (endpoints.length > 0) {
+        endpoints.forEach((e) => this.log(`  - Found Endpoint: ${e.name}`));
+      } else if (items.length === 0) {
+        const rootNode = tree.rootNode as TreeSitterNode;
+        this.log(
+          `Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${rootNode.type}`,
+        );
+      }
+    }
+  }
+
+  private getLanguageId(filePath: string): string {
+    const ext = path.extname(filePath).toLowerCase();
+    switch (ext) {
+      case ".ts":
+        return "typescript";
+      case ".tsx":
+        return "typescriptreact";
+      case ".js":
+        return "javascript";
+      case ".jsx":
+        return "javascriptreact";
+      case ".cs":
+        return "csharp";
+      case ".py":
+        return "python";
+      case ".java":
+        return "java";
+      case ".go":
+        return "go";
+      case ".cpp":
+      case ".cc":
+      case ".cxx":
+      case ".hpp":
+        return "cpp";
+      case ".c":
+      case ".h":
+        return "c";
+      case ".rb":
+        return "ruby";
+      case ".php":
+        return "php";
+      default:
+        return "";
+    }
+  }
+
+  private extractSymbols(
+    node: TreeSitterNode,
+    filePath: string,
+    items: SearchableItem[],
+    langId: string,
+    containerName?: string,
+  ): void {
+    const type = this.getSearchItemType(node.type, langId);
+    let currentContainer = containerName;
+
+    if (type) {
+      const nameNode = this.getNameNode(node);
+      if (nameNode) {
+        const name = nameNode.text;
+        const fullName = containerName ? `${containerName}.${name}` : name;
+
+        items.push({
+          id: `ts:${filePath}:${fullName}:${node.startPosition.row}`,
+          name: name,
+          type: type,
+          filePath: filePath,
+          line: node.startPosition.row,
+          column: node.startPosition.column,
+          containerName: containerName,
+          fullName: fullName,
+        });
+
+        // If it's a type (class/interface/enum), it becomes the container for children
+        if (
+          type === SearchItemType.CLASS ||
+          type === SearchItemType.INTERFACE ||
+          type === SearchItemType.ENUM
+        ) {
+          currentContainer = fullName;
+        }
+      }
+    }
+
+    // C# Endpoint detection
+    if (langId === "csharp") {
+      this.detectCSharpEndpoint(node, filePath, items, containerName);
+    }
+
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        this.extractSymbols(child, filePath, items, langId, currentContainer);
+      }
+    }
+  }
+
+  /**
+   * Specialized detection for ASP.NET Endpoints
+   */
+  private detectCSharpEndpoint(
+    node: TreeSitterNode,
+    filePath: string,
+    items: SearchableItem[],
+    containerName?: string,
+  ): void {
+    this.detectControllerAction(node, filePath, items, containerName);
+    this.detectMinimalApi(node, filePath, items);
+  }
+
+  private detectControllerAction(
+    node: TreeSitterNode,
+    filePath: string,
+    items: SearchableItem[],
+    containerName?: string,
+  ): void {
+    if (node.type !== "method_declaration") return;
+
+    const { method, route } = this.scanAttributes(node);
+
+    if (method || route) {
+      this.processEndpointMethod(
+        node,
+        method || "GET",
+        route || "",
+        filePath,
+        items,
+        containerName,
+      );
+    }
+  }
+
+  private scanAttributes(node: TreeSitterNode): {
+    method: string | null;
+    route: string | null;
+  } {
+    const results: { method: string | null; route: string | null } = {
+      method: null,
+      route: null,
     };
+    this.findAttributeListsRecursive(node, results);
+    return results;
+  }
 
-    private async loadLanguage(langId: string, wasmFile: string): Promise<boolean> {
-        try {
-            const wasmPath = path.join(this.extensionPath, 'dist', 'parsers', wasmFile);
+  private findAttributeListsRecursive(
+    node: TreeSitterNode,
+    results: { method: string | null; route: string | null },
+    isRoot: boolean = true,
+  ): void {
+    const type = node.type;
 
-            if (await this.fileExists(wasmPath)) {
-                this.log(`Loading language ${langId} from ${wasmFile}...`);
-                // Ensure this.lib is not null before using it
-                if (!this.lib) {
-                    this.log(`ERROR: TreeSitter library not initialized when trying to load ${langId}`);
-                    return false;
-                }
-                // Use plain absolute path string - do NOT use file:// URLs on Windows for this library
-                const absoluteWasmPath = path.normalize(wasmPath);
-                const lang = await this.lib.Language.load(absoluteWasmPath);
-                this.languages.set(langId, lang);
-                this.log(`Successfully loaded ${langId}`);
-                return true;
-            } else {
-                this.log(`WARNING: WASM file not found for ${langId} at ${wasmPath}`);
-                return false;
-            }
-        } catch (error) {
-            this.log(`ERROR: Failed to load ${langId}: ${error}`);
-            return false;
-        }
+    // Stop if we hit something that clearly isn't an attribute prefix (like a body or another member)
+    if (
+      !isRoot &&
+      (type === "block" ||
+        type === "parameter_list" ||
+        type.endsWith("body") ||
+        type.endsWith("declaration"))
+    ) {
+      return;
     }
 
-    /**
-     * Parse a file and extract symbols
-     */
-    async parseFile(filePath: string): Promise<SearchableItem[]> {
-        if (!this.isInitialized || !this.ParserClass) {
-            return [];
-        }
-
-        const langId = this.getLanguageId(filePath);
-        const lang = await this.ensureLanguageLoaded(langId);
-
-        if (!lang) {
-            return [];
-        }
-
-        try {
-            this.logDebugStart(langId, filePath);
-
-            const parser = this.getOrCreateParser(langId, lang);
-            const content = await fs.promises.readFile(filePath, 'utf8');
-            const tree = parser.parse(content);
-            const items: SearchableItem[] = [];
-
-            this.extractSymbols(tree.rootNode as unknown as TreeSitterNode, filePath, items, langId);
-
-            this.logDebugEnd(langId, filePath, items, tree);
-
-            tree.delete();
-            return items;
-        } catch (error) {
-            this.log(`Error tree-sitter parsing ${filePath}: ${error}`);
-            return [];
-        }
+    if (type === "attribute_list") {
+      this.processAttributeList(node, results);
     }
 
-    private getOrCreateParser(langId: string, lang: unknown): Parser {
-        const cached = this.parserCache.get(langId);
-        if (cached) {
-            return cached;
-        }
+    // Recursively search children for attribute lists
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        this.findAttributeListsRecursive(child, results, false);
+      }
+    }
+  }
 
-        if (!this.ParserClass) {
-            throw new Error('TreeSitterParser not initialized. Call init() before parsing.');
-        }
+  private processAttributeList(
+    node: TreeSitterNode,
+    results: { method: string | null; route: string | null },
+  ): void {
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        if (!child.type.startsWith("attribute")) continue;
 
-        const parser = new this.ParserClass();
-        parser.setLanguage(lang);
-        this.parserCache.set(langId, parser);
-        return parser;
+        const info = this.getHttpAttributeInfo(child);
+        if (!info) continue;
+
+        if (info.method !== "ROUTE") {
+          results.method = info.method;
+        }
+        const attrRoute = this.extractAttributeRoute(child);
+        if (attrRoute) {
+          results.route = attrRoute;
+        }
+      }
+    }
+  }
+
+  private processEndpointMethod(
+    node: TreeSitterNode,
+    method: string,
+    localRoute: string,
+    filePath: string,
+    items: SearchableItem[],
+    containerName?: string,
+  ): void {
+    const nameNode = this.getNameNode(node);
+    if (!nameNode) return;
+
+    const methodName = nameNode.text;
+    let finalRoute = localRoute;
+
+    const controllerRoute = this.getControllerRoutePrefix(node);
+    const containerPrefix = containerName ? `${containerName}.` : "";
+
+    if (controllerRoute) {
+      // ⚡ Bolt: Fast string replacement for route resolution
+      // Replaces regex and global string replacements with endsWith/indexOf and slice.
+      // Performance impact: ~30% faster string manipulation in route resolution hot paths.
+      let controllerTokenValue = "";
+      if (containerName) {
+        controllerTokenValue = containerName.endsWith("Controller")
+          ? containerName.slice(0, -10)
+          : containerName;
+      }
+
+      const tokenIdx = controllerRoute.indexOf("[controller]");
+      const resolvedPrefix =
+        tokenIdx !== -1
+          ? controllerRoute.slice(0, tokenIdx) +
+            controllerTokenValue +
+            controllerRoute.slice(tokenIdx + 12)
+          : controllerRoute;
+
+      finalRoute = this.combineRoutes(resolvedPrefix, finalRoute);
     }
 
-    private async ensureLanguageLoaded(langId: string): Promise<unknown> {
-        let lang = this.languages.get(langId);
-        if (!lang) {
-            // Lazy load language
-            const wasmFile = TreeSitterParser.LANGUAGE_MAP[langId];
-            if (wasmFile) {
-                const loaded = await this.loadLanguage(langId, wasmFile);
-                if (loaded) {
-                    lang = this.languages.get(langId);
-                }
-            }
-        }
-        return lang;
+    items.push({
+      id: `endpoint:${filePath}:${containerPrefix}${methodName}:${node.startPosition.row}`,
+      name: finalRoute
+        ? `[${method}] ${finalRoute}`
+        : `[${method}] ${methodName}`,
+      type: SearchItemType.ENDPOINT,
+      filePath: filePath,
+      line: node.startPosition.row,
+      column: node.startPosition.column,
+      containerName: containerName,
+      fullName: `${containerPrefix}${methodName}`,
+      detail: finalRoute
+        ? `ASP.NET Endpoint: ${method} ${finalRoute}`
+        : `ASP.NET Controller Action: ${methodName}`,
+    });
+  }
+
+  private combineRoutes(prefix: string, suffix: string): string {
+    if (!suffix) return prefix;
+    if (!prefix) return suffix;
+    const cleanPrefix = prefix.endsWith("/") ? prefix.slice(0, -1) : prefix;
+    const cleanSuffix = suffix.startsWith("/") ? suffix.slice(1) : suffix;
+    return `${cleanPrefix}/${cleanSuffix}`;
+  }
+
+  private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
+    // Walk up to find the class declaration
+    let parent = this.getParent(methodNode);
+    // ⚡ Bolt: Fast tree-sitter node type checks
+    // Replaced dynamic string manipulation (toLowerCase().includes) with O(1) Set lookups
+    // using the pre-existing CLASS_TYPES Set. This eliminates redundant allocations
+    // and improves performance during AST traversal loops.
+    while (
+      parent &&
+      !CLASS_TYPES.has(parent.type) &&
+      parent.type !== "compilation_unit"
+    ) {
+      parent = this.getParent(parent);
     }
 
-    private logDebugStart(langId: string, filePath: string) {
-        if (langId === 'csharp') {
-            this.log(`Starting C# parse: ${filePath}`);
-        }
+    if (parent && CLASS_TYPES.has(parent.type)) {
+      const results: { method: string | null; route: string | null } = {
+        method: null,
+        route: null,
+      };
+      this.findAttributeListsRecursive(parent, results, true);
+      return results.route;
+    }
+    return null;
+  }
+
+  private static readonly HTTP_ATTR_REGEX =
+    /http(get|post|put|delete|patch|head|options)|route/i;
+
+  private getHttpAttributeInfo(
+    attr: TreeSitterNode,
+  ): { method: string } | null {
+    // ⚡ Bolt: Fast regex matching optimization
+    // Replaces multiple .includes() checks on a newly allocated lowercase string
+    // with a single pre-compiled regex test, yielding a ~4x performance improvement.
+    const text = attr.text;
+    const match = /http(get|post|put|delete|patch|head|options)|route/i.exec(
+      text,
+    );
+    if (match) {
+      if (match[1]) {
+        return { method: match[1].toUpperCase() };
+      }
+      return { method: "ROUTE" };
+    }
+    return null;
+  }
+
+  private extractAttributeRoute(attr: TreeSitterNode): string {
+    // Look for string literals anywhere in the attribute node (usually in the argument list)
+    return this.findFirstStringLiteral(attr) || "";
+  }
+
+  private findFirstStringLiteral(node: TreeSitterNode): string | null {
+    if (
+      node.type === "string_literal" ||
+      node.type === "verbatim_string_literal"
+    ) {
+      return this.cleanCSharpString(node.text);
     }
 
-    private logDebugEnd(langId: string, filePath: string, items: SearchableItem[], tree: { rootNode: unknown }) {
-        if (langId === 'csharp') {
-            const endpoints = items.filter((i) => i.type === SearchItemType.ENDPOINT);
-            this.log(`Finished C# parse: ${filePath}. Items: ${items.length}, Endpoints: ${endpoints.length}`);
-            if (endpoints.length > 0) {
-                endpoints.forEach((e) => this.log(`  - Found Endpoint: ${e.name}`));
-            } else if (items.length === 0) {
-                const rootNode = tree.rootNode as TreeSitterNode;
-                this.log(`Parsed ${filePath} (CSHARP) - Found 0 items. Root node type: ${rootNode.type}`);
-            }
-        }
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        const found = this.findFirstStringLiteral(child);
+        if (found) return found;
+      }
+    }
+    return null;
+  }
+
+  private cleanCSharpString(text: string): string {
+    // ⚡ Bolt: Fast string cleaning optimization
+    // Replaces .includes() checking on indexed string characters with .charCodeAt() checks
+    // avoiding string allocations during iteration and yielding ~7x performance improvement.
+    let start = 0;
+    const len = text.length;
+    // Skip opening quotes and prefixes like @ or $
+    while (start < len) {
+      const c = text.charCodeAt(start);
+      if (c === 34 || c === 64 || c === 36) {
+        // '"', '@', '$'
+        start++;
+      } else {
+        break;
+      }
+    }
+    let end = len;
+    // Skip closing quotes
+    while (end > start) {
+      if (text.charCodeAt(end - 1) === 34) {
+        // '"'
+        end--;
+      } else {
+        break;
+      }
+    }
+    return text.slice(start, end);
+  }
+
+  private detectMinimalApi(
+    node: TreeSitterNode,
+    filePath: string,
+    items: SearchableItem[],
+  ): void {
+    if (node.type !== "invocation_expression") return;
+
+    const text = node.text;
+    // Minimal API Map methods: app.MapGet, app.MapPost, etc.
+    const mapMatch = /\.Map(Get|Post|Put|Delete|Patch)\s*\(/.exec(text);
+    if (!mapMatch) return;
+
+    const httpMethod = mapMatch[1].toUpperCase();
+    const args = this.findChildByType(node, "argument_list");
+    // args has opening '(', then arguments separated by commas, then ')'
+    // Minimal API pattern: MapGet("/route", handler) - route is usually first arg
+    if (!args || args.childCount < 2) return;
+
+    // In tree-sitter, child(0) is '(', child(1) is the first argument
+    const firstArg = args.child(1);
+    if (!firstArg) return;
+
+    const route = this.cleanCSharpString(firstArg.text);
+    if (!route) return;
+
+    items.push({
+      id: `endpoint:${filePath}:${route}:${node.startPosition.row}`,
+      name: `[${httpMethod}] ${route}`,
+      type: SearchItemType.ENDPOINT,
+      filePath: filePath,
+      line: node.startPosition.row,
+      column: node.startPosition.column,
+      fullName: route,
+      detail: `ASP.NET Minimal API: ${httpMethod} ${route}`,
+    });
+  }
+
+  private findChildByType(
+    node: TreeSitterNode,
+    type: string,
+  ): TreeSitterNode | null {
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        if (child.type === type) return child;
+      }
+    }
+    return null;
+  }
+
+  private filterChildrenByType(
+    node: TreeSitterNode,
+    type: string,
+  ): TreeSitterNode[] {
+    const results: TreeSitterNode[] = [];
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        if (child.type === type) results.push(child);
+      }
+    }
+    return results;
+  }
+
+  private getParent(node: TreeSitterNode): TreeSitterNode | null {
+    return node.parent;
+  }
+
+  private getSearchItemType(
+    nodeType: string,
+    langId: string,
+  ): SearchItemType | undefined {
+    // Classes & Types
+    // ⚡ Bolt: Fast tree-sitter node type string matching
+    // Replaced dynamic Regex matching (/pattern/.test(nodeType)) with endsWith and strict equality checks.
+    // This preserves the required unanchored behavior (e.g. abstract_class_declaration)
+    // while avoiding redundant RegExp instantiation and parsing overheads.
+    // Performance impact: ~5x faster item type resolution.
+    if (
+      nodeType.endsWith("class_declaration") ||
+      nodeType.endsWith("class_definition") ||
+      nodeType === "class"
+    ) {
+      return SearchItemType.CLASS;
+    }
+    if (
+      nodeType.endsWith("interface_declaration") ||
+      nodeType.endsWith("interface_definition") ||
+      nodeType === "interface"
+    ) {
+      return SearchItemType.INTERFACE;
+    }
+    if (
+      nodeType.endsWith("enum_declaration") ||
+      nodeType.endsWith("enum_definition") ||
+      nodeType === "enum"
+    ) {
+      return SearchItemType.ENUM;
+    }
+    if (
+      nodeType.endsWith("struct_declaration") ||
+      nodeType.endsWith("struct_definition") ||
+      nodeType === "struct"
+    ) {
+      return SearchItemType.CLASS;
+    }
+    if (
+      nodeType.endsWith("trait_declaration") ||
+      nodeType.endsWith("trait_definition") ||
+      nodeType === "trait"
+    ) {
+      return SearchItemType.INTERFACE;
     }
 
-    private getLanguageId(filePath: string): string {
-        const ext = path.extname(filePath).toLowerCase();
-        switch (ext) {
-            case '.ts':
-                return 'typescript';
-            case '.tsx':
-                return 'typescriptreact';
-            case '.js':
-                return 'javascript';
-            case '.jsx':
-                return 'javascriptreact';
-            case '.cs':
-                return 'csharp';
-            case '.py':
-                return 'python';
-            case '.java':
-                return 'java';
-            case '.go':
-                return 'go';
-            case '.cpp':
-            case '.cc':
-            case '.cxx':
-            case '.hpp':
-                return 'cpp';
-            case '.c':
-            case '.h':
-                return 'c';
-            case '.rb':
-                return 'ruby';
-            case '.php':
-                return 'php';
-            default:
-                return '';
-        }
+    // Functions & Methods
+    if (
+      nodeType.endsWith("method_declaration") ||
+      nodeType.endsWith("method_definition") ||
+      nodeType === "method"
+    ) {
+      return SearchItemType.METHOD;
+    }
+    if (
+      nodeType.endsWith("function_declaration") ||
+      nodeType.endsWith("function_definition") ||
+      nodeType === "function"
+    ) {
+      return SearchItemType.FUNCTION;
     }
 
-    private extractSymbols(
-        node: TreeSitterNode,
-        filePath: string,
-        items: SearchableItem[],
-        langId: string,
-        containerName?: string,
-    ): void {
-        const type = this.getSearchItemType(node.type, langId);
-        let currentContainer = containerName;
+    return this.getLanguageSpecificItemType(nodeType, langId);
+  }
 
-        if (type) {
-            const nameNode = this.getNameNode(node);
-            if (nameNode) {
-                const name = nameNode.text;
-                const fullName = containerName ? `${containerName}.${name}` : name;
-
-                items.push({
-                    id: `ts:${filePath}:${fullName}:${node.startPosition.row}`,
-                    name: name,
-                    type: type,
-                    filePath: filePath,
-                    line: node.startPosition.row,
-                    column: node.startPosition.column,
-                    containerName: containerName,
-                    fullName: fullName,
-                });
-
-                // If it's a type (class/interface/enum), it becomes the container for children
-                if (
-                    type === SearchItemType.CLASS ||
-                    type === SearchItemType.INTERFACE ||
-                    type === SearchItemType.ENUM
-                ) {
-                    currentContainer = fullName;
-                }
-            }
+  private getLanguageSpecificItemType(
+    nodeType: string,
+    langId: string,
+  ): SearchItemType | undefined {
+    switch (langId) {
+      case "python":
+        if (nodeType === "function_definition") {
+          return SearchItemType.FUNCTION;
         }
-
-        // C# Endpoint detection
-        if (langId === 'csharp') {
-            this.detectCSharpEndpoint(node, filePath, items, containerName);
+        break;
+      case "go":
+        return this.getGoItemType(nodeType);
+      case "ruby":
+        if (nodeType === "method" || nodeType === "singleton_method") {
+          return SearchItemType.METHOD;
         }
-
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                this.extractSymbols(child, filePath, items, langId, currentContainer);
-            }
-        }
+        break;
     }
 
-    /**
-     * Specialized detection for ASP.NET Endpoints
-     */
-    private detectCSharpEndpoint(
-        node: TreeSitterNode,
-        filePath: string,
-        items: SearchableItem[],
-        containerName?: string,
-    ): void {
-        this.detectControllerAction(node, filePath, items, containerName);
-        this.detectMinimalApi(node, filePath, items);
+    // Fallback for common properties and variables
+    if (
+      nodeType.endsWith("property_declaration") ||
+      nodeType.endsWith("property_definition")
+    ) {
+      return SearchItemType.PROPERTY;
+    }
+    if (
+      nodeType.endsWith("variable_declaration") ||
+      nodeType.endsWith("variable_declarator")
+    ) {
+      return SearchItemType.VARIABLE;
     }
 
-    private detectControllerAction(
-        node: TreeSitterNode,
-        filePath: string,
-        items: SearchableItem[],
-        containerName?: string,
-    ): void {
-        if (node.type !== 'method_declaration') return;
+    return undefined;
+  }
 
-        const { method, route } = this.scanAttributes(node);
-
-        if (method || route) {
-            this.processEndpointMethod(node, method || 'GET', route || '', filePath, items, containerName);
-        }
+  private getGoItemType(nodeType: string): SearchItemType | undefined {
+    if (nodeType === "method_declaration") {
+      return SearchItemType.METHOD;
     }
-
-    private scanAttributes(node: TreeSitterNode): { method: string | null; route: string | null } {
-        const results: { method: string | null; route: string | null } = { method: null, route: null };
-        this.findAttributeListsRecursive(node, results);
-        return results;
+    if (nodeType === "function_declaration") {
+      return SearchItemType.FUNCTION;
     }
-
-    private findAttributeListsRecursive(
-        node: TreeSitterNode,
-        results: { method: string | null; route: string | null },
-        isRoot: boolean = true,
-    ): void {
-        const type = node.type;
-
-        // Stop if we hit something that clearly isn't an attribute prefix (like a body or another member)
-        if (
-            !isRoot &&
-            (type === 'block' || type === 'parameter_list' || type.endsWith('body') || type.endsWith('declaration'))
-        ) {
-            return;
-        }
-
-        if (type === 'attribute_list') {
-            this.processAttributeList(node, results);
-        }
-
-        // Recursively search children for attribute lists
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                this.findAttributeListsRecursive(child, results, false);
-            }
-        }
+    if (nodeType === "type_declaration") {
+      return SearchItemType.CLASS;
     }
+    return undefined;
+  }
 
-    private processAttributeList(node: TreeSitterNode, results: { method: string | null; route: string | null }): void {
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                if (!child.type.startsWith('attribute')) continue;
+  private getNameNode(node: TreeSitterNode): TreeSitterNode | null {
+    // Tree-sitter usually has an 'identifier' or 'name' child for declarations
+    const nameChild = node.childForFieldName("name");
+    if (nameChild) return nameChild;
 
-                const info = this.getHttpAttributeInfo(child);
-                if (!info) continue;
-
-                if (info.method !== 'ROUTE') {
-                    results.method = info.method;
-                }
-                const attrRoute = this.extractAttributeRoute(child);
-                if (attrRoute) {
-                    results.route = attrRoute;
-                }
-            }
-        }
+    const children = node.children;
+    if (children) {
+      for (const child of children) {
+        if (child.type === "identifier") return child;
+      }
     }
+    return null;
+  }
 
-    private processEndpointMethod(
-        node: TreeSitterNode,
-        method: string,
-        localRoute: string,
-        filePath: string,
-        items: SearchableItem[],
-        containerName?: string,
-    ): void {
-        const nameNode = this.getNameNode(node);
-        if (!nameNode) return;
-
-        const methodName = nameNode.text;
-        let finalRoute = localRoute;
-
-        const controllerRoute = this.getControllerRoutePrefix(node);
-        const containerPrefix = containerName ? `${containerName}.` : '';
-
-        if (controllerRoute) {
-            // ⚡ Bolt: Fast string replacement for route resolution
-            // Replaces regex and global string replacements with endsWith/indexOf and slice.
-            // Performance impact: ~30% faster string manipulation in route resolution hot paths.
-            let controllerTokenValue = '';
-            if (containerName) {
-                controllerTokenValue = containerName.endsWith('Controller')
-                    ? containerName.slice(0, -10)
-                    : containerName;
-            }
-
-            const tokenIdx = controllerRoute.indexOf('[controller]');
-            const resolvedPrefix =
-                tokenIdx !== -1
-                    ? controllerRoute.slice(0, tokenIdx) + controllerTokenValue + controllerRoute.slice(tokenIdx + 12)
-                    : controllerRoute;
-
-            finalRoute = this.combineRoutes(resolvedPrefix, finalRoute);
-        }
-
-        items.push({
-            id: `endpoint:${filePath}:${containerPrefix}${methodName}:${node.startPosition.row}`,
-            name: finalRoute ? `[${method}] ${finalRoute}` : `[${method}] ${methodName}`,
-            type: SearchItemType.ENDPOINT,
-            filePath: filePath,
-            line: node.startPosition.row,
-            column: node.startPosition.column,
-            containerName: containerName,
-            fullName: `${containerPrefix}${methodName}`,
-            detail: finalRoute
-                ? `ASP.NET Endpoint: ${method} ${finalRoute}`
-                : `ASP.NET Controller Action: ${methodName}`,
-        });
+  private async fileExists(path: string): Promise<boolean> {
+    try {
+      await fs.promises.access(path, fs.constants.F_OK);
+      return true;
+    } catch {
+      return false;
     }
-
-    private combineRoutes(prefix: string, suffix: string): string {
-        if (!suffix) return prefix;
-        if (!prefix) return suffix;
-        const cleanPrefix = prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
-        const cleanSuffix = suffix.startsWith('/') ? suffix.slice(1) : suffix;
-        return `${cleanPrefix}/${cleanSuffix}`;
-    }
-
-    private getControllerRoutePrefix(methodNode: TreeSitterNode): string | null {
-        // Walk up to find the class declaration
-        let parent = this.getParent(methodNode);
-        // ⚡ Bolt: Fast tree-sitter node type checks
-        // Replaced dynamic string manipulation (toLowerCase().includes) with O(1) Set lookups
-        // using the pre-existing CLASS_TYPES Set. This eliminates redundant allocations
-        // and improves performance during AST traversal loops.
-        while (parent && !CLASS_TYPES.has(parent.type) && parent.type !== 'compilation_unit') {
-            parent = this.getParent(parent);
-        }
-
-        if (parent && CLASS_TYPES.has(parent.type)) {
-            const results: { method: string | null; route: string | null } = {
-                method: null,
-                route: null,
-            };
-            this.findAttributeListsRecursive(parent, results, true);
-            return results.route;
-        }
-        return null;
-    }
-
-    private static readonly HTTP_ATTR_REGEX = /http(get|post|put|delete|patch|head|options)|route/i;
-
-    private getHttpAttributeInfo(attr: TreeSitterNode): { method: string } | null {
-        // ⚡ Bolt: Fast regex matching optimization
-        // Replaces multiple .includes() checks on a newly allocated lowercase string
-        // with a single pre-compiled regex test, yielding a ~4x performance improvement.
-        const text = attr.text;
-        const match = /http(get|post|put|delete|patch|head|options)|route/i.exec(text);
-        if (match) {
-            if (match[1]) {
-                return { method: match[1].toUpperCase() };
-            }
-            return { method: 'ROUTE' };
-        }
-        return null;
-    }
-
-    private extractAttributeRoute(attr: TreeSitterNode): string {
-        // Look for string literals anywhere in the attribute node (usually in the argument list)
-        return this.findFirstStringLiteral(attr) || '';
-    }
-
-    private findFirstStringLiteral(node: TreeSitterNode): string | null {
-        if (node.type === 'string_literal' || node.type === 'verbatim_string_literal') {
-            return this.cleanCSharpString(node.text);
-        }
-
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                const found = this.findFirstStringLiteral(child);
-                if (found) return found;
-            }
-        }
-        return null;
-    }
-
-    private cleanCSharpString(text: string): string {
-        // ⚡ Bolt: Fast string cleaning optimization
-        // Replaces .includes() checking on indexed string characters with .charCodeAt() checks
-        // avoiding string allocations during iteration and yielding ~7x performance improvement.
-        let start = 0;
-        const len = text.length;
-        // Skip opening quotes and prefixes like @ or $
-        while (start < len) {
-            const c = text.charCodeAt(start);
-            if (c === 34 || c === 64 || c === 36) {
-                // '"', '@', '$'
-                start++;
-            } else {
-                break;
-            }
-        }
-        let end = len;
-        // Skip closing quotes
-        while (end > start) {
-            if (text.charCodeAt(end - 1) === 34) {
-                // '"'
-                end--;
-            } else {
-                break;
-            }
-        }
-        return text.slice(start, end);
-    }
-
-    private detectMinimalApi(node: TreeSitterNode, filePath: string, items: SearchableItem[]): void {
-        if (node.type !== 'invocation_expression') return;
-
-        const text = node.text;
-        // Minimal API Map methods: app.MapGet, app.MapPost, etc.
-        const mapMatch = /\.Map(Get|Post|Put|Delete|Patch)\s*\(/.exec(text);
-        if (!mapMatch) return;
-
-        const httpMethod = mapMatch[1].toUpperCase();
-        const args = this.findChildByType(node, 'argument_list');
-        // args has opening '(', then arguments separated by commas, then ')'
-        // Minimal API pattern: MapGet("/route", handler) - route is usually first arg
-        if (!args || args.childCount < 2) return;
-
-        // In tree-sitter, child(0) is '(', child(1) is the first argument
-        const firstArg = args.child(1);
-        if (!firstArg) return;
-
-        const route = this.cleanCSharpString(firstArg.text);
-        if (!route) return;
-
-        items.push({
-            id: `endpoint:${filePath}:${route}:${node.startPosition.row}`,
-            name: `[${httpMethod}] ${route}`,
-            type: SearchItemType.ENDPOINT,
-            filePath: filePath,
-            line: node.startPosition.row,
-            column: node.startPosition.column,
-            fullName: route,
-            detail: `ASP.NET Minimal API: ${httpMethod} ${route}`,
-        });
-    }
-
-    private findChildByType(node: TreeSitterNode, type: string): TreeSitterNode | null {
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                if (child.type === type) return child;
-            }
-        }
-        return null;
-    }
-
-    private filterChildrenByType(node: TreeSitterNode, type: string): TreeSitterNode[] {
-        const results: TreeSitterNode[] = [];
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                if (child.type === type) results.push(child);
-            }
-        }
-        return results;
-    }
-
-    private getParent(node: TreeSitterNode): TreeSitterNode | null {
-        return node.parent;
-    }
-
-    private getSearchItemType(nodeType: string, langId: string): SearchItemType | undefined {
-        // Classes & Types
-        // ⚡ Bolt: Fast tree-sitter node type string matching
-        // Replaced dynamic Regex matching (/pattern/.test(nodeType)) with endsWith and strict equality checks.
-        // This preserves the required unanchored behavior (e.g. abstract_class_declaration)
-        // while avoiding redundant RegExp instantiation and parsing overheads.
-        // Performance impact: ~5x faster item type resolution.
-        if (nodeType.endsWith('class_declaration') || nodeType.endsWith('class_definition') || nodeType === 'class') {
-            return SearchItemType.CLASS;
-        }
-        if (
-            nodeType.endsWith('interface_declaration') ||
-            nodeType.endsWith('interface_definition') ||
-            nodeType === 'interface'
-        ) {
-            return SearchItemType.INTERFACE;
-        }
-        if (nodeType.endsWith('enum_declaration') || nodeType.endsWith('enum_definition') || nodeType === 'enum') {
-            return SearchItemType.ENUM;
-        }
-        if (
-            nodeType.endsWith('struct_declaration') ||
-            nodeType.endsWith('struct_definition') ||
-            nodeType === 'struct'
-        ) {
-            return SearchItemType.CLASS;
-        }
-        if (nodeType.endsWith('trait_declaration') || nodeType.endsWith('trait_definition') || nodeType === 'trait') {
-            return SearchItemType.INTERFACE;
-        }
-
-        // Functions & Methods
-        if (
-            nodeType.endsWith('method_declaration') ||
-            nodeType.endsWith('method_definition') ||
-            nodeType === 'method'
-        ) {
-            return SearchItemType.METHOD;
-        }
-        if (
-            nodeType.endsWith('function_declaration') ||
-            nodeType.endsWith('function_definition') ||
-            nodeType === 'function'
-        ) {
-            return SearchItemType.FUNCTION;
-        }
-
-        return this.getLanguageSpecificItemType(nodeType, langId);
-    }
-
-    private getLanguageSpecificItemType(nodeType: string, langId: string): SearchItemType | undefined {
-        switch (langId) {
-            case 'python':
-                if (nodeType === 'function_definition') {
-                    return SearchItemType.FUNCTION;
-                }
-                break;
-            case 'go':
-                return this.getGoItemType(nodeType);
-            case 'ruby':
-                if (nodeType === 'method' || nodeType === 'singleton_method') {
-                    return SearchItemType.METHOD;
-                }
-                break;
-        }
-
-        // Fallback for common properties and variables
-        if (nodeType.endsWith('property_declaration') || nodeType.endsWith('property_definition')) {
-            return SearchItemType.PROPERTY;
-        }
-        if (nodeType.endsWith('variable_declaration') || nodeType.endsWith('variable_declarator')) {
-            return SearchItemType.VARIABLE;
-        }
-
-        return undefined;
-    }
-
-    private getGoItemType(nodeType: string): SearchItemType | undefined {
-        if (nodeType === 'method_declaration') {
-            return SearchItemType.METHOD;
-        }
-        if (nodeType === 'function_declaration') {
-            return SearchItemType.FUNCTION;
-        }
-        if (nodeType === 'type_declaration') {
-            return SearchItemType.CLASS;
-        }
-        return undefined;
-    }
-
-    private getNameNode(node: TreeSitterNode): TreeSitterNode | null {
-        // Tree-sitter usually has an 'identifier' or 'name' child for declarations
-        const nameChild = node.childForFieldName('name');
-        if (nameChild) return nameChild;
-
-        const children = node.children;
-        if (children) {
-            for (const child of children) {
-                if (child.type === 'identifier') return child;
-            }
-        }
-        return null;
-    }
-
-    private async fileExists(path: string): Promise<boolean> {
-        try {
-            await fs.promises.access(path, fs.constants.F_OK);
-            return true;
-        } catch {
-            return false;
-        }
-    }
+  }
 }

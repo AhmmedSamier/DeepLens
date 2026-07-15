@@ -1,0 +1,29 @@
+[
+  {
+    "name": "Initial",
+    "memory": {
+      "rss": 70.25,
+      "heapTotal": 2.93,
+      "heapUsed": 2.27,
+      "external": 0.82
+    }
+  },
+  {
+    "name": "Before Indexing",
+    "memory": {
+      "rss": 92.46,
+      "heapTotal": 22.61,
+      "heapUsed": 2.27,
+      "external": 0.82
+    }
+  },
+  {
+    "name": "After Indexing",
+    "memory": {
+      "rss": 222.31,
+      "heapTotal": 72.69,
+      "heapUsed": 88.03,
+      "external": 12.69
+    }
+  }
+]

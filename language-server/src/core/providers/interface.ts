@@ -1,1 +1,1 @@
-export { ISearchProvider, SearchContext } from '../types';
+export { ISearchProvider, SearchContext } from "../types";

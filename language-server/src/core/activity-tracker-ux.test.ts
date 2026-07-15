@@ -1,57 +1,57 @@
-import { beforeEach, describe, expect, it } from 'bun:test';
-import { ActivityTracker } from './activity-tracker';
-import { SearchItemType } from './types';
+import { beforeEach, describe, expect, it } from "bun:test";
+import { ActivityTracker } from "./activity-tracker";
+import { SearchItemType } from "./types";
 
-describe('ActivityTracker UX', () => {
-    let tracker: ActivityTracker;
-    const mockStorage = {
-        workspaceState: {
-            get: () => undefined,
-            update: async () => {},
-        },
+describe("ActivityTracker UX", () => {
+  let tracker: ActivityTracker;
+  const mockStorage = {
+    workspaceState: {
+      get: () => undefined,
+      update: async () => {},
+    },
+  };
+
+  beforeEach(async () => {
+    tracker = new ActivityTracker(mockStorage);
+    await tracker.waitForLoaded();
+  });
+
+  it("should add relative time to item details", async () => {
+    const item = {
+      id: "test-1",
+      name: "test.ts",
+      type: SearchItemType.FILE,
+      filePath: "/test.ts",
+      detail: "Recently opened",
     };
 
-    beforeEach(async () => {
-        tracker = new ActivityTracker(mockStorage);
-        await tracker.waitForLoaded();
-    });
+    tracker.recordAccess(item);
+    await new Promise((r) => setTimeout(r, 10));
 
-    it('should add relative time to item details', async () => {
-        const item = {
-            id: 'test-1',
-            name: 'test.ts',
-            type: SearchItemType.FILE,
-            filePath: '/test.ts',
-            detail: 'Recently opened',
-        };
+    const recentItems = tracker.getRecentItems(1);
+    expect(recentItems.length).toBe(1);
 
-        tracker.recordAccess(item);
-        await new Promise((r) => setTimeout(r, 10));
+    const recentItem = recentItems[0].item;
+    expect(recentItem.detail).toContain("Accessed just now");
+    expect(recentItem.detail).toContain("Recently opened");
+  });
 
-        const recentItems = tracker.getRecentItems(1);
-        expect(recentItems.length).toBe(1);
+  it("should handle items without existing detail", async () => {
+    const item = {
+      id: "test-2",
+      name: "test2.ts",
+      type: SearchItemType.FILE,
+      filePath: "/test2.ts",
+      detail: null,
+    };
 
-        const recentItem = recentItems[0].item;
-        expect(recentItem.detail).toContain('Accessed just now');
-        expect(recentItem.detail).toContain('Recently opened');
-    });
+    tracker.recordAccess(item);
+    await new Promise((r) => setTimeout(r, 10));
 
-    it('should handle items without existing detail', async () => {
-        const item = {
-            id: 'test-2',
-            name: 'test2.ts',
-            type: SearchItemType.FILE,
-            filePath: '/test2.ts',
-            detail: null,
-        };
+    const recentItems = tracker.getRecentItems(1);
+    expect(recentItems.length).toBe(1);
 
-        tracker.recordAccess(item);
-        await new Promise((r) => setTimeout(r, 10));
-
-        const recentItems = tracker.getRecentItems(1);
-        expect(recentItems.length).toBe(1);
-
-        const recentItem = recentItems[0].item;
-        expect(recentItem.detail).toBe('Accessed just now');
-    });
+    const recentItem = recentItems[0].item;
+    expect(recentItem.detail).toBe("Accessed just now");
+  });
 });
