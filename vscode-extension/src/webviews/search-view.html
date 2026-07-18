@@ -368,6 +368,7 @@
         let textSearchEnabled = true;
         let recentHistoryMode = false;
         let confirmClearHistory = false;
+        let lastRequestId = null;
 
         const slashCommandScopes = ${SLASH_COMMAND_SCOPES};
 
@@ -545,16 +546,17 @@
 
         updateScopeButtons();
 
-        let lastRenderedRequestId = 0;
-
         window.addEventListener('message', event => {
             const message = event.data;
             switch (message.type) {
                 case 'results':
-                    if (message.requestId >= lastRenderedRequestId) {
+                    // Always render if requestId is new/undefined, skip if we've seen it before
+                    if (message.requestId == null || message.requestId !== lastRequestId) {
                         hideLoading();
                         if (loadingIndicator) loadingIndicator.style.visibility = 'hidden';
-                        lastRenderedRequestId = message.requestId;
+                        if (message.requestId != null) {
+                            lastRequestId = message.requestId;
+                        }
                         results = message.results;
                         recentHistoryMode = message.isRecentHistory === true;
                         if (!recentHistoryMode) {
