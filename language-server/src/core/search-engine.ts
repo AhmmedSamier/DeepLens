@@ -2449,15 +2449,27 @@ export class SearchEngine implements ISearchProvider {
                 return;
             }
 
+            const namePasses = (this.itemNameBitflags[i] & queryBitflags) === queryBitflags;
+            const fullPasses = (this.itemFullNameBitflags[i] & queryBitflags) === queryBitflags;
+
+            // ⚡ Bolt: Fast specific bitflag early-exit
+            // Burst search only checks name and fullName. If characters are only in the path, skip string evaluation.
+            if (!namePasses && !fullPasses) {
+                return;
+            }
+
             const prepared = this.preparedNames[i];
             const item = this.items[i];
             if (!item) return;
 
-            const nameLower = prepared
-                ? (prepared as unknown as ExtendedPrepared)._targetLower
-                : item.name.toLowerCase();
+            let nameLower = "";
+            if (namePasses || fullPasses) {
+                nameLower = prepared
+                    ? (prepared as unknown as ExtendedPrepared)._targetLower
+                    : item.name.toLowerCase();
+            }
 
-            const score = this.calculateMatchScore(nameLower, item.fullName, this.preparedFullNames[i], queryLower);
+            const score = this.calculateMatchScore(nameLower, item.fullName, this.preparedFullNames[i], queryLower, namePasses, fullPasses);
             if (score > 0) {
                 // Compute highlights for substring match in the item name
                 let highlights: number[][] | undefined;
@@ -2487,22 +2499,27 @@ export class SearchEngine implements ISearchProvider {
         fullName: string | undefined,
         preparedFullName: Fuzzysort.Prepared | null,
         queryLower: string,
+        namePassesBitflags: boolean = true,
+        fullNamePassesBitflags: boolean = true,
     ): number {
         // ⚡ Bolt: Fast substring evaluation optimization
         // Combining string equality and prefix checks into a single indexOf evaluation.
         // Caching the indexOf result removes redundant O(N) string traversals in the hot loop,
         // yielding ~30% faster execution for long strings during burst searches.
-        const nameIdx = nameLower.indexOf(queryLower);
-        if (nameIdx !== -1) {
-            // Check for exact match or prefix match
-            if (nameIdx === 0) {
-                return nameLower.length === queryLower.length ? 1.0 : 0.9;
+        let nameIdx = -1;
+        if (namePassesBitflags) {
+            nameIdx = nameLower.indexOf(queryLower);
+            if (nameIdx !== -1) {
+                // Check for exact match or prefix match
+                if (nameIdx === 0) {
+                    return nameLower.length === queryLower.length ? 1.0 : 0.9;
+                }
+                return 0.8;
             }
-            return 0.8;
         }
 
         // Check fullName if it exists
-        if (fullName) {
+        if (fullName && fullNamePassesBitflags) {
             // ⚡ Bolt: Lazy retrieval of pre-computed lowercased fullName to avoid redundant string allocations
             const fullLower = preparedFullName
                 ? (preparedFullName as unknown as ExtendedPrepared)._targetLower
