@@ -96,3 +96,9 @@
 ## 2026-10-27 - [Fast Endpoint Matching Bypass]
 **Learning:** In the `SearchEngine.processItemForSearch` method, `tryUrlEndpointMatch` was previously called for all items that passed the bitflag check or were preserved for URL evaluation, regardless of whether the item was actually an endpoint. This added unnecessary function call overhead and duplicate condition evaluations for non-endpoint items.
 **Action:** Add an explicit O(1) `typeId === 11 /* ENDPOINT */` check alongside `context.isPotentialUrl` directly inside `processItemForSearch` to completely bypass the `tryUrlEndpointMatch` function call for all non-endpoint items. This eliminates redundant evaluations and speeds up the fallback search path.
+## 2024-05-28 - Fast Git Status Parsing
+**Learning:** Running multiple git commands (`git diff`, `git diff --cached`, `git ls-files`) concurrently incurs significant child process spawn overhead. Replacing these with a single `git status --porcelain -z` call is faster, and parsing its null-terminated string using `.indexOf('\0')` and `.slice()` provides a large performance boost over splitting by newline.
+**Action:** Always prefer a single `git status --porcelain -z` command over multiple diffs, and use manual null-terminated string parsing (`indexOf`, `slice`) to avoid intermediate string array allocations.
+## 2024-05-28 - Accurate Fast Git Status Parsing
+**Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
+**Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
