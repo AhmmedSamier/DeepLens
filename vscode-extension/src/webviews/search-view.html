@@ -856,6 +856,7 @@
             const clearBtn = document.createElement('button');
             clearBtn.className = 'empty-state-btn';
             clearBtn.setAttribute('data-empty-action', 'clear');
+            clearBtn.setAttribute('aria-label', 'Clear Search');
             const clearIcon = document.createElement('i');
             clearIcon.className = 'codicon codicon-clear-all';
             clearBtn.appendChild(clearIcon);
@@ -866,6 +867,7 @@
             const recentBtn = document.createElement('button');
             recentBtn.className = 'empty-state-btn';
             recentBtn.setAttribute('data-empty-action', 'recent');
+            recentBtn.setAttribute('aria-label', 'Show Recent History');
             const recentIcon = document.createElement('i');
             recentIcon.className = 'codicon codicon-history';
             recentBtn.appendChild(recentIcon);
@@ -877,6 +879,7 @@
                 const globalBtn = document.createElement('button');
                 globalBtn.className = 'empty-state-btn';
                 globalBtn.setAttribute('data-empty-action', 'global');
+                globalBtn.setAttribute('aria-label', 'Switch to Global Search');
                 const globalIcon = document.createElement('i');
                 globalIcon.className = 'codicon codicon-search';
                 globalBtn.appendChild(globalIcon);
@@ -888,6 +891,7 @@
             const nativeBtn = document.createElement('button');
             nativeBtn.className = 'empty-state-btn';
             nativeBtn.setAttribute('data-empty-action', 'native');
+            nativeBtn.setAttribute('aria-label', 'Search in Files (Native)');
             const nativeIcon = document.createElement('i');
             nativeIcon.className = 'codicon codicon-search-fuzzy';
             nativeBtn.appendChild(nativeIcon);
@@ -898,6 +902,7 @@
             const rebuildBtn = document.createElement('button');
             rebuildBtn.className = 'empty-state-btn';
             rebuildBtn.setAttribute('data-empty-action', 'rebuild');
+            rebuildBtn.setAttribute('aria-label', 'Rebuild Index');
             const rebuildIcon = document.createElement('i');
             rebuildIcon.className = 'codicon codicon-refresh';
             rebuildBtn.appendChild(rebuildIcon);
@@ -908,6 +913,7 @@
             const clearCacheBtn = document.createElement('button');
             clearCacheBtn.className = 'empty-state-btn';
             clearCacheBtn.setAttribute('data-empty-action', 'clear-cache');
+            clearCacheBtn.setAttribute('aria-label', 'Clear Index Cache');
             const clearCacheIcon = document.createElement('i');
             clearCacheIcon.className = 'codicon codicon-trash';
             clearCacheBtn.appendChild(clearCacheIcon);
@@ -918,6 +924,7 @@
             const settingsBtn = document.createElement('button');
             settingsBtn.className = 'empty-state-btn';
             settingsBtn.setAttribute('data-empty-action', 'settings');
+            settingsBtn.setAttribute('aria-label', 'Configure Settings');
             const settingsIcon = document.createElement('i');
             settingsIcon.className = 'codicon codicon-settings-gear';
             settingsBtn.appendChild(settingsIcon);
@@ -976,6 +983,7 @@
                 const confirmClearBtn = document.createElement('button');
                 confirmClearBtn.className = 'empty-state-btn';
                 confirmClearBtn.setAttribute('data-history-action', 'confirm-clear');
+                confirmClearBtn.setAttribute('aria-label', 'Confirm Clear History');
                 const confirmClearIcon = document.createElement('i');
                 confirmClearIcon.className = 'codicon codicon-trash';
                 confirmClearBtn.appendChild(confirmClearIcon);
@@ -985,6 +993,7 @@
                 const cancelClearBtn = document.createElement('button');
                 cancelClearBtn.className = 'empty-state-btn';
                 cancelClearBtn.setAttribute('data-history-action', 'cancel-clear');
+                cancelClearBtn.setAttribute('aria-label', 'Cancel');
                 const cancelClearIcon = document.createElement('i');
                 cancelClearIcon.className = 'codicon codicon-clear-all';
                 cancelClearBtn.appendChild(cancelClearIcon);
@@ -994,6 +1003,7 @@
                 const clearRecentBtn = document.createElement('button');
                 clearRecentBtn.className = 'empty-state-btn';
                 clearRecentBtn.setAttribute('data-history-action', 'clear');
+                clearRecentBtn.setAttribute('aria-label', 'Clear Recent History');
                 const clearRecentIcon = document.createElement('i');
                 clearRecentIcon.className = 'codicon codicon-trash';
                 clearRecentBtn.appendChild(clearRecentIcon);
