@@ -99,3 +99,6 @@
 ## 2026-07-01 - Prevent Focus Stealing in Search Filter Buttons
 **Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), clicking interactive elements like filter buttons steals DOM focus from the primary search input. This forces users to manually click back into the input or hit Tab before they can resume typing.
 **Action:** When implementing filter or scope toggle buttons that don't need their own text-input focus, attach a `mousedown` event listener that calls `e.preventDefault()`. This prevents the browser's default focus transition before it even fires, ensuring the user's cursor remains firmly anchored in the main search input.
+## 2025-02-27 - Search View Focus Management
+**Learning:** Custom interactive elements (like `div` acting as buttons or interactive toolbars) in VS Code Webviews can steal focus from the primary search input when clicked, disrupting keyboard workflow.
+**Action:** Always add `e.preventDefault()` on the `mousedown` event for interactive elements in hybrid mouse/keyboard search interfaces to preserve DOM focus on the primary input, while ensuring they remain accessible.
