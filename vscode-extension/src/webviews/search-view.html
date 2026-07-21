@@ -1179,7 +1179,7 @@
         }
 
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && searchInput.value !== '') {
+            if (e.key === 'Escape' && (searchInput.value !== '' || currentScope !== 'everything')) {
                 e.preventDefault();
                 searchInput.value = '';
                 currentScope = 'everything';
