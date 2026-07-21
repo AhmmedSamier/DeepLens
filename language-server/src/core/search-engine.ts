@@ -98,6 +98,14 @@ const ID_TO_SCOPE = [
     SearchScope.ENDPOINTS,
 ];
 
+const PRECOMPUTED_PRIORITY_TYPE_IDS = new Uint8Array(256);
+const prioritySet2 = new Set([SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES]);
+for (let i = 0; i < ID_TO_SCOPE.length; i++) {
+    if (prioritySet2.has(ID_TO_SCOPE[i])) {
+        PRECOMPUTED_PRIORITY_TYPE_IDS[i] = 1;
+    }
+}
+
 // Precompute bitflags table for O(1) lookup for the Basic Multilingual Plane (BMP)
 // Maps char code (0-65535) to a bitmask.
 const CHAR_TO_BITFLAG = new Uint32Array(65536);
@@ -2568,13 +2576,8 @@ export class SearchEngine implements ISearchProvider {
         // Instead of allocating a Uint8Array of size N to track already processed items,
         // we precompute which type IDs belong to priority scopes and iterate sequentially.
         // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
-        for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
-                isPriorityTypeId[i] = 1;
-            }
-        }
+        // We use a static precomputed table to avoid per-request array allocations.
+        const isPriorityTypeId = PRECOMPUTED_PRIORITY_TYPE_IDS;
 
         const itemsLength = this.items.length;
         const itemTypeIds = this.itemTypeIds;
@@ -2659,12 +2662,16 @@ export class SearchEngine implements ISearchProvider {
             return;
         }
 
-        for (const result of results) {
+        const len = results.length;
+        const weight = this.activityWeight;
+        const invWeight = 1 - weight;
+        for (let i = 0; i < len; i++) {
+            const result = results[i];
             const activityScore = this.getActivityScore(result.item.id);
             if (activityScore > 0) {
                 const baseScore = result.score;
                 if (baseScore > 0.05) {
-                    result.score = baseScore * (1 - this.activityWeight) + activityScore * this.activityWeight;
+                    result.score = baseScore * invWeight + activityScore * weight;
                 }
             }
         }
