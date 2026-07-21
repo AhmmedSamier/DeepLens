@@ -1179,7 +1179,16 @@
         }
 
         searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'ArrowDown') {
+            if (e.key === 'Escape' && (searchInput.value !== '' || currentScope !== 'everything')) {
+                e.preventDefault();
+                searchInput.value = '';
+                currentScope = 'everything';
+                userScope = 'everything';
+                updateScopeButtons();
+                triggerSearchFromInput('');
+                searchInput.focus();
+                showStatus('Search and filters cleared');
+            } else if (e.key === 'ArrowDown') {
                 e.preventDefault();
                 selectItem(Math.min(selectedIndex + 1, visibleEntries.length - 1));
                 const selection = getEffectiveSelection(selectedIndex);
