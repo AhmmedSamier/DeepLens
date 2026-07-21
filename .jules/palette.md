@@ -99,3 +99,6 @@
 ## 2026-07-01 - Prevent Focus Stealing in Search Filter Buttons
 **Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), clicking interactive elements like filter buttons steals DOM focus from the primary search input. This forces users to manually click back into the input or hit Tab before they can resume typing.
 **Action:** When implementing filter or scope toggle buttons that don't need their own text-input focus, attach a `mousedown` event listener that calls `e.preventDefault()`. This prevents the browser's default focus transition before it even fires, ensuring the user's cursor remains firmly anchored in the main search input.
+## 2026-07-02 - Actionable Escape-to-Clear Shortcut
+**Learning:** Users often press the Escape key intuitively to clear a search input, especially when it has filters applied. Lacking this native behavior adds friction, as users are forced to manually highlight and delete the text or click a "Clear" button.
+**Action:** When implementing complex search inputs, always bind the `Escape` key to clear the query and reset filters, mirroring native search interface expectations.
