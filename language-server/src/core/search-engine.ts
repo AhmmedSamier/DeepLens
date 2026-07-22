@@ -98,6 +98,17 @@ const ID_TO_SCOPE = [
     SearchScope.ENDPOINTS,
 ];
 
+const BURST_PRIORITY_SCOPES = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
+const IS_BURST_PRIORITY_TYPE_ID = new Uint8Array(256);
+{
+    const prioritySet = new Set(BURST_PRIORITY_SCOPES);
+    for (let i = 0; i < ID_TO_SCOPE.length; i++) {
+        if (prioritySet.has(ID_TO_SCOPE[i])) {
+            IS_BURST_PRIORITY_TYPE_ID[i] = 1;
+        }
+    }
+}
+
 // Precompute bitflags table for O(1) lookup for the Basic Multilingual Plane (BMP)
 // Maps char code (0-65535) to a bitmask.
 const CHAR_TO_BITFLAG = new Uint32Array(65536);
@@ -2528,13 +2539,11 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        const priorityScopes = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
-
-        this.searchPriorityScopes(priorityScopes, maxResults, processItem, results, token);
+        this.searchPriorityScopes(BURST_PRIORITY_SCOPES, maxResults, processItem, results, token);
 
         // Pass 5: Everything else (e.g. Properties, Variables, Commands)
         if (results.length < maxResults && !token?.isCancellationRequested) {
-            this.searchRemainingItems(priorityScopes, maxResults, processItem, results, token);
+            this.searchRemainingItems(maxResults, processItem, results, token);
         }
     }
 
@@ -2558,30 +2567,17 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private searchRemainingItems(
-        priorityScopes: SearchScope[],
         maxResults: number,
         processItem: (i: number) => void,
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        // ⚡ Bolt: Fast Remaining Scopes Iteration Optimization
-        // Instead of allocating a Uint8Array of size N to track already processed items,
-        // we precompute which type IDs belong to priority scopes and iterate sequentially.
-        // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
-        for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
-                isPriorityTypeId[i] = 1;
-            }
-        }
-
         const itemsLength = this.items.length;
         const itemTypeIds = this.itemTypeIds;
 
         for (let i = 0; i < itemsLength; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (isPriorityTypeId[itemTypeIds[i]] === 0) {
+            if (IS_BURST_PRIORITY_TYPE_ID[itemTypeIds[i]] === 0) {
                 processItem(i);
             }
         }
