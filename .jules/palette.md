@@ -99,3 +99,7 @@
 ## 2026-07-01 - Prevent Focus Stealing in Search Filter Buttons
 **Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), clicking interactive elements like filter buttons steals DOM focus from the primary search input. This forces users to manually click back into the input or hit Tab before they can resume typing.
 **Action:** When implementing filter or scope toggle buttons that don't need their own text-input focus, attach a `mousedown` event listener that calls `e.preventDefault()`. This prevents the browser's default focus transition before it even fires, ensuring the user's cursor remains firmly anchored in the main search input.
+
+## 2026-07-22 - Prevent Focus Stealing in Search Empty States
+**Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), clicking interactive action buttons in the empty state (like "Clear Search", "Show Recent History") or history toolbar steals DOM focus from the primary search input. This breaks keyboard flow and forces users to manually click back or Tab to resume typing.
+**Action:** When adding new interactive action buttons (like `.empty-state-btn`), attach a `mousedown` event listener that calls `e.preventDefault()` to prevent the browser's default focus transition before it fires.
