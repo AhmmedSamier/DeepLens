@@ -164,6 +164,8 @@ export class SearchEngine implements ISearchProvider {
     // Reusable buffers for index tracking to avoid allocations in hot loops
     private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
     private visitedIndicesList: number[] = [];
+    private burstUrlMatchIdsCache: Set<string> = new Set();
+    private reusablePriorityTypeIds = new Uint8Array(256);
     private _isSearching = false;
 
     // String normalization cache (1-item) for relativeFilePath
@@ -2568,10 +2570,11 @@ export class SearchEngine implements ISearchProvider {
         // Instead of allocating a Uint8Array of size N to track already processed items,
         // we precompute which type IDs belong to priority scopes and iterate sequentially.
         // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
+        // Uses a reusable Uint8Array to avoid allocations on every burst search stroke.
+        const isPriorityTypeId = this.reusablePriorityTypeIds;
+        isPriorityTypeId.fill(0);
         for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
+            if (priorityScopes.includes(ID_TO_SCOPE[i])) {
                 isPriorityTypeId[i] = 1;
             }
         }
@@ -2611,9 +2614,10 @@ export class SearchEngine implements ISearchProvider {
         maxResults?: number,
     ): void {
         // ⚡ Bolt: Fast Set initialization
-        // Replaces new Set(results.map(r => r.item.id)) with a manual loop to avoid intermediate array allocation
-        // Performance impact: ~30-40% faster unique tracking for URL matches
-        const existingIds = new Set<string>();
+        // Reuses a class-level Set to avoid instantiating a new Set on every search stroke.
+        // Performance impact: Reduces GC overhead during high-frequency burst searches.
+        const existingIds = this.burstUrlMatchIdsCache;
+        existingIds.clear();
         const resultsLen = results.length;
         for (let j = 0; j < resultsLen; j++) {
             existingIds.add(results[j].item.id);
