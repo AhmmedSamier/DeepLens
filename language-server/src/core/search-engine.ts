@@ -165,6 +165,8 @@ export class SearchEngine implements ISearchProvider {
     private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
     private visitedIndicesList: number[] = [];
     private _isSearching = false;
+    private readonly reusablePriorityTypeIds = new Uint8Array(256);
+    private readonly burstUrlMatchIdsCache = new Set<string>();
 
     // String normalization cache (1-item) for relativeFilePath
     private lastRelativeInput: string | null = null;
@@ -2568,11 +2570,11 @@ export class SearchEngine implements ISearchProvider {
         // Instead of allocating a Uint8Array of size N to track already processed items,
         // we precompute which type IDs belong to priority scopes and iterate sequentially.
         // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
+        // We also use a class-level reusable buffer to avoid GC overhead in hot paths.
+        this.reusablePriorityTypeIds.fill(0);
         for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
-                isPriorityTypeId[i] = 1;
+            if (priorityScopes.includes(ID_TO_SCOPE[i] as SearchScope)) {
+                this.reusablePriorityTypeIds[i] = 1;
             }
         }
 
@@ -2581,7 +2583,7 @@ export class SearchEngine implements ISearchProvider {
 
         for (let i = 0; i < itemsLength; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (isPriorityTypeId[itemTypeIds[i]] === 0) {
+            if (this.reusablePriorityTypeIds[itemTypeIds[i]] === 0) {
                 processItem(i);
             }
         }
@@ -2613,7 +2615,9 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast Set initialization
         // Replaces new Set(results.map(r => r.item.id)) with a manual loop to avoid intermediate array allocation
         // Performance impact: ~30-40% faster unique tracking for URL matches
-        const existingIds = new Set<string>();
+        // Also uses a class-level reusable Set to avoid garbage collection overhead in hot paths.
+        this.burstUrlMatchIdsCache.clear();
+        const existingIds = this.burstUrlMatchIdsCache;
         const resultsLen = results.length;
         for (let j = 0; j < resultsLen; j++) {
             existingIds.add(results[j].item.id);
@@ -2651,6 +2655,9 @@ export class SearchEngine implements ISearchProvider {
                 checkItem(i);
             }
         }
+
+        // Clean up to avoid holding references and leaking memory
+        this.burstUrlMatchIdsCache.clear();
     }
 
     // Kept for burstSearch usage
