@@ -99,3 +99,7 @@
 ## 2026-07-01 - Prevent Focus Stealing in Search Filter Buttons
 **Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), clicking interactive elements like filter buttons steals DOM focus from the primary search input. This forces users to manually click back into the input or hit Tab before they can resume typing.
 **Action:** When implementing filter or scope toggle buttons that don't need their own text-input focus, attach a `mousedown` event listener that calls `e.preventDefault()`. This prevents the browser's default focus transition before it even fires, ensuring the user's cursor remains firmly anchored in the main search input.
+
+## 2026-07-25 - Implement ARIA Combobox pattern for search inputs
+**Learning:** For highly interactive custom search dropdowns in Webviews, standard inputs and divs are insufficient for screen reader users to understand the component's state (expanded vs collapsed) or navigate results via keyboard. The interface remains effectively invisible to assistive technology.
+**Action:** When implementing arrow key navigation for a search input in custom Webviews, always use the ARIA Combobox pattern: apply `role="combobox"`, `aria-expanded`, and `aria-activedescendant` to the input, pair it with a `role="listbox"`, and give each result item `role="option"` with a unique ID, ensuring dynamic states like `aria-selected` are correctly toggled during keyboard navigation.
