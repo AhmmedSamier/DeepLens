@@ -1862,7 +1862,7 @@ export class SearchEngine implements ISearchProvider {
         const isPotentialUrl =
             (scope === SearchScope.EVERYTHING || scope === SearchScope.ENDPOINTS) && RouteMatcher.isPotentialUrl(query);
         const preparedQuery = isPotentialUrl ? RouteMatcher.prepare(query) : null;
-        const queryForUrlMatch = isPotentialUrl ? RouteMatcher.prepare(query) : query;
+        const queryForUrlMatch = isPotentialUrl ? preparedQuery! : query;
         const queryBitflags = this.calculateBitflags(query);
 
         return {
