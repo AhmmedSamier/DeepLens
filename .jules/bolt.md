@@ -103,3 +103,6 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2024-07-28 - [Reduce GC overhead with reusable buffers]
+**Learning:** In hot paths (like `SearchEngine`'s `burstSearch`), allocating new arrays, Sets, and typed arrays on every call creates significant garbage collection overhead, leading to latency spikes during rapid keystrokes.
+**Action:** Hoist strictly static allocations to module-level constants. For data dependent on method arguments, do not use globally hardcoded constants; instead, use class-level reusable buffers (e.g., `reusablePriorityTypeIds`, `burstUrlMatchIdsCache`) that are cleared and repopulated per call. This is safe because the single-threaded Node.js environment ensures searches execute sequentially.
