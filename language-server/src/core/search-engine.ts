@@ -139,10 +139,15 @@ function ensureBitflagsInitialized(): void {
     areBitflagsInitialized = true;
 }
 
+const PRIORITY_SCOPES = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
+
 export class SearchEngine implements ISearchProvider {
     id = 'engine';
     priority = 0;
     private readonly providers: ISearchProvider[] = [];
+
+    private readonly reusablePriorityTypeIds = new Uint8Array(256);
+    private readonly burstUrlMatchIdsCache = new Set<string>();
 
     // Parallel Arrays (Struct of Arrays)
     private items: SearchableItem[] = [];
@@ -2528,13 +2533,11 @@ export class SearchEngine implements ISearchProvider {
         results: SearchResult[],
         token?: CancellationToken,
     ): void {
-        const priorityScopes = [SearchScope.TYPES, SearchScope.SYMBOLS, SearchScope.ENDPOINTS, SearchScope.FILES];
-
-        this.searchPriorityScopes(priorityScopes, maxResults, processItem, results, token);
+        this.searchPriorityScopes(PRIORITY_SCOPES, maxResults, processItem, results, token);
 
         // Pass 5: Everything else (e.g. Properties, Variables, Commands)
         if (results.length < maxResults && !token?.isCancellationRequested) {
-            this.searchRemainingItems(priorityScopes, maxResults, processItem, results, token);
+            this.searchRemainingItems(PRIORITY_SCOPES, maxResults, processItem, results, token);
         }
     }
 
@@ -2565,14 +2568,16 @@ export class SearchEngine implements ISearchProvider {
         token?: CancellationToken,
     ): void {
         // ⚡ Bolt: Fast Remaining Scopes Iteration Optimization
-        // Instead of allocating a Uint8Array of size N to track already processed items,
-        // we precompute which type IDs belong to priority scopes and iterate sequentially.
-        // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
+        // Reusing the class-level Uint8Array to track priority scopes avoids allocating
+        // a new Uint8Array and Set on every burst search.
+        const isPriorityTypeId = this.reusablePriorityTypeIds;
+        isPriorityTypeId.fill(0);
         for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
-                isPriorityTypeId[i] = 1;
+            for (let j = 0; j < priorityScopes.length; j++) {
+                if (ID_TO_SCOPE[i] === priorityScopes[j]) {
+                    isPriorityTypeId[i] = 1;
+                    break;
+                }
             }
         }
 
@@ -2611,9 +2616,9 @@ export class SearchEngine implements ISearchProvider {
         maxResults?: number,
     ): void {
         // ⚡ Bolt: Fast Set initialization
-        // Replaces new Set(results.map(r => r.item.id)) with a manual loop to avoid intermediate array allocation
-        // Performance impact: ~30-40% faster unique tracking for URL matches
-        const existingIds = new Set<string>();
+        // Reusing the class-level Set avoids allocating a new Set on every burst search.
+        const existingIds = this.burstUrlMatchIdsCache;
+        existingIds.clear();
         const resultsLen = results.length;
         for (let j = 0; j < resultsLen; j++) {
             existingIds.add(results[j].item.id);
