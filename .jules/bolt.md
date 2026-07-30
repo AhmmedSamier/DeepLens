@@ -103,3 +103,6 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2024-05-30 - [O(1) early-exits inside helper functions in hot loops]
+**Learning:** When applying early exits to O(N) hot loops, placing the early exit condition *inside* a helper function (like `tryFuzzyMatchName`) still incurs function call overhead for every item.
+**Action:** Move simple boolean or bitmask early-exit checks to the very top of the calling loop method (like `calculateFuzzyScore`) to skip function calls entirely for non-matching items.
