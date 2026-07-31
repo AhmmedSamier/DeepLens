@@ -109,8 +109,9 @@ suite('ReferenceCodeLens Test Suite', () => {
         assert.ok(Array.isArray(lenses), 'Should return an array even on error');
     });
 
-    test('Provider should provide code lenses for supported symbol kinds', async () => {
+    test('Provider should provide code lenses for supported symbol kinds', async function () {
         // Increase timeout for this test as the TS language server can be slow to initialize in CI
+        this.timeout(5000);
         // Create a test document with a class
         const testContent = `
 export class TestClass {
@@ -155,7 +156,8 @@ export function testFunction() {
         }
     });
 
-    test('Provider should resolve code lens with reference count', async () => {
+    test('Provider should resolve code lens with reference count', async function () {
+        this.timeout(5000);
         // Create a test document
         const testContent = `
 export class ReferenceTestClass {
@@ -202,7 +204,8 @@ export class ReferenceTestClass {
         }
     });
 
-    test('Provider should respect minRefsToShow configuration', async () => {
+    test('Provider should respect minRefsToShow configuration', async function () {
+        this.timeout(5000);
         const config = vscode.workspace.getConfiguration('deeplens');
         const originalMinRefs = config.get<number>('codeLens.minRefsToShow', 0);
 
@@ -234,7 +237,8 @@ export class ReferenceTestClass {
         provider.reloadConfig();
     });
 
-    test('Provider should show implementation lenses when enabled', async () => {
+    test('Provider should show implementation lenses when enabled', async function () {
+        this.timeout(5000);
         const config = vscode.workspace.getConfiguration('deeplens');
         const originalShowImpl = config.get<boolean>('codeLens.showImplementations', true);
 
@@ -263,7 +267,8 @@ export interface ImplementationTestInterface {
         provider.reloadConfig();
     });
 
-    test('Provider should hide implementation lenses when disabled', async () => {
+    test('Provider should hide implementation lenses when disabled', async function () {
+        this.timeout(5000);
         const config = vscode.workspace.getConfiguration('deeplens');
         const originalShowImpl = config.get<boolean>('codeLens.showImplementations', true);
 
@@ -291,7 +296,8 @@ export interface NoImplTestInterface {
         provider.reloadConfig();
     });
 
-    test('Provider should show call chain lenses for methods and functions', async () => {
+    test('Provider should show call chain lenses for methods and functions', async function () {
+        this.timeout(5000);
         const config = vscode.workspace.getConfiguration('deeplens');
         const originalShowCallChain = config.get<boolean>('codeLens.showCallChain', true);
 
@@ -342,7 +348,8 @@ export function callChainFunction() {
         provider.reloadConfig();
     });
 
-    test('Provider should handle multiple symbol types correctly', async () => {
+    test('Provider should handle multiple symbol types correctly', async function () {
+        this.timeout(5000);
         const testContent = `
 export enum TestEnum {
     Value1,
@@ -389,7 +396,8 @@ export const variable = 42;
         }
     });
 
-    test('Provider onDidChangeCodeLenses event should fire on config reload', (done) => {
+    test('Provider onDidChangeCodeLenses event should fire on config reload', function (done) {
+        this.timeout(5000);
         provider.onDidChangeCodeLenses(() => {
             assert.ok(true, 'onDidChangeCodeLenses event should fire');
             done();
@@ -398,14 +406,16 @@ export const variable = 42;
         provider.reloadConfig();
     });
 
-    test('Provider should dispose cleanly', () => {
+    test('Provider should dispose cleanly', function () {
+        this.timeout(5000);
         const disposableProvider = new ReferenceCodeLensProvider();
         assert.doesNotThrow(() => {
             disposableProvider.dispose();
         }, 'Provider should dispose without throwing');
     });
 
-    test('Provider should handle nested symbols correctly', async () => {
+    test('Provider should handle nested symbols correctly', async function () {
+        this.timeout(5000);
         const testContent = `
 export class OuterClass {
     public outerMethod() {
@@ -427,7 +437,8 @@ export class OuterClass {
         assert.ok(Array.isArray(lenses), 'Should handle nested symbols');
     });
 
-    test('Resolved lens should have proper command structure', async () => {
+    test('Resolved lens should have proper command structure', async function () {
+        this.timeout(5000);
         const testContent = `
 export class CommandTestClass {
     method() {}
@@ -452,7 +463,8 @@ export class CommandTestClass {
         }
     });
 
-    test('Provider should filter out symbol declaration from reference locations', async () => {
+    test('Provider should filter out symbol declaration from reference locations', async function () {
+        this.timeout(5000);
         const testContent = `
 export class FilterTestClass {}
 const instance = new FilterTestClass();
