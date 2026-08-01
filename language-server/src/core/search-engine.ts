@@ -1935,6 +1935,8 @@ export class SearchEngine implements ISearchProvider {
         }
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private processItemForSearch(
         i: number,
         context: ReturnType<typeof this.prepareSearchContext>,
@@ -1964,11 +1966,51 @@ export class SearchEngine implements ISearchProvider {
             typeId = context.itemTypeIds[i];
         }
 
-        // ⚡ Bolt: Fast fuzzy search skip
-        // If the item doesn't pass the bitflag check, any fuzzy search will inherently fail.
-        // We only bypassed the return above to allow RouteMatcher to evaluate parameterized endpoints.
-        // Skip the expensive calculateSearchScore (fuzzy matching) if we know the characters are missing.
-        let score = passesBitflag ? this.calculateSearchScore(i, typeId, context) : -Infinity;
+        // ⚡ Bolt: Fast fuzzy search skip & O(1) early-exits
+        let score = -Infinity;
+        if (passesBitflag) {
+            let nameScore = -Infinity;
+            if ((context.itemNameBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+                const pName = context.preparedNames[i];
+                if (pName) {
+                    const res = Fuzzysort.single(context.query, pName);
+                    if (res && res.score > context.MIN_SCORE) {
+                        context.currentHighlights = this.indexesToHighlights(res.indexes);
+                        nameScore = res.score;
+                    }
+                }
+            }
+
+            let fullNameScore = -Infinity;
+            if (nameScore < 0.9) {
+                if ((context.itemFullNameBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+                    const pFull = context.preparedFullNames[i];
+                    if (pFull) {
+                        const res = Fuzzysort.single(context.query, pFull);
+                        if (res) fullNameScore = res.score * 0.9;
+                    }
+                }
+            }
+
+            const bestNameOrFull = fullNameScore > nameScore ? fullNameScore : nameScore;
+
+            let pathScore = -Infinity;
+            if (bestNameOrFull < 0.8) {
+                if ((context.itemPathBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+                    const pPath = context.preparedPaths[i];
+                    if (pPath) {
+                        const res = Fuzzysort.single(context.query, pPath);
+                        if (res) pathScore = res.score * 0.8;
+                    }
+                }
+            }
+
+            let fuzzyScore = pathScore > bestNameOrFull ? pathScore : bestNameOrFull;
+            if (fuzzyScore > context.MIN_SCORE) {
+                fuzzyScore *= ID_TO_BOOST[typeId] || 1;
+            }
+            score = fuzzyScore;
+        }
         let resultScope: SearchScope | undefined;
 
         // ⚡ Bolt: Fast URL matching early-exit
@@ -1988,92 +2030,6 @@ export class SearchEngine implements ISearchProvider {
         if (score > context.MIN_SCORE) {
             this.finalizeAndPushResult(i, score, resultScope, typeId, context, heap);
         }
-    }
-
-    private calculateSearchScore(
-        i: number,
-        typeId: number,
-        context: ReturnType<typeof this.prepareSearchContext>,
-    ): number {
-        return this.calculateFuzzyScore(i, typeId, context);
-    }
-
-    private calculateFuzzyScore(
-        i: number,
-        typeId: number,
-        context: ReturnType<typeof this.prepareSearchContext>,
-    ): number {
-        // Try matching against name (weight: 1.0)
-        const nameScore = this.tryFuzzyMatchName(i, context);
-
-        // Try matching against full name (weight: 0.9) if name score is not high enough
-        const fullNameScore = nameScore < 0.9 ? this.tryFuzzyMatchFullName(i, context) : -Infinity;
-        const bestNameOrFull = fullNameScore > nameScore ? fullNameScore : nameScore;
-
-        // Try matching against path (weight: 0.8) if still not high enough
-        const pathScore = bestNameOrFull < 0.8 ? this.tryFuzzyMatchPath(i, context) : -Infinity;
-        let fuzzyScore = pathScore > bestNameOrFull ? pathScore : bestNameOrFull;
-
-        // Apply type boost to final fuzzy score
-        if (fuzzyScore > context.MIN_SCORE) {
-            const typeBoost = ID_TO_BOOST[typeId] || 1;
-            fuzzyScore *= typeBoost;
-        }
-
-        return fuzzyScore;
-    }
-
-    private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for name property fuzzy matching
-        // Even if the item passes the aggregate bitflag check, we can skip expensive
-        // fuzzy sorting on the name property if it doesn't contain the required characters.
-        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
-        const pName = context.preparedNames[i];
-        if (!pName) {
-            return -Infinity;
-        }
-
-        const res = Fuzzysort.single(context.query, pName);
-        if (res && res.score > context.MIN_SCORE) {
-            context.currentHighlights = this.indexesToHighlights(res.indexes);
-            return res.score;
-        }
-        return -Infinity;
-    }
-
-    private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for fullName property fuzzy matching
-        // Skip expensive fuzzy sorting on the fullName property if it doesn't contain the required characters.
-        if ((context.itemFullNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
-        const pFull = context.preparedFullNames[i];
-        if (!pFull) {
-            return -Infinity;
-        }
-
-        const res = Fuzzysort.single(context.query, pFull);
-        return res ? res.score * 0.9 : -Infinity;
-    }
-
-    private tryFuzzyMatchPath(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for path property fuzzy matching
-        // Skip expensive fuzzy sorting on the path property if it doesn't contain the required characters.
-        if ((context.itemPathBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
-        const pPath = context.preparedPaths[i];
-        if (!pPath) {
-            return -Infinity;
-        }
-
-        const res = Fuzzysort.single(context.query, pPath);
-        return res ? res.score * 0.8 : -Infinity;
     }
 
     private tryUrlEndpointMatch(
