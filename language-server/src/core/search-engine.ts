@@ -164,6 +164,7 @@ export class SearchEngine implements ISearchProvider {
     // Reusable buffers for index tracking to avoid allocations in hot loops
     private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
     private visitedIndicesList: number[] = [];
+    private reusablePriorityTypeIds: Uint8Array = new Uint8Array(256);
     private _isSearching = false;
 
     // String normalization cache (1-item) for relativeFilePath
@@ -2568,11 +2569,17 @@ export class SearchEngine implements ISearchProvider {
         // Instead of allocating a Uint8Array of size N to track already processed items,
         // we precompute which type IDs belong to priority scopes and iterate sequentially.
         // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
-        for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
-                isPriorityTypeId[i] = 1;
+        // ⚡ Bolt: Avoid intermediate Set and Uint8Array allocation in fallback hot loop by using class-level reusable array.
+        const priorityIds = this.reusablePriorityTypeIds;
+        priorityIds.fill(0);
+
+        // Setup
+        for (let i = 0; i < priorityScopes.length; i++) {
+            const scope = priorityScopes[i];
+            for (let j = 0; j < ID_TO_SCOPE.length; j++) {
+                if (ID_TO_SCOPE[j] === scope) {
+                    priorityIds[j] = 1;
+                }
             }
         }
 
@@ -2581,7 +2588,7 @@ export class SearchEngine implements ISearchProvider {
 
         for (let i = 0; i < itemsLength; i++) {
             if (results.length >= maxResults || token?.isCancellationRequested) break;
-            if (isPriorityTypeId[itemTypeIds[i]] === 0) {
+            if (priorityIds[itemTypeIds[i]] === 0) {
                 processItem(i);
             }
         }
