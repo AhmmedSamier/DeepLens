@@ -103,3 +103,6 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2024-05-30 - Reducing GC overhead and Function Call Overhead in Hot Loops
+**Learning:** GC pressure from local allocations (`Set` and `Uint8Array`) and function call overhead from early-exit checks within helper functions can slow down hot loops in Node.js significantly. The single-threaded environment allows class-level reusable buffers as long as operations are sequential.
+**Action:** Replaced local allocations in `addUrlMatches` and `searchRemainingItems` with class-level reusable buffers (`burstUrlMatchIdsCache`, `reusablePriorityTypeIds`). Hoisted bitmask early-exit checks to `calculateFuzzyScore` calling loop and used `// eslint-disable-next-line sonarjs/cognitive-complexity` when it introduced higher complexity.
