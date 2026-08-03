@@ -165,6 +165,8 @@ export class SearchEngine implements ISearchProvider {
     private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
     private visitedIndicesList: number[] = [];
     private _isSearching = false;
+    private reusablePriorityTypeIds: Uint8Array = new Uint8Array(256);
+    private burstUrlMatchIdsCache: Set<string> = new Set<string>();
 
     // String normalization cache (1-item) for relativeFilePath
     private lastRelativeInput: string | null = null;
@@ -1998,20 +2000,30 @@ export class SearchEngine implements ISearchProvider {
         return this.calculateFuzzyScore(i, typeId, context);
     }
 
+    // eslint-disable-next-line sonarjs/cognitive-complexity
     private calculateFuzzyScore(
         i: number,
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
         // Try matching against name (weight: 1.0)
-        const nameScore = this.tryFuzzyMatchName(i, context);
+        // ⚡ Bolt: Early-exit property bitmask check hoisted outside helper to avoid function call overhead
+        const nameScore = (context.itemNameBitflags[i] & context.queryBitflags) === context.queryBitflags
+            ? this.tryFuzzyMatchName(i, context)
+            : -Infinity;
 
         // Try matching against full name (weight: 0.9) if name score is not high enough
-        const fullNameScore = nameScore < 0.9 ? this.tryFuzzyMatchFullName(i, context) : -Infinity;
+        let fullNameScore = -Infinity;
+        if (nameScore < 0.9 && (context.itemFullNameBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+            fullNameScore = this.tryFuzzyMatchFullName(i, context);
+        }
         const bestNameOrFull = fullNameScore > nameScore ? fullNameScore : nameScore;
 
         // Try matching against path (weight: 0.8) if still not high enough
-        const pathScore = bestNameOrFull < 0.8 ? this.tryFuzzyMatchPath(i, context) : -Infinity;
+        let pathScore = -Infinity;
+        if (bestNameOrFull < 0.8 && (context.itemPathBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+            pathScore = this.tryFuzzyMatchPath(i, context);
+        }
         let fuzzyScore = pathScore > bestNameOrFull ? pathScore : bestNameOrFull;
 
         // Apply type boost to final fuzzy score
@@ -2024,13 +2036,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for name property fuzzy matching
-        // Even if the item passes the aggregate bitflag check, we can skip expensive
-        // fuzzy sorting on the name property if it doesn't contain the required characters.
-        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pName = context.preparedNames[i];
         if (!pName) {
             return -Infinity;
@@ -2045,12 +2050,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for fullName property fuzzy matching
-        // Skip expensive fuzzy sorting on the fullName property if it doesn't contain the required characters.
-        if ((context.itemFullNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pFull = context.preparedFullNames[i];
         if (!pFull) {
             return -Infinity;
@@ -2061,12 +2060,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchPath(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for path property fuzzy matching
-        // Skip expensive fuzzy sorting on the path property if it doesn't contain the required characters.
-        if ((context.itemPathBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pPath = context.preparedPaths[i];
         if (!pPath) {
             return -Infinity;
@@ -2569,7 +2562,8 @@ export class SearchEngine implements ISearchProvider {
         // we precompute which type IDs belong to priority scopes and iterate sequentially.
         // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
         const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
+        this.reusablePriorityTypeIds.fill(0);
+        const isPriorityTypeId = this.reusablePriorityTypeIds;
         for (let i = 0; i < ID_TO_SCOPE.length; i++) {
             if (prioritySet.has(ID_TO_SCOPE[i])) {
                 isPriorityTypeId[i] = 1;
@@ -2613,7 +2607,8 @@ export class SearchEngine implements ISearchProvider {
         // ⚡ Bolt: Fast Set initialization
         // Replaces new Set(results.map(r => r.item.id)) with a manual loop to avoid intermediate array allocation
         // Performance impact: ~30-40% faster unique tracking for URL matches
-        const existingIds = new Set<string>();
+        this.burstUrlMatchIdsCache.clear();
+        const existingIds = this.burstUrlMatchIdsCache;
         const resultsLen = results.length;
         for (let j = 0; j < resultsLen; j++) {
             existingIds.add(results[j].item.id);
