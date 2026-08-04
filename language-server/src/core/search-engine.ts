@@ -164,6 +164,8 @@ export class SearchEngine implements ISearchProvider {
     // Reusable buffers for index tracking to avoid allocations in hot loops
     private visitedIndicesBuffer: Uint8Array = new Uint8Array(0);
     private visitedIndicesList: number[] = [];
+    private reusablePriorityTypeIds = new Uint8Array(256);
+    private burstUrlMatchIdsCache = new Set<string>();
     private _isSearching = false;
 
     // String normalization cache (1-item) for relativeFilePath
@@ -2568,10 +2570,10 @@ export class SearchEngine implements ISearchProvider {
         // Instead of allocating a Uint8Array of size N to track already processed items,
         // we precompute which type IDs belong to priority scopes and iterate sequentially.
         // This avoids the large allocation while preserving the exact iteration order of the fallback pass.
-        const prioritySet = new Set(priorityScopes);
-        const isPriorityTypeId = new Uint8Array(256);
+        const isPriorityTypeId = this.reusablePriorityTypeIds;
+        isPriorityTypeId.fill(0); // Clear buffer at setup phase to prevent corrupted state
         for (let i = 0; i < ID_TO_SCOPE.length; i++) {
-            if (prioritySet.has(ID_TO_SCOPE[i])) {
+            if (priorityScopes.indexOf(ID_TO_SCOPE[i]) !== -1) {
                 isPriorityTypeId[i] = 1;
             }
         }
@@ -2610,10 +2612,11 @@ export class SearchEngine implements ISearchProvider {
         queryOrPrepared: string | PreparedPath,
         maxResults?: number,
     ): void {
-        // ⚡ Bolt: Fast Set initialization
-        // Replaces new Set(results.map(r => r.item.id)) with a manual loop to avoid intermediate array allocation
-        // Performance impact: ~30-40% faster unique tracking for URL matches
-        const existingIds = new Set<string>();
+        // ⚡ Bolt: Fast Set initialization and Reusable Cache
+        // Replaces new Set(results.map(r => r.item.id)) with a manual loop and reusable class-level buffer
+        // to avoid both intermediate array allocations and GC overhead in hot paths
+        const existingIds = this.burstUrlMatchIdsCache;
+        existingIds.clear(); // Clear cache at setup phase to prevent corrupted state
         const resultsLen = results.length;
         for (let j = 0; j < resultsLen; j++) {
             existingIds.add(results[j].item.id);
