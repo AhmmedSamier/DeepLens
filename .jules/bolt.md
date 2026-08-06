@@ -103,3 +103,7 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+
+## 2026-10-27 - [Fast String Indentation Calculation]
+**Learning:** Using `String.prototype.search(/\S|$/)` to calculate indentation in hot text processing loops creates unnecessary regex engine overhead. A manual charCodeAt loop also has worse performance than native V8 string optimizations, and misses Unicode whitespace characters.
+**Action:** Replace `search(/\S|$/)` with `line.length - line.trimStart().length`. This eliminates the regex, maintains full Unicode/BOM compatibility, and is significantly faster because it leverages native V8 string methods, all while keeping code readable.
