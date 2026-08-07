@@ -7,7 +7,7 @@ services:
         environment:
             SONAR_JDBC_URL: jdbc:postgresql://host.docker.internal:5432/postgres
             SONAR_JDBC_USERNAME: postgres
-            SONAR_JDBC_PASSWORD: Orien123
+            SONAR_JDBC_PASSWORD: ${SONAR_JDBC_PASSWORD:-sonar}
         ports:
             - '9000:9000'
         volumes:
