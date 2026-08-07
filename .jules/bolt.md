@@ -103,3 +103,6 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2024-05-30 - Hot loop optimization learnings
+**Learning:** Returning scalar values instead of newly allocated objects in hot loops reduces GC overhead. Hoisting bitflag checks out of helper functions prevents function call overhead. Using `str.length - str.trimStart().length` instead of regex `/\S|$/` leverages fast V8 native methods for indentation calculation.
+**Action:** Apply scalar returns for success/failure scenarios in hot paths. Hoist pre-conditions (like bitmask checks) outside of functions called within loops. Use native string functions instead of regexes for simple whitespace operations.
