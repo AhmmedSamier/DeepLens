@@ -344,12 +344,12 @@
             <button class="scope-button" data-scope="properties" title="Search Properties" aria-pressed="false"><i class="codicon codicon-symbol-property"></i> Properties</button>
             <button class="scope-button" data-scope="endpoints" title="Search API Endpoints" aria-pressed="false"><i class="codicon codicon-globe"></i> Endpoints</button>
         </div>
-        <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" spellcheck="false" aria-label="Search everywhere">
+        <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" spellcheck="false" aria-label="Search everywhere" role="combobox" aria-expanded="false" aria-autocomplete="list" aria-controls="results" aria-activedescendant="">
         <div class="progress-bar-container" id="loading-indicator" aria-hidden="true"><div class="progress-bar"></div></div>
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
     </div>
-    <div id="results" class="results-container"></div>
+    <div id="results" class="results-container" role="listbox"></div>
 
     <script nonce="${nonce}">
         const vscode = acquireVsCodeApi();
@@ -605,6 +605,8 @@
             visibleEntries = [];
 
             const showSlashCommands = isSlashTriggerQuery(searchInput.value) && slashCommands.length > 0;
+            searchInput.setAttribute('aria-expanded', (showSlashCommands || results.length > 0).toString());
+
             if (showSlashCommands) {
                 renderSlashCommands();
                 updateSummary();
@@ -626,6 +628,8 @@
                 const item = result.item;
                 const div = document.createElement('div');
                 div.className = 'result-item';
+                div.setAttribute('role', 'option');
+                div.id = 'result-item-' + visibleEntries.length;
 
                 // Row 1: icon + label + description
                 const row1 = document.createElement('div');
@@ -725,6 +729,8 @@
             slashCommands.forEach((command, index) => {
                 const div = document.createElement('div');
                 div.className = 'result-item';
+                div.setAttribute('role', 'option');
+                div.id = 'result-item-' + visibleEntries.length;
 
                 // Row 1: icon + label + description
                 const row1 = document.createElement('div');
@@ -1168,6 +1174,9 @@
             if (selectedIndex >= 0) {
                 items[selectedIndex].classList.add('selected');
                 items[selectedIndex].scrollIntoView({ block: 'nearest' });
+                searchInput.setAttribute('aria-activedescendant', items[selectedIndex].id);
+            } else {
+                searchInput.removeAttribute('aria-activedescendant');
             }
         }
 
@@ -1188,7 +1197,7 @@
                 }
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                selectItem(Math.max(selectedIndex - 1, 0));
+                selectItem(Math.max(selectedIndex - 1, -1));
                 const selection = getEffectiveSelection(selectedIndex);
                 if (selection && selection.kind === 'result') {
                     vscode.postMessage({ type: 'preview', result: selection.result });
