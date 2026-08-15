@@ -103,3 +103,6 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2025-02-15 - Optimize Text Search Performance
+**Learning:** String `indexOf('\n')` and Regex `search(/\S|$/)` have significant overhead when executed repeatedly for string matching and formatting logic during line-by-line file searching in V8.
+**Action:** Use fast C++-backed string methods like `string.length - string.trimStart().length` to determine leading whitespace rather than Regex. Also optimize iterating over newlines by replacing `while(indexOf('\n') !== -1)` with a single `lastIndexOf` check paired with a fast `charCodeAt(i) === 10` loop.
