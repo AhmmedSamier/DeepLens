@@ -2003,15 +2003,28 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
     ): number {
+        // ⚡ Bolt: Fast early-exit for property fuzzy matching
+        // We hoist the bitflag checks out of the tryFuzzyMatch* helper functions directly into the calling logic.
+        // This avoids function call overhead for items that are immediately rejected.
+
         // Try matching against name (weight: 1.0)
-        const nameScore = this.tryFuzzyMatchName(i, context);
+        let nameScore = -Infinity;
+        if ((context.itemNameBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+            nameScore = this.tryFuzzyMatchName(i, context);
+        }
 
         // Try matching against full name (weight: 0.9) if name score is not high enough
-        const fullNameScore = nameScore < 0.9 ? this.tryFuzzyMatchFullName(i, context) : -Infinity;
+        let fullNameScore = -Infinity;
+        if (nameScore < 0.9 && (context.itemFullNameBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+            fullNameScore = this.tryFuzzyMatchFullName(i, context);
+        }
         const bestNameOrFull = fullNameScore > nameScore ? fullNameScore : nameScore;
 
         // Try matching against path (weight: 0.8) if still not high enough
-        const pathScore = bestNameOrFull < 0.8 ? this.tryFuzzyMatchPath(i, context) : -Infinity;
+        let pathScore = -Infinity;
+        if (bestNameOrFull < 0.8 && (context.itemPathBitflags[i] & context.queryBitflags) === context.queryBitflags) {
+            pathScore = this.tryFuzzyMatchPath(i, context);
+        }
         let fuzzyScore = pathScore > bestNameOrFull ? pathScore : bestNameOrFull;
 
         // Apply type boost to final fuzzy score
@@ -2024,13 +2037,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for name property fuzzy matching
-        // Even if the item passes the aggregate bitflag check, we can skip expensive
-        // fuzzy sorting on the name property if it doesn't contain the required characters.
-        if ((context.itemNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pName = context.preparedNames[i];
         if (!pName) {
             return -Infinity;
@@ -2045,12 +2051,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchFullName(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for fullName property fuzzy matching
-        // Skip expensive fuzzy sorting on the fullName property if it doesn't contain the required characters.
-        if ((context.itemFullNameBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pFull = context.preparedFullNames[i];
         if (!pFull) {
             return -Infinity;
@@ -2061,12 +2061,6 @@ export class SearchEngine implements ISearchProvider {
     }
 
     private tryFuzzyMatchPath(i: number, context: ReturnType<typeof this.prepareSearchContext>): number {
-        // ⚡ Bolt: Fast early-exit for path property fuzzy matching
-        // Skip expensive fuzzy sorting on the path property if it doesn't contain the required characters.
-        if ((context.itemPathBitflags[i] & context.queryBitflags) !== context.queryBitflags) {
-            return -Infinity;
-        }
-
         const pPath = context.preparedPaths[i];
         if (!pPath) {
             return -Infinity;
