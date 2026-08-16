@@ -1608,15 +1608,26 @@ export class SearchEngine implements ISearchProvider {
         bufferOffset: number,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let lastIndex = bufferOffset;
-        let newlineIndex;
-        let lineIndex = startLineIndex;
-        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            lastIndex = newlineIndex + 1;
-            lineIndex++;
+        const lastNewline = buffer.lastIndexOf('\n');
+        if (lastNewline !== -1 && lastNewline >= bufferOffset) {
+            let lineIndex = startLineIndex;
+            // ⚡ Bolt: Fast Newline Counting Optimization
+            // Replaces multiple O(N) .indexOf() calls with a single native V8 loop using .charCodeAt(),
+            // which avoids intermediate variable churn and overhead, significantly improving text search speed.
+            for (let i = bufferOffset; i <= lastNewline; i++) {
+                if (buffer.charCodeAt(i) === 10) lineIndex++;
+            }
+            return {
+                newBuffer: buffer.slice(lastNewline + 1),
+                newLineIndex: lineIndex,
+                hitLimit: false,
+            };
         }
-        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
-        return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+        return {
+            newBuffer: bufferOffset > 0 ? buffer.slice(bufferOffset) : buffer,
+            newLineIndex: startLineIndex,
+            hitLimit: false,
+        };
     }
 
     private processSingleLine(
