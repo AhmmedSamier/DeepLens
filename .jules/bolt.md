@@ -103,3 +103,10 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2026-08-17 - [Fast String Indentation Parsing in V8]
+**Learning:** In hot paths doing large string manipulation in V8 (Node.js), regex-based whitespace checks (`line.search(/\S|$/)`) invoke the slow regex engine, but manual loop counting over `charCodeAt` is also surprisingly slow because it misses native C++ optimizations and fails to properly handle Unicode spaces unless heavily complexified. The fastest way to measure leading whitespace indentation is `line.length - line.trimStart().length`, because V8 highly optimizes `trimStart` using native code paths. This is especially true when tested with Node vs Bun.
+**Action:** Replace `String.prototype.search(/\S|$/)` with `line.length - line.trimStart().length` for high-performance indentation calculation.
+
+## 2026-08-17 - [Fast String Newline Extraction Loop in V8]
+**Learning:** When advancing through large text buffers line-by-line without matches, a `while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1)` loop is slow because it causes V8 to constantly context switch into the `indexOf` native binding and allocate state. Scanning the string backward with a single `lastIndexOf` and running a tight, simple JavaScript `for` loop (`buffer.charCodeAt(i) === 10`) allows V8's JIT compiler to optimize the loop heavily, making it drastically faster.
+**Action:** Replace sequential `indexOf` loops with a bounding `lastIndexOf` check and a tight `charCodeAt` loop when counting occurrences of a single character in extremely hot paths in V8.
