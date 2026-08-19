@@ -103,3 +103,7 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+
+## 2026-11-01 - [Fast Early-Exit Optimization for Sub-Property Matches]
+**Learning:** When using property-specific early exits in a fallback chain (like checking name, then full name, then path), placing the bitmask checks inside the helper functions (e.g. `tryFuzzyMatchName`) adds function call overhead for immediately rejected properties.
+**Action:** Hoist the O(1) bitflag early-exit checks into the calling function before the function call, so the expensive string-matching functions are only invoked when the bitflag passes.
