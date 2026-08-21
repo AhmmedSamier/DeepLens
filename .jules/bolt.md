@@ -103,3 +103,8 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2026-08-21 - [Fast Newline Counting in Hot Paths]
+**Learning:** In V8 (Node.js/Bun), using `while ((index = buffer.indexOf('
+', lastIndex)) !== -1)` to count newlines in large strings incurs significant overhead in hot paths.
+**Action:** Find the last newline with `buffer.lastIndexOf('
+')` and use a fast native `buffer.charCodeAt(i) === 10` loop up to that index to count newlines. This is measurably faster for large buffers.
