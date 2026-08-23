@@ -1608,14 +1608,22 @@ export class SearchEngine implements ISearchProvider {
         bufferOffset: number,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let lastIndex = bufferOffset;
-        let newlineIndex;
         let lineIndex = startLineIndex;
-        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            lastIndex = newlineIndex + 1;
-            lineIndex++;
+        const lastNewline = buffer.lastIndexOf('\n');
+
+        if (lastNewline !== -1 && lastNewline >= bufferOffset) {
+            // Count newlines natively
+            for (let i = bufferOffset; i <= lastNewline; i++) {
+                if (buffer.charCodeAt(i) === 10) {
+                    lineIndex++;
+                }
+            }
+            const lastIndex = lastNewline + 1;
+            const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
+            return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
         }
-        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
+
+        const newBuffer = bufferOffset > 0 ? buffer.slice(bufferOffset) : buffer;
         return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
     }
 
@@ -1632,7 +1640,7 @@ export class SearchEngine implements ISearchProvider {
 
         const trimmedLine = line.trim();
         if (trimmedLine.length > 0) {
-            const indentation = line.search(/\S|$/);
+            const indentation = line.length - line.trimStart().length;
             const result = this.createSearchResult(
                 context.fileItem,
                 trimmedLine,
