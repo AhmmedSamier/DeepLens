@@ -1608,15 +1608,27 @@ export class SearchEngine implements ISearchProvider {
         bufferOffset: number,
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
-        let lastIndex = bufferOffset;
-        let newlineIndex;
-        let lineIndex = startLineIndex;
-        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            lastIndex = newlineIndex + 1;
-            lineIndex++;
+        const lastNewlineIndex = buffer.lastIndexOf('\n');
+        if (lastNewlineIndex < bufferOffset) {
+            return {
+                newBuffer: bufferOffset > 0 ? buffer.slice(bufferOffset) : buffer,
+                newLineIndex: startLineIndex,
+                hitLimit: false,
+            };
         }
-        const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
-        return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
+
+        let lineCount = 0;
+        for (let i = bufferOffset; i <= lastNewlineIndex; i++) {
+            if (buffer.charCodeAt(i) === 10) {
+                lineCount++;
+            }
+        }
+
+        return {
+            newBuffer: buffer.slice(lastNewlineIndex + 1),
+            newLineIndex: startLineIndex + lineCount,
+            hitLimit: false,
+        };
     }
 
     private processSingleLine(
