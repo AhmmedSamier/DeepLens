@@ -1977,10 +1977,10 @@ export class SearchEngine implements ISearchProvider {
         // O(1) checks and parameter evaluations in the hot loop.
         // Check for URL/Endpoint match
         if (context.isPotentialUrl && typeId === 11 /* ENDPOINT */) {
-            const urlResult = this.tryUrlEndpointMatch(i, typeId, context, score);
-            if (urlResult) {
-                score = urlResult.score;
-                resultScope = urlResult.scope;
+            const urlScore = this.tryUrlEndpointMatch(i, typeId, context, score);
+            if (urlScore !== -Infinity) {
+                score = urlScore;
+                resultScope = SearchScope.ENDPOINTS;
             }
         }
 
@@ -2081,33 +2081,33 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
         currentScore: number,
-    ): { score: number; scope: SearchScope } | null {
+    ): number {
         if (!context.isPotentialUrl || !context.preparedQuery || typeId !== 11 /* ENDPOINT */) {
-            return null;
+            return -Infinity;
         }
 
         const pattern = context.preparedPatterns[i];
         if (!pattern) {
-            return null;
+            return -Infinity;
         }
 
         const item = context.items[i];
         if (!item) {
-            return null;
+            return -Infinity;
         }
 
-        const matchResult = this.calculateUrlMatchScore(pattern, context);
-        if (matchResult && matchResult.score > currentScore) {
-            return { score: matchResult.score, scope: SearchScope.ENDPOINTS };
+        const urlScore = this.calculateUrlMatchScore(pattern, context);
+        if (urlScore > currentScore) {
+            return urlScore;
         }
 
-        return null;
+        return -Infinity;
     }
 
     private calculateUrlMatchScore(
         pattern: RoutePattern,
         context: ReturnType<typeof this.prepareSearchContext>,
-    ): { score: number } | null {
+    ): number {
         let finalQueryForMatch: string | PreparedPath = context.queryForUrlMatch;
         let methodScoreBoost = 0;
 
@@ -2120,7 +2120,7 @@ export class SearchEngine implements ISearchProvider {
                     methodScoreBoost = 0.5;
                 } else {
                     // Method mismatch, skip specialized route matching
-                    return null;
+                    return -Infinity;
                 }
             }
         }
@@ -2128,11 +2128,11 @@ export class SearchEngine implements ISearchProvider {
         if (finalQueryForMatch) {
             const urlScore = RouteMatcher.scoreMatchPattern(pattern, finalQueryForMatch);
             if (urlScore > 0) {
-                return { score: urlScore + methodScoreBoost };
+                return urlScore + methodScoreBoost;
             }
         }
 
-        return null;
+        return -Infinity;
     }
 
     private finalizeAndPushResult(
