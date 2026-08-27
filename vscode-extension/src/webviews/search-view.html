@@ -1188,7 +1188,7 @@
                 }
             } else if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                selectItem(Math.max(selectedIndex - 1, 0));
+                selectItem(Math.max(selectedIndex - 1, -1));
                 const selection = getEffectiveSelection(selectedIndex);
                 if (selection && selection.kind === 'result') {
                     vscode.postMessage({ type: 'preview', result: selection.result });
