@@ -99,3 +99,6 @@
 ## 2026-07-01 - Prevent Focus Stealing in Search Filter Buttons
 **Learning:** In hybrid mouse/keyboard search interfaces (like VS Code Webviews), clicking interactive elements like filter buttons steals DOM focus from the primary search input. This forces users to manually click back into the input or hit Tab before they can resume typing.
 **Action:** When implementing filter or scope toggle buttons that don't need their own text-input focus, attach a `mousedown` event listener that calls `e.preventDefault()`. This prevents the browser's default focus transition before it even fires, ensuring the user's cursor remains firmly anchored in the main search input.
+## 2026-08-27 - Allow custom keyboard navigation to clear selection
+**Learning:** When implementing custom keyboard navigation (ArrowUp/ArrowDown) in lists like Search Results, hard-stopping ArrowUp at index 0 traps the user in the list and prevents them from visually returning to the input field's context.
+**Action:** When implementing custom keyboard navigation for ArrowUp, always allow the selection index to reach -1 (e.g. `Math.max(selectedIndex - 1, -1)`) so users can deselect the list and return conceptual focus to the input element.
