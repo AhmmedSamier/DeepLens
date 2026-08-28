@@ -1418,7 +1418,10 @@ export class SearchEngine implements ISearchProvider {
                         const matchIndex = match.index;
                         const trimmedLine = newBuffer.trim();
                         if (trimmedLine.length > 0) {
-                            const indentation = newBuffer.search(/\S|$/);
+                            // ⚡ Bolt: Fast string indentation calculation
+                            // Replaces the regex `newBuffer.search(/\S|$/)` with a native length comparison
+                            // to avoid expensive RegExp engine overhead in the hot text search stream.
+                            const indentation = newBuffer.length - newBuffer.trimStart().length;
                             const result = this.createSearchResult(
                                 fileItem,
                                 trimmedLine,
@@ -1515,7 +1518,10 @@ export class SearchEngine implements ISearchProvider {
                     if (match) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
-                            const indentation = buffer.search(/\S|$/);
+                            // ⚡ Bolt: Fast string indentation calculation
+                            // Replaces the regex `buffer.search(/\S|$/)` with a native length comparison
+                            // to avoid expensive RegExp engine overhead in the hot text search stream.
+                            const indentation = buffer.length - buffer.trimStart().length;
                             const result = this.createSearchResult(
                                 fileItem,
                                 trimmedLine,
@@ -1632,7 +1638,10 @@ export class SearchEngine implements ISearchProvider {
 
         const trimmedLine = line.trim();
         if (trimmedLine.length > 0) {
-            const indentation = line.search(/\S|$/);
+            // ⚡ Bolt: Fast string indentation calculation
+            // Replaces the regex `line.search(/\S|$/)` with a native length comparison
+            // to avoid expensive RegExp engine overhead in the hot text search stream.
+            const indentation = line.length - line.trimStart().length;
             const result = this.createSearchResult(
                 context.fileItem,
                 trimmedLine,
