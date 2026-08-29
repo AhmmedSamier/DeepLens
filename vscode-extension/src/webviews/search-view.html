@@ -165,8 +165,11 @@
             cursor: pointer;
             text-align: left;
         }
-        .empty-state-btn:hover {
+        .empty-state-btn:hover,
+        .empty-state-btn:focus-visible {
             background: var(--vscode-button-secondaryHoverBackground);
+            outline: 1px solid var(--vscode-focusBorder);
+            outline-offset: -1px;
         }
         .scope-button {
             padding: 2px 6px;
