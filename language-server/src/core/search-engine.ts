@@ -1418,7 +1418,7 @@ export class SearchEngine implements ISearchProvider {
                         const matchIndex = match.index;
                         const trimmedLine = newBuffer.trim();
                         if (trimmedLine.length > 0) {
-                            const indentation = newBuffer.search(/\S|$/);
+                            const indentation = newBuffer.length - newBuffer.trimStart().length;
                             const result = this.createSearchResult(
                                 fileItem,
                                 trimmedLine,
@@ -1515,7 +1515,7 @@ export class SearchEngine implements ISearchProvider {
                     if (match) {
                         const trimmedLine = buffer.trim();
                         if (trimmedLine.length > 0) {
-                            const indentation = buffer.search(/\S|$/);
+                            const indentation = buffer.length - buffer.trimStart().length;
                             const result = this.createSearchResult(
                                 fileItem,
                                 trimmedLine,
@@ -1609,12 +1609,16 @@ export class SearchEngine implements ISearchProvider {
         startLineIndex: number,
     ): { newBuffer: string; newLineIndex: number; hitLimit: boolean } {
         let lastIndex = bufferOffset;
-        let newlineIndex;
         let lineIndex = startLineIndex;
-        while ((newlineIndex = buffer.indexOf('\n', lastIndex)) !== -1) {
-            lastIndex = newlineIndex + 1;
-            lineIndex++;
+        const lastNewline = buffer.lastIndexOf('\n');
+
+        if (lastNewline >= lastIndex) {
+            for (let i = lastIndex; i <= lastNewline; i++) {
+                if (buffer.charCodeAt(i) === 10) lineIndex++;
+            }
+            lastIndex = lastNewline + 1;
         }
+
         const newBuffer = lastIndex > 0 ? buffer.slice(lastIndex) : buffer;
         return { newBuffer, newLineIndex: lineIndex, hitLimit: false };
     }
@@ -1632,7 +1636,7 @@ export class SearchEngine implements ISearchProvider {
 
         const trimmedLine = line.trim();
         if (trimmedLine.length > 0) {
-            const indentation = line.search(/\S|$/);
+            const indentation = line.length - line.trimStart().length;
             const result = this.createSearchResult(
                 context.fileItem,
                 trimmedLine,
