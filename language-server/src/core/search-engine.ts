@@ -1977,10 +1977,10 @@ export class SearchEngine implements ISearchProvider {
         // O(1) checks and parameter evaluations in the hot loop.
         // Check for URL/Endpoint match
         if (context.isPotentialUrl && typeId === 11 /* ENDPOINT */) {
-            const urlResult = this.tryUrlEndpointMatch(i, typeId, context, score);
-            if (urlResult) {
-                score = urlResult.score;
-                resultScope = urlResult.scope;
+            const urlScore = this.tryUrlEndpointMatch(i, typeId, context, score);
+            if (urlScore !== -Infinity) {
+                score = urlScore;
+                resultScope = SearchScope.ENDPOINTS;
             }
         }
 
@@ -2081,27 +2081,27 @@ export class SearchEngine implements ISearchProvider {
         typeId: number,
         context: ReturnType<typeof this.prepareSearchContext>,
         currentScore: number,
-    ): { score: number; scope: SearchScope } | null {
+    ): number {
         if (!context.isPotentialUrl || !context.preparedQuery || typeId !== 11 /* ENDPOINT */) {
-            return null;
+            return -Infinity;
         }
 
         const pattern = context.preparedPatterns[i];
         if (!pattern) {
-            return null;
+            return -Infinity;
         }
 
         const item = context.items[i];
         if (!item) {
-            return null;
+            return -Infinity;
         }
 
         const matchResult = this.calculateUrlMatchScore(pattern, context);
         if (matchResult && matchResult.score > currentScore) {
-            return { score: matchResult.score, scope: SearchScope.ENDPOINTS };
+            return matchResult.score;
         }
 
-        return null;
+        return -Infinity;
     }
 
     private calculateUrlMatchScore(

@@ -103,3 +103,6 @@
 ## 2024-05-28 - Accurate Fast Git Status Parsing
 **Learning:** Using `git status --porcelain -z` without the `-uall` flag causes it to omit untracked files inside untracked directories, breaking parity with `git ls-files --others`. Also, when handling 'R' and 'C' rename statuses in porcelain v1, you must evaluate both the X (index) and Y (working tree) characters of the status prefix, and then ensure the old path string is also captured and added.
 **Action:** Always use `-uall` with `git status --porcelain -z` when tracking modified/untracked files, and correctly verify `statusX` and `statusY` before extracting the old path segment.
+## 2024-05-30 - [Fast Scalar Value Returns in URL Endpoint Matcher]
+**Learning:** Returning newly allocated objects (`{ score: number, scope: SearchScope } | null`) from helper methods called within high-throughput loops (like `tryUrlEndpointMatch` in `processItemForSearch`) significantly increases memory allocation and triggers frequent garbage collection pauses, reducing search performance.
+**Action:** Refactor hot path helper methods to return scalar primitives (like a `number` representing the score, or `-Infinity` for no match). Handle scope or secondary state assignment directly in the calling loop logic. This avoids object allocations completely and provides a measurable speedup.
