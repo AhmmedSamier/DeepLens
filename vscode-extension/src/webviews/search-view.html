@@ -345,7 +345,7 @@
             <button class="scope-button" data-scope="endpoints" title="Search API Endpoints" aria-pressed="false"><i class="codicon codicon-globe"></i> Endpoints</button>
         </div>
         <input type="text" id="search-input" placeholder="Search everywhere..." autocomplete="off" spellcheck="false" aria-label="Search everywhere">
-        <div class="progress-bar-container" id="loading-indicator" aria-hidden="true"><div class="progress-bar"></div></div>
+        <div class="progress-bar-container" id="loading-indicator" aria-hidden="true" role="progressbar" aria-label="Loading"><div class="progress-bar"></div></div>
 
         <div id="search-summary" class="search-summary" aria-live="polite" aria-atomic="true"></div>
     </div>
@@ -593,6 +593,8 @@
             }
             const statusEl = document.createElement('div');
             statusEl.className = 'status-message';
+            statusEl.setAttribute('role', 'status');
+            statusEl.setAttribute('aria-live', 'polite');
             statusEl.textContent = message;
             statusEl.style.cssText = 'padding: 8px; background: var(--vscode-banner-background); color: var(--vscode-banner-foreground); border-radius: 3px; display: flex; align-items: center; gap: 8px; margin-bottom: 12px;';
             resultsContainer.parentNode.insertBefore(statusEl, resultsContainer);
