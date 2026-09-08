@@ -203,9 +203,8 @@ export class ActivityTracker {
     /**
      * Calculate activity score based on recency and frequency
      */
-    private calculateScore(record: ActivityRecord, maxAccessCount?: number): number {
-        const now = Date.now();
-        const daysSinceLastAccess = (now - record.lastAccessed) / (1000 * 60 * 60 * 24);
+    private calculateScore(record: ActivityRecord, maxAccessCount?: number, now: number = Date.now()): number {
+        const daysSinceLastAccess = (now - record.lastAccessed) / 86400000;
 
         // Recency score: decays over time
         // 1.0 for today, 0.5 for ~1 day ago, approaches 0 for old items
@@ -231,8 +230,9 @@ export class ActivityTracker {
         }
         this.maxAccessCount = max;
 
+        const now = Date.now();
         for (const record of this.activities.values()) {
-            record.score = this.calculateScore(record, max);
+            record.score = this.calculateScore(record, max, now);
         }
     }
 
