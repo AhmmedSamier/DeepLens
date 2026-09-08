@@ -36,7 +36,8 @@ export async function runActivityBenchmarks(): Promise<void> {
 
         activitiesMap.set(item.id, {
             itemId: item.id,
-            lastAccessed: Date.now(),
+            // Vary the lastAccessed so Date.now() isn't identical across all
+            lastAccessed: Date.now() - Math.random() * 10000000,
             accessCount: Math.floor(Math.random() * 100) + 1,
             score: 0,
             item,
@@ -48,7 +49,7 @@ export async function runActivityBenchmarks(): Promise<void> {
         () => {
             benchmarkTracker.recalculateAllScores();
         },
-        20,
+        50,
     );
 
     tracker.dispose();
